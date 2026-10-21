@@ -1,6 +1,6 @@
 import type { BikePlace, DrawnPart, HomeSubject, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import { useLabelsApart } from "@/components/drawings/labels-apart";
 import {
   BIKE_HEIGHT,
@@ -10,16 +10,27 @@ import {
 } from "@/components/drawings/mountain-bike";
 import { classes } from "@/lib/classes";
 import { useLayout } from "../../components/frame/handheld.ts";
-import { FencedBlock, fencedKind, OnHome } from "../../components/rich-blocks/fenced.tsx";
+import {
+  DrawingPlace,
+  FencedBlock,
+  fencedKind,
+  OnHome,
+} from "../../components/rich-blocks/fenced.tsx";
 import { DrawSpace } from "./draw-space.tsx";
 
 /** A floor plan is drawn as in an answer, by its rich block, loaded only when Home has one. */
 const PLAN = fencedKind("plan");
 
+/** A house's floors are drawn by the plan's own module, loaded only when Home has them (#670). */
+const Floors = lazy(() =>
+  import("../../components/rich-blocks/floor-plan.tsx").then(({ Floors }) => ({ default: Floors })),
+);
+
 /**
  * A planning workspace's main subject, leading its Home (#603; Paper, "Tablet · Mountain biking
  * Home: the bike, then projects (#603)"): the drawn bike, its parts placed on it by name, or a
- * room's floor plan (#257). One panel, keeping its size; with no subject, one quiet line in it.
+ * room's floor plan (#257), or a house's floors side by side (#670). One panel, keeping its size;
+ * with no subject, one quiet line in it.
  * A space with no plan yet is Draw the garage's card instead (#604).
  */
 export function HomeSubjectBlock(props: { workspaceId: WorkspaceId; subject: HomeSubject | null }) {
@@ -47,6 +58,10 @@ export function HomeSubjectBlock(props: { workspaceId: WorkspaceId; subject: Hom
             />
           </OnHome>
         )
+      ) : subject.kind === "floors" ? (
+        <Suspense fallback={<DrawingPlace />}>
+          <Floors name={subject.name} floors={subject.floors} />
+        </Suspense>
       ) : (
         <DrawnBike workspaceId={props.workspaceId} subject={subject} />
       )}

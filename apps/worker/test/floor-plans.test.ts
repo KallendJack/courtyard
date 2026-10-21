@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PlanningHome, type SessionEvent, SessionSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createFakeProvider } from "../src/providers/index.ts";
 import {
   asOwner,
   changesIn,
@@ -158,5 +159,63 @@ describe("a floor plan in an answer (#257)", () => {
     expect(saved(events)).toEqual([]);
     // With no plan, the garage is still there to draw, from its size saved (#604).
     expect((await home(request)).subject).toMatchObject({ kind: "space", size: "5.4 m × 3 m" });
+  });
+});
+
+// A house's floors (#670, the first slice of #292): each floor's plan is a document of its own,
+// named for the floor; Home shows them all, in the house's order, rather than the newest alone.
+describe("a house's floors on Home (#670)", () => {
+  const floor = (room: string, depth: number) => ({
+    room,
+    width: 700,
+    depth,
+    front: "Front of house",
+    zones: [{ name: "Kitchen", fromLeft: 191, fromBack: 0, width: 269, depth: 252 }],
+  });
+  const GROUND = floor("Ground floor", 784);
+  const FIRST = floor("First floor", 723);
+
+  /** The house's Home, with each plan saved as its room's document, in the order given. */
+  const house = async (...plans: readonly { room: string }[]) => {
+    const docs = join(contextDir, "house", "docs");
+    await mkdir(docs, { recursive: true });
+    await writeFile(join(contextDir, "house", "CONTEXT.md"), "# House\n\n## Facts\n\n- Ours.\n");
+    for (const plan of plans) {
+      const slug = `${plan.room.toLowerCase().replace(/\s+/g, "-")}-floor-plan`;
+      await writeFile(
+        join(docs, `${slug}.md`),
+        `# ${plan.room} floor plan\n\n\`\`\`plan\n${JSON.stringify(plan, null, 2)}\n\`\`\`\n`,
+      );
+    }
+    // Home asks for the house's move review in the background: answered at once.
+    const request = await asOwner(
+      testWorker({ root, providers: [createFakeProvider({ delayMs: 0 })] }),
+    );
+    return PlanningHome.parse(await (await request("/api/workspaces/house/home")).json());
+  };
+
+  it("shows every floor's plan, ground first, each named for its floor", async () => {
+    // The first floor saved last, so the newest: still after the ground floor.
+    const { subject } = await house(GROUND, FIRST);
+
+    expect(subject).toEqual({
+      kind: "floors",
+      name: "House",
+      floors: [
+        { name: "Ground", document: "ground-floor-floor-plan", plan: GROUND },
+        { name: "First", document: "first-floor-floor-plan", plan: FIRST },
+      ],
+    });
+  });
+
+  it("leaves out a room's plan beside them", async () => {
+    expect((await house(FIRST, GARAGE, GROUND)).subject).toMatchObject({
+      kind: "floors",
+      floors: [{ name: "Ground" }, { name: "First" }],
+    });
+  });
+
+  it("shows one floor alone as a plan, as before", async () => {
+    expect((await house(GROUND)).subject).toMatchObject({ kind: "plan", plan: GROUND });
   });
 });

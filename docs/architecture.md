@@ -115,7 +115,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
   saved as its document once the answer ends, the newest a space's main subject on Home (#257, #603).
 - [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents, Things and projects share.
 - [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home: its main
-  subject (a Thing drawn as a mountain bike, its parts placed by name, or a room's floor plan) and its projects (#603).
+  subject (a Thing drawn as a mountain bike, its parts placed by name, a house's floors, or a room's floor plan) and
+  its projects (#603, #670).
 - [`changes/`](../apps/worker/src/features/changes/README.md): Recent changes and Undo.
 - [`attachments/`](../apps/worker/src/features/attachments/README.md): photos and PDFs sent with a message.
 
@@ -219,7 +220,7 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
     Needs you and a session's Next pill.
   - [`home/`](../apps/web/src/features/home/README.md): the home page's Needs you, tile lines and foot rows.
   - [`planning-home/`](../apps/web/src/features/planning-home/README.md): a planning workspace's page, its pills,
-    and Home: its main subject (the drawn bike, `components/drawings/`, or a room's floor plan), its projects under
+    and Home: its main subject (the drawn bike, `components/drawings/`, a house's floors, or a room's floor plan), its projects under
     it, then the box; no chat.
   - [`new-workspace/`](../apps/web/src/features/new-workspace/README.md): New workspace's form, Planning or Code.
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.

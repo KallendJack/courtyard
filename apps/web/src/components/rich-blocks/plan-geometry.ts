@@ -40,13 +40,17 @@ const INWARD: Record<PlanWall, [number, number]> = {
   right: [-1, 0],
 };
 
-/** The plan laid out to fit `fit` pixels at most, to scale. */
-export const layoutOf = (plan: FloorPlan, fit: { width: number; height: number }) => {
+/**
+ * The plan laid out to fit `fit` pixels at most, to scale, with `pad` pixels round the room for
+ * what is written outside it (a house's floors, #670, have nothing there).
+ */
+export const layoutOf = (plan: FloorPlan, fit: { width: number; height: number; pad?: number }) => {
+  const { pad = PAD } = fit;
   const quarter = plan.turned === undefined ? 0 : QUARTERS[plan.turned.to];
   const sideways = quarter % 2 === 1;
   const across = sideways ? plan.depth : plan.width;
   const down = sideways ? plan.width : plan.depth;
-  const scale = Math.min((fit.width - 2 * PAD) / across, (fit.height - 2 * PAD) / down);
+  const scale = Math.min((fit.width - 2 * pad) / across, (fit.height - 2 * pad) / down);
 
   /** Where a point in the room, `x` cm from the left wall and `y` from the back, is drawn. */
   const point = (x: number, y: number): Point => {
@@ -58,7 +62,7 @@ export const layoutOf = (plan: FloorPlan, fit: { width: number; height: number }
           : quarter === 2
             ? [plan.width - x, plan.depth - y]
             : [y, plan.width - x];
-    return { x: PAD + sx * scale, y: PAD + sy * scale };
+    return { x: pad + sx * scale, y: pad + sy * scale };
   };
   /** Where a box in the room is drawn. */
   const box = (x: number, y: number, width: number, depth: number): Box => {
@@ -74,8 +78,8 @@ export const layoutOf = (plan: FloorPlan, fit: { width: number; height: number }
   const onWall = (wall: PlanWall, t: number) => point(...along(plan, wall, t));
   return {
     scale,
-    width: across * scale + 2 * PAD,
-    height: down * scale + 2 * PAD,
+    width: across * scale + 2 * pad,
+    height: down * scale + 2 * pad,
     room: box(0, 0, plan.width, plan.depth),
     point,
     box,
