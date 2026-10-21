@@ -101,17 +101,12 @@ describe("a floor plan in an answer (#257)", () => {
     expect(heading).toBe("# Garage floor plan\n\n```plan\n");
     expect(JSON.parse(json ?? "")).toEqual(GARAGE);
     expect((await changesIn(contextDir))[0]?.title).toBe("Save floor plan: Garage");
-    expect(await home(request)).toMatchObject({
-      views: [
-        {
-          kind: "plan",
-          id: "plan:garage-floor-plan",
-          title: "Garage plan",
-          document: "garage-floor-plan",
-          plan: GARAGE,
-        },
-      ],
-      showing: "plan:garage-floor-plan",
+    // A space's main subject is its floor plan (#603).
+    expect((await home(request)).subject).toEqual({
+      kind: "plan",
+      name: "Garage plan",
+      document: "garage-floor-plan",
+      plan: GARAGE,
     });
   });
 
@@ -131,9 +126,7 @@ describe("a floor plan in an answer (#257)", () => {
       { action: "update", document: { slug: "garage-floor-plan", name: "Garage floor plan" } },
     ]);
     expect((await changesIn(contextDir))[0]?.title).toBe("Update floor plan: Garage");
-    const { views } = await home(request);
-    expect(views).toHaveLength(1);
-    expect(views[0]).toMatchObject({ plan: moved });
+    expect((await home(request)).subject).toMatchObject({ plan: moved });
   });
 
   it("saves nothing for a block that isn't a plan Courtyard can draw", async () => {
@@ -142,6 +135,6 @@ describe("a floor plan in an answer (#257)", () => {
     ]);
 
     expect(saved(events)).toEqual([]);
-    expect((await home(request)).views).toEqual([]);
+    expect((await home(request)).subject).toBeNull();
   });
 });

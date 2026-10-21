@@ -160,11 +160,10 @@ export {
 export { OptionsBlock, optionsPart } from "./lib/options.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";
 export {
-  HomeView,
-  HomeViewId,
-  HomeViewPick,
-  LastQuestion,
-  PinnedPart,
+  BIKE_PLACES,
+  BikePlace,
+  DrawnPart,
+  HomeSubject,
   PlanningHome,
 } from "./lib/planning-home.ts";
 export {
@@ -300,8 +299,6 @@ export {
   TaskOutput,
 } from "./lib/tasks.ts";
 export {
-  pinOf,
-  pinText,
   THING_DETAILS,
   THING_FIELD_MAX_CHARACTERS,
   THING_FORM_FIELD,
@@ -320,8 +317,6 @@ export {
   ThingList,
   ThingMark,
   ThingPhotoPath,
-  ThingPin,
-  ThingPinMove,
   ThingProblem,
   ThingSave,
   ThingSlug,

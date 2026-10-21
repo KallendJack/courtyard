@@ -1,136 +1,88 @@
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
 import {
-  type HomeView,
-  HomeViewId,
-  type PinnedPart,
-  type PlanningHome,
-  type ThingSlug,
+  BIKE_PLACES,
+  type BikePlace,
+  type DrawnPart,
+  type HomeSubject,
   type ThingSummary,
-  type WorkspaceId,
 } from "@courtyard/contract";
-import { z } from "zod";
-import { readJsonFile, writeJsonFile } from "../../lib/files.ts";
-import { err, ok, type Result } from "../../lib/result.ts";
 
 /**
- * A planning workspace's Home (#208): the views it can show, each filled from the workspace's
- * Things, which one shows, and its photo. Decided here, once, for every screen.
+ * A planning workspace's main subject (#603): a Thing drawn as its kind of thing, its parts placed
+ * by name; else its newest floor plan. Decided here, once, for every screen.
  */
 
-/** A Thing's photo view's id. */
-const pictureOf = (slug: ThingSlug) => HomeViewId.parse(`picture:${slug}`);
+/**
+ * The words in a part's name that put it on each place of the mountain bike's drawing, in the
+ * order they're tried: a rear tyre before any tyre, so "Tyres" takes the front one.
+ */
+const BIKE_WORDS: readonly (readonly [BikePlace, RegExp])[] = [
+  ["seatpost", /\bseat ?post\b|\bdropper\b/i],
+  ["saddle", /\bsaddle\b/i],
+  ["grips", /\bgrips?\b/i],
+  ["fork", /\bfork\b/i],
+  ["brakes", /\bbrakes?\b|\brotors?\b/i],
+  ["drivetrain", /\bdrivetrain\b|\bchain(?:ring)?\b|\bcassette\b|\bderailleur\b|\bcranks?\b/i],
+  ["pedals", /\bpedals?\b/i],
+  ["rear-tyre", /\b(?:rear|back) (?:tyre|tire)s?\b/i],
+  ["front-tyre", /\b(?:tyre|tire)s?\b/i],
+];
 
-/** Whether a Thing needs something: to get, to replace, or a next step. */
-const needsSomething = (thing: ThingSummary) =>
-  thing.status !== "have" || thing.needs !== undefined;
+/** A Thing is drawn as a mountain bike once this many of its parts have a place on it. */
+const PARTS_TO_DRAW = 2;
 
-/** The latest of some times, as ISO strings compare. */
-const latest = (times: readonly string[]) =>
-  times.reduce((last, time) => (time > last ? time : last), "");
-
-const partOn = (part: ThingSummary): PinnedPart => ({
+const drawnPart = (part: ThingSummary): DrawnPart => ({
   thing: part.slug,
   name: part.name,
-  status: part.status,
-  ...(part.needs === undefined ? {} : { needs: part.needs }),
-  pin: part.pin,
-  flagged: needsSomething(part),
+  ...(part.upcoming === undefined ? {} : { upcoming: part.upcoming.name }),
 });
 
-/** Each Thing that isn't a part, with its parts, in list order. */
-const withParts = (things: readonly ThingSummary[]) => {
+/**
+ * A Thing's parts on the mountain bike's drawing, in list order: each on the first free place its
+ * name fits, in the drawing's order; those with none, or whose place is taken, under it.
+ */
+const onTheBike = (top: ThingSummary, parts: readonly ThingSummary[]) => {
+  const taken = new Map<BikePlace, ThingSummary>();
+  const unplaced: ThingSummary[] = [];
+  for (const part of parts) {
+    const place = BIKE_WORDS.find(([at, words]) => !taken.has(at) && words.test(part.name))?.[0];
+    if (place === undefined) unplaced.push(part);
+    else taken.set(place, part);
+  }
+  return {
+    kind: "drawing",
+    drawing: "mountain-bike",
+    thing: top.slug,
+    name: top.name,
+    placed: BIKE_PLACES.flatMap((place) => {
+      const part = taken.get(place);
+      return part === undefined ? [] : [{ place, ...drawnPart(part) }];
+    }),
+    unplaced: unplaced.map(drawnPart),
+  } satisfies HomeSubject;
+};
+
+/**
+ * The workspace's main subject: the Thing with the most parts on the mountain bike's drawing, once
+ * enough of them fit it; else its newest floor plan (#257), whose views come newest first; else
+ * none.
+ */
+export const subjectOf = (
+  things: readonly ThingSummary[],
+  plans: readonly Extract<HomeSubject, { kind: "plan" }>[] = [],
+): HomeSubject | null => {
   const slugs = new Set(things.map(({ slug }) => slug));
-  return things
+  const drawn = things
     .filter(({ partOf }) => partOf === undefined || !slugs.has(partOf))
-    .map((top) => ({ top, parts: things.filter(({ partOf }) => partOf === top.slug) }));
-};
-
-/**
- * Home's views from a workspace's Things and its saved floor plans, in list order: each Thing with
- * a photo and parts, broken down into every part, those that need something first; then each
- * room's plan, newest first. The wanted list is the Things tab's (#565).
- */
-export const homeViews = (
-  things: readonly ThingSummary[],
-  plans: readonly HomeView[] = [],
-): HomeView[] => {
-  const pictures = withParts(things).flatMap(({ top, parts }): HomeView[] =>
-    top.photo && parts.length > 0
-      ? [
-          {
-            kind: "picture",
-            id: pictureOf(top.slug),
-            title: top.name,
-            changedAt: latest([top, ...parts].map(({ updatedAt }) => updatedAt)),
-            thing: top.slug,
-            parts: [
-              ...parts.filter(needsSomething),
-              ...parts.filter((one) => !needsSomething(one)),
-            ].map(partOn),
-          },
-        ]
-      : [],
-  );
-  return [...pictures, ...plans];
-};
-
-/** The workspace's photo: its main Thing's, the one with a photo and the most parts. */
-const mainPhoto = (things: readonly ThingSummary[]) =>
-  withParts(things)
-    .filter(({ top }) => top.photo)
-    .reduce<{ top: ThingSummary; parts: readonly ThingSummary[] } | undefined>(
-      (main, one) => (main === undefined || one.parts.length > main.parts.length ? one : main),
+    .map((top) =>
+      onTheBike(
+        top,
+        things.filter(({ partOf }) => partOf === top.slug),
+      ),
+    )
+    .filter(({ placed }) => placed.length >= PARTS_TO_DRAW)
+    .reduce<ReturnType<typeof onTheBike> | undefined>(
+      (most, one) => (most === undefined || one.placed.length > most.placed.length ? one : most),
       undefined,
-    )?.top.slug ?? null;
-
-/** Home without its question and projects: its views, the one showing, and its photo. */
-export const homeOf = (
-  things: readonly ThingSummary[],
-  pick: HomeViewId | undefined,
-  /** Its saved floor plans' views (#257). */
-  plans: readonly HomeView[] = [],
-): Omit<PlanningHome, "question" | "projects"> => {
-  const views = homeViews(things, plans);
-  const picked = views.find(({ id }) => id === pick);
-  const lastChanged = views.reduce<HomeView | undefined>(
-    (last, view) => (last === undefined || view.changedAt > last.changedAt ? view : last),
-    undefined,
-  );
-  return {
-    views,
-    showing: (picked ?? lastChanged)?.id ?? null,
-    picked: picked !== undefined,
-    photo: mainPhoto(things),
-  };
+    );
+  return drawn ?? plans[0] ?? null;
 };
-
-const KeptPick = z.object({ view: HomeViewId });
-
-/**
- * The owner's pick of each planning workspace's view, kept in the data folder (it's Courtyard's
- * own state, not the workspace's): `planning-home/<workspace>.json`.
- */
-export const createHomePicks = (options: { dataDir: string }) => {
-  const folder = join(options.dataDir, "planning-home");
-  const fileOf = (workspaceId: WorkspaceId) => join(folder, `${workspaceId}.json`);
-  return {
-    /** The view the owner last picked, if any. */
-    of: async (workspaceId: WorkspaceId): Promise<HomeViewId | undefined> => {
-      const kept = await readJsonFile(fileOf(workspaceId), KeptPick);
-      return kept.ok ? kept.value?.view : undefined;
-    },
-    /** Keeps the owner's pick. */
-    pick: async (workspaceId: WorkspaceId, view: HomeViewId): Promise<Result<null, "storage">> => {
-      try {
-        await mkdir(folder, { recursive: true });
-      } catch {
-        return err("storage");
-      }
-      const written = await writeJsonFile(fileOf(workspaceId), { view });
-      return written.ok ? ok(null) : err("storage");
-    },
-  };
-};
-
-export type HomePicks = ReturnType<typeof createHomePicks>;

@@ -444,13 +444,9 @@ export default function HandheldFrame(props: {
         )}
       </div>
       <div ref={bottom} data-frame-bottom="">
-        {/* On a tablet the box is always there, on a page that has one, unless it's tucked away (#565);
-            on the cover screen, once opened. */}
-        <div
-          ref={props.dockRef}
-          data-dock={layout}
-          hidden={tablet && box?.tucked !== true ? undefined : !boxOpen}
-        />
+        {/* On a tablet the box is always there, on a page that has one; on the cover screen, once
+            opened. */}
+        <div ref={props.dockRef} data-dock={layout} hidden={tablet ? undefined : !boxOpen} />
         {!tablet && !reading && (
           <div data-handheld="" className="contents">
             <div

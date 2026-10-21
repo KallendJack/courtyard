@@ -133,9 +133,9 @@ function Legend() {
 }
 
 /**
- * "On Home ✓", once the workspace's Home shows this very plan: the worker saved it there when the
- * answer ended (#257). It opens Home. Nothing where there's no Home, or once a later plan of the
- * room has replaced it.
+ * "On Home ✓", once the workspace's Home shows this very plan as its main subject: the worker saved
+ * it when the answer ended (#257, #603). It opens Home. Nothing where there's no Home, or once a
+ * later plan has replaced it.
  */
 function SavedOnHome(props: { plan: FloorPlan }) {
   const params = useParams({ strict: false });
@@ -147,9 +147,8 @@ function SavedOnHome(props: { plan: FloorPlan }) {
     load: async () => (workspaceId === undefined ? undefined : loadKeptHome(workspaceId)),
   });
   const drawn = JSON.stringify(props.plan);
-  const saved = home?.views.some(
-    (view) => view.kind === "plan" && JSON.stringify(view.plan) === drawn,
-  );
+  const subject = home?.subject;
+  const saved = subject?.kind === "plan" && JSON.stringify(subject.plan) === drawn;
   if (workspaceId === undefined || saved !== true) return null;
   return (
     <Link
