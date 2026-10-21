@@ -14,9 +14,14 @@ change with one Undo; Home's Projects lists the office with its next step and Ca
 
 ## API
 
-None of its own: Home (`GET /api/workspaces/:id/home`) carries the projects, a session starts from one with
-`project` in its first message (`POST /api/workspaces/:id/sessions`), and a project save is undone from its note
-(`POST /api/sessions/:id/projects/:save/undo`) or Recent changes. `routes.ts` holds how those answer a refusal.
+- `PUT /api/workspaces/:id/projects/:slug/decision`: Pick on an options block in a session that belongs to the
+  project (#603), `ProjectDecision`, recorded as the model's tool records one (a decided step, a history line), the
+  owner's own change with Undo in Recent changes. Answers `ProjectDecided`.
+
+Otherwise Home (`GET /api/workspaces/:id/home`) carries the projects, a session starts from one with `project` in its
+first message (`POST /api/workspaces/:id/sessions`), and says which it belongs to as `project` (`GET
+/api/sessions/:id`), and a project save is undone from its note (`POST /api/sessions/:id/projects/:save/undo`) or
+Recent changes. `routes.ts` holds how those answer a refusal.
 
 ## How it works
 

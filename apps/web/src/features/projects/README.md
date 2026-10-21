@@ -9,7 +9,8 @@ Needs a pro or Decided. Carry on starts a session that belongs to the project, "
 office: Measure the back wall."
 
 - **Uses:** `components/layout/home-block.tsx` (the block and its rows), `features/sessions/` (Start, for Carry on).
-- **Used by:** `features/planning-home/` (Home and the project's place), `features/sessions/` (a project save's note).
+- **Used by:** `features/planning-home/` (Home and the project's place), `features/sessions/` (a project save's note),
+  `components/rich-blocks/options.tsx` (Pick for a project's decision).
 
 ## Screens
 
@@ -25,3 +26,5 @@ office: Measure the back wall."
 - Home brings the projects (`PlanningHome.projects`), so a project's page opens at once from it.
 - Carry on (`carry-on.ts`) starts a session with the project's name and next step as its first message and `project`
   set, then opens it. Its calls and words are in `api.ts`.
+- Pick on an options block `about` a decision, in a session that belongs to a project, records it (`pickDecision`,
+  #603): the options block's own Pick and look, showing ✓ Decided once the project has it.

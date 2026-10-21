@@ -1482,7 +1482,11 @@ violet: each its name, its price and shop linking to its page, its line why, and
 upcoming one with no model turn (`PUT …/things/:slug/upcoming`, a line in its history saying so), then shows
 **✓ Upcoming**; another Pick replaces it. The contract's `OptionsBlock` schema checks it (one to four options, each
 linked); one that fails shows its source under "Couldn't draw this list of options", and one whose Thing isn't there shows
-them without Pick. No picture is drawn: the web app loads images only from the worker, and fetching a shop's picture
+them without Pick. An options block for a decision on a project (#603) has `about` (what's being decided, such as
+Desk) in place of `part`, or beside it, and its options needn't be linked: in a session that belongs to a project, its
+Pick records the project's decision (`PUT …/projects/:slug/decision`, with the block's options, the option picked and
+its why), the owner's own change with Undo in Recent changes, and shows **✓ Decided**, the same Pick and look; another
+Pick replaces it, as a decision about the same thing again does. With both, Pick does both. No picture is drawn: the web app loads images only from the worker, and fetching a shop's picture
 for it is a decision of its own.
 
 ## Projects
@@ -1563,12 +1567,19 @@ asking:
 > ("about 10 minutes, laser measurer"); needs a pro, work on electrics, gas or a building's structure, its detail who
 > to get and what to ask ("a registered electrician (Part P)"); or decided. A job the owner asks to add to a project
 > that needs a pro is added straight away as a needs a pro step, since the step itself says a pro does it. Its first
-> step that isn't decided is what's next, which the workspace's page shows with Carry on. When the owner decides something for a project, such
-> as its layout or which desk, record the decision with the options they weighed, their pick and why, in their words;
-> it becomes a decided step. When they've done a step, mark it done. When this session is clearly about a project it
-> doesn't belong to, attach it with session, so the project gathers its sessions. What a project holds goes in the
-> project, not in a context line as well: a plan with steps, or one carried over days, is a project. The owner sees
-> each change you make as a note under your answer, so leave saves unmentioned.
+> step that isn't decided is what's next, which the workspace's page shows with Carry on. When the owner decides
+> something for a project, such as its layout or which desk, record the decision with the options they weighed, their
+> pick and why, in their words; it becomes a decided step. To help them choose between options for a project, such as
+> which desk to buy, write a sentence saying which you'd pick, then the options side by side in an options block whose
+> about is what's being decided: a code block whose language is `options`, holding only JSON, such as {"about":
+> "Desk", "options": [{"name": "Flexispot E7", "price": "about £300", "shop": "Flexispot", "link": "https://…", "why":
+> "Stands up, fits the back wall"}]}, with two to four options, the one you'd pick first, a product linked to the page
+> you found it on. In a session that belongs to the project, the owner's Pick on one records the decision with those
+> options and its why, so record one yourself only when they tell you which. When they've done a step, mark it done.
+> When this session is clearly about a project it doesn't belong to, attach it with session, so the project gathers
+> its sessions. What a project holds goes in the project, not in a context line as well: a plan with steps, or one
+> carried over days, is a project. The owner sees each change you make as a note under your answer, so leave saves
+> unmentioned.
 
 **The save_project tool,** offered beside the document and Things tools, as a model reads it, and its inputs:
 

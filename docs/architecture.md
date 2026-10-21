@@ -323,7 +323,9 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   `ProductBlock` accepts, drawn as a card with + Add to wanted, which adds a Thing of that name, wanted, through
   `features/things/`'s call, or ✓ In Wanted once one is. An `options` block (`options.tsx`, #602) is the JSON the
   contract's `OptionsBlock` accepts, a Thing's replacement options side by side, each with Pick, which makes it that
-  Thing's upcoming one through `features/things/`'s call, or ✓ Upcoming once it is. A `plan` block (`floor-plan.tsx`, #257) is the JSON the
+  Thing's upcoming one through `features/things/`'s call, or ✓ Upcoming once it is. One `about` a decision (#603),
+  in a session that belongs to a project (the session's `project`), records the project's decision through
+  `features/projects/`' call (`PUT …/projects/:slug/decision`), or ✓ Decided once it is. A `plan` block (`floor-plan.tsx`, #257) is the JSON the
   contract's `FloorPlan` accepts, a room in centimetres seen from the front, drawn top-down and to scale by our own
   SVG (`plan-geometry.ts` places each part, and turns the plan when it says why) beside a list of its things by
   side; a tap on a thing or its row lights both up. It says "On Home ✓" once the workspace's Home shows that very

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ChangeId } from "./change-id.ts";
 
 // A planning workspace's projects (#603, ADR 0032): what the owner carries over days and sessions,
 // such as turning the garage into an office, a Markdown file each in its `projects` folder: its
@@ -109,6 +110,14 @@ export const ProjectSave = z.object({
   changes: z.array(z.string()),
 });
 export type ProjectSave = z.infer<typeof ProjectSave>;
+
+/**
+ * A project's decision picked on an options block (#603), in a session that belongs to it: the
+ * project as it is now, and the change that recorded it (`null` when it couldn't be kept), which
+ * Undo names.
+ */
+export const ProjectDecided = z.object({ change: z.nullable(ChangeId), project: Project });
+export type ProjectDecided = z.infer<typeof ProjectDecided>;
 
 /**
  * A change to a project as Recent changes lists it: what it did (removed only by undoing its
