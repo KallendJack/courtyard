@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DocumentSlug } from "./documents.ts";
 import { FloorPlan } from "./floor-plan.ts";
+import { Project } from "./projects.ts";
 import { Effort, ModelRef, SessionId } from "./session.ts";
 import { ThingPin, ThingSlug, ThingStatus } from "./things.ts";
 
@@ -94,6 +95,11 @@ export const PlanningHome = z.object({
   /** The workspace's photo, top right: its main Thing's, by its file's name. */
   photo: ThingSlug.nullable(),
   question: LastQuestion.nullable(),
+  /**
+   * Its projects (#603): those being carried on first, each by name, then those done; each with
+   * its steps and decisions, which its page shows.
+   */
+  projects: z.array(Project),
 });
 export type PlanningHome = z.infer<typeof PlanningHome>;
 

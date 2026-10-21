@@ -6,7 +6,7 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { BookmarkCheck, FileText, ListChecks, Pencil, Tag, Undo2 } from "lucide-react";
+import { BookmarkCheck, FileText, ListChecks, Pencil, Route, Tag, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/buttons/button";
 import { NoteRow, NoteWords } from "@/components/chat/note-row";
@@ -225,6 +225,43 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
         />
         {slug !== null && workspace !== undefined && !muted && (
           <OpenLink workspaceId={workspace} kind="thing" slug={slug} />
+        )}
+      </NoteRow>
+    );
+  }
+
+  if (change.project !== undefined) {
+    const { did, name, slug } = change.project;
+    const label =
+      did === "added" ? "Started project" : `${did === "removed" ? "Removed" : "Updated"} project`;
+    return (
+      <NoteRow
+        icon={muted ? <Undo2 /> : <Route />}
+        muted={muted}
+        tall
+        actions={actions}
+        error={undo.error}
+      >
+        <NoteWords
+          label={muted ? "Undone" : label}
+          line={name}
+          muted={muted}
+          struck={did === "removed"}
+        />
+        <Meta
+          workspace={workspace}
+          change={change}
+          note={muted ? `${did}, then undone` : undefined}
+        />
+        {slug !== null && workspace !== undefined && !muted && (
+          <Link
+            to="/workspaces/$workspaceId"
+            params={{ workspaceId: workspace }}
+            hash={`project/${slug}`}
+            className={OPEN}
+          >
+            Open
+          </Link>
         )}
       </NoteRow>
     );

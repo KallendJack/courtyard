@@ -10,6 +10,7 @@ import type { Result } from "../../lib/result.ts";
 import { planViews } from "../floor-plans/index.ts";
 import type { PlanningFilesTarget } from "../planning-files/index.ts";
 import { workspaceIn } from "../planning-files/routes.ts";
+import { readProjects } from "../projects/index.ts";
 import { readThings } from "../things/index.ts";
 import { thingError } from "../things/routes.ts";
 import { type HomePicks, homeOf } from "./index.ts";
@@ -35,10 +36,13 @@ export const planningHomeRoutes = (target: {
     const things = read.value.things.map(({ summary }) => summary);
     // Documents that can't be read leave Home without plans, never without the rest.
     const plans = await planViews({ contextDir, workspaceId });
+    // Its projects (#603); ones that can't be read leave Home without them, never without the rest.
+    const projects = await readProjects({ contextDir, workspaceId });
     return {
       home: {
         ...homeOf(things, await picks.of(workspaceId), plans.ok ? plans.value : []),
         question: question.value,
+        projects: projects.ok ? projects.value.projects.map(({ project }) => project) : [],
       } satisfies PlanningHome,
     };
   };

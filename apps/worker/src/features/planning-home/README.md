@@ -7,13 +7,15 @@ its photo, and the latest session's next steps, which History shows. Decided her
 photo, the stretched chain and the soft rear tyre flagged first, then the fork) and "Road bike". The road bike changed
 last, so it shows, until you tap the Whyte, which then stays.
 
-- **Uses:** `things/` (the Things, read), `floor-plans/` (its plan views), `planning-files/routes.ts`, `sessions/` (`lastQuestion`), `lib/files.ts`.
+- **Uses:** `things/` (the Things, read), `floor-plans/` (its plan views), `projects/` (its projects, read),
+  `planning-files/routes.ts`, `sessions/` (`lastQuestion`), `lib/files.ts`.
 - **Used by:** `worker.ts`; in the web app, `features/planning-home/` once its screens are built.
 
 ## API
 
 - `GET /api/workspaces/:id/home`: `PlanningHome`, its views, the one showing, whether it's the owner's pick, the
-  workspace's photo and the latest session's last question with its next steps.
+  workspace's photo, the latest session's last question with its next steps, and its projects (#603), those being
+  carried on first, each with its steps and decisions.
 - `PUT /api/workspaces/:id/home/showing`: the owner's pick (`HomeViewPick`), refused with 404 for a view that isn't
   there.
 

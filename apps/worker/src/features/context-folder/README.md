@@ -18,7 +18,7 @@ pushed to the backup, and listed in Recent changes with Undo.
 - Makes changes one at a time, each kept as a commit that says what kind of change it is.
 - Commits hand edits (before the next change and every ten minutes), pushes to the backup, and reads the history
   back for Recent changes and Fresh start.
-- A change made file by file rather than line by line (a document's or a Thing's) names its files in
+- A change made file by file rather than line by line (a document's, a Thing's or a project's) names its files in
   `Courtyard-File` trailers, so `wholeFilesOf`, `stillAsLeft` and `undoWholeFiles` can read it back and undo it (as
   bytes, so a photo goes back as it was).
 - `WHOLE_FILE_FOLDERS` are the workspace folders Recent changes looks in besides `CONTEXT.md`.

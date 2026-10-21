@@ -7,11 +7,19 @@ import { ButtonLink } from "../buttons/button-link";
 import { describeProblem } from "../layout/problems.tsx";
 import { NoteRow, NoteWords } from "./note-row";
 
-/** The page a saved file opens on: a document's, or a Thing's card. */
-type FilePage = {
-  readonly to: "/workspaces/$workspaceId/documents/$slug" | "/workspaces/$workspaceId/things/$slug";
-  readonly params: { readonly workspaceId: string; readonly slug: string };
-};
+/** The page a saved file opens on: a document's, a Thing's card, or a project's place (#603). */
+type FilePage =
+  | {
+      readonly to:
+        | "/workspaces/$workspaceId/documents/$slug"
+        | "/workspaces/$workspaceId/things/$slug";
+      readonly params: { readonly workspaceId: string; readonly slug: string };
+    }
+  | {
+      readonly to: "/workspaces/$workspaceId";
+      readonly params: { readonly workspaceId: string };
+      readonly hash: string;
+    };
 
 /**
  * A document or a Thing a session saved, as a note under the answer (ADR 0020): what it did ("Saved
@@ -44,11 +52,22 @@ export function FileSaveNote(props: {
       actions={
         undone ? undefined : (
           <>
-            {open !== undefined && (
-              <ButtonLink variant="quiet" size="xs" to={open.to} params={open.params}>
-                Open
-              </ButtonLink>
-            )}
+            {open !== undefined &&
+              ("hash" in open ? (
+                <ButtonLink
+                  variant="quiet"
+                  size="xs"
+                  to={open.to}
+                  params={open.params}
+                  hash={open.hash}
+                >
+                  Open
+                </ButtonLink>
+              ) : (
+                <ButtonLink variant="quiet" size="xs" to={open.to} params={open.params}>
+                  Open
+                </ButtonLink>
+              ))}
             <Button
               variant="quiet"
               size="xs"

@@ -44,13 +44,13 @@ export const planningFolder = async (
 const SLUG_MAX = 60;
 
 /**
- * The file name for a document or a Thing called `name`, as `slug` checks it, or `undefined`
+ * The file name for a document, a Thing or a project called `name`, as `slug` checks it, or `undefined`
  * when it has no letter or digit. A name Windows keeps for itself gets the kind after it
  * (`con-thing`).
  */
 export const slugFor = <Slug extends z.ZodType>(
   name: string,
-  file: { readonly slug: Slug; readonly kind: "document" | "thing" },
+  file: { readonly slug: Slug; readonly kind: PlanningFileKind },
 ): z.output<Slug> | undefined => {
   let plain = plainName(name);
   if (plain.length > SLUG_MAX) plain = plain.slice(0, SLUG_MAX).replace(/-[^-]*$/, "");
@@ -65,14 +65,17 @@ export const pathInFolder = (workspaceId: WorkspaceId, path: string) => `${works
 /** A path from the context folder's top, as changes name it, in its workspace's folder. */
 export const pathInWorkspace = (path: string) => path.split("/").slice(1).join("/");
 
+/** The kinds of file a planning workspace keeps: documents, Things (ADR 0020) and projects (#603). */
+export type PlanningFileKind = "document" | "thing" | "project";
+
 /**
- * A change to a planning workspace's documents or Things, described for the context folder's
- * history: its files by their paths in the workspace's folder, each named once.
+ * A change to a planning workspace's documents, Things or projects, described for the context
+ * folder's history: its files by their paths in the workspace's folder, each named once.
  */
 export const planningChange = (
   target: Pick<PlanningFilesTarget, "workspaceId" | "sessionId">,
   change: {
-    readonly kind: "document" | "thing";
+    readonly kind: PlanningFileKind;
     readonly title: string;
     readonly paths: readonly string[];
   },

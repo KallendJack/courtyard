@@ -19,6 +19,7 @@ import {
   DOCUMENT_TOOL_NAME,
   LEAD_TOOL_NAME,
   PREVIEW_TOOL_NAME,
+  PROJECT_TOOL_NAME,
   READ_SESSION_TOOL_NAME,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
@@ -201,6 +202,24 @@ const scriptedThings = (message: string): Record<string, unknown>[] =>
     return [input];
   });
 
+const PROJECT = /^project: *(\{.*\})$/i;
+
+/**
+ * The project saves a message scripts (#603), one per line: "project: " and the tool's input as
+ * JSON, such as `project: {"name": "Garage office", "add_steps": [{"kind": "needs a pro", "text":
+ * "Sockets"}]}`. A line whose JSON doesn't read is left out.
+ */
+const scriptedProjects = (message: string): unknown[] =>
+  message.split("\n").flatMap((line) => {
+    const [, json] = PROJECT.exec(line.trim()) ?? [];
+    if (json === undefined) return [];
+    try {
+      return [JSON.parse(json)];
+    } catch {
+      return [];
+    }
+  });
+
 const PREVIEW_SHOT = /^preview screenshot: (\S+)(?: (\S+))?$/i;
 
 /**
@@ -253,6 +272,7 @@ const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unk
   [SAVE_TOOL_NAME, scriptedSaves],
   [DOCUMENT_TOOL_NAME, scriptedDocuments],
   [THING_TOOL_NAME, scriptedThings],
+  [PROJECT_TOOL_NAME, scriptedProjects],
   [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
   [LEAD_TOOL_NAME, scriptedBuildOrder],
 ];

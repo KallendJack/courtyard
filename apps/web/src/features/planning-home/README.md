@@ -8,6 +8,7 @@ it, each with a line to its pin, the chain and the rear tyre with a gold dot. Ta
 photo: "RockShox · 120 mm", with Open and Ask about it.
 
 - **Uses:** `features/sessions/` (the message box, Start, and History's list), `features/things/`,
+  `features/projects/` (Home's projects and a project's place),
   `features/documents/`, `components/photo/` (the photo with its pins and labels, the header's ring),
   `components/workspace/` (its pills), `components/forms/segmented-choice.tsx` (the view chips). The worker's side is
   `GET /api/workspaces/:id/home`, `PUT …/home/showing`, and a Thing's `PUT …/pin` and `PUT …/mark`
@@ -22,7 +23,11 @@ photo: "RockShox · 120 mm", with Open and Ask about it.
   in the same ring, offering to take or pick one), and the pills: + New · History · Things · Docs, each tab once it has
   something, with its count, by the address's hash. The chosen pill leads back to Home.
 - **Home** (`home-now.tsx`): the view showing in one panel, a chip for each when there are several, the pick kept by
-  the worker; and nothing else, no chat. With nothing to show, the panel keeps its size with one quiet line.
+  the worker; under it the workspace's projects (`features/projects/`, #603), two rows tall, each with its next
+  step and Carry on; and nothing else, no chat. With projects and nothing to show, the projects fill Home; with
+  neither, the panel keeps its size with one quiet line.
+- **A project** (`#project/<slug>`, #603): its page in Home's place, under the header and pills
+  (`features/projects/project-view.tsx`); the box under it starts a session that belongs to the project.
 - **The Breakdown view** (`breakdown-view.tsx`): a Thing's photo with every part pinned, a gold dot for one that needs
   something; from a tablet up each part's label beside the photo with a line to its pin (labels with no pin yet at the
   foot of the shorter side), on the cover screen every part in a list under it. A tap on a label, a pin or a row opens

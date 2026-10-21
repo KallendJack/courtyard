@@ -176,6 +176,21 @@ export {
 } from "./lib/preview.ts";
 export { ProductBlock } from "./lib/product.ts";
 export {
+  DECISION_OPTIONS_MAX,
+  nextStepOf,
+  PROJECT_FIELD_MAX_CHARACTERS,
+  PROJECT_LINE_MAX_CHARACTERS,
+  Project,
+  ProjectChange,
+  ProjectDecision,
+  ProjectFields,
+  ProjectSave,
+  ProjectSlug,
+  ProjectStatus,
+  ProjectStep,
+  StepKind,
+} from "./lib/projects.ts";
+export {
   BumpStanding,
   ChangedFile,
   MergeReadiness,

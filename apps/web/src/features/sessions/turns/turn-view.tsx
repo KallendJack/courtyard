@@ -30,6 +30,7 @@ import { SourceList, sourcesAsMarkdown } from "../answer/sources.tsx";
 import { answerApproval, attachmentUrl } from "../composer/messages.ts";
 import { answeringWith, availableModels } from "../composer/models.ts";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "../notes/documents.tsx";
+import { ProjectNoteRow } from "../notes/projects.tsx";
 import { SaveNote } from "../notes/save-note.tsx";
 import { ThingNoteRow } from "../notes/things.tsx";
 import { CutOffCard } from "./cut-off-card.tsx";
@@ -579,6 +580,18 @@ export const TurnView = memo(function TurnView(props: {
         <ul aria-label="Things saved" className="space-y-1.5">
           {turn.things.map((note) => (
             <ThingNoteRow
+              key={note.seq}
+              sessionId={sessionId}
+              workspaceId={workspaceId}
+              note={note}
+            />
+          ))}
+        </ul>
+      )}
+      {turn.projects.length > 0 && (
+        <ul aria-label="Projects saved" className="space-y-1.5">
+          {turn.projects.map((note) => (
+            <ProjectNoteRow
               key={note.seq}
               sessionId={sessionId}
               workspaceId={workspaceId}

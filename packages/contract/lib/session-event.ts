@@ -3,6 +3,7 @@ import { AlwaysAllow, AlwaysFor, ApprovalAnswer, ApprovalAsk } from "./approval.
 import { Attachment, PhotoAttachment } from "./attachment.ts";
 import { ChangeId } from "./change-id.ts";
 import { DocumentSlug } from "./documents.ts";
+import { ProjectSave } from "./projects.ts";
 import { PullRequest } from "./pull-request.ts";
 import { Effort, ModelRef, PlacedLine } from "./session.ts";
 import { SkillName, SkillSource } from "./skill-name.ts";
@@ -345,6 +346,16 @@ export const SessionEvent = z.discriminatedUnion("type", [
   }),
   /** The owner undid the Thing save numbered `save`, whenever and from wherever they did it. */
   z.object({ ...eventBase, type: z.literal("thing-undone"), save: z.number().int().positive() }),
+  /** A project the model started or changed during the turn (#603). */
+  z.object({
+    ...eventBase,
+    type: z.literal("project-saved"),
+    save: ProjectSave,
+    /** The change it was committed as, which Undo reverses; absent when git couldn't keep it. */
+    change: z.optional(ChangeId),
+  }),
+  /** The owner undid the project save numbered `save`, whenever and from wherever they did it. */
+  z.object({ ...eventBase, type: z.literal("project-undone"), save: z.number().int().positive() }),
   /** A model gave the session this title after its first answer, in place of the first line. */
   z.object({ ...eventBase, type: z.literal("session-titled"), title: z.string() }),
   /** Replies the model offered the owner to tap, with the answer it's writing (ADR 0017). */

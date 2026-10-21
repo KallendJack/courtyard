@@ -12,6 +12,7 @@ import {
   type ModelRef,
   type PhotoAttachment,
   type PlacedLine,
+  type ProjectSave,
   type PullRequest,
   type Save,
   SessionEvent,
@@ -54,6 +55,14 @@ export type ThingNote = {
   /** The save's event number, which Undo names it by. */
   readonly seq: number;
   readonly save: ThingSave;
+  readonly undone: boolean;
+};
+
+/** A project the model started or changed in its answer (#603), shown as a note under it, and whether the owner has undone it since. */
+export type ProjectNote = {
+  /** The save's event number, which Undo names it by. */
+  readonly seq: number;
+  readonly save: ProjectSave;
   readonly undone: boolean;
 };
 
@@ -198,6 +207,8 @@ export type Turn = {
   readonly documents: readonly DocumentNote[];
   /** The Things its model saved, in order. */
   readonly things: readonly ThingNote[];
+  /** The projects its model started or changed, in order (#603). */
+  readonly projects: readonly ProjectNote[];
   /** Replies the model suggested the owner tap (ADR 0017); none when it suggested none. */
   readonly replies: readonly string[];
   /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
@@ -355,6 +366,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             notes: [],
             documents: [],
             things: [],
+            projects: [],
             replies: [],
             sources: [],
             images: [],
@@ -688,6 +700,25 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         change: (turn) => ({
           ...turn,
           things: turn.things.map((note) =>
+            note.seq === event.save ? { ...note, undone: true } : note,
+          ),
+        }),
+      });
+    case "project-saved": {
+      const note: ProjectNote = { seq, save: event.save, undone: false };
+      return withTurn(log, {
+        seq,
+        holds: (_, last) => last,
+        change: (turn) => ({ ...turn, projects: [...turn.projects, note] }),
+      });
+    }
+    case "project-undone":
+      return withTurn(log, {
+        seq,
+        holds: (turn) => turn.projects.some((note) => note.seq === event.save),
+        change: (turn) => ({
+          ...turn,
+          projects: turn.projects.map((note) =>
             note.seq === event.save ? { ...note, undone: true } : note,
           ),
         }),

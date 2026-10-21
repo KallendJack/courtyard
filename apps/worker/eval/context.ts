@@ -9,6 +9,7 @@ import {
   endsTurn,
   ModelId,
   type PlacedLine,
+  type ProjectSave,
   type Save,
   type SessionId,
   SessionSummary,
@@ -22,6 +23,7 @@ import { HOUSE_SKILLS_FOLDER, readHouseManifest } from "@courtyard/skills";
 import { z } from "zod";
 import { DOCS_FOLDER, documentPath } from "../src/features/documents/index.ts";
 import { OWNER_FILE } from "../src/features/owner-context/index.ts";
+import { projectPath } from "../src/features/projects/index.ts";
 import { readThingText, thingPath } from "../src/features/things/index.ts";
 import { CONTEXT_FILE } from "../src/features/workspaces/index.ts";
 import {
@@ -42,6 +44,7 @@ import {
 import {
   contextFileFor,
   type ExpectedDocument,
+  type ExpectedProject,
   type ExpectedSave,
   type ExpectedThing,
   ownerContextFor,
@@ -671,6 +674,51 @@ const judgeThings = async (judge: {
   return checks;
 };
 
+const describeProject = (save: ProjectSave) =>
+  `${save.action === "add" ? "started" : "changed"} project ${save.project.name}${save.changes.length === 0 ? "" : ` (${save.changes.join("; ")})`}`;
+
+/**
+ * A turn's project checks (#603): one for each project it should start or change, judged by its
+ * file afterwards, and one for saving no other. Nothing when the turn doesn't say.
+ */
+const judgeProjects = async (judge: {
+  expected: readonly ExpectedProject[] | undefined;
+  saved: readonly ProjectSave[];
+  /** The workspace's folder, where the projects are. */
+  folder: string;
+}): Promise<Check[]> => {
+  const { expected, saved, folder } = judge;
+  if (expected === undefined) return [];
+  const left = [...saved];
+  const checks: Check[] = [];
+  for (const wanted of expected) {
+    const matching = left.filter(
+      (save) =>
+        save.action === wanted.action && hasWords(save.project.name, { words: wanted.name }),
+    );
+    const save = matching.at(-1);
+    if (save === undefined) {
+      checks.push({
+        miss: `expected to ${wanted.action === "add" ? "start" : "change"} a project with ${describeWords(wanted.name)}; ${saved.length === 0 ? "saved none" : saved.map(describeProject).join("; ")}`,
+      });
+      continue;
+    }
+    // Several saves to the same project are one change to it, judged by its file.
+    for (const one of matching) left.splice(left.indexOf(one), 1);
+    const path = projectPath(save.project.slug);
+    const text = await readFile(join(folder, path), "utf8").catch(() => "");
+    checks.push({
+      miss: hasWords(text, { words: wanted.words })
+        ? null
+        : `expected ${path} to have ${describeWords(wanted.words)}; it reads "${text.replace(/\s+/g, " ").slice(0, 600)}"`,
+    });
+  }
+  checks.push({
+    miss: left.length === 0 ? null : `not expected: ${left.map(describeProject).join("; ")}`,
+  });
+  return checks;
+};
+
 /**
  * A house skills folder for a scenario with house skills of its own: Courtyard's, with the
  * scenario's beside them in skills.json. `undefined` when it adds none.
@@ -932,6 +980,19 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         notes.push(`${prefix}the answer ends "${answer.trim().replace(/\s+/g, " ").slice(-300)}"`);
       }
       judged.push(...thingChecks);
+      const projects = events.flatMap((event) =>
+        event.type === "project-saved" ? [event.save] : [],
+      );
+      if (projects.length > 0) notes.push(`${prefix}${projects.map(describeProject).join("; ")}`);
+      const projectChecks = await judgeProjects({
+        expected: turn.projects,
+        saved: projects,
+        folder,
+      });
+      if (projectChecks.some((check) => check.miss !== null)) {
+        notes.push(`${prefix}the answer ends "${answer.trim().replace(/\s+/g, " ").slice(-300)}"`);
+      }
+      judged.push(...projectChecks);
       checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 
       if (turn.undoSaves) {
