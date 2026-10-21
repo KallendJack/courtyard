@@ -1683,7 +1683,8 @@ effort, with no tools, kept with the workspace's review in the data folder (`mov
 in the context folder. When it can't be had, it's asked again 30 minutes on. A move may start a project or add steps
 to one, write a document again whole, archive a document (to `docs/archive/`, out of the documents and out of what
 models are told), give parts an upcoming one, and take away what it replaces: documents, Things, and Plans or Ideas
-lines, word for word. One that doesn't fit the contract's `Move`, or past the eighth, is left out.
+lines, word for word. One that doesn't fit the contract's `Move` (a step over 120 characters, say, or more than 30
+steps), or past the eighth, is left out whole, so nothing it would take away is lost.
 
 The model writing it is told:
 
@@ -1699,8 +1700,10 @@ The model writing it is told:
 > Propose each move that puts something where it belongs now, at most 8, the most useful first. A guide that's a
 > journey or a plan with steps becomes a project: its goal in a line and its steps from where the owner is now, the
 > next first, each you can do this (its detail what it takes), needs a pro (work on electrics, gas or a building's
-> structure, its detail who to get) or decided, leaving out what's done. Plans lines become steps of the project they
-> belong to, one you start or one there already, and Ideas lines a project's later steps, after its others. A wanted
+> structure, its detail who to get) or decided, leaving out what's done. A step is a few words, at most 120
+> characters, its detail too, with no ` · ` in its words, and a project has at most 30 steps: put the later ones
+> together rather than leave any out. Plans lines become steps of the project they belong to, one you start or one
+> there already, and Ideas lines a project's later steps, after its others. A wanted
 > Thing that's a new one of a part that's there, or a guide's list of what to buy for the parts, becomes those parts'
 > upcoming ones. A guide for something done or over is archived, kept out of the way. A long reference guide is
 > written again to fit one screen: tables first, short lines, no emoji in its headings, keeping every number, setting

@@ -26,7 +26,7 @@ const oneLine = (max: number) =>
 export const MOVES_MAX = 8;
 
 /** The most steps a move gives a project. */
-export const MOVE_STEPS_MAX = 20;
+export const MOVE_STEPS_MAX = 30;
 
 /**
  * One move a review proposes: what it says (what moves where, and what it becomes), then what it
