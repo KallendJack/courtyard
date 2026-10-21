@@ -267,18 +267,19 @@ export const usageWarnings = (state: {
 };
 
 /**
- * What an open pull request waits on the owner for: its conflict with its base, unless its
- * session is bringing it up to date (#382); its failing checks, unless its session is working on
- * them (#172), or it's a Dependabot bump the worker or the Lead has (#496) until it's still
- * failing after the Lead's fix; a merge once its checks pass; else nothing (its checks still
- * running, say).
+ * What an open pull request that isn't a draft (#653) waits on the owner for: its conflict with its
+ * base, unless its session is bringing it up to date (#382); its failing checks, unless its
+ * session is working on them (#172), or it's a Dependabot bump the worker or the Lead has (#496)
+ * until it's still failing after the Lead's fix; a merge once its checks pass; else nothing (its
+ * checks still running, say).
  */
 export const pullRequestWaiting = (
   pullRequest: PullRequest,
   session: { readonly now: TurnNow } | undefined,
   bump?: BumpStanding,
 ): PullRequestWaiting => {
-  if (pullRequest.state !== "open") return "nothing";
+  // A draft is parked by whoever opened it, whatever its checks (#653).
+  if (pullRequest.state !== "open" || pullRequest.draft === true) return "nothing";
   if (pullRequest.conflicts === true) {
     return session?.now.kind === "working" ? "nothing" : "conflict";
   }

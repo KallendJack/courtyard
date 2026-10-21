@@ -53,6 +53,7 @@ const standInGitHub = (issues: { number: number; comments: string[] }[]) => {
         deletions: 0,
         changed_files: 1,
         mergeable: true,
+        draft: false,
       };
     }
     if (path === `/repos/${REPO}/commits/abc123/check-runs`) {

@@ -275,6 +275,7 @@ export const createFakeGitHub = (
       files,
       changes: changesOf(files),
       conflicts: false,
+      draft: false,
       fork: false,
       author: open.author ?? account,
       mergedAt: null,
@@ -696,6 +697,8 @@ export const createFakeGitHub = (
       change(number, { checks, ...(head === undefined ? {} : { head }) }),
     /** The pull request now conflicts with its base, or no longer does (#160). */
     setConflicts: (number: number, conflicts: boolean) => change(number, { conflicts }),
+    /** The pull request is now a draft, or marked ready for review (#653). */
+    setDraft: (number: number, draft: boolean) => change(number, { draft }),
     /** Its state on GitHub now, as a test checks Merge or Close reached it (#160). */
     stateOf: (number: number) => pulls[pullNumbered(number)]?.state,
     /** The pull request was merged, on GitHub or from Courtyard. */
