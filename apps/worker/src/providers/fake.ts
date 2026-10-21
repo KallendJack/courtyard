@@ -173,13 +173,14 @@ const scriptedWork = (message: string) =>
 
 const THING = /^thing (\S+?): *(.*)$/i;
 const THING_FIELD =
-  /^(name|status|brand|bought|price|condition|size|where|part of|needs|pin|history|photo|remove)\b *(.*)$/i;
+  /^(name|status|brand|bought|price|condition|size|where|part of|needs|pin|history|photo|remove|upcoming price|upcoming shop|upcoming link|upcoming why|upcoming|fitted)\b *(.*)$/i;
 
 /**
  * The Thing saves a message scripts (ADR 0020), one per line: "thing add: name Tyres | status
  * have | part of T1" adds one, and "thing T2: history Swapped | price £32", "thing T2: pin 42, 61
- * | needs Lube it" (#208), "thing T2: photo 1" or "thing T2: remove" changes or removes the Thing
- * labelled T2. Each field is its name, then its value; an empty value clears it.
+ * | needs Lube it" (#208), "thing T2: upcoming DMR V8 | upcoming price £28" or "thing T2: fitted"
+ * (#602), "thing T2: photo 1" or "thing T2: remove" changes or removes the Thing labelled T2.
+ * Each field is its name, then its value; an empty value clears it.
  */
 const scriptedThings = (message: string): Record<string, unknown>[] =>
   message.split("\n").flatMap((line) => {
@@ -190,7 +191,12 @@ const scriptedThings = (message: string): Record<string, unknown>[] =>
       const [, field = "", value = ""] = THING_FIELD.exec(part.trim()) ?? [];
       const key = field.toLowerCase().replace(" ", "_");
       if (key === "") continue;
-      input[key] = key === "remove" ? true : key === "photo" ? Number(value) : value.trim();
+      input[key] =
+        key === "remove" || key === "fitted"
+          ? true
+          : key === "photo"
+            ? Number(value)
+            : value.trim();
     }
     return [input];
   });

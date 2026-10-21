@@ -314,7 +314,9 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   one at a time, in the colours read from the theme, at its
   own size so a wide one scrolls sideways. A `product` block (`product.tsx`, #245) is the JSON the contract's
   `ProductBlock` accepts, drawn as a card with + Add to wanted, which adds a Thing of that name, wanted, through
-  `features/things/`'s call, or ✓ In Wanted once one is. A `plan` block (`floor-plan.tsx`, #257) is the JSON the
+  `features/things/`'s call, or ✓ In Wanted once one is. An `options` block (`options.tsx`, #602) is the JSON the
+  contract's `OptionsBlock` accepts, a Thing's replacement options side by side, each with Pick, which makes it that
+  Thing's upcoming one through `features/things/`'s call, or ✓ Upcoming once it is. A `plan` block (`floor-plan.tsx`, #257) is the JSON the
   contract's `FloorPlan` accepts, a room in centimetres seen from the front, drawn top-down and to scale by our own
   SVG (`plan-geometry.ts` places each part, and turns the plan when it says why) beside a list of its things by
   side; a tap on a thing or its row lights both up. It says "On Home ✓" once the workspace's Home shows that very
@@ -451,7 +453,9 @@ Where the rest fits:
   `thing-saved` event and the browser shows a note with Open, which goes to the Thing's card
   (`/workspaces/:id/things/:slug`), and Undo. The owner's own adds, edits, deletes and photo uploads, from the
   workspace page's Things section and each card, go through `things/`'s routes, each a change Recent changes can undo
-  ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)).
+  ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)). A Thing's
+  **upcoming** one (#602, ADR 0032) is kept in its file the same way: set by the model's tool, or by Pick on an
+  answer's `options` block (Find a replacement's answer), and swapped in by "… fitted" or the tool's `fitted`.
 - **The status line** (#256). A code workspace's line is built from `sessions/`' list and `next-up/` when asked, with
   no model. A planning workspace has none (#600).
 - **Session notes** (#601, ADR 0032). `sessions/notes.ts` asks the errand model for a planning session's note
@@ -652,8 +656,8 @@ things live only in the worker's memory and go when it restarts.
   `description`, allowlist changes and Paper connection, with the file's name once connected from its page).
 - `<workspace>/docs/<slug>.md`: a planning workspace's documents (ADR 0020), each named by its first `#` heading and
   its file by that name.
-- `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter and a dated
-  history, each file named by the Thing's name when it was added; `<workspace>/things/photos/<slug>.jpg`: a Thing's
+- `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter (an upcoming
+  replacement among them, its `upcoming …` lines, #602) and a dated history, each file named by the Thing's name when it was added; `<workspace>/things/photos/<slug>.jpg`: a Thing's
   photo, resized to fit 1600 px and 300 KB, in plain git.
 - `.agents/skills/<skill>/` at the top: the owner's skills for every workspace; `<workspace>/.agents/skills/<skill>/`:
   their skills for one workspace (ADR 0016). Added by hand, so they're kept and backed up like everything else.

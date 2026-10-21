@@ -1,4 +1,4 @@
-import type { WorkspaceId } from "@courtyard/contract";
+import type { ThingSlug, WorkspaceId } from "@courtyard/contract";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { WorkspaceIcon } from "../workspace/workspace-icon.tsx";
@@ -15,7 +15,7 @@ const PILL =
  * The way back above a page's title: to a workspace, named, with its icon, or with no workspace
  * (the owner context's Recent changes and Tidy, Fresh start), to Settings, where they're opened
  * from (#102); from a pull request's review, to the workspace's pull requests, as "All PRs"
- * (#240): its PRs tab (#301). From a session, a button: its only way out, now the right rail no
+ * (#240): its PRs tab (#301); from Find a replacement, to its Thing, by name (#602). From a session, a button: its only way out, now the right rail no
  * longer lists the workspace's sessions (#521; Paper, "Tablet · Session: back button, no rail list").
  */
 export function BackLink(props: {
@@ -28,9 +28,24 @@ export function BackLink(props: {
   pullRequests?: boolean;
   /** A pill button rather than a line of text: a session's way back (#521). */
   button?: boolean;
+  /** Back to one of the workspace's Things, by its name: from Find a replacement (#602). */
+  thing?: { readonly slug: ThingSlug; readonly name: string };
 }) {
   const workspaces = loggedIn.useLoaderData();
-  const { workspaceId, within } = props;
+  const { workspaceId, within, thing } = props;
+  if (workspaceId !== undefined && thing !== undefined) {
+    return (
+      <Link
+        to="/workspaces/$workspaceId/things/$slug"
+        params={{ workspaceId, slug: thing.slug }}
+        aria-label={`Back to ${thing.name}`}
+        className={`${BACK} gap-1.5 font-semibold`}
+      >
+        <ChevronLeft aria-hidden className="size-3.5" />
+        {thing.name}
+      </Link>
+    );
+  }
   if (workspaceId === undefined) {
     return (
       <Link to="/settings" aria-label="Back to Settings" className={NAMED}>

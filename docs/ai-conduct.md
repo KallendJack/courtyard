@@ -1270,8 +1270,14 @@ folder. Its front matter holds its fields: name, status (`have`, `want`, or `rep
 to replace), brand, bought (a year, a month or a day), price, shop (where it was bought, #245), condition, size, where,
 part of (another Thing's file
 name, one level only), needs (the next thing to do about it, in a few words, until it's done; #208), pin (a part's
-place on the photo of the Thing it's part of, how far across then how far down, each a percentage: `42.5, 61`) and
-photo (`photos/<slug>.jpg`, beside it); all but name and status can be left out. A pin goes when its part moves to
+place on the photo of the Thing it's part of, how far across then how far down, each a percentage: `42.5, 61`),
+photo (`photos/<slug>.jpg`, beside it) and its **upcoming** replacement (#602): upcoming (its make and model),
+upcoming price, upcoming shop, upcoming link (the page it's sold on) and upcoming why (one line); all but name and
+status can be left out. A part holds what's on it and what's coming next: a new one of a part that's there is
+upcoming on it, never a Thing of its own. A Thing with an upcoming one is one to replace, and once it's bought or
+fitted the upcoming one is swapped in (its name as the brand, its price and shop, bought today, had again, with no
+condition, needs or upcoming), the one it had going to its history ("Fitted DMR V8, replacing Wellgo alloy flats
+(bought 2025-04)"). A new upcoming one replaces the last whole. A pin goes when its part moves to
 another Thing or to none, and the owner moves one by dragging it on the photo. Its body is
 a dated history, a line each (`- 2026-10-09: Swapped, the old one was past 0.75%`). A Thing's file keeps the name it
 was added with when the Thing is renamed, so its parts still find it. A hand-edited file that isn't a Thing as written
@@ -1280,8 +1286,9 @@ Undo, and the chat shows each of a model's saves as a note with Undo. Code works
 
 What a model is told (Every turn, item 8), on every turn in a planning workspace, with the Things one per line between
 `<things>` markers, each part straight after the Thing it's part of, both in order of name
-(`[T2] Chain, have, KMC X11, bought 2026-03, needs Lube it, pin 42.5, 61, part of [T1] (things/chain.md)`: its label,
-name, status, brand, then each other field it has by name, then its file), and each file that isn't a Thing as written
+(`[T2] Chain, replace, KMC X11, bought 2026-03, needs Lube it, pin 42.5, 61, upcoming KMC X11SL (price £45, shop
+Tredz), part of [T1] (things/chain.md)`: its label, name, status, brand, then each other field it has by name, its
+upcoming one with its price, shop, link and why, then its file), and each file that isn't a Thing as written
 (`- things/fork.md can't be read as a Thing: <problem>`):
 
 > The workspace's Things are below: the owner's kit for this area, such as a bike and its parts, one per line with its
@@ -1307,8 +1314,15 @@ tool is offered beside the document tool.
 > fork, add only what they told you about, offer to add its parts, and once the owner agrees add them straight away
 > with what you know, since details can come later. Name each Thing as the owner does ("Whyte T-140", not "Mountain
 > bike"), one Thing for each they name ("the tyres" is one). A Thing is part of at most one other, which isn't a part
-> itself. What a Thing holds goes in the Thing, not in a context line as well. To compare options, such as which racket to buy, answer with a table, and offer to save the comparison as a
-> document; once the owner picks one, add it as a Thing. The workspace's page shows what each Thing needs next, so
+> itself. A part holds what's on it and what's coming next: when the owner wants a new one of a part that's there ("I
+> want new pedals"), it's that part's upcoming one, never a new Thing. Once they've said which, set the part's upcoming
+> (with its price, shop, link and why, those you know); until then mark it replace and help them choose. When they say
+> they've bought or fitted it, change the part with fitted, which swaps it in and keeps the old one in its history. A
+> wanted Thing that's a new one of a part that's there, such as wanted pedals beside the bike's pedals, belongs on that
+> part: offer to move it, and once the owner agrees, set it as the part's upcoming one and remove the wanted Thing.
+> What a Thing holds goes in the Thing, not in a context line as well. To compare options, such as which racket to buy,
+> answer with a table, and offer to save the comparison as a document; once the owner picks one, add it as a Thing, or
+> set it as the upcoming one of the part it replaces. The workspace's page shows what each Thing needs next, so
 > keep its needs to the next action and what it takes ("Pump it up before Saturday"), never background such as its
 > brand, size or specs, which stay on its card, and clear it once it's done. When a Thing with parts has a photo, pin
 > each part where it is on that photo, by looking at it, and leave out a part you can't see there. The owner sees
@@ -1344,6 +1358,15 @@ brands, sizes, specs and the owner's level and goals stay in the context file or
 >   such as 42.5, 61. An empty text clears it.
 > - history: A line for its history, dated today, saying what happened, such as Swapped, the old one was past 0.75%.
 > - photo: The number of one of the owner's photos with this message, 1 for Image 1, to keep as its photo.
+> - upcoming: Its upcoming one: what the owner means to fit next in its place, by its make and model, such as DMR V8.
+>   A new one of a part that's there is upcoming on it, never a Thing of its own. An empty text clears it, and what
+>   goes with it.
+> - upcoming_price: What its upcoming one costs, such as about £28.
+> - upcoming_shop: Where its upcoming one is sold, such as Tredz.
+> - upcoming_link: The page its upcoming one is sold on, as you found it on the web.
+> - upcoming_why: Why the owner picked its upcoming one, in a few words, such as Most grip.
+> - fitted: True once the owner says they've bought or fitted its upcoming one: it takes the old one's place (its
+>   name as the brand, with its price and shop, bought today), and the old one goes to its history.
 
 A photo is resized by the worker to fit 1600 px and 300 KB, and kept as the Thing's photo; the photos are numbered as
 the turn's images are (Attachments, above). The worker keeps each Thing as the model was shown it, or last saved it,
@@ -1395,6 +1418,21 @@ and refuses, saying why:
 
   > That changes nothing: <name> is like that already.
 
+- **a new part for the place of a part that's there** (#602): a part of the same Thing whose name the new one's ends
+  with, plural or not ("DMR V8 pedals" after "Pedals", "KMC X11SL chain" after "Chain"; "Chain guide" is a part of
+  its own). The owner's own Add Thing isn't held to it:
+
+  > <thing> has <part> already, so a new one is upcoming on it, never a Thing of its own: change <label> with upcoming
+  > (and its price, shop, link and why), then fitted once the owner fits it.
+
+- **fitted, with nothing upcoming:**
+
+  > <thing> has nothing upcoming to fit: give its upcoming one first.
+
+- **an upcoming price, shop, link or why with no upcoming name:**
+
+  > Give the upcoming part's name first.
+
 - **a field that doesn't fit** (too long, more than one line, a date bought that isn't one) is refused with the
   contract's own words, such as "Give the date bought as a year, a month or a day, such as 2026, 2026-03 or
   2026-10-09."
@@ -1404,10 +1442,13 @@ As with saves, a refused Thing can be put right once: the next call is its retry
 "Added [T3] Whyte T-140.", "Changed [T2] Chain." or "Removed Chain.". The chat shows "Added Thing", "Updated Thing" or
 "Removed Thing" with its name and, in grey, what changed; a refusal shows nothing to the owner. The fake saves one for
 each line "thing add: name Tyres | status have | part of T1", or "thing T2: history Swapped | price £32", "thing T2:
-pin 42, 61 | needs Lube it", "thing T2: photo 1" or "thing T2: remove".
+pin 42, 61 | needs Lube it", "thing T2: upcoming DMR V8 | upcoming price £28", "thing T2: fitted", "thing T2: photo 1"
+or "thing T2: remove".
 
 The eval's `thing-*` scenarios check it on both providers: "swapped the chain today" changes the chain, with a line in
-its history, and nothing else; and a bike's typical parts are offered but saved only once the owner agrees.
+its history, and nothing else; a bike's typical parts are offered but saved only once the owner agrees; and
+`thing-new-pedals-upcoming`'s "I want new pedals", with the ones picked, saves them as upcoming on the pedals, never
+as a new Thing (the owner's real mistake, #602).
 
 ## The wanted list
 
@@ -1423,11 +1464,33 @@ What a model is told (Every turn, item 11), after the rule for Things, on a turn
 > they can add it to the wanted list with one tap: a code block whose language is `product`, holding only JSON, such
 > as {"name": "Wall track with brackets", "about": "about £140 · moves as the garage changes"}, its name as the owner
 > would call it and one short line about it. Write a sentence of your own before them, and never use one for a product
-> the owner already has.
+> the owner already has, or for a new one of a part that's there. When the owner asks you to find a replacement for
+> one of their Things ("Replace my pedals (Wellgo alloy flats). Budget: under £30"), search the web, then answer with a
+> sentence saying which you'd pick and the options side by side in an options block, so they can pick one with a tap,
+> which makes it that Thing's upcoming one: a code block whose language is `options`, holding only JSON, such as
+> {"part": "things/pedals.md", "options": [{"name": "DMR V8", "price": "about £28", "shop": "Tredz", "link":
+> "https://www.tredz.co.uk/…", "why": "Most grip, lasts for years"}]}: the Thing by its file, as your list of Things
+> gives it, then two to four real options within the budget, the one you'd pick first, each with its price, its shop,
+> the page you found it on and why in a few words. Leave out any you couldn't find on the web in this answer.
 
 A **`product` block** is drawn as a card with its name and line, and **+ Add to wanted**, which adds a Thing of that
 name, wanted, with no model turn; it shows **✓ In Wanted** once a Thing of that name is wanted or to replace. The
 contract's `ProductBlock` schema checks it; one that fails shows its source under "Couldn't draw this product".
+
+**Find a replacement** (#602, ADR 0032; Paper, "Tablet · Find a replacement: budget tapped, options with Pick (#602)")
+is on the card of every Thing the owner has: it opens a page filled in with the first message, "Replace my pedals
+(Wellgo alloy flats).", the part's name and what's fitted (its brand, else its name), and budget choices to tap
+(under the part's price rounded up to a round sum, and twice that, or "Under £50" and "£50–100" when it has none, and
+"Best value"), each starting a session with "Budget: …" added; or the owner talks or types their own. Nothing about it
+is told to the model beyond that message and the rule above.
+
+An **`options` block** is drawn as the options side by side (stacked on a phone), the first, the model's pick, in
+violet: each its name, its price and shop linking to its page, its line why, and **Pick**, which makes it the Thing's
+upcoming one with no model turn (`PUT …/things/:slug/upcoming`, a line in its history saying so), then shows
+**✓ Upcoming**; another Pick replaces it. The contract's `OptionsBlock` schema checks it (one to four options, each
+linked); one that fails shows its source under "Couldn't draw this list of options", and one whose Thing isn't there shows
+them without Pick. No picture is drawn: the web app loads images only from the worker, and fetching a shop's picture
+for it is a decision of its own.
 
 ## Session notes
 

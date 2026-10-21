@@ -7,13 +7,16 @@ import {
   ThingDetail,
   type ThingForm,
   ThingList,
+  type ThingMark,
   ThingSlug,
   type ThingSummary,
+  type ThingUpcoming,
   Undone,
   WorkspaceId,
 } from "@courtyard/contract";
 import { sendForm } from "../../api/send-form.ts";
 import { fromWorker, NOT_FOUND, sendJson } from "../../api/worker.ts";
+import { createKept } from "../../components/layout/kept.tsx";
 
 // Things' calls live with Things rather than in worker.ts, so their schemas stay off the first
 // load.
@@ -95,6 +98,35 @@ export const uploadThingPhoto = (workspaceId: WorkspaceId, slug: ThingSlug, phot
 /** Where a Thing's photo is served from, named by when the Thing last changed so a new one shows. */
 export const thingPhotoUrl = (workspaceId: WorkspaceId, thing: ThingSummary) =>
   `/api${thingsOf(workspaceId)}/${thing.slug}/photo?at=${encodeURIComponent(thing.updatedAt)}`;
+
+/** Each workspace's Things, as last known, so every block in an answer that names one agrees. */
+export const KEPT_THINGS = createKept<ThingList>();
+
+/** A workspace's Things again, kept for the blocks that show them: nothing when the worker didn't answer. */
+export const loadKeptThings = async (workspaceId: WorkspaceId) => {
+  const loaded = await loadThings(workspaceId);
+  if (loaded.kind !== "loaded") return undefined;
+  KEPT_THINGS.set(workspaceId, loaded.data);
+  return loaded.data;
+};
+
+/** A pick from Find a replacement's options (#602): the Thing's upcoming one. */
+export const pickUpcoming = (workspaceId: WorkspaceId, slug: ThingSlug, upcoming: ThingUpcoming) =>
+  sendJson({
+    path: `${thingsOf(workspaceId)}/${slug}/upcoming`,
+    method: "PUT",
+    body: upcoming,
+    schema: ThingChanged,
+  });
+
+/** "… fitted" on a Thing's card (#602): its upcoming one swapped in, as a change Undo takes back. */
+export const fitUpcoming = (workspaceId: WorkspaceId, slug: ThingSlug) =>
+  sendJson({
+    path: `${thingsOf(workspaceId)}/${slug}/mark`,
+    method: "PUT",
+    body: { mark: "fitted" } satisfies ThingMark,
+    schema: ThingChanged,
+  });
 
 /** Undoes one of a session's Thing saves, named by its event number (ADR 0020). */
 export const undoThingSave = (sessionId: SessionId, save: number) =>

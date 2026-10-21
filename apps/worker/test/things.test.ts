@@ -519,6 +519,93 @@ describe("a part's card on Home: Done it and Add to wanted (#481)", () => {
   });
 });
 
+const pickUpcoming = (request: Requester, slug: string, body: unknown) =>
+  sendJson(request, `/api/workspaces/mountain-biking/things/${slug}/upcoming`, "PUT", body);
+
+/** The chain with a lighter one picked to replace it. */
+const CHAIN_WITH_UPCOMING = CHAIN.replace("status: have", "status: replace").replace(
+  "part of: whyte-t-140\n",
+  "part of: whyte-t-140\nupcoming: KMC X11SL\nupcoming price: £45\nupcoming shop: Tredz\nupcoming link: https://shop.example/kmc-x11sl\nupcoming why: Lighter, lasts longer\n",
+);
+
+describe("upcoming parts (#602)", () => {
+  it("keeps a part's picked replacement as upcoming on it, one to replace, as one change", async () => {
+    await withKit();
+    const request = await owner();
+
+    const picked = await pickUpcoming(request, "chain", {
+      name: "KMC X11SL",
+      price: "£45",
+      shop: "Tredz",
+      link: "https://shop.example/kmc-x11sl",
+      why: "Lighter, lasts longer",
+    });
+
+    expect(picked.status).toBe(200);
+    expect(ThingChanged.parse(await picked.json()).thing).toMatchObject({
+      status: "replace",
+      brand: "KMC X11",
+      upcoming: {
+        name: "KMC X11SL",
+        price: "£45",
+        shop: "Tredz",
+        link: "https://shop.example/kmc-x11sl",
+        why: "Lighter, lasts longer",
+      },
+    });
+    const file = await thingFile("chain");
+    expect(file).toContain(
+      "upcoming: KMC X11SL\nupcoming price: £45\nupcoming shop: Tredz\nupcoming link: https://shop.example/kmc-x11sl\nupcoming why: Lighter, lasts longer\n---\n",
+    );
+    expect(file).toMatch(/- \d{4}-\d{2}-\d{2}: Picked KMC X11SL as upcoming\n$/);
+    expect((await changesIn(contextDir))[0]?.title).toBe("Change Thing: Chain");
+    expect((await listed(request)).things[1]?.upcoming?.name).toBe("KMC X11SL");
+  });
+
+  it("swaps the upcoming one in once it's fitted, the old one going to its history, and Undo puts it back", async () => {
+    await withKit();
+    await writeFile(join(thingsDir(), "chain.md"), CHAIN_WITH_UPCOMING);
+    const request = await owner();
+
+    const fitted = await markThing(request, "chain", { mark: "fitted" });
+
+    expect(fitted.status).toBe(200);
+    const saved = ThingChanged.parse(await fitted.json());
+    expect(saved.thing).toMatchObject({
+      name: "Chain",
+      status: "have",
+      brand: "KMC X11SL",
+      price: "£45",
+      shop: "Tredz",
+    });
+    expect(saved.thing.upcoming).toBeUndefined();
+    const file = await thingFile("chain");
+    expect(file).not.toContain("upcoming");
+    expect(file).toMatch(/\nbought: \d{4}-\d{2}-\d{2}\n/);
+    expect(file).toMatch(
+      /- 2026-03-14: fitted with the new cassette\n- \d{4}-\d{2}-\d{2}: Fitted KMC X11SL, replacing KMC X11 \(bought 2026-03\)\n$/,
+    );
+
+    expect((await undoChange(request, saved.change ?? "")).status).toBe(204);
+    expect(await thingFile("chain")).toBe(CHAIN_WITH_UPCOMING);
+  });
+
+  it("refuses fitting a part with nothing upcoming, and an upcoming one with no name or a link that isn't one", async () => {
+    await withKit();
+    const request = await owner();
+
+    expect(await errorFrom(await markThing(request, "chain", { mark: "fitted" }))).toEqual([
+      409,
+      "Chain has nothing upcoming to fit: pick one first.",
+    ]);
+    expect((await pickUpcoming(request, "chain", { price: "£45" })).status).toBe(400);
+    expect(
+      await errorFrom(await pickUpcoming(request, "chain", { name: "KMC X11SL", link: "ftp://x" })),
+    ).toEqual([400, "Give the link as a web address."]);
+    expect(await thingFile("chain")).toBe(CHAIN);
+  });
+});
+
 /** 9 October 2026, midday: the day the tool dates history lines. */
 const TODAY = Date.UTC(2026, 9, 9, 12);
 
@@ -685,6 +772,51 @@ describe("the Things tool", () => {
     expect(await thingFile("chain")).toBe(CHAIN);
   });
 
+  it("keeps a new one of a part as upcoming on it, then swaps it in once the owner fits it (#602)", async () => {
+    await withKit();
+    const { saver, events } = await sessionWith([
+      [
+        thingTool({
+          thing: "T2",
+          upcoming: "KMC X11SL",
+          upcoming_price: "£45",
+          upcoming_link: "https://shop.example/kmc-x11sl",
+        }),
+      ],
+      [thingTool({ thing: "T2", fitted: true, price: "£42" })],
+    ]);
+
+    expect(reasons(saver.replies[0])).toEqual(["Changed [T2] Chain."]);
+    expect(thingSaves(events)[0]?.save.fields).toEqual({
+      status: "replace",
+      upcoming: "KMC X11SL",
+      upcomingPrice: "£45",
+      upcomingLink: "https://shop.example/kmc-x11sl",
+    });
+    expect(reasons(saver.replies[1])).toEqual(["Changed [T2] Chain."]);
+    expect(await thingFile("chain")).toBe(
+      "---\nname: Chain\nstatus: have\nbrand: KMC X11SL\nbought: 2026-10-09\nprice: £42\npart of: whyte-t-140\n---\n\n- 2026-03-14: fitted with the new cassette\n- 2026-10-09: Fitted KMC X11SL, replacing KMC X11 (bought 2026-03)\n",
+    );
+  });
+
+  it("refuses a new Thing for a part that's there, and fitting one with nothing upcoming (#602)", async () => {
+    await withKit();
+    const { saver } = await sessionWith([
+      [
+        thingTool({ name: "KMC X11SL chain", status: "want", part_of: "T1" }),
+        thingTool({ thing: "T2", fitted: true }),
+        thingTool({ name: "Chain guide", status: "want", part_of: "T1" }),
+      ],
+    ]);
+
+    expect(reasons(saver.replies[0])).toEqual([
+      "[T1] Whyte T-140 has [T2] Chain already, so a new one is upcoming on it, never a Thing of its own: change T2 with upcoming (and its price, shop, link and why), then fitted once the owner fits it.\n\nYou can put it right and try once more.",
+      "[T2] Chain has nothing upcoming to fit: give its upcoming one first.\n\nCarry on without saving it.",
+      "Added [T3] Chain guide.",
+    ]);
+    expect(await thingFile("kmc-x11sl-chain").catch(() => null)).toBe(null);
+  });
+
   it("sets a Thing's photo from one the owner attached in the session, by its number", async () => {
     await withKit();
     const photo = {
@@ -749,6 +881,8 @@ describe("the Things tool", () => {
         "thing T2: history Swapped | price £32",
         "thing T2: pin 42, 61 | needs Lube it",
         "thing T9: remove",
+        "thing T2: upcoming KMC X11SL | upcoming price £45 | upcoming link https://shop.example/x11sl",
+        "thing T2: fitted",
       ].join("\n"),
       model: FAKE_MODEL,
     });
@@ -759,8 +893,12 @@ describe("the Things tool", () => {
       ["add", "Tyres"],
       ["change", "Chain"],
       ["change", "Chain"],
+      ["change", "Chain"],
+      ["change", "Chain"],
     ]);
-    expect(await thingFile("chain")).toContain("needs: Lube it\npin: 42, 61\n");
+    expect(await thingFile("chain")).toContain(
+      "brand: KMC X11SL\nbought: 2026-10-09\nprice: £45\npart of: whyte-t-140\npin: 42, 61\n",
+    );
     expect(await thingFile("tyres")).toBe(
       "---\nname: Tyres\nstatus: have\nbrand: Maxxis Minion DHF\npart of: whyte-t-140\n---\n",
     );

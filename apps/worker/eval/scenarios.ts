@@ -142,7 +142,7 @@ export type Turn = {
 export type ExpectedThing = {
   readonly action: "add" | "change" | "remove";
   readonly name: Words;
-  readonly fields?: Readonly<Partial<Record<"status" | ThingDetailName, Words>>>;
+  readonly fields?: Readonly<Partial<Record<"status" | ThingDetailName | "upcoming", Words>>>;
   readonly history?: Words;
   readonly partOf?: string;
 };
@@ -1387,6 +1387,35 @@ export const SCENARIOS: readonly Scenario[] = [
         things: [
           { action: "add", name: ["chain"], partOf: "whyte-t-140" },
           { action: "add", name: ["tyre"], partOf: "whyte-t-140" },
+        ],
+      },
+    ],
+  },
+  {
+    // The owner's real mistake (#602): wanting new pedals made a new Thing beside the pedals.
+    name: "thing-new-pedals-upcoming",
+    rule: "a new one of a part that's there is saved as upcoming on that part, never as a new Thing",
+    workspace: "Mountain biking",
+    context: { facts: ["Rides trails most Sundays"] },
+    files: {
+      "things/boardman-mht-8-6.md":
+        "---\nname: Boardman MHT 8.6\nstatus: have\nbought: 2026-09\nprice: £650\n---\n",
+      "things/pedals.md":
+        "---\nname: Pedals\nstatus: have\nbrand: Wellgo alloy flats\ncondition: Feet slide off on rough ground\npart of: boardman-mht-8-6\n---\n\n- 2026-09-20: Came with the bike\n",
+      "things/chain.md":
+        "---\nname: Chain\nstatus: have\nbrand: KMC X9\npart of: boardman-mht-8-6\n---\n",
+    },
+    turns: [
+      {
+        say: "I want new pedals, my feet keep sliding off. I've decided on the DMR V8s, they're about £28.",
+        expect: [],
+        things: [
+          {
+            action: "change",
+            name: ["pedals"],
+            fields: { upcoming: [["v8", "dmr"]] },
+            partOf: "boardman-mht-8-6",
+          },
         ],
       },
     ],

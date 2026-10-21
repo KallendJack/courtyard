@@ -27,6 +27,7 @@ import {
   type ThingDetailName,
   type ThingSave,
   ThingStatus,
+  type ThingUpcoming,
   type WorkspaceConnections,
   type WorkspaceMode,
 } from "@courtyard/contract";
@@ -486,6 +487,15 @@ export const documentReply = (
 /** The Things tool's name, as a model calls it (ADR 0020). */
 export const THING_TOOL_NAME = "save_thing" satisfies TurnToolName;
 
+/** A Thing's upcoming one as a model reads it (#602): `upcoming DMR V8 (price £28, shop Tredz)`. */
+const upcomingWords = (upcoming: ThingUpcoming, said: (text: string) => string) => {
+  const rest = (["price", "shop", "link", "why"] as const).flatMap((field) => {
+    const value = upcoming[field];
+    return value === undefined ? [] : [`${field} ${said(value)}`];
+  });
+  return `upcoming ${said(upcoming.name)}${rest.length === 0 ? "" : ` (${rest.join(", ")})`}`;
+};
+
 /** A Thing as a model reads it: its label, its fields, the Thing it's part of by label, and its file. */
 const thingLine = ({ label, thing }: LabelledThing, all: readonly LabelledThing[]) => {
   const parent = all.find((other) => other.thing.slug === thing.partOf);
@@ -501,6 +511,7 @@ const thingLine = ({ label, thing }: LabelledThing, all: readonly LabelledThing[
     }),
     ...(thing.needs === undefined ? [] : [`needs ${said(thing.needs)}`]),
     ...(thing.pin === null ? [] : [`pin ${pinText(thing.pin)}`]),
+    ...(thing.upcoming === undefined ? [] : [upcomingWords(thing.upcoming, said)]),
     ...(parent !== undefined
       ? [`part of [${parent.label}]`]
       : thing.partOf === undefined
@@ -536,7 +547,7 @@ const thingsPart = (workspace: FramingWorkspace, readsFiles: boolean) => {
 };
 
 /** When and how a model keeps Things current (docs/ai-conduct.md, Things). */
-const KEEPING_THINGS = `The owner's kit for this workspace, what they have, want, or have and mean to replace, are its Things, which you keep current yourself with the ${THING_TOOL_NAME} tool as you answer, by the same rules as saves: save what the owner tells you, never your own suggestions until the owner agrees, and ask rather than guess which Thing they mean, or whether they've bought it. When the owner says they bought, fitted, swapped, sold or did something to one ("swapped the chain today"), change that Thing: set the fields that changed, such as bought and price, and add a line to its history saying what happened. When they add something that has typical parts, such as a bike's chain, tyres and fork, add only what they told you about, offer to add its parts, and once the owner agrees add them straight away with what you know, since details can come later. Name each Thing as the owner does ("Whyte T-140", not "Mountain bike"), one Thing for each they name ("the tyres" is one). A Thing is part of at most one other, which isn't a part itself. What a Thing holds goes in the Thing, not in a context line as well. To compare options, such as which racket to buy, answer with a table, and offer to save the comparison as a document; once the owner picks one, add it as a Thing. The workspace's page shows what each Thing needs next, so keep its needs to the next action and what it takes ("Pump it up before Saturday"), never background such as its brand, size or specs, which stay on its card, and clear it once it's done. When a Thing with parts has a photo, pin each part where it is on that photo, by looking at it, and leave out a part you can't see there. The owner sees each Thing you save as a note under your answer, so leave saves unmentioned.`;
+const KEEPING_THINGS = `The owner's kit for this workspace, what they have, want, or have and mean to replace, are its Things, which you keep current yourself with the ${THING_TOOL_NAME} tool as you answer, by the same rules as saves: save what the owner tells you, never your own suggestions until the owner agrees, and ask rather than guess which Thing they mean, or whether they've bought it. When the owner says they bought, fitted, swapped, sold or did something to one ("swapped the chain today"), change that Thing: set the fields that changed, such as bought and price, and add a line to its history saying what happened. When they add something that has typical parts, such as a bike's chain, tyres and fork, add only what they told you about, offer to add its parts, and once the owner agrees add them straight away with what you know, since details can come later. Name each Thing as the owner does ("Whyte T-140", not "Mountain bike"), one Thing for each they name ("the tyres" is one). A Thing is part of at most one other, which isn't a part itself. A part holds what's on it and what's coming next: when the owner wants a new one of a part that's there ("I want new pedals"), it's that part's upcoming one, never a new Thing. Once they've said which, set the part's upcoming (with its price, shop, link and why, those you know); until then mark it replace and help them choose. When they say they've bought or fitted it, change the part with fitted, which swaps it in and keeps the old one in its history. A wanted Thing that's a new one of a part that's there, such as wanted pedals beside the bike's pedals, belongs on that part: offer to move it, and once the owner agrees, set it as the part's upcoming one and remove the wanted Thing. What a Thing holds goes in the Thing, not in a context line as well. To compare options, such as which racket to buy, answer with a table, and offer to save the comparison as a document; once the owner picks one, add it as a Thing, or set it as the upcoming one of the part it replaces. The workspace's page shows what each Thing needs next, so keep its needs to the next action and what it takes ("Pump it up before Saturday"), never background such as its brand, size or specs, which stay on its card, and clear it once it's done. When a Thing with parts has a photo, pin each part where it is on that photo, by looking at it, and leave out a part you can't see there. The owner sees each Thing you save as a note under your answer, so leave saves unmentioned.`;
 
 /** Each of a Thing's details as the Things tool describes it to a model. */
 const THING_DETAIL_INPUTS: Readonly<Record<ThingDetailName, string>> = {
@@ -601,8 +612,37 @@ const THING_TOOL: TurnTool = {
       .describe(
         "The number of one of the owner's photos with this message, 1 for Image 1, to keep as its photo.",
       ),
+    upcoming: z
+      .string()
+      .optional()
+      .describe(
+        "Its upcoming one: what the owner means to fit next in its place, by its make and model, such as DMR V8. A new one of a part that's there is upcoming on it, never a Thing of its own. An empty text clears it, and what goes with it.",
+      ),
+    upcoming_price: z
+      .string()
+      .optional()
+      .describe("What its upcoming one costs, such as about £28."),
+    upcoming_shop: z.string().optional().describe("Where its upcoming one is sold, such as Tredz."),
+    upcoming_link: z
+      .string()
+      .optional()
+      .describe("The page its upcoming one is sold on, as you found it on the web."),
+    upcoming_why: z
+      .string()
+      .optional()
+      .describe("Why the owner picked its upcoming one, in a few words, such as Most grip."),
+    fitted: z
+      .boolean()
+      .optional()
+      .describe(
+        "True once the owner says they've bought or fitted its upcoming one: it takes the old one's place (its name as the brand, with its price and shop, bought today), and the old one goes to its history.",
+      ),
   },
 };
+
+/** A Thing by its label and name, as the Things tool's replies name one: "[T2] Chain". */
+const labelledName = ({ label, thing }: LabelledThing) =>
+  label === "" ? thing.name : `[${label}] ${thing.name}`;
 
 /** Why a Thing was refused, in the model's terms. */
 const thingRefusalReason = (refusal: ThingToolRefusal) => {
@@ -639,6 +679,10 @@ const thingRefusalReason = (refusal: ThingToolRefusal) => {
       return "That photo can't be read.";
     case "not-a-part":
       return "Only a part has a pin: give it the Thing it's part of first, or leave the pin out.";
+    case "place-taken":
+      return `${labelledName(refusal.parent)} has ${labelledName(refusal.part)} already, so a new one is upcoming on it, never a Thing of its own: change ${refusal.part.label || refusal.part.thing.name} with upcoming (and its price, shop, link and why), then fitted once the owner fits it.`;
+    case "nothing-upcoming":
+      return `${refusal.thing === undefined ? refusal.name : labelledName(refusal.thing)} has nothing upcoming to fit: give its upcoming one first.`;
     case "code-workspace":
       return "Only planning workspaces keep Things.";
     case "stopped":
@@ -2335,7 +2379,7 @@ export const fixFromQuestionsMessage = (fix: { number: number; asked: readonly Q
  * How a session's model looks after the wanted list (#245; docs/ai-conduct.md, The wanted list):
  * what was bought, and products named in an answer.
  */
-const KEEPING_WANTED = `The Things the owner wants or means to replace are their wanted list. When they say they bought one ("bought the Allty"), change that Thing: status have, price what they paid, shop where they bought it, its make and model as its brand, and a line in its history. When you suggest products the owner might buy, write each as a product block, so they can add it to the wanted list with one tap: a code block whose language is \`product\`, holding only JSON, such as {"name": "Wall track with brackets", "about": "about £140 · moves as the garage changes"}, its name as the owner would call it and one short line about it. Write a sentence of your own before them, and never use one for a product the owner already has.`;
+const KEEPING_WANTED = `The Things the owner wants or means to replace are their wanted list. When they say they bought one ("bought the Allty"), change that Thing: status have, price what they paid, shop where they bought it, its make and model as its brand, and a line in its history. When you suggest products the owner might buy, write each as a product block, so they can add it to the wanted list with one tap: a code block whose language is \`product\`, holding only JSON, such as {"name": "Wall track with brackets", "about": "about £140 · moves as the garage changes"}, its name as the owner would call it and one short line about it. Write a sentence of your own before them, and never use one for a product the owner already has, or for a new one of a part that's there. When the owner asks you to find a replacement for one of their Things ("Replace my pedals (Wellgo alloy flats). Budget: under £30"), search the web, then answer with a sentence saying which you'd pick and the options side by side in an options block, so they can pick one with a tap, which makes it that Thing's upcoming one: a code block whose language is \`options\`, holding only JSON, such as {"part": "things/pedals.md", "options": [{"name": "DMR V8", "price": "about £28", "shop": "Tredz", "link": "https://www.tredz.co.uk/…", "why": "Most grip, lasts for years"}]}: the Thing by its file, as your list of Things gives it, then two to four real options within the budget, the one you'd pick first, each with its price, its shop, the page you found it on and why in a few words. Leave out any you couldn't find on the web in this answer.`;
 
 /**
  * What the model that writes a session's note is told (#601, ADR 0032; docs/ai-conduct.md,

@@ -56,6 +56,28 @@ export const THING_DETAILS = [
 ] as const;
 export type ThingDetailName = (typeof THING_DETAILS)[number];
 
+/** The longest line saying why an upcoming part was picked, in characters. */
+export const THING_WHY_MAX_CHARACTERS = 120;
+
+/**
+ * A Thing's upcoming replacement (#602, ADR 0032): the one the owner means to fit next in its
+ * place, such as new pedals for the pedals, never a Thing of its own. Its name as the owner would
+ * call it (its make and model), what it costs, the shop and the page it's sold on, and one line
+ * saying why it was picked.
+ */
+export const ThingUpcoming = z.object({
+  name: oneLine(THING_FIELD_MAX_CHARACTERS, "upcoming part's name"),
+  price: oneLine(THING_FIELD_MAX_CHARACTERS, "upcoming part's price").optional(),
+  shop: oneLine(THING_FIELD_MAX_CHARACTERS, "upcoming part's shop").optional(),
+  /** The page it's sold on, as found on the web. */
+  link: z
+    .url({ protocol: /^https?$/, error: "Give the link as a web address." })
+    .max(500)
+    .optional(),
+  why: oneLine(THING_WHY_MAX_CHARACTERS, "line saying why").optional(),
+});
+export type ThingUpcoming = z.infer<typeof ThingUpcoming>;
+
 /**
  * Where a part sits on the photo of the Thing it's part of (#208): how far across and how far
  * down, each a percentage of the photo, to one decimal place.
@@ -114,16 +136,31 @@ export const ThingFields = z
       )
       .optional(),
     photo: ThingPhotoPath.optional(),
+    /** Its upcoming replacement's name (#602), and the rest of it: see `ThingUpcoming`. */
+    upcoming: ThingUpcoming.shape.name.optional(),
+    upcomingPrice: ThingUpcoming.shape.price,
+    upcomingShop: ThingUpcoming.shape.shop,
+    upcomingLink: ThingUpcoming.shape.link,
+    upcomingWhy: ThingUpcoming.shape.why,
   })
   .strict();
 export type ThingFields = z.infer<typeof ThingFields>;
 
 /**
- * A Thing as lists show it: its fields, where its file is, whether it has a photo, and a part's
- * pin on its Thing's photo (`null` when it has none).
+ * A Thing as lists show it: its fields, where its file is, whether it has a photo, a part's pin
+ * on its Thing's photo (`null` when it has none), and its upcoming replacement, if it has one.
  */
-export const ThingSummary = ThingFields.omit({ photo: true, pin: true }).extend({
+export const ThingSummary = ThingFields.omit({
+  photo: true,
+  pin: true,
+  upcoming: true,
+  upcomingPrice: true,
+  upcomingShop: true,
+  upcomingLink: true,
+  upcomingWhy: true,
+}).extend({
   pin: ThingPin.nullable(),
+  upcoming: ThingUpcoming.optional(),
   slug: ThingSlug,
   /** Its path in the workspace's folder: `things/<slug>.md`. */
   path: z.string(),
@@ -189,9 +226,10 @@ export type ThingPinMove = z.infer<typeof ThingPinMove>;
 
 /**
  * A part's card on Home (#481): Done it (what it needed is done, and it's had again), or Add to
- * wanted (one the owner has, to replace).
+ * wanted (one the owner has, to replace); or its card's "… fitted" (#602), which swaps its
+ * upcoming replacement in, the one it had going to its history.
  */
-export const ThingMark = z.object({ mark: z.enum(["done", "wanted"]) });
+export const ThingMark = z.object({ mark: z.enum(["done", "wanted", "fitted"]) });
 export type ThingMark = z.infer<typeof ThingMark>;
 
 /** The multipart field a Thing's new photo is uploaded in. */
@@ -235,6 +273,12 @@ export const ThingSave = z.object({
       needs: z.string().nullable(),
       /** Its pin, as `pinText` writes it. */
       pin: z.string().nullable(),
+      /** Its upcoming replacement's name (#602), and the rest of it. */
+      upcoming: z.string().nullable(),
+      upcomingPrice: z.string().nullable(),
+      upcomingShop: z.string().nullable(),
+      upcomingLink: z.string().nullable(),
+      upcomingWhy: z.string().nullable(),
     })
     .partial()
     .optional(),

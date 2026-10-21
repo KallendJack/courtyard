@@ -62,6 +62,37 @@ export const thingLine = (thing: ThingSummary, partOf?: string) =>
     .join(" · ");
 
 /**
+ * Find a replacement's first message (#602): "Replace my pedals (Wellgo alloy flats)." The
+ * Thing's name as the owner would say it (lower case, unless it's a name such as Whyte T-140),
+ * then what's fitted, its brand and size, when it has them.
+ */
+export const replacementMessage = (thing: ThingSummary) => {
+  const [first = "", ...rest] = thing.name.split(" ");
+  const plain = /^[A-Z][a-z]*$/.test(first) && rest.every((word) => word === word.toLowerCase());
+  const name = plain ? thing.name.toLowerCase() : thing.name;
+  const fitted = [thing.brand, thing.size].filter((said) => said !== undefined).join(", ");
+  return `Replace my ${name}${fitted === "" ? "" : ` (${fitted})`}.`;
+};
+
+/** A sum rounded up to one that reads as a budget: to £10 under £100, £50 under £500, else £100. */
+const budgetSum = (sum: number) => {
+  const step = sum < 100 ? 10 : sum < 500 ? 50 : 100;
+  return Math.max(step, Math.ceil(sum / step) * step);
+};
+
+/**
+ * Find a replacement's budgets to tap (#602): under what the Thing cost, rounded up, and up to
+ * twice that, or under £50 and £50–100 when its price isn't known; and best value.
+ */
+export const budgetChoices = (thing: ThingSummary) => {
+  const [, currency = "£", digits] =
+    /([£$€])?\s*(\d[\d,]*(?:\.\d+)?)/.exec(thing.price ?? "") ?? [];
+  const cost = digits === undefined ? undefined : Number(digits.replaceAll(",", ""));
+  const under = cost === undefined || cost <= 0 ? 50 : budgetSum(cost);
+  return [`Under ${currency}${under}`, `${currency}${under}–${under * 2}`, "Best value"];
+};
+
+/**
  * What a Thing save did, in a few words for its note: an added Thing's status and details, or the
  * fields a change set ("bought 9 Oct 2026, £32") and its history line.
  */
@@ -80,6 +111,10 @@ export const thingSaveWords = (save: ThingSave) => {
       if (field === "bought") return [`bought ${boughtInWords(value)}`];
       return [field === "partOf" ? `part of ${value}` : value];
     }),
+    // A part's upcoming one (#602): its name, the rest of it on its card.
+    ...(fields.upcoming === undefined
+      ? []
+      : [fields.upcoming === null ? "nothing upcoming" : `upcoming ${fields.upcoming}`]),
     ...(save.photo ? ["new photo"] : []),
   ];
   const parts = [

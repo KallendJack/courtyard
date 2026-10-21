@@ -155,6 +155,7 @@ export {
   OFFLINE_CONVERSATIONS,
   OfflineCopy,
 } from "./lib/offline-copy.ts";
+export { OptionsBlock, optionsPart } from "./lib/options.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";
 export {
   HomeView,
@@ -289,6 +290,7 @@ export {
   THING_FORM_FIELD,
   THING_HISTORY_MAX_CHARACTERS,
   THING_PHOTO_FIELD,
+  THING_WHY_MAX_CHARACTERS,
   ThingBought,
   ThingChange,
   ThingChanged,
@@ -308,6 +310,7 @@ export {
   ThingSlug,
   ThingStatus,
   ThingSummary,
+  ThingUpcoming,
 } from "./lib/things.ts";
 export {
   ModelUsageMeter,

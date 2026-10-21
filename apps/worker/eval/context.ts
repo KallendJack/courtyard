@@ -646,7 +646,7 @@ const judgeThings = async (judge: {
     }
     const { fields, history } = read.value;
     const misses = [
-      ...(["status", ...THING_DETAILS] as const).flatMap((field) => {
+      ...(["status", ...THING_DETAILS, "upcoming"] as const).flatMap((field) => {
         const words = wanted.fields?.[field];
         const value = fields[field] ?? "";
         return words === undefined || hasWords(value, { words })

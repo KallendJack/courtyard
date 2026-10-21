@@ -90,6 +90,13 @@ export type ThingRefusal =
   | { readonly kind: "bad-photo" }
   /** A pin on a Thing that isn't part of another, so has no Thing's photo to sit on (#208). */
   | { readonly kind: "not-a-part" }
+  /** Fitted, with nothing upcoming to fit (#602). */
+  | { readonly kind: "nothing-upcoming"; readonly name: string }
+  /**
+   * A new part for a place on its Thing another part has (#602): a new one of a part that's there
+   * is upcoming on it, never a Thing of its own. Refused only when `saveThing` is asked to.
+   */
+  | { readonly kind: "place-taken"; readonly parent: ThingSlug; readonly part: ThingSlug }
   | { readonly kind: "storage" };
 
 /** A Thing's file, or its photo, on the worker machine. */
@@ -108,6 +115,11 @@ const FILE_KEYS = [
   ["needs", "needs"],
   ["pin", "pin"],
   ["photo", "photo"],
+  ["upcoming", "upcoming"],
+  ["upcoming price", "upcomingPrice"],
+  ["upcoming shop", "upcomingShop"],
+  ["upcoming link", "upcomingLink"],
+  ["upcoming why", "upcomingWhy"],
 ] as const satisfies readonly (readonly [string, keyof ThingFields])[];
 
 const HISTORY_LINE = /^(?:[-*][ \t]+)?(?:(\d{4}-\d{2}-\d{2}):[ \t]*)?(.*)$/;
@@ -220,10 +232,30 @@ const readThingsIn = async (folder: string): Promise<Result<ReadThings, ThingRef
     } catch {
       return err({ kind: "storage" });
     }
-    const { photo, pin, ...fields } = read.value.fields;
+    const {
+      photo,
+      pin,
+      upcoming,
+      upcomingPrice,
+      upcomingShop,
+      upcomingLink,
+      upcomingWhy,
+      ...fields
+    } = read.value.fields;
     things.push({
       summary: {
         ...fields,
+        ...(upcoming === undefined
+          ? {}
+          : {
+              upcoming: {
+                name: upcoming,
+                ...(upcomingPrice === undefined ? {} : { price: upcomingPrice }),
+                ...(upcomingShop === undefined ? {} : { shop: upcomingShop }),
+                ...(upcomingLink === undefined ? {} : { link: upcomingLink }),
+                ...(upcomingWhy === undefined ? {} : { why: upcomingWhy }),
+              },
+            }),
         slug: slug.data,
         path: thingPath(slug.data),
         photo: photo !== undefined,
@@ -306,7 +338,73 @@ type FieldChange = {
   readonly partOf?: ThingSlug | null;
   readonly needs?: string | null;
   readonly pin?: ThingPin | null;
-} & { readonly [K in ThingDetailName]?: string | null };
+} & { readonly [K in ThingDetailName | UpcomingField]?: string | null };
+
+/** The fields that hold a Thing's upcoming replacement (#602). */
+const UPCOMING_FIELDS = [
+  "upcoming",
+  "upcomingPrice",
+  "upcomingShop",
+  "upcomingLink",
+  "upcomingWhy",
+] as const;
+type UpcomingField = (typeof UPCOMING_FIELDS)[number];
+
+/** A name's words as a place on a Thing: lower case, without what's in brackets, each singular. */
+const placeWords = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word !== "")
+    .map((word) => (word.length > 3 && word.endsWith("s") ? word.slice(0, -1) : word));
+
+/**
+ * Whether a new part's name ends with the name of a part that's there ("DMR V8 pedals" after
+ * "Pedals"), so it's a new one for that part's place on its Thing (#602), not a part of its own
+ * ("Chain guide" after "Chain").
+ */
+const samePlace = (part: string, added: string) => {
+  const there = placeWords(part);
+  const named = placeWords(added).slice(-there.length);
+  return (
+    there.length > 0 &&
+    named.length === there.length &&
+    there.every((word, index) => named[index] === word)
+  );
+};
+
+/**
+ * A Thing's upcoming one swapped in (#602): its name as the brand, its price and shop, bought
+ * today, had again, with nothing upcoming, needed or worn; and a history line for the one it had.
+ */
+const swappedIn = (swap: {
+  /** The Thing as it was. */
+  before: Readonly<Record<string, string | undefined>>;
+  /** Its upcoming one, as the save left it. */
+  upcoming: Readonly<Record<string, string | undefined>>;
+  today: string;
+}) => {
+  const { before, upcoming } = swap;
+  const was = [
+    before.bought === undefined ? undefined : `bought ${before.bought}`,
+    before.price,
+  ].filter((said) => said !== undefined);
+  const fields: Record<string, string | undefined> = {
+    brand: upcoming.upcoming,
+    price: upcoming.upcomingPrice,
+    shop: upcoming.upcomingShop,
+    bought: swap.today,
+    status: "have",
+    condition: undefined,
+    needs: undefined,
+  };
+  for (const field of UPCOMING_FIELDS) fields[field] = undefined;
+  return {
+    fields,
+    history: `Fitted ${upcoming.upcoming}, replacing ${before.brand ?? "the old one"}${was.length === 0 ? "" : ` (${was.join(", ")})`}`,
+  };
+};
 
 /** A change to one Thing: a new one, or one that's there, by its file's name. */
 export type ThingEdit = {
@@ -318,6 +416,8 @@ export type ThingEdit = {
   readonly history?: string;
   /** A photo as `keptPhoto` keeps it. */
   readonly photo?: Uint8Array;
+  /** Its upcoming one is bought or fitted (#602): swapped in, the one it had to its history. */
+  readonly fitted?: boolean;
 };
 
 /** A saved Thing, the change it was committed as (if git kept it), and its file's text now. */
@@ -357,7 +457,12 @@ const fieldsChanged = (
 export const saveThing = async (
   target: PlanningFilesTarget,
   edit: ThingEdit,
-  options: { now: number; check?: (now: ReadThing) => ThingRefusal | undefined },
+  options: {
+    now: number;
+    check?: (now: ReadThing) => ThingRefusal | undefined;
+    /** Refuses a new part for a place on its Thing that another part has (#602). */
+    oneForEachPlace?: boolean;
+  },
 ): Promise<Result<ThingSaved, ThingRefusal>> => {
   let title = "";
   const paths: string[] = [];
@@ -406,8 +511,46 @@ export const saveThing = async (
       const before = was?.value.fields;
       const merged: Record<string, string | undefined> = { ...before };
       const { pin, ...written } = edit.fields ?? {};
+      // A new upcoming one replaces the last whole (#602): its price, shop and link go with it, and
+      // clearing it clears them.
+      if (
+        written.upcoming === null ||
+        (written.upcoming ?? before?.upcoming) !== before?.upcoming
+      ) {
+        for (const field of UPCOMING_FIELDS) merged[field] = undefined;
+      }
       for (const [field, value] of Object.entries(written)) {
         merged[field] = value === null ? undefined : value;
+      }
+      if (
+        merged.upcoming === undefined &&
+        UPCOMING_FIELDS.some((field) => merged[field] !== undefined)
+      ) {
+        return err({ kind: "invalid", problem: "Give the upcoming part's name first." });
+      }
+      let fittedLine: string | undefined;
+      if (edit.fitted) {
+        if (merged.upcoming === undefined) {
+          return err({ kind: "nothing-upcoming", name: merged.name ?? "" });
+        }
+        const swap = swappedIn({
+          before: before ?? {},
+          upcoming: merged,
+          today: historyDate(options.now),
+        });
+        // What the same save sets (the price paid, say) is truer than the upcoming one's.
+        for (const [field, value] of Object.entries(swap.fields)) {
+          const set = Object.entries(written).some(([name, given]) => name === field && given);
+          if (!set || field.startsWith("upcoming")) merged[field] = value;
+        }
+        fittedLine = swap.history;
+      } else if (
+        merged.upcoming !== undefined &&
+        merged.status === "have" &&
+        written.status === undefined
+      ) {
+        // A part with one coming to take its place is one to replace.
+        merged.status = "replace";
       }
       // A pin sits on the photo of the Thing it's part of (#208), so it goes once that changes.
       if (pin !== undefined) merged.pin = pin === null ? undefined : pinText(pin);
@@ -429,6 +572,18 @@ export const saveThing = async (
         if (there !== undefined || unreadable) {
           return err({ kind: "clash", name: there?.summary.name ?? merged.name, slug });
         }
+        // A part that's there whose place on the same Thing this new one names.
+        const added = merged.name;
+        const taken = things.find(
+          ({ summary }) => summary.partOf === merged.partOf && samePlace(summary.name, added),
+        );
+        if (options.oneForEachPlace && taken?.summary.partOf !== undefined) {
+          return err({
+            kind: "place-taken",
+            parent: taken.summary.partOf,
+            part: taken.summary.slug,
+          });
+        }
       }
       if (merged.partOf !== undefined) {
         const parent = things.find(({ summary }) => summary.slug === merged.partOf);
@@ -444,6 +599,9 @@ export const saveThing = async (
         return err({ kind: "invalid", problem: fields.error.issues[0]?.message ?? "" });
       }
       const history = [...(was?.value.history ?? [])];
+      if (fittedLine !== undefined) {
+        history.push({ date: historyDate(options.now), text: fittedLine });
+      }
       const line = edit.history?.replace(/\s+/g, " ").trim();
       if (edit.history !== undefined) {
         if (line === undefined || line === "") {
@@ -565,7 +723,22 @@ const ThingRequest = z.looseObject({
   pin: z.string().optional(),
   history: z.string().optional(),
   photo: z.number().int().optional(),
+  upcoming: z.string().optional(),
+  upcoming_price: z.string().optional(),
+  upcoming_shop: z.string().optional(),
+  upcoming_link: z.string().optional(),
+  upcoming_why: z.string().optional(),
+  fitted: z.boolean().optional(),
 });
+
+/** Each of the Things tool's inputs for a Thing's upcoming one (#602), and its field. */
+const UPCOMING_INPUTS = [
+  ["upcoming", "upcoming"],
+  ["upcoming_price", "upcomingPrice"],
+  ["upcoming_shop", "upcomingShop"],
+  ["upcoming_link", "upcomingLink"],
+  ["upcoming_why", "upcomingWhy"],
+] as const satisfies readonly (readonly [string, UpcomingField])[];
 
 /** A detail as a model sends it: any text, blank to clear it. */
 const DetailSent = z.string();
@@ -587,8 +760,19 @@ const detailsSent = (rest: Readonly<Record<string, unknown>>) => {
 
 /** Why the Things tool didn't save: the input doesn't fit, a label or photo is wrong, or it was refused. */
 export type ThingToolRefusal =
-  | Exclude<ThingRefusal, { kind: "stale" }>
+  | Exclude<ThingRefusal, { kind: "stale" | "place-taken" | "nothing-upcoming" }>
   | { readonly kind: "malformed" }
+  /**
+   * A new part for the place of one that's there (#602), the Thing and that part as the model
+   * knows them.
+   */
+  | { readonly kind: "place-taken"; readonly parent: LabelledThing; readonly part: LabelledThing }
+  /** Fitted, with nothing upcoming (#602), the Thing as the model knows it. */
+  | {
+      readonly kind: "nothing-upcoming";
+      readonly thing: LabelledThing | undefined;
+      readonly name: string;
+    }
   /** No Thing has that label (or it's been removed since). */
   | { readonly kind: "unknown-label"; readonly label: string }
   /** The Thing changed since the model was shown it: the Things now, labelled afresh. */
@@ -633,8 +817,25 @@ export const createTurnThings = (
   return async (raw: unknown): Promise<Result<ThingToolSaved, ThingToolRefusal>> => {
     const request = ThingRequest.safeParse(raw);
     if (!request.success) return err({ kind: "malformed" });
-    const { thing, remove, name, status, part_of, needs, pin, history, photo, ...rest } =
-      request.data;
+    const {
+      thing,
+      remove,
+      name,
+      status,
+      part_of,
+      needs,
+      pin,
+      history,
+      photo,
+      upcoming,
+      upcoming_price,
+      upcoming_shop,
+      upcoming_link,
+      upcoming_why,
+      fitted,
+      ...rest
+    } = request.data;
+    const upcomingSent = { upcoming, upcoming_price, upcoming_shop, upcoming_link, upcoming_why };
     const details = detailsSent(rest);
     if (details === undefined) return err({ kind: "malformed" });
     const label = thing === undefined || thing.trim() === "" ? undefined : asLabel(thing);
@@ -649,6 +850,10 @@ export const createTurnThings = (
       ...details,
       ...(needs === undefined ? {} : { needs: needs.trim() === "" ? null : needs }),
     };
+    for (const [input, field] of UPCOMING_INPUTS) {
+      const value = upcomingSent[input];
+      if (value !== undefined) fields[field] = value.trim() === "" ? null : value.trim();
+    }
     if (pin !== undefined) {
       const placed = pin.trim() === "" ? null : pinOf(pin);
       if (placed === undefined) {
@@ -684,6 +889,7 @@ export const createTurnThings = (
         fields,
         ...(history === undefined ? {} : { history }),
         ...(kept === undefined ? {} : { photo: kept }),
+        ...(fitted ? { fitted: true } : {}),
       },
       {
         now: target.now,
@@ -691,16 +897,43 @@ export const createTurnThings = (
           sameFileText(now.text, seen.get(now.summary.slug) ?? null)
             ? undefined
             : { kind: "stale" },
+        oneForEachPlace: true,
       },
     );
     if (!saved.ok) {
-      if (saved.error.kind !== "stale" || label === undefined) {
-        return saved.error.kind === "stale" ? err({ kind: "storage" }) : err(saved.error);
+      const refused = saved.error;
+      if (
+        refused.kind !== "stale" &&
+        refused.kind !== "place-taken" &&
+        refused.kind !== "nothing-upcoming"
+      ) {
+        return err(refused);
       }
       const now = await readThings(target);
       if (!now.ok) return err({ kind: "storage" });
-      show(now.value.things);
-      return err({ kind: "stale", label, things: labelledThings(now.value.things) });
+      /** A Thing as the model knows it: by the label it was shown, if any. */
+      const known = (of: ThingSlug) => {
+        const found = now.value.things.find(({ summary }) => summary.slug === of)?.summary;
+        return found === undefined ? undefined : { label: labelOf(of) ?? "", thing: found };
+      };
+      switch (refused.kind) {
+        case "nothing-upcoming":
+          return err({
+            kind: "nothing-upcoming",
+            name: refused.name,
+            thing: slug === undefined ? undefined : known(slug),
+          });
+        case "place-taken": {
+          const parent = known(refused.parent);
+          const part = known(refused.part);
+          if (parent === undefined || part === undefined) return err({ kind: "storage" });
+          return err({ kind: "place-taken", parent, part });
+        }
+        case "stale":
+          if (label === undefined) return err({ kind: "storage" });
+          show(now.value.things);
+          return err({ kind: "stale", label, things: labelledThings(now.value.things) });
+      }
     }
     const { slug: savedSlug } = saved.value.save.thing;
     if (saved.value.text === null) {

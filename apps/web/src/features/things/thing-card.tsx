@@ -21,12 +21,14 @@ import { changeThing, deleteThing, uploadThingPhoto } from "./api.ts";
 import { ThingsScope } from "./scope.tsx";
 import { ThingForm } from "./thing-form.tsx";
 import { StatusChip, ThingPhoto, ThingRows } from "./thing-rows.tsx";
+import { NowAndUpcoming } from "./upcoming.tsx";
 import { boughtInWords } from "./words.ts";
 
 /**
- * A Thing's page (ADR 0020): its name pinned at the top, then its photo and the details it has,
- * the Thing it's part of and its parts, Edit, Change photo and Delete, then its history, newest
- * first, drawn like an answer.
+ * A Thing's page (ADR 0020): its name pinned at the top, then what's fitted beside its upcoming
+ * one, when it has one, with Find a replacement and "… fitted" (#602), then its photo and the
+ * details it has, the Thing it's part of and its parts, Edit, Change photo and Delete, then its
+ * history, newest first, drawn like an answer.
  */
 export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list: ThingList }) {
   const { thing, history, workspaceId } = props;
@@ -111,6 +113,7 @@ export function ThingCard(props: ThingDetail & { workspaceId: WorkspaceId; list:
             />
           ) : (
             <>
+              <NowAndUpcoming workspaceId={workspaceId} thing={thing} />
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:gap-7">
                 {thing.photo && <ThingPhoto workspaceId={workspaceId} thing={thing} size="card" />}
                 <dl className="flex grow flex-col">
