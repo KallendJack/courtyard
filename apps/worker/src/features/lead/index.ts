@@ -42,11 +42,12 @@ import { getWorkspace, listCodeWorkspaces, type WorkspaceError } from "../worksp
  * A code workspace's Lead (#347): one long-lived session whose job is the build order, not one
  * issue. The steady part is the worker's, one of its repeating jobs: once the owner runs the order,
  * it starts a builder session for each next free issue in Next up, a set number at a time, and
- * watches them: it notes in the Lead's chat what it did, tells the owner when a builder's pull
- * request is ready to merge, sends the Lead a turn when one merges (to move its boards and keep the
- * plan current), and holds itself back while 4 pull requests wait for the owner's review, its model
- * is at its usage limit, main is red, or the machine is busy with the owner's own sessions (#591);
- * what waits on the owner holds back only its own builder. It rests while nothing in a numbered
+ * watches them: it notes in the Lead's chat what it did and when a builder's pull request is ready
+ * to merge, sends the Lead a turn when one merges (to move its boards and keep the plan current),
+ * and holds itself back while 4 pull requests wait for the owner's review, its model is at its
+ * usage limit, main is red, or the machine is busy with the owner's own sessions (#591); what waits
+ * on the owner holds back only its own builder. Pausing itself for reviews or the limit is the one
+ * thing of its own it notifies the owner of (#593). It rests while nothing in a numbered
  * milestone is ready to build, and starts again as soon as something is.
  * The Lead's model talks with the owner and changes how the order runs with its build order tool.
  * Merging, Update, reordering and filing issues stay the owner's.
@@ -233,8 +234,11 @@ export const createLead = (options: {
   mainRed: (workspaceId: WorkspaceId) => Promise<boolean>;
   /** Each builder's status, as the worker recorded it (#590). */
   builders?: Pick<Builders, "statusOf">;
-  /** Tells the owner, on their devices, what a session needs (#173): "Ready to merge". */
-  notify: (session: SessionId, need: string) => void;
+  /**
+   * Tells the owner, on their devices, that the Lead paused itself (#593), by its session, and
+   * why: "4 pull requests wait for you". Nothing else of the Lead's is notified.
+   */
+  pausedItself: (session: SessionId, why: string) => void;
   now: () => number;
 }) => {
   const { sessions, nextUp } = options;
@@ -460,9 +464,9 @@ export const createLead = (options: {
   };
 
   /**
-   * Tells the owner what's new about the Lead's builders: each pull request ready to merge (with a
-   * notification), and each merged one (with a turn for the Lead). Done with, a builder leaves its
-   * record.
+   * Tells the owner what's new about the Lead's builders, in its chat: each pull request ready to
+   * merge, and each merged one (with a turn for the Lead). Neither is notified (#593). Done with, a
+   * builder leaves its record.
    */
   const watchBuilders = async (
     kept: Kept,
@@ -479,9 +483,10 @@ export const createLead = (options: {
       const pullRequest = each?.pullRequest;
       const name = nameOf(each, issue);
       if (pullRequest?.state === "open" && standingOf(each, statuses.get(session)) === "ready") {
-        const about = `ready:${session}:${pullRequest.head}`;
-        if (!now.told.includes(about)) options.notify(session, "Ready to merge");
-        await tellOnce(about, `${name} is ready for you to merge (#${pullRequest.number}).`);
+        await tellOnce(
+          `ready:${session}:${pullRequest.head}`,
+          `${name} is ready for you to merge (#${pullRequest.number}).`,
+        );
       }
       // Paused, it takes no turn of its own (#591): it tidies up once it runs again.
       if (
@@ -549,6 +554,20 @@ export const createLead = (options: {
         : [{ kind: "limit" as const, until: new Date(limited).toISOString() }]),
       ...(red ? [{ kind: "main-red" as const }] : []),
     ];
+    // It pauses itself for the owner's reviews or the usage limit: they hear it once each time
+    // (#593), not again while it holds.
+    for (const reason of holding) {
+      if (was.holding?.some((each) => each.kind === reason.kind) === true) continue;
+      if (reason.kind === "reviews") {
+        options.pausedItself(kept.session, `${reason.waiting} pull requests wait for you`);
+      }
+      if (reason.kind === "limit") {
+        options.pausedItself(
+          kept.session,
+          `the usage limit until ${clockOf(Date.parse(reason.until))}`,
+        );
+      }
+    }
     let why = reviewing
       ? `${ready.length} pull requests wait for your review, so the next builder starts once one merges.`
       : limited !== undefined

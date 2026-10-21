@@ -8,7 +8,7 @@ because it changes the same file, and starts it once the first one's PR merges.
 - **Uses:** `next-up/` (the order), `sessions/` (starting builders, merging, `stopBuilding`), `builders/` (each
   builder's status, which it decides from and serves as `LeadStatus.statuses`), `allow-all/`
   (each builder's Allow all, until its pull request opens), `prompts/`, `providers/`, `workspaces/`; `code/`'s
-  `changedFiles`.
+  `changedFiles`; `notifications/` (`pausedItself`, passed in).
 - **Used by:** `worker.ts` (one of its repeating jobs). An Update waiting holds none of its builders back (#591).
 
 ## API
@@ -34,6 +34,9 @@ because it changes the same file, and starts it once the first one's PR merges.
   its fix), and while the owner's own sessions leave one place free; what waits on the owner holds back only its own
   builder, and an Update waiting holds back nothing. With nothing ready it rests, and starts again as soon as
   something is, through the night: there's no window and no cap on a Run.
+- **Notified** (#593): only as it pauses itself, for the owner's reviews ("4 pull requests wait for you") or the usage
+  limit ("the usage limit until 18:10"), once each time (`pausedItself`, to `notifications/`). A pull request ready
+  for review, or merged, is said in its chat only; its builders' waits are `builders/`' to tell.
 - **Paused** (#591): its builders carry on and nothing new starts, and it takes no turn of its own: a builder's
   merge waits (`LeadStatus.toTidy` counts them, its row says "N merges to tidy") until it runs again, when it tidies
   up after each.

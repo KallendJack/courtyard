@@ -2,10 +2,12 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import {
   type BuilderStatus,
+  builderHash,
   CodeSessionList,
   LeadStatus,
   NeedsYou,
   NextUp,
+  SessionId,
 } from "../packages/contract/index.ts";
 import { shiftsOn } from "./shifts.ts";
 
@@ -41,6 +43,7 @@ const JOURNEY = "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e";
 const NOTIFY = "3c4d5e6f-7a8b-4c9d-8e1f-2a3b4c5d6e7f";
 const TALK = "4d5e6f7a-8b9c-4d0e-9f2a-3b4c5d6e7f80";
 const TILES = "5e6f7a8b-9c0d-4e1f-8a3b-4c5d6e7f8091";
+const PINS = "6f7a8b9c-0d1e-4f2a-9b4c-5d6e7f8091a2";
 
 /** A builder session as Toolshed's list gives it. */
 const listed = (id: string, issue: number, name: string, more: object = {}) => ({
@@ -225,6 +228,48 @@ test("on the cover screen, the board comes first, then Needs you, then Next up",
   expect(builders?.y ?? 0).toBeLessThan(needs?.y ?? 0);
   await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
   await shot(page, "cover-builders-board-running");
+});
+
+test("a builder's notification opens Home with its row on the board in view (#593)", async ({
+  page,
+}) => {
+  // On the cover screen the board is three rows tall: the sixth is out of view until asked for.
+  await page.setViewportSize({ width: 400, height: 900 });
+  const six = [
+    [IDEAS, 41, "Ideas, ranked by value"],
+    [JOURNEY, 42, "Journey book"],
+    [NOTIFY, 43, "Notify me"],
+    [TALK, 47, "Hold to talk"],
+    [TILES, 48, "Tiles that fit"],
+    [PINS, 49, "Pin to Home"],
+  ] as const;
+  await given(page, {
+    lead: {
+      statuses: six.map(([session, number, name]) =>
+        builder(
+          session,
+          number,
+          name,
+          session === PINS
+            ? { kind: "stuck", since: ago(2), reason: "A restart cut its turn off twice." }
+            : { kind: "building", since: ago(10) },
+        ),
+      ),
+    },
+    sessions: six.map(([session, number, name]) => listed(session, number, name)),
+  });
+  const pins = row(page, "Pin to Home");
+
+  await page.goto(HOME);
+  await expect(pins).toContainText("Stuck");
+  await expect(pins).not.toBeInViewport();
+
+  // The page its notification opens, as the worker names it.
+  await page.goto("about:blank");
+  await page.goto(`${HOME}#${builderHash(SessionId.parse(PINS))}`);
+
+  await expect(pins).toBeInViewport({ ratio: 1 });
+  await expect(pins.getByRole("button", { name: "Retry Pin to Home" })).toBeVisible();
 });
 
 test("the header lists every reason the Lead starts no more; Allow and Retry act in their rows", async ({

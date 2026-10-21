@@ -356,7 +356,8 @@ export const createWorker = (options: {
       const workspace = await getWorkspace(contextDir, session.value.workspaceId);
       // One whose workspace can't be read is told of, as before there was a choice.
       const notify = workspace.ok ? workspace.value.notify : "everything";
-      return { title: session.value.title, notify };
+      const { title, workspaceId, byLead } = session.value;
+      return { title, notify, workspaceId, builder: byLead === true };
     },
     eventsOf: async (id) => {
       const events = await sessions.events(id);
@@ -392,8 +393,19 @@ export const createWorker = (options: {
       nextUp: (workspaceId) => nextUp.shown(workspaceId),
     },
   });
-  // Each Lead builder's status (#590), kept as things happen in its session.
-  const builders = createBuilders({ dataDir, now });
+  // Each Lead builder's status (#590), kept as things happen in its session; the owner is told
+  // when one waits on them (#593).
+  const builders = createBuilders({
+    dataDir,
+    now,
+    waitsOnYou: (session, status) => {
+      background(
+        notifications
+          .builderWaits(session, status)
+          .catch((error: unknown) => console.error(`Session ${session}: notifying crashed`, error)),
+      );
+    },
+  });
   const sessions = createSessions({
     builders,
     dataDir,
@@ -481,10 +493,10 @@ export const createWorker = (options: {
       });
     },
     now,
-    notify: (session, need) => {
+    pausedItself: (session, why) => {
       background(
         notifications
-          .needs(session, need)
+          .leadPaused(session, why)
           .catch((error: unknown) => console.error(`Session ${session}: notifying crashed`, error)),
       );
     },

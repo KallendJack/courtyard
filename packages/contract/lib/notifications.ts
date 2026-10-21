@@ -27,7 +27,7 @@ export type NotificationsOff = z.infer<typeof NotificationsOff>;
 
 /**
  * What a workspace notifies the owner of (#493), picked in its ⋯'s Notify me: everything; only
- * what needs them (an approval, a failure, a pull request ready to merge, a question to answer);
+ * what needs them (an approval, a failure, a question to answer, a builder waiting on them);
  * or nothing. A code workspace starts on everything, a planning one on what needs them.
  */
 export const NotifyMe = z.enum(["everything", "needs-me", "nothing"]);
@@ -39,14 +39,20 @@ export type NotifyMeSetting = z.infer<typeof NotifyMeSetting>;
 
 /**
  * What a notification carries, and all it carries, since it shows on a locked screen: the
- * session's title, what it needs, and which session a tap opens.
+ * session's title, what it needs, and which session a tap opens; or, for the Lead and its
+ * builders (#593), what waits on the owner and the page a tap opens.
  */
 export const PushNotice = z.object({
-  /** The session's title. */
+  /** The session's title, or what waits: "Journey book is waiting on you". */
   title: z.string(),
   /** What it needs: "Needs your OK to run a command". */
   body: z.string(),
-  /** The session a tap opens. */
+  /** The session it's about, which a tap opens unless it names a page. */
   session: SessionId,
+  /**
+   * The page a tap opens instead (#593): a code workspace's Home, with a builder's row on its
+   * Builders board in view (`builderHash`).
+   */
+  page: z.string().startsWith("/").optional(),
 });
 export type PushNotice = z.infer<typeof PushNotice>;

@@ -6,11 +6,12 @@ import {
   type LeadStatus,
   type NextUpIssue,
   type ProviderList,
+  type SessionId,
   type WorkspaceId,
 } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { Button } from "@/components/buttons/button";
 import { ButtonLink } from "@/components/buttons/button-link";
 import { doingWords } from "@/components/chat/session-state";
@@ -93,10 +94,13 @@ export const needsTheOwner = ({ status }: LeadBuilderStatus) =>
  * no more, with Pause or Run, and Merge in order once more than one is ready. Then a row per
  * builder: its issue's name, its status and since when, what it's doing now, and one action when
  * there's one to take (Allow or Answer, Review, Retry); a row only working opens its session. A
- * merged one leaves at the end of the day. It keeps its size whatever it holds (#283).
+ * merged one leaves at the end of the day. It keeps its size whatever it holds (#283). A builder's
+ * notification opens it with that builder's row in view (#593).
  */
 export function BuildersBoard(props: {
   workspaceId: WorkspaceId;
+  /** The builder whose row is put in view as the board opens, as its notification asks (#593). */
+  inView: SessionId | undefined;
   lead: LeadStatus | undefined;
   sessions: readonly Listed[];
   /** Next up's issues, once known, which name the issues it holds back. */
@@ -196,6 +200,7 @@ function Board(props: Parameters<typeof BuildersBoard>[0] & { lead: LeadStatus }
               <BuilderRow
                 key={builder.session}
                 workspaceId={props.workspaceId}
+                inView={builder.session === props.inView}
                 builder={builder}
                 session={props.sessions.find((each) => each.id === builder.session)}
                 onChanged={props.onChanged}
@@ -211,15 +216,20 @@ function Board(props: Parameters<typeof BuildersBoard>[0] & { lead: LeadStatus }
 /**
  * One builder (#592): its dot, its issue's name, its status and since when ("Checking · 2 min"),
  * and what it's doing now; then its one action, or, only working, a quiet › with the whole row
- * opening its session.
+ * opening its session. Opened from its notification, it's scrolled into view (#593).
  */
 function BuilderRow(props: {
   workspaceId: WorkspaceId;
+  inView: boolean;
   builder: LeadBuilderStatus;
   session: Listed | undefined;
   onChanged: () => void;
 }) {
   const { builder, session } = props;
+  const row = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (props.inView) row.current?.scrollIntoView({ block: "nearest" });
+  }, [props.inView]);
   const { status } = builder;
   const look = LOOKS[status.kind];
   const name = builderName(builder.title);
@@ -236,6 +246,7 @@ function BuilderRow(props: {
   );
   return (
     <li
+      ref={row}
       aria-label={name}
       className={classes(
         "flex shrink-0 items-center gap-2.5 rounded-row border py-2 pr-2 pl-3",

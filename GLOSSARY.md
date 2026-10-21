@@ -629,7 +629,7 @@ _Avoid_: alert, ping
 
 **Notify me**:
 What a workspace's notifications tell the owner of, picked from its ⋯: Everything, Only what needs me (an approval,
-a failure, a pull request ready to merge, a question to answer) or Nothing. Code workspaces start on Everything,
+a failure, a question to answer, a builder Waiting on you or Stuck, the Lead pausing itself) or Nothing. Code workspaces start on Everything,
 planning ones on Only what needs me.
 _Avoid_: mute, do not disturb, notification level
 

@@ -209,7 +209,22 @@ const next = (
   }
 };
 
-export const createBuilders = (options: { dataDir: string; now: () => number }) => {
+/**
+ * Whether a builder now waits on the owner, which they're told of (#593): Stuck, or Waiting on you
+ * but for a turn a restart cut off, which carries on by itself.
+ */
+const waitsOnTheOwner = (kept: Kept) =>
+  kept.status.kind === "stuck" || (kept.status.kind === "waiting-on-you" && !kept.cutOff);
+
+export const createBuilders = (options: {
+  dataDir: string;
+  now: () => number;
+  /**
+   * Tells the owner a builder waits on them (#593): once each time it comes to be Waiting on you
+   * or Stuck, never again while that status holds.
+   */
+  waitsOnYou?: (session: SessionId, status: BuilderStatus) => void;
+}) => {
   const path = join(options.dataDir, FILE);
   const oneAtATime = createOneAtATime();
   /** Every builder as kept, read from its file the first time it's needed. */
@@ -235,10 +250,8 @@ export const createBuilders = (options: { dataDir: string; now: () => number }) 
         const moved = next(was, happening);
         const { status: unstamped, ...rest } = moved.kept;
         if (unstamped === undefined) return { status: undefined, carryOn: false };
-        const since =
-          was !== undefined && goesOn(was.status, unstamped)
-            ? was.status.since
-            : new Date(options.now()).toISOString();
+        const goingOn = was !== undefined && goesOn(was.status, unstamped);
+        const since = goingOn ? was.status.since : new Date(options.now()).toISOString();
         const stamped = BuilderStatus.safeParse({ ...unstamped, since });
         if (!stamped.success) return { status: was?.status, carryOn: false };
         const status = stamped.data;
@@ -249,6 +262,7 @@ export const createBuilders = (options: { dataDir: string; now: () => number }) 
           const written = await writeJsonFile(path, { builders });
           if (!written.ok) console.error(`Builder ${session}: its status couldn't be kept`);
         }
+        if (!goingOn && waitsOnTheOwner(kept)) options.waitsOnYou?.(session, status);
         return { status, carryOn: moved.carryOn };
       }),
 

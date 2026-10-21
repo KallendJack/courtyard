@@ -3,12 +3,15 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ApprovalAsk,
+  type BuilderStatus,
+  builderHash,
   NotificationSubscription,
   type NotifyMe,
   type PullRequest,
   type PushNotice,
   type SessionEvent,
   type SessionId,
+  type WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
 import { DeviceLogin, type StorageError } from "../../auth/owner/index.ts";
@@ -124,6 +127,36 @@ const needOf = async (
   }
 };
 
+/** What a builder's approval asks to do, as its notification says it: the command, in full. */
+const askWords = (ask: ApprovalAsk) => {
+  switch (ask.kind) {
+    case "command":
+      return ask.command;
+    case "tool":
+      return `${ask.action} in ${ask.connection}`;
+    case "edit":
+    case "setup":
+      return `change ${ask.path}`;
+  }
+};
+
+/**
+ * The question a builder's last turn ended on (#593): the last sentence of its answer, which ends
+ * in a question mark.
+ */
+const questionIn = (events: readonly SessionEvent[]) => {
+  const asked = events.findLastIndex((event) => event.type === "owner-message");
+  const answer = events
+    .slice(asked + 1)
+    .map((event) => (event.type === "text-delta" ? event.text : ""))
+    .join("")
+    .trim();
+  return answer.split(/(?<=[.!?])\s+|\n+/).at(-1);
+};
+
+/** A builder by what it builds, as the owner reads it: its issue's title, without "Build #N: ". */
+const builderName = (title: string) => title.replace(/^Build #\d+: /, "");
+
 /** Whether a workspace on `notify` hears of a need. */
 const hears = (notify: NotifyMe, need: Need) =>
   notify === "everything" || (notify === "needs-me" && need.needsYou);
@@ -156,10 +189,19 @@ export const createNotifications = (options: {
   send: SendPush;
   /** The devices logged in now: only these are sent to. */
   devicesLoggedIn: () => Promise<Result<ReadonlySet<DeviceLogin>, StorageError>>;
-  /** A session's title, as a notification says it, and what its workspace notifies of (#493). */
-  sessionOf: (
-    session: SessionId,
-  ) => Promise<{ readonly title: string; readonly notify: NotifyMe } | undefined>;
+  /**
+   * A session's title, as a notification says it, what its workspace notifies of (#493), its
+   * workspace, and whether it's a Lead's builder (#593).
+   */
+  sessionOf: (session: SessionId) => Promise<
+    | {
+        readonly title: string;
+        readonly notify: NotifyMe;
+        readonly workspaceId: WorkspaceId;
+        readonly builder: boolean;
+      }
+    | undefined
+  >;
   /** A session's events so far, to tell whether its last turn asked the owner something. */
   eventsOf: (session: SessionId) => Promise<readonly SessionEvent[] | undefined>;
 }) => {
@@ -269,6 +311,25 @@ export const createNotifications = (options: {
         : undefined;
     });
 
+  /**
+   * Sends a notification of what waits on the owner from the Lead or one of its builders (#593):
+   * its words, opening its workspace's Home at `hash` (the Builders board heads it). A workspace on
+   * Nothing hears none. The words are worked out only once there's a device to send to.
+   */
+  const waits = (
+    session: SessionId,
+    words: (title: string) => Promise<{ title: string; body: string } | undefined>,
+    hash?: string,
+  ) =>
+    send(async () => {
+      const found = await options.sessionOf(session);
+      if (found === undefined || found.notify === "nothing") return undefined;
+      const said = await words(found.title);
+      if (said === undefined) return undefined;
+      const home = `/workspaces/${encodeURIComponent(found.workspaceId)}`;
+      return { ...said, session, page: hash === undefined ? home : `${home}#${hash}` };
+    });
+
   return {
     /** The worker's public key, made on its first run. */
     publicKey: async (): Promise<Result<string, StorageError>> => {
@@ -290,31 +351,67 @@ export const createNotifications = (options: {
     turnOff: (endpoint: string) =>
       changeDevices((devices) => devices.filter((kept) => kept.subscription.endpoint !== endpoint)),
 
-    /** Sends a notification when a session's event is one the owner hears about. */
+    /**
+     * Sends a notification when a session's event is one the owner hears about. A Lead's builder
+     * is heard of by its status alone (`builderWaits`, #593).
+     */
     sessionEvent: (session: SessionId, event: SessionEvent, pullRequest: PullRequest | undefined) =>
-      notice(session, () =>
-        needOf(event, pullRequest, async () => {
+      notice(session, async () => {
+        if ((await options.sessionOf(session))?.builder !== false) return undefined;
+        return needOf(event, pullRequest, async () => {
           const events = await options.eventsOf(session);
           return events !== undefined && endsAsking(events, event.seq);
-        }),
-      ),
+        });
+      }),
 
     /**
-     * Sends a notification saying what a session needs, with no event of its own: a Lead's
-     * builder's pull request ready to merge (#347), or a plan's usage nearing its
-     * limit (#66). Each needs the owner, so a workspace on Nothing alone hears none.
+     * Sends a notification saying what a session needs, with no event of its own: a plan's usage
+     * nearing its limit (#66). It needs the owner, so a workspace on Nothing alone hears none.
      */
     needs: (session: SessionId, says: string) =>
       notice(session, async () => ({ says, needsYou: true })),
 
     /**
+     * Tells the owner a Lead's builder waits on them (#593), once each time it comes to: Waiting
+     * on you, with the command its approval runs or the question its turn ended on; or Stuck,
+     * with why. A tap opens its row on its workspace's Builders board.
+     */
+    builderWaits: (session: SessionId, status: BuilderStatus) =>
+      waits(
+        session,
+        async (title) => {
+          const name = builderName(title);
+          if (status.kind === "stuck") return { title: `${name} is Stuck`, body: status.reason };
+          if (status.kind !== "waiting-on-you") return undefined;
+          const events = (await options.eventsOf(session)) ?? [];
+          const asked = events.find(
+            (event) => event.type === "approval-requested" && event.seq === status.approval,
+          );
+          const body =
+            asked?.type === "approval-requested" ? askWords(asked.ask) : questionIn(events);
+          return { title: `${name} is waiting on you`, body: body ?? "It asks you something" };
+        },
+        builderHash(session),
+      ),
+
+    /**
+     * Tells the owner the Lead paused itself (#593), by its session, and why: "4 pull requests
+     * wait for you". A tap opens its workspace's Home, the Builders board at its head.
+     */
+    leadPaused: (session: SessionId, why: string) =>
+      waits(session, async () => ({ title: "The Lead paused itself", body: why })),
+
+    /**
      * The one notification after a crash or a restart of the PC (#186): which sessions' turns it
-     * cut off, waiting for Continue, but those of workspaces on Nothing (#493). A tap opens the
-     * first; the rest wait in Needs you.
+     * cut off, waiting for Continue, but those of workspaces on Nothing (#493) and the Lead's
+     * builders, heard of by their status (#593). A tap opens the first; the rest wait in Needs you.
      */
     restarted: async (cutOff: readonly { readonly id: SessionId; readonly title: string }[]) => {
       const heard = await Promise.all(
-        cutOff.map(async (session) => (await options.sessionOf(session.id))?.notify !== "nothing"),
+        cutOff.map(async (session) => {
+          const found = await options.sessionOf(session.id);
+          return found?.notify !== "nothing" && found?.builder !== true;
+        }),
       );
       const told = cutOff.filter((_, index) => heard[index]);
       const [first] = told;
