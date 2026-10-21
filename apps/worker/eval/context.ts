@@ -304,7 +304,7 @@ const plansIn = (answer: string) =>
   });
 
 /**
- * What a plan holds as sizes (#661), each named: its outline when it says it was measured, its
+ * What a plan holds as sizes (#661), each named: its outline when it says it is a known size, its
  * zones' and floor things' sides, its wall things' lengths, and its doors', windows' and
  * doorways' widths. Where things are (`fromLeft`, `fromBack`, `at`) isn't a size.
  */
@@ -329,7 +329,7 @@ const sizesOn = (plan: FloorPlan) => {
 /**
  * What's wrong with an answer's floor plans (#661), or null: none drawn, one the web app can't
  * draw, a size on one that it wasn't given (give or take 1 cm), a size on something nobody gave
- * one, or its outline said to be measured, or not, other than expected.
+ * one, or its outline said to be a known size, or not, other than expected.
  */
 const planMiss = (expected: ExpectedPlan, plans: ReturnType<typeof plansIn>) => {
   if (plans.length === 0) return "expected a floor plan; the answer has no plan block";
@@ -351,7 +351,7 @@ const planMiss = (expected: ExpectedPlan, plans: ReturnType<typeof plansIn>) => 
     }
     if (expected.measured !== undefined && (plan.measured === true) !== expected.measured) {
       misses.push(
-        `${plan.room}: expected its outline ${expected.measured ? "" : "not "}said to be measured`,
+        `${plan.room}: expected its outline ${expected.measured ? "" : "not "}said to be a known size`,
       );
     }
   }

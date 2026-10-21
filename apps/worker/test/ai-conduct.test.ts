@@ -432,6 +432,8 @@ describe("what every turn tells a model", () => {
       // A whole floor's outline was shown as 7.8 m, the rooms plus guessed gaps (#661).
       '`"measured": true`',
       "shows no overall size",
+      // An Office at its developer's size had its correct size hidden (#668).
+      "measured by the owner or from a plan's room table",
       "say in a line what you've left off",
     ]) {
       expect(plans).toContain(rule);

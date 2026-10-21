@@ -161,6 +161,74 @@ test("a thing with no size given is a dot where it is, listed without one, and a
   await shot(plan, "unmeasured-plan");
 });
 
+/**
+ * A house's ground floor from a developer's room table (#668): each room's size is known, so it's
+ * written under its name; the floor's own outline is added up from them, so it isn't.
+ */
+const HOUSE_GROUND = {
+  room: "Ground floor",
+  width: 700,
+  depth: 784,
+  zones: [
+    { name: "Kitchen", fromLeft: 191, fromBack: 0, width: 269, depth: 252 },
+    { name: "Lounge", fromLeft: 393, fromBack: 338, width: 307, depth: 446 },
+    { name: "Garage", fromLeft: 0, fromBack: 270, width: 274, depth: 514 },
+    { name: "WC", fromLeft: 0, fromBack: 153, width: 170, depth: 90 },
+  ],
+  items: [{ name: "Fridge freezer", fromLeft: 214, fromBack: 270, width: 60, depth: 61 }],
+};
+
+test("each room on a plan shows its size under its name, a room too small for it in the list, and a floor added up from rooms none of its own (#668)", async ({
+  page,
+}) => {
+  const plan = await drawn(page, `Rooms ${Date.now()}`, HOUSE_GROUND);
+
+  // Under each name, width × depth in metres; the WC is too small on the plan for both lines.
+  await expect(plan.locator('[data-plan-part="zone"]')).toHaveText([
+    "Kitchen",
+    "Lounge",
+    "Garage",
+    "WC",
+  ]);
+  await expect(plan.locator('[data-plan-part="zone-size"]')).toHaveText([
+    "2.69 × 2.52",
+    "3.07 × 4.46",
+    "2.74 × 5.14",
+  ]);
+  const lounge = await plan.getByText("Lounge", { exact: true }).boundingBox();
+  const size = await plan.getByText("3.07 × 4.46", { exact: true }).boundingBox();
+  const middle = (box: typeof size) => (box?.y ?? 0) + (box?.height ?? 0) / 2;
+  expect(middle(size) - middle(lounge)).toBeGreaterThan(8);
+  expect(
+    Math.abs((size?.x ?? 0) + (size?.width ?? 0) / 2 - (lounge?.x ?? 0) - (lounge?.width ?? 0) / 2),
+  ).toBeLessThan(1);
+
+  const rooms = plan.getByRole("list", { name: "Rooms in the ground floor" });
+  await expect(rooms.getByRole("listitem")).toHaveText(["WC1.70 × 0.90"]);
+
+  // The floor's outline was added up from its rooms: no overall size.
+  await expect(plan).toContainText("Plan · Ground floor");
+  await expect(plan).not.toContainText(/\d\.\d m/);
+  await shot(plan, "room-sizes");
+});
+
+/** Bedroom 3 as the Office, at its size in the developer's room table: a known size (#668). */
+const OFFICE = {
+  room: "Office",
+  width: 272,
+  depth: 329,
+  measured: true,
+  items: [{ name: "Desk", fromLeft: 60, fromBack: 0, width: 140, depth: 60 }],
+};
+
+test("a one-room plan at a developer's size shows its overall size (#668)", async ({ page }) => {
+  const plan = await drawn(page, `Office ${Date.now()}`, OFFICE);
+  await expect(plan).toContainText("Plan · Office · 3.3 × 2.7 m");
+  await expect(
+    plan.getByRole("group", { name: /^Office, 2\.7 m wide and 3\.3 m deep/ }),
+  ).toBeVisible();
+});
+
 test("a plan drawn in an answer is saved straight away, and shows on the workspace's Home", async ({
   page,
 }) => {

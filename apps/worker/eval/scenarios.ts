@@ -177,8 +177,9 @@ export type ExpectedPlan = {
   /** Words for what nobody gave a size: nothing on the plan named with one has a size. */
   readonly unsized: readonly string[];
   /**
-   * Whether it says its outline was measured (`"measured": true`). Left out, it isn't checked;
-   * either way a measured outline's sizes must be ones it was given.
+   * Whether it says its outline is a known size (`"measured": true`: the owner's measurement or a
+   * room table's, #668). Left out, it isn't checked; either way a known outline's sizes must be
+   * ones it was given.
    */
   readonly measured?: boolean;
 };
@@ -607,6 +608,27 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "Draw the garage as a floor plan, to scale, from what's saved:\n- The garage measures 5.14 m long × 2.74 m wide inside\n- The fridge freezer stands in the back right corner; it's 60 cm wide and 61 cm deep",
         expect: [],
         plans: { sizes: [514, 274, 60, 61], unsized: ["boiler", "door"], measured: true },
+      },
+    ],
+  },
+  // A developer's room size is a known size (#668): the Office, bedroom 3 in the room table, had
+  // its correct size hidden because nobody had measured it.
+  {
+    name: "plan-room-table-size",
+    rule: "a single room drawn from a developer's room table says its outline is a known size, so its overall size is shown (#668)",
+    workspace: "House",
+    context: {
+      facts: [
+        "First floor room sizes from the developer's table (width × depth): bedroom 1 2.77 × 4.36 m, bedroom 2 3.07 × 3.83 m, bedroom 3 2.72 × 3.29 m, en suite 2.03 × 1.41 m, bathroom 1.95 × 1.91 m",
+        "Bedroom 3 is now the Office",
+        "The Office's window is in its front wall, the 2.72 m one, and its door in the back wall",
+      ],
+    },
+    turns: [
+      {
+        say: "Draw the office as a floor plan.",
+        expect: [],
+        plans: { sizes: [272, 329], unsized: ["door", "window", "desk"], measured: true },
       },
     ],
   },
