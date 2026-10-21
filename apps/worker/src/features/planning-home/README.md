@@ -8,7 +8,7 @@ cage. Home's subject is the Boardman drawn as a mountain bike: the saddle, pedal
 pedals saying DMR V8, and the bottle cage under it, with no place on the drawing.
 
 - **Uses:** `things/` (the Things, read), `floor-plans/` (its rooms' plans), `projects/` (its projects, read),
-  `planning-files/routes.ts`.
+  `workspaces/` (its name and facts, for a space to draw), `planning-files/routes.ts`.
 - **Used by:** `worker.ts`; in the web app, `features/planning-home/`.
 
 ## API
@@ -25,5 +25,8 @@ pedals saying DMR V8, and the bottle cage under it, with no place on the drawing
   taken, goes under it. A wanted part isn't on the bike, so it's neither drawn nor listed (#603). A Thing with two or more parts placed is drawn; of several, the one with the
   most. Each placed part comes with its upcoming replacement's name (#602).
 - **A space's floor plan:** with no drawn Thing, the newest document that is a room's plan and nothing else (#257).
+- **A space to draw** (`spaceOf`, #604): with neither, a workspace whose facts give a floor's two sides ("5.14 × 2.74
+  m", "240cm x 180cm") is a space: named from the workspace ("garage"), its size as first saved ("5.14 m × 2.74 m"),
+  and every fact that holds a length with its unit, which Draw the garage starts a session with.
 - The places themselves (`BIKE_PLACES`) are the contract's; where each sits on the drawing is the web app's.
 - Code workspaces have none: 409, as their Things do.

@@ -18,6 +18,10 @@ Courtyard restarts on it.
   the shared `components/code/build-stages.tsx`: each job's dot violet running, moss passed, red failed, grey
   waiting, its time counting up; as a row, a small graph that opens the full one in a sheet), and Update, offered
   unless it has failed.
+- **What's new** (`whats-new.tsx`, #604; Paper, "Tablet · Home: what's new after an Update (#604)"): after an Update,
+  Home's row first says the next line it brought, "Updated · New in Garage: Draw the garage", with Try it, which
+  marks it seen and opens where it's tried (a workspace, Settings, or Home itself, where it just goes). A newer
+  version waits in the row till it's tapped.
 - Tapped before it has passed, the Update waits, and the row says so, with Cancel and Update now (#186); then, while
   a check runs, "Waiting for a check to finish" (#629). It never waits for a session mid-turn (#621). Details, the failed job's page on GitHub, once it has failed.
 

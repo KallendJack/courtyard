@@ -32,6 +32,10 @@ its card opens.
 - **A room's floor plan** (#257; Paper, "Tablet · Floor plan in an answer (#257)"): drawn by the same rich block as in
   an answer (`components/rich-blocks/floor-plan.tsx`, told it's `OnHome`), its list of things scrolling inside the
   block, which keeps its size.
+- **Draw the garage** (`draw-space.tsx`, #604; Paper, "Tablet · Garage Home: Draw the garage, then projects
+  (#604)"): a space with no plan yet, as tall as it needs: a dashed box with its size where the plan will be, "No plan
+  of the garage yet", the facts it's drawn from as saved, and Draw the garage, which starts a session with them
+  (the contract's `drawSpaceMessage`) and opens it. Stacked on the cover screen.
 - **A project** (`#project/<slug>`, #603): its page in Home's place, under the header and pills
   (`features/projects/project-view.tsx`); the box under it starts a session that belongs to the project.
 - **The box:** always there; it starts a new session. + New (`#new`) focuses it. A photo or doc from Add goes in it.

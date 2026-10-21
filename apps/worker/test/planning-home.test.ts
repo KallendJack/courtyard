@@ -210,3 +210,70 @@ describe("a planning workspace's Home (#603)", () => {
     expect(response.status).toBe(409);
   });
 });
+
+describe("a space with no floor plan yet (#604)", () => {
+  /** The garage workspace, its context file holding these facts. */
+  const garage = async (...facts: readonly string[]) => {
+    await mkdir(join(contextDir, "garage"), { recursive: true });
+    await writeFile(
+      join(contextDir, "garage", "CONTEXT.md"),
+      `# Garage\n\nTurning it into an office.\n\n## Facts\n\n${facts.map((fact) => `- ${fact}\n`).join("")}`,
+    );
+  };
+  const garageHome = async (request: Requester) =>
+    PlanningHome.parse(await (await request("/api/workspaces/garage/home")).json());
+
+  it("is the space to draw, named from the workspace, with its size and the facts that measure it", async () => {
+    await garage(
+      "The garage is 5.14 × 2.74 m inside.",
+      "It's 2.45 m high.",
+      "The boiler is in the back corner.",
+      "Narrower by the door: 2.40 m.",
+    );
+    const request = await asOwner(testWorker({ root }));
+
+    expect((await garageHome(request)).subject).toEqual({
+      kind: "space",
+      name: "garage",
+      size: "5.14 m × 2.74 m",
+      measurements: [
+        "The garage is 5.14 × 2.74 m inside.",
+        "It's 2.45 m high.",
+        "Narrower by the door: 2.40 m.",
+      ],
+    });
+  });
+
+  it("reads a room's size in centimetres or with both units said", async () => {
+    await garage("Shed floor 240cm x 180cm.");
+    const request = await asOwner(testWorker({ root }));
+
+    expect((await garageHome(request)).subject).toMatchObject({
+      kind: "space",
+      size: "240 cm × 180 cm",
+    });
+  });
+
+  it("isn't a space without a floor's two sides saved, however many lengths are", async () => {
+    await garage("The back wall is 2.4 m wide.", "Rides on Sundays.");
+    const request = await asOwner(testWorker({ root }));
+
+    expect((await garageHome(request)).subject).toBeNull();
+  });
+
+  it("gives way to a drawn Thing, which leads Home first", async () => {
+    await garage("The garage is 5.14 × 2.74 m inside.");
+    const bike = join(contextDir, "garage", "things");
+    await mkdir(bike, { recursive: true });
+    await writeFile(join(bike, "hardtail.md"), "---\nname: Hardtail\nstatus: have\n---\n");
+    for (const name of ["Saddle", "Pedals"]) {
+      await writeFile(
+        join(bike, `${name.toLowerCase()}.md`),
+        `---\nname: ${name}\nstatus: have\npart of: hardtail\n---\n`,
+      );
+    }
+    const request = await asOwner(testWorker({ root }));
+
+    expect((await garageHome(request)).subject).toMatchObject({ kind: "drawing" });
+  });
+});

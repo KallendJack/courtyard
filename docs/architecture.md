@@ -145,7 +145,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 
 *Running Courtyard* (`features/`)
 
-- [`live/`](../apps/worker/src/features/live/README.md): the live copy's updates and main's build.
+- [`live/`](../apps/worker/src/features/live/README.md): the live copy's updates, main's build, and what's new
+  after an Update, from the merged pull requests (#604).
 - [`notifications/`](../apps/worker/src/features/notifications/README.md): web push to the owner's devices.
 - [`offline-copy/`](../apps/worker/src/features/offline-copy/README.md): the copy a device keeps to read offline,
   `GET /api/offline-copy` (#106).
@@ -736,6 +737,7 @@ things live only in the worker's memory and go when it restarts.
   ([ADR 0015](adr/0015-codex-runs-through-its-app-server-in-its-own-codex-home-without-a-shell.md)).
   `sign-ins.json`: the providers the owner said Not now to.
 - `live-update.json`, `live-update.log`, `worker.log`: the live copy's last update and the worker's output.
+- `whats-new.json`: the last Update's what's-new lines and those tapped (#604).
 
 **Only in the worker's memory:** usage limits and each plan's usage as last read, and which turns are running.
 

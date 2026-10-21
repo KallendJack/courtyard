@@ -973,3 +973,163 @@ describe("Update when ready (#186)", () => {
     });
   });
 });
+
+describe("what's new after an Update (#604)", () => {
+  const ON_GITHUB = "https://github.com/octo-owner/courtyard.git";
+  const REPO = "octo-owner/courtyard";
+  let github: FakeGitHub;
+  let cookie: string | undefined;
+
+  /** A worker on the live copy, signed in to GitHub; a second call is a restart. */
+  const start = async () => {
+    const app = testWorker({
+      root,
+      env: { COURTYARD_LIVE_COPY: liveCopy },
+      now: () => now,
+      startUpdate: () => {},
+      github: github.api,
+    });
+    const first = cookie === undefined;
+    cookie ??= await setUpOwner(app);
+    const request = requesterFor(app, cookie);
+    if (first) {
+      await postJson(request, "/api/github/sign-in", {});
+      github.approve();
+      await expect
+        .poll(async () => GitHubConnection.parse(await (await request("/api/github")).json()).kind)
+        .toBe("signed-in");
+    }
+    return request;
+  };
+
+  /** A pull request with this description, merged on GitHub as a merge commit on main. */
+  const mergePull = async (title: string, body: string) => {
+    await writeFile(join(pusher, "notes.md"), `${title}\n`);
+    await git(pusher, "commit", "-qam", "work");
+    const head = (await git(pusher, "rev-parse", "HEAD")).stdout.trim();
+    const number = github.openPullRequest({ repo: REPO, branch: title, head, title, body });
+    github.merge(number);
+    await git(
+      pusher,
+      "commit",
+      "--allow-empty",
+      "-qm",
+      `Merge pull request #${number} from octo-owner/${number}`,
+      "-m",
+      title,
+    );
+    await git(pusher, "push", "-q", "origin", "main");
+    return number;
+  };
+
+  /** What update.ps1 does: the live copy moved on to main's newest, and says it updated. */
+  const updated = async () => {
+    const from = (await git(liveCopy, "rev-parse", "HEAD")).stdout.trim();
+    await git(liveCopy, "pull", "-q", "--ff-only", "origin", "main");
+    const to = (await git(liveCopy, "rev-parse", "HEAD")).stdout.trim();
+    await lastUpdateIs({
+      from: { commit: from, title: "before" },
+      to: { commit: to, title: "after" },
+    });
+  };
+
+  const whatsNewOf = async (request: Requester) => {
+    const status = await statusOf(request);
+    return status.kind === "live" ? status.whatsNew : undefined;
+  };
+  const seen = (request: Requester, pullRequest: unknown) =>
+    postJson(request, "/api/live/whats-new/seen", { pullRequest });
+
+  beforeEach(async () => {
+    await git(liveCopy, "remote", "set-url", "origin", ON_GITHUB);
+    await git(liveCopy, "config", `url.${remote.replaceAll("\\", "/")}.insteadOf`, ON_GITHUB);
+    await mkdir(join(root, "context", "garage"), { recursive: true });
+    await writeFile(join(root, "context", "garage", "CONTEXT.md"), "# Garage\n");
+    github = createFakeGitHub();
+    cookie = undefined;
+  });
+
+  it("says each what's-new line of the pull requests an Update brought, once, then they're gone", async () => {
+    const draw = await mergePull(
+      "Draw the garage from Home",
+      "## Summary\n\nThe garage's plan on Home.\n\nWhat's new: Draw the garage · Garage\n\nCloses #604\n",
+    );
+    // A pull request that changes nothing the owner sees says nothing.
+    await mergePull("Faster CI", "## Summary\n\nCaches the build.\n");
+    const talk = await mergePull(
+      "Talk from Settings",
+      "**What's new:** Talk from the Settings sheet · Settings\n",
+    );
+    const fade = await mergePull("Softer fade", "What's new: A softer fade under the title.\n");
+    const request = await start();
+    // Nothing until an Update brings them.
+    expect(await whatsNewOf(request)).toBeNull();
+
+    await updated();
+
+    expect(await whatsNewOf(request)).toEqual({
+      pullRequest: draw,
+      what: "Draw the garage",
+      place: { kind: "workspace", id: "garage", name: "Garage" },
+    });
+    expect((await seen(request, draw)).status).toBe(204);
+    expect(await whatsNewOf(request)).toEqual({
+      pullRequest: talk,
+      what: "Talk from the Settings sheet",
+      place: { kind: "settings" },
+    });
+    await seen(request, talk);
+    // Where it names nowhere Courtyard knows, it's tried on Home itself.
+    expect(await whatsNewOf(request)).toEqual({
+      pullRequest: fade,
+      what: "A softer fade under the title",
+      place: { kind: "home" },
+    });
+    await seen(request, fade);
+    expect(await whatsNewOf(request)).toBeNull();
+    // Gone for good, after a restart too.
+    expect(await whatsNewOf(await start())).toBeNull();
+  });
+
+  it("goes at the next Update, seen or not, which says its own", async () => {
+    await mergePull("Draw the garage from Home", "What's new: Draw the garage · Garage\n");
+    const request = await start();
+    await updated();
+    expect(await whatsNewOf(request)).toMatchObject({ what: "Draw the garage" });
+
+    const later = await mergePull("Projects", "What's new: Projects on Home · garage\n");
+    await updated();
+
+    expect(await whatsNewOf(request)).toEqual({
+      pullRequest: later,
+      what: "Projects on Home",
+      place: { kind: "workspace", id: "garage", name: "Garage" },
+    });
+  });
+
+  it("says nothing after an Update that didn't update, or with no one signed in to GitHub", async () => {
+    await mergePull("Draw the garage from Home", "What's new: Draw the garage · Garage\n");
+    const request = await start();
+    await lastUpdateIs({ outcome: "refused", message: "CI is still running." });
+    expect(await whatsNewOf(request)).toBeNull();
+
+    await postJson(request, "/api/github/sign-out", {});
+    await updated();
+    expect(await whatsNewOf(request)).toBeNull();
+
+    // Signed in again, it reads them then.
+    await postJson(request, "/api/github/sign-in", {});
+    github.approve();
+    await expect
+      .poll(async () => GitHubConnection.parse(await (await request("/api/github")).json()).kind)
+      .toBe("signed-in");
+    expect(await whatsNewOf(request)).toMatchObject({ what: "Draw the garage" });
+  });
+
+  it("refuses to mark seen a line that isn't there", async () => {
+    const request = await start();
+
+    expect((await seen(request, 99)).status).toBe(404);
+    expect((await seen(request, "x")).status).toBe(400);
+  });
+});

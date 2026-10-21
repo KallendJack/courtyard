@@ -220,7 +220,9 @@ _Avoid_: shopping list, basket, cart, recommendations, deals
 
 **Main subject**:
 What a planning workspace's Home leads with (#603), decided by the worker from its data: a Thing drawn as its kind of
-thing, or a space's floor plan (#257). The **drawn bike** is Courtyard's own drawing of a mountain bike, never a
+thing, or a space's floor plan (#257), or, until a space has one, **Draw the garage** (#604): a workspace whose facts
+give a floor's two sides is a space, and its card shows its size and the facts that measure it, with a button named
+from the workspace that starts a session with them, for a floor plan. The **drawn bike** is Courtyard's own drawing of a mountain bike, never a
 model's, the Thing's parts placed on it by name, each a label opening its card, one with an upcoming replacement
 saying so ("Pedals · DMR V8 next"), and those it has no place for listed under it. The Thing's photo is on its card.
 _Avoid_: view, Breakdown view, hero, dashboard
@@ -236,8 +238,9 @@ _Avoid_: dev workspace, repo workspace
 
 **Home page**:
 The page the Courtyard mark opens (#102): the workspaces, a tile each with one line (what waits on the owner, else
-when it was last used), and New workspace. At its foot, only when needed, main's build with Update and the
-**problem line**, one gold line for the worst thing wrong, with Fix it. Everything else is in Settings.
+when it was last used), and New workspace. At its foot, only when needed, main's build with Update (after an Update,
+**What's new** first) and the **problem line**, one gold line for the worst thing wrong, with Fix it. Everything
+else is in Settings.
 _Avoid_: dashboard, launcher, Home (that's a workspace page's first tab)
 
 **Settings**:
@@ -446,6 +449,13 @@ Update tapped while main's build or a check runs: it waits, and the worker runs 
 check holds the machine's builds lock, so a restart never cuts a check off (#629). It holds nothing back meanwhile and never waits for a turn mid-way, which carries on by itself after the restart (#621). Update now
 runs it at once; Cancel drops it; it's dropped if main fails meanwhile.
 _Avoid_: scheduled update, queued update
+
+**What's new**:
+The one line a merged pull request that changes what the owner sees gives in its description (#604), `What's new:
+<what> · <where to try it>` (a workspace's name, Settings, or none for Home). After an Update, Home's New version row
+says each line the Update brought once, "Updated · New in Garage: Draw the garage", with **Try it**, which opens
+where it's tried; a line goes once tapped, and all of them at the next Update.
+_Avoid_: changelog, release notes, what's changed
 
 **Overflow**:
 Continuing a session on another provider's model after a usage limit is hit. The owner chooses it with Carry on, on

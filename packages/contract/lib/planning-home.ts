@@ -40,7 +40,8 @@ export type DrawnPart = z.infer<typeof DrawnPart>;
 /**
  * A planning workspace's main subject, which leads its Home (#603): a Thing drawn as its kind of
  * thing, its parts placed on the drawing by name and those it has no place for listed under it;
- * or a room's floor plan, as last drawn in an answer (#257).
+ * or a room's floor plan, as last drawn in an answer (#257); or, until a space has one, the space
+ * to draw (#604): a workspace whose facts give a floor's two sides.
  */
 export const HomeSubject = z.discriminatedUnion("kind", [
   z.object({
@@ -59,8 +60,27 @@ export const HomeSubject = z.discriminatedUnion("kind", [
     document: DocumentSlug,
     plan: FloorPlan,
   }),
+  z.object({
+    kind: z.literal("space"),
+    /** What it's called, from the workspace's name: "garage", as in "Draw the garage". */
+    name: z.string(),
+    /** Its floor's two sides, as first saved: "5.14 m × 2.74 m". */
+    size: z.string(),
+    /** The facts saved about it that hold a measurement, which a plan is drawn from. */
+    measurements: z.array(z.string()),
+  }),
 ]);
 export type HomeSubject = z.infer<typeof HomeSubject>;
+
+/**
+ * Draw the garage's first message (#604): the space and its saved measurements, as its Home
+ * shows them, for a floor plan.
+ */
+export const drawSpaceMessage = (space: Extract<HomeSubject, { kind: "space" }>) =>
+  [
+    `Draw the ${space.name} as a floor plan, to scale, from what's saved:`,
+    ...space.measurements.map((fact) => `- ${fact}`),
+  ].join("\n");
 
 /** A planning workspace's Home, as `GET /api/workspaces/:id/home` gives it. */
 export const PlanningHome = z.object({

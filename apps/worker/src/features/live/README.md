@@ -6,8 +6,9 @@ For the live copy only: whether `main` has moved on, updating, and how the last 
 **Example:** a PR merges while a session is mid-turn. You tap Update; it waits for main's build, then updates and
 restarts, and the cut-off turn carries on.
 
-- **Uses:** the update command, passed in; `github/` and `code/` for main's build, and the machine's builds lock
-  for a check that's running, through `worker.ts`.
+- **Uses:** the update command, passed in; `github/` and `code/` for main's build and the merged pull requests'
+  descriptions, `workspaces/` for where a what's-new line is tried, and the machine's builds lock for a check that's
+  running, through `worker.ts`.
 - **Used by:** `worker.ts`; in the web app, `features/live/`.
 
 ## API
@@ -16,6 +17,8 @@ All in `worker.ts`:
 
 - `GET /api/live`: where the live copy stands, with main's build.
 - `POST /api/live/update` (Update when ready, or Update now) and `DELETE` the same (Cancel).
+- `POST /api/live/whats-new/seen` `{ pullRequest }`: a what's-new line tapped (#604); 404 when the last Update has none
+  by that number.
 
 ## How it works
 
@@ -30,6 +33,12 @@ All in `worker.ts`:
   as usual (queued messages, fixing turns, task reports, the Lead's builders and its merge notes).
 - **After a restart:** an update the worker starts itself leaves a note (`live-update-restart.json`), so the next
   worker continues the turns it cut off.
+- **What's new** (`whats-new.ts`, #604): after an Update that brought the version running (`live-update.json`'s
+  `updated`), the merge commits from its `from` to its `to` name the pull requests it brought; each one's description
+  is read from GitHub once, and its line `What's new: <what> · <where>` (bold or not) kept in `whats-new.json` in the
+  data folder. The live status gives the next not yet tapped, its where read as a workspace by name, Settings, or else
+  Home. A tap marks it seen; the next Update's lines replace them all. With GitHub out of reach it says nothing, and
+  reads them again next time.
 - **Main's build** (#249), while main has moved on: CI on main's newest commit, asked of GitHub through `github/` (on
   the repository the live copy's remote names, read through `code/`) only when a page asks for the live status, at
   most every 8 seconds while it runs and once a minute otherwise; none when no one is signed in to GitHub.

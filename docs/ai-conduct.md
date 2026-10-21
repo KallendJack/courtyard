@@ -293,6 +293,12 @@ rooms to draw, so it isn't told (#599):
 > with it moved; Courtyard keeps each room's latest plan on the workspace's Home. Where a room's front is, once you
 > know, is worth keeping as a fact, so every later plan agrees. Write a sentence or two of your own before it.
 
+**Draw the garage** (#604; Paper, "Tablet · Garage Home: Draw the garage, then projects (#604)") leads the Home of a
+planning workspace whose facts give a floor's two sides ("5.14 × 2.74 m") until it has a plan, named from the
+workspace. Its card shows every fact that holds a measurement, and its button starts a session with the first message
+"Draw the garage as a floor plan, to scale, from what's saved:" and those facts, one to a line. Nothing about it is
+told to the model beyond that message and the rule above.
+
 ## Planning answers
 
 Built with #599 (ADR 0032), from the owner's own planning sessions, where answers ran too long to read mid-task,

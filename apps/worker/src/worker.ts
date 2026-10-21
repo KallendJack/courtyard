@@ -21,6 +21,7 @@ import {
   type OwnerContextDetail,
   type SetupPaper,
   type SkillList,
+  WhatsNewSeen,
   WorkspaceChange,
   type WorkspaceDetail,
   WorkspaceId,
@@ -60,6 +61,7 @@ import { rememberingLimits } from "./features/limits/index.ts";
 import { usageRoutes } from "./features/limits/routes.ts";
 import { createUsage } from "./features/limits/usage.ts";
 import { createLive, runUpdateTask, type UpdateCommand } from "./features/live/index.ts";
+import { placeAmong } from "./features/live/whats-new.ts";
 import { createMattSetup } from "./features/matt-setup/index.ts";
 import {
   createMattSkills,
@@ -118,7 +120,7 @@ import { createGitHub, KEEP_FRESH_EVERY_MS } from "./integrations/github/index.t
 import { gitHubProblem, gitHubRoutes } from "./integrations/github/routes.ts";
 import { createPaperFiles, type PaperFiles } from "./integrations/paper/files.ts";
 import { apiError, contextError, readBody } from "./lib/http.ts";
-import { ok, type Result } from "./lib/result.ts";
+import { err, ok, type Result } from "./lib/result.ts";
 import { sharedOwnerContext } from "./prompts/index.ts";
 import {
   createClaudeProvider,
@@ -521,6 +523,19 @@ export const createWorker = (options: {
     },
     // A check holding the machine's builds lock (#629), a session's or a script's.
     checkRunning: () => holdersOf(buildsLock).length > 0,
+    // What's new after an Update (#604): from the merged pull requests' descriptions on GitHub.
+    whatsNew: {
+      descriptionOf: async (number) => {
+        const repo = liveCopy === null ? undefined : await code.onGitHub(liveCopy);
+        if (!repo?.ok) return err("unreachable");
+        const found = await github.pullRequestNumbered({ repo: repo.value, number });
+        return found.ok ? ok(found.value?.body) : err("unreachable");
+      },
+      placeNamed: async (where) => {
+        const workspaces = await listWorkspaces(contextDir);
+        return placeAmong(where, workspaces.ok ? workspaces.value : []);
+      },
+    },
   });
   // Every session is checked as the worker starts (#186): queued messages a stopped worker left
   // waiting go now (#177), and turns it left running are cut off. After an Update the worker
@@ -693,6 +708,14 @@ export const createWorker = (options: {
   // Cancel (#186): the Update waiting no longer waits.
   api.delete("/live/update", async (c) => {
     await live.cancel();
+    return c.body(null, 204);
+  });
+  // A what's-new line tapped (#604): said, and gone.
+  api.post("/live/whats-new/seen", async (c) => {
+    const body = await readBody(c, WhatsNewSeen);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const seen = await live.seen(body.value.pullRequest);
+    if (!seen.ok) return apiError(c, { status: 404, error: "The last Update has no such line." });
     return c.body(null, 204);
   });
 

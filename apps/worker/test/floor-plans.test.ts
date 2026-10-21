@@ -135,6 +135,7 @@ describe("a floor plan in an answer (#257)", () => {
     ]);
 
     expect(saved(events)).toEqual([]);
-    expect((await home(request)).subject).toBeNull();
+    // With no plan, the garage is still there to draw, from its size saved (#604).
+    expect((await home(request)).subject).toMatchObject({ kind: "space", size: "5.4 m × 3 m" });
   });
 });

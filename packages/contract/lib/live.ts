@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WorkspaceId } from "./workspace-summary.ts";
 
 /** A version of the live copy: its full commit, and how people read it (short commit, first line). */
 export const LiveVersion = z.object({ commit: z.string(), title: z.string() });
@@ -96,6 +97,35 @@ export type LiveUpdateRequest = z.infer<typeof LiveUpdateRequest>;
 export const LiveUpdateStarted = z.object({ waits: z.boolean() });
 export type LiveUpdateStarted = z.infer<typeof LiveUpdateStarted>;
 
+/**
+ * Where a what's-new line says to try it (#604): a workspace, by the name the line gives;
+ * Settings; or Home itself, for one that names neither.
+ */
+export const WhatsNewPlace = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("workspace"), id: WorkspaceId, name: z.string() }),
+  z.object({ kind: z.literal("settings") }),
+  z.object({ kind: z.literal("home") }),
+]);
+export type WhatsNewPlace = z.infer<typeof WhatsNewPlace>;
+
+/**
+ * One line of what's new (#604): a merged pull request that changes what the owner sees says it
+ * in its description (`What's new: Draw the garage · Garage`), and Home says it once after the
+ * Update that brought it, till it's tapped or the next Update.
+ */
+export const WhatsNew = z.object({
+  /** The pull request that said it. */
+  pullRequest: z.number().int().positive(),
+  /** What's new, in a few words: "Draw the garage". */
+  what: z.string(),
+  place: WhatsNewPlace,
+});
+export type WhatsNew = z.infer<typeof WhatsNew>;
+
+/** A what's-new line tapped (#604): it's said, and goes. */
+export const WhatsNewSeen = z.object({ pullRequest: z.number().int().positive() });
+export type WhatsNewSeen = z.infer<typeof WhatsNewSeen>;
+
 /** Whether this worker can update itself from the app, and if so, what it runs and what's newer. */
 export const LiveStatus = z.discriminatedUnion("kind", [
   /** Not a live copy: development, tests, or a worker set up by hand. */
@@ -115,6 +145,11 @@ export const LiveStatus = z.discriminatedUnion("kind", [
     build: MainBuild.nullable(),
     /** The Update waiting to run (#186), or `null` when none waits. */
     waiting: UpdateWaiting.nullable(),
+    /**
+     * The next what's-new line of the last Update not yet tapped (#604), or `null`. Missing from
+     * a worker from before it, as one being updated can be.
+     */
+    whatsNew: WhatsNew.nullable().default(null),
   }),
 ]);
 export type LiveStatus = z.infer<typeof LiveStatus>;

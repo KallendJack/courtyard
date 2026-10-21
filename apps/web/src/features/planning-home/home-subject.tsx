@@ -10,6 +10,7 @@ import {
 import { classes } from "@/lib/classes";
 import { useLayout } from "../../components/frame/handheld.ts";
 import { FencedBlock, fencedKind, OnHome } from "../../components/rich-blocks/fenced.tsx";
+import { DrawSpace } from "./draw-space.tsx";
 
 /** A floor plan is drawn as in an answer, by its rich block, loaded only when Home has one. */
 const PLAN = fencedKind("plan");
@@ -18,9 +19,14 @@ const PLAN = fencedKind("plan");
  * A planning workspace's main subject, leading its Home (#603; Paper, "Tablet · Mountain biking
  * Home: the bike, then projects (#603)"): the drawn bike, its parts placed on it by name, or a
  * room's floor plan (#257). One panel, keeping its size; with no subject, one quiet line in it.
+ * A space with no plan yet is Draw the garage's card instead (#604).
  */
 export function HomeSubjectBlock(props: { workspaceId: WorkspaceId; subject: HomeSubject | null }) {
   const { subject } = props;
+  // A space with no plan yet: its own card, as tall as it needs (#604).
+  if (subject?.kind === "space") {
+    return <DrawSpace workspaceId={props.workspaceId} space={subject} />;
+  }
   return (
     <div className="flex min-h-80 flex-col gap-2.5 rounded-card border bg-surface px-3.5 py-3 md:min-h-0 md:grow">
       {subject === null ? (
