@@ -32,16 +32,18 @@ const OFFICE = {
     },
     { kind: "you can do this", text: "Pick a desk and chair that fit the back wall" },
     { kind: "needs a pro", text: "Sockets by the desk", detail: "an electrician (Part P)" },
-    { kind: "needs a pro", text: "A door through to the house", detail: "a builder, building regs" },
+    {
+      kind: "needs a pro",
+      text: "A door through to the house",
+      detail: "a builder, building regs",
+    },
   ],
 };
 
 /** Starts the scripted session, waits for its project notes, and goes back to Home. */
 const saveAndGoHome = async (page: Page, name: string, lines: readonly string[]) => {
   await startSaving(page, lines.join("\n"));
-  await expect(page.getByRole("list", { name: "Projects saved" })).toContainText(
-    "Started project",
-  );
+  await expect(page.getByRole("list", { name: "Projects saved" })).toContainText("Started project");
   await page.getByRole("link", { name: `Back to ${name}` }).click();
 };
 
