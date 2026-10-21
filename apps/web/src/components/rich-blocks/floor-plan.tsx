@@ -480,8 +480,15 @@ const useWhole = (svg: SVGSVGElement | null, layout: Layout): Box => {
   useLayoutEffect(() => {
     if (svg === null) return;
     const { x, y, width, height } = svg.getBBox();
+    // A turned plan's words measure a hair differently each time it's drawn: a change under a
+    // pixel is kept as it was, or the frame would chase it for good (#674).
+    const near = (a: number, b: number) => Math.abs(a - b) < 1;
     setDrawn((was) =>
-      was?.x === x && was.y === y && was.width === width && was.height === height
+      was !== undefined &&
+      near(was.x, x) &&
+      near(was.y, y) &&
+      near(was.width, width) &&
+      near(was.height, height)
         ? was
         : { x, y, width, height },
     );
