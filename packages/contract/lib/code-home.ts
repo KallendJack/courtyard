@@ -307,7 +307,8 @@ export const LeadStatus = z.object({
   building: z.array(LeadBuilder),
   /**
    * Each builder the Lead keeps, with its status as the worker recorded it (#590): one it started
-   * before statuses were kept has none until something happens in it.
+   * before statuses were kept stands as its open pull request does, and with none has ended
+   * (#635). `building` and `ready` are counted from these same builders.
    */
   statuses: z.array(LeadBuilderStatus),
   next: z.array(NextUpIssue),

@@ -45,7 +45,7 @@ because it changes the same file, and starts it once the first one's PR merges.
   or its pull request was closed) leaves Building, its slot free; its session is kept and its claim stands, and it
   waits in Needs you saying why (`waiting/`). A Merged one is done with once the Lead has been told. Ready for
   review is its pull request ready to merge; every other status is Building and holds its slot. One started before
-  statuses were kept is read from its pull request until something happens in it. Nothing stalls: there's no
-  timer.
+  statuses were kept stands as its open pull request does, and with none it has ended, so it's let go (#635). The
+  Builders board's header counts the same builders its rows show. Nothing stalls: there's no timer.
 - **Allow all:** every builder starts allowing all until its pull request opens, 12 hours at most (`allow-all/`'s
   `task`), covering what Allow all always covers (#428); the Lead has no switch of its own (#591).

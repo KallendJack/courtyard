@@ -33,7 +33,7 @@ import {
   RUN_BUILD_ORDER_MESSAGE,
 } from "../../prompts/index.ts";
 import type { ToolReply } from "../../providers/index.ts";
-import type { Builders } from "../builders/index.ts";
+import { type Builders, statusFromPullRequest } from "../builders/index.ts";
 import type { NextUp } from "../next-up/index.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
 import { getWorkspace, listCodeWorkspaces, type WorkspaceError } from "../workspaces/index.ts";
@@ -137,26 +137,22 @@ export type LeadProblem =
 type Listed = CodeSessionList["sessions"][number];
 
 /**
- * Where a builder stands: still building; stuck (#590), as its status says, taking no slot until
- * it carries on; its pull request ready to merge; or done with.
+ * Where a builder stands, as its status says: still building; stuck (#590), taking no slot until
+ * it carries on; its pull request ready to merge; or done with: merged, its pull request closed,
+ * its session gone, or with no status at all, nothing left to wait for (#635).
  */
-const standingOf = (listed: Listed | undefined, status?: BuilderStatus) => {
+const standingOf = (listed: Listed | undefined, status: BuilderStatus | undefined) => {
   const pullRequest = listed?.pullRequest;
   if (
     listed === undefined ||
-    status?.kind === "merged" ||
+    status === undefined ||
+    status.kind === "merged" ||
     (pullRequest !== undefined && pullRequest.state !== "open")
   ) {
     return "ended" as const;
   }
-  if (status !== undefined) {
-    if (status.kind === "stuck") return "stuck" as const;
-    return status.kind === "ready-for-review" ? ("ready" as const) : ("building" as const);
-  }
-  // One started before statuses were kept, until something happens in it.
-  return pullRequest?.checks.kind === "passed" && pullRequest.conflicts !== true
-    ? ("ready" as const)
-    : ("building" as const);
+  if (status.kind === "stuck") return "stuck" as const;
+  return status.kind === "ready-for-review" ? ("ready" as const) : ("building" as const);
 };
 
 /**
@@ -281,11 +277,20 @@ export const createLead = (options: {
     return new Map((listed.ok ? listed.value : []).map((session) => [session.id, session]));
   };
 
-  /** Each of the Lead's builders' status, as the worker recorded it (#590). */
-  const statusesOf = async (kept: Kept | undefined) => {
+  /**
+   * Each of the Lead's builders' status, as the worker recorded it (#590); one started before
+   * statuses were kept stands as its open pull request does, and with none has no status (#635).
+   * The board's header and its rows both read these, so they never disagree.
+   */
+  const statusesOf = async (kept: Kept | undefined, listed: ReadonlyMap<SessionId, Listed>) => {
     const statuses = new Map<SessionId, BuilderStatus>();
     for (const { session } of kept?.built ?? []) {
-      const status = await options.builders?.statusOf(session);
+      const each = listed.get(session);
+      const status =
+        (await options.builders?.statusOf(session)) ??
+        (each?.pullRequest?.state === "open"
+          ? statusFromPullRequest(each.pullRequest, each.updatedAt)
+          : undefined);
       if (status !== undefined) statuses.set(session, status);
     }
     return statuses;
@@ -431,7 +436,7 @@ export const createLead = (options: {
     kept: Kept | undefined,
   ): Promise<LeadStatus> => {
     const [listed, issues] = await Promise.all([listedIn(workspaceId), nextUp.list(workspaceId)]);
-    const statusesNow = await statusesOf(kept);
+    const statusesNow = await statusesOf(kept, listed);
     const { building, ready } = buildersOf(kept, listed, statusesNow);
     const merge = mergeOf(kept?.merge, listed);
     const statuses: LeadBuilderStatus[] = [];
@@ -532,7 +537,7 @@ export const createLead = (options: {
    */
   const look = async (workspaceId: WorkspaceId, was: Kept): Promise<Kept> => {
     const listed = await listedIn(workspaceId);
-    const statuses = await statusesOf(was);
+    const statuses = await statusesOf(was, listed);
     let kept = await mergeStep(await watchBuilders(was, listed, statuses), listed);
     const woke = await wakes(workspaceId, kept);
     if (woke) {
@@ -833,7 +838,7 @@ export const createLead = (options: {
       changing(rawId, async (workspaceId, kept) => {
         if (kept === undefined) return err({ kind: "session", error: { kind: "not-found" } });
         const listed = await listedIn(workspaceId);
-        const ready = buildersOf(kept, listed, await statusesOf(kept)).ready.filter((each) =>
+        const ready = buildersOf(kept, listed, await statusesOf(kept, listed)).ready.filter((each) =>
           request.pullRequests.includes(each.pullRequest),
         );
         if (ready.length === 0) return err({ kind: "nothing-to-merge" });
