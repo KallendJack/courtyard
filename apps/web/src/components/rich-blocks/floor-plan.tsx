@@ -1,10 +1,19 @@
-import { FloorPlan, type PlanItem, type PlanWall, WorkspaceId } from "@courtyard/contract";
+import {
+  FloorPlan,
+  type HomeSubject,
+  type PlanItem,
+  type PlanWall,
+  WorkspaceId,
+} from "@courtyard/contract";
 import { Link, useParams } from "@tanstack/react-router";
 import { PanelsTopLeft } from "lucide-react";
 import { type KeyboardEvent, use, useLayoutEffect, useMemo, useState } from "react";
+import { Button } from "@/components/buttons/button";
 import { RowButton } from "@/components/buttons/row-button";
+import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { useBlocksFill } from "@/components/frame/handheld";
 import { CapsLabel } from "@/components/layout/caps-label";
+import { CardDialog } from "@/components/layout/card-dialog";
 import { useKept } from "@/components/layout/kept";
 import { Scroller } from "@/components/layout/scroller";
 import { classes } from "@/lib/classes";
@@ -80,6 +89,32 @@ const fitIn = (size: Size): Size => ({
   height: Math.max(LEAST, size.height),
 });
 
+/** The room the drawing has on the cover screen: the row's whole width, as tall as it needs. */
+const fullWidth = (size: Size): Size => ({
+  width: Math.max(LEAST, size.width),
+  height: Number.MAX_SAFE_INTEGER,
+});
+
+/**
+ * How much bigger a long room is drawn turned before Home turns it (#669): half as big again, so
+ * a squarer room stays the right way up.
+ */
+const TURN_GAIN = 1.5;
+
+/**
+ * A long room on Home turned a quarter, its length across the block, when that draws it at least
+ * `TURN_GAIN` times bigger (#669): the front on the left, its right side along the bottom. A plan
+ * the model turned itself is left as it is.
+ */
+const turnedToFit = (plan: FloorPlan, fit: Size): FloorPlan | undefined => {
+  if (plan.turned !== undefined) return undefined;
+  const turned: FloorPlan = { ...plan, turned: { to: "right", why: "to fit" } };
+  return layoutOf(turned, fit).scale >= TURN_GAIN * layoutOf(plan, fit).scale ? turned : undefined;
+};
+
+/** The upright plan in the card a turned one opens: as big as it fits there (#669). */
+const FIT_UPRIGHT = { width: 400, height: 480 };
+
 /** How thick the walls are drawn, the inner walls, and a strip for a thing on a wall, in pixels. */
 const WALL = 4;
 const PARTITION = 3;
@@ -99,16 +134,23 @@ export default function FloorPlanBlock(props: DrawingProps) {
   const plan = useMemo(() => planFrom(props.source), [props.source]);
   const onHome = use(OnHome);
   const [chosen, setChosen] = useState<number>();
-  // From a tablet up, on Home, the plan fills its block: drawn whole to fit the row it's in.
+  const [upright, setUpright] = useState(false);
+  // From a tablet up, on Home, the plan fills its block: drawn whole to fit the row it's in. On
+  // the cover screen it's as wide as the block (#669).
   const fills = useBlocksFill() && onHome;
   const [row, setRow] = useState<HTMLDivElement | null>(null);
-  const room = useSizeOf(row, fills);
+  const room = useSizeOf(row, onHome);
   if (plan === undefined) return props.fallback;
   const choose = (index: number) => setChosen((was) => (was === index ? undefined : index));
   const name = `${plan.room} floor plan`;
 
-  const layout = layoutOf(plan, room !== undefined ? fitIn(room) : onHome ? FIT_ON_HOME : FIT);
-  const rooms = zonesOf(plan, layout);
+  const fit =
+    room === undefined ? (onHome ? FIT_ON_HOME : FIT) : fills ? fitIn(room) : fullWidth(room);
+  // A long room on Home is turned to fit its block (#669); answers and documents keep it upright.
+  const turned = fills && room !== undefined ? turnedToFit(plan, fit) : undefined;
+  const drawn = turned ?? plan;
+  const layout = layoutOf(drawn, fit);
+  const rooms = zonesOf(drawn, layout);
 
   const list = <ThingsList plan={plan} rooms={rooms} chosen={chosen} choose={choose} />;
   return (
@@ -127,11 +169,35 @@ export default function FloorPlanBlock(props: DrawingProps) {
             {plan.measured === true &&
               ` · ${(plan.depth / 100).toFixed(1)} × ${metres(plan.width)}`}
           </CapsLabel>
-          <span className="flex items-center gap-3">
-            <Legend />
-            {!onHome && !props.arriving && <SavedOnHome plan={plan} />}
-          </span>
+          {turned === undefined ? (
+            <span className="flex items-center gap-3">
+              <Legend />
+              {!onHome && !props.arriving && <SavedOnHome plan={plan} />}
+            </span>
+          ) : (
+            <Button variant="quiet" size="xs" onClick={() => setUpright(true)}>
+              Turned to fit · tap for full size
+            </Button>
+          )}
         </figcaption>
+        {turned !== undefined && (
+          <CardDialog
+            title={name}
+            note="The right way up, the front at the bottom"
+            open={upright}
+            onClose={() => setUpright(false)}
+          >
+            <Scroller className="min-h-0">
+              <Drawing
+                plan={plan}
+                layout={layoutOf(plan, FIT_UPRIGHT)}
+                rooms={zonesOf(plan, layoutOf(plan, FIT_UPRIGHT))}
+                chosen={chosen}
+                choose={choose}
+              />
+            </Scroller>
+          </CardDialog>
+        )}
         {plan.turned !== undefined && (
           <p className="text-meta text-muted-foreground">
             Turned {plan.turned.to === "around" ? "around" : `to the ${plan.turned.to}`}:{" "}
@@ -145,7 +211,7 @@ export default function FloorPlanBlock(props: DrawingProps) {
             onHome && "min-h-0 grow md:flex-nowrap",
           )}
         >
-          <Drawing plan={plan} layout={layout} rooms={rooms} chosen={chosen} choose={choose} />
+          <Drawing plan={drawn} layout={layout} rooms={rooms} chosen={chosen} choose={choose} />
           {onHome ? (
             <Scroller from="tablet" fadeEnd className="min-w-56 basis-64 grow md:h-full">
               {list}
@@ -156,6 +222,109 @@ export default function FloorPlanBlock(props: DrawingProps) {
         </div>
       </figure>
     </RichBlock>
+  );
+}
+
+type Floor = Extract<HomeSubject, { kind: "floors" }>["floors"][number];
+
+/** Room round a floor's walls, in pixels: nothing is written outside a floor (#670). */
+const FLOOR_PAD = 6;
+/** The gap between floors side by side, and the room a floor's name takes above it. */
+const FLOOR_GAP = 24;
+const FLOOR_NAME = 24;
+
+/**
+ * The one scale a house's floors are drawn at (#670): the biggest at which every floor fits its
+ * share of `size`, `across` of them side by side, its name above it.
+ */
+const scaleOfFloors = (floors: readonly Floor[], size: Size, across: number) => {
+  const width = (size.width - FLOOR_GAP * (across - 1)) / across - 2 * FLOOR_PAD;
+  const height = size.height - FLOOR_NAME - 2 * FLOOR_PAD;
+  return Math.max(
+    0.01,
+    Math.min(...floors.map(({ plan }) => Math.min(width / plan.width, height / plan.depth))),
+  );
+};
+
+/**
+ * A house's floors on its Home (#670; Paper, "Tablet · House Home: the house floor by floor
+ * (#292)" and "Cover · House Home: one floor at a time (#292)"): from a tablet up, side by side
+ * to one scale, each named above it and each room with its size; on the cover screen, one floor
+ * at a time, as wide as the block, with a switch between them. No overall size: a floor's outline
+ * is added up from its rooms.
+ */
+export function Floors(props: { name: string; floors: readonly Floor[] }) {
+  const { floors } = props;
+  const fills = useBlocksFill();
+  const [row, setRow] = useState<HTMLDivElement | null>(null);
+  const size = useSizeOf(row, true);
+  const [shown, setShown] = useState(floors[0]?.name ?? "");
+  const drawn = fills ? floors : floors.filter(({ name }) => name === shown);
+  const scale =
+    size === undefined
+      ? undefined
+      : scaleOfFloors(
+          floors,
+          fills ? size : { width: size.width, height: Number.MAX_SAFE_INTEGER },
+          fills ? floors.length : 1,
+        );
+  return (
+    <RichBlock fill={fills}>
+      <figure
+        aria-label={`${props.name} floor plans`}
+        className={classes("flex flex-col gap-3", fills && "min-h-0 grow")}
+      >
+        <figcaption className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <CapsLabel tone="muted" inline className="flex items-center gap-2">
+            <PanelsTopLeft aria-hidden className="size-3.5 text-primary-text" />
+            Plan · {props.name}
+          </CapsLabel>
+          {!fills && (
+            <SegmentedChoice
+              label="Floor"
+              options={floors.map(({ name }) => ({ value: name, label: name }))}
+              value={shown}
+              onChange={setShown}
+            />
+          )}
+        </figcaption>
+        <div ref={setRow} className={classes("flex gap-6", fills && "min-h-0 grow")}>
+          {scale !== undefined &&
+            drawn.map((floor) => (
+              <FloorDrawing key={floor.document} floor={floor} scale={scale} named={fills} />
+            ))}
+        </div>
+        <p className="text-meta text-muted-foreground">Front at the bottom</p>
+      </figure>
+    </RichBlock>
+  );
+}
+
+/**
+ * One floor of a house drawn at the house's scale, its rooms each sized; named above it, where
+ * no switch names it.
+ */
+function FloorDrawing(props: { floor: Floor; scale: number; named: boolean }) {
+  const { floor, scale } = props;
+  const { plan } = floor;
+  const [chosen, setChosen] = useState<number>();
+  const layout = layoutOf(plan, {
+    width: plan.width * scale + 2 * FLOOR_PAD,
+    height: plan.depth * scale + 2 * FLOOR_PAD,
+    pad: FLOOR_PAD,
+  });
+  return (
+    <section aria-label={`${floor.name} floor`} className="flex min-w-0 flex-col gap-2">
+      {props.named && <CapsLabel tone="muted">{floor.name}</CapsLabel>}
+      <Drawing
+        plan={plan}
+        layout={layout}
+        rooms={zonesOf(plan, layout)}
+        chosen={chosen}
+        choose={(index) => setChosen((was) => (was === index ? undefined : index))}
+        bare
+      />
+    </section>
   );
 }
 
@@ -216,6 +385,8 @@ type Drawn = {
   rooms: readonly Room[];
   chosen: number | undefined;
   choose: (index: number) => void;
+  /** Nothing written outside its walls: a house's floor, under its name (#670). */
+  bare?: boolean;
 };
 
 /** The room to scale: its floor, things, inner walls, walls with their gaps, and what's outside. */
@@ -291,7 +462,7 @@ function Drawing(props: Drawn) {
           </g>
         );
       })}
-      <Outside plan={plan} layout={layout} />
+      {props.bare !== true && <Outside plan={plan} layout={layout} />}
     </svg>
   );
 }

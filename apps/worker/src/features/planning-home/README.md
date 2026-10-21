@@ -24,7 +24,10 @@ pedals saying DMR V8, and the bottle cage under it, with no place on the drawing
   tyre, then any tyre for the front), in list order, one part to a place; a part with no place, or whose place is
   taken, goes under it. A wanted part isn't on the bike, so it's neither drawn nor listed (#603). A Thing with two or more parts placed is drawn; of several, the one with the
   most. Each placed part comes with its upcoming replacement's name (#602).
-- **A space's floor plan:** with no drawn Thing, the newest document that is a room's plan and nothing else (#257).
+- **A house's floors** (#670): with no drawn Thing, once two or more of those plans are each a floor's, by their
+  room's name ("Ground floor", "First floor"), all of them, lowest first (basement, lower ground, ground, first,
+  second, …), each named for its floor ("Ground"), under the workspace's name. Any other room's plan is left out.
+- **A space's floor plan:** with neither, the newest document that is a room's plan and nothing else (#257).
 - **A space to draw** (`spaceOf`, #604): with neither, a workspace whose facts give a floor's two sides ("5.14 × 2.74
   m", "240cm x 180cm") is a space: named from the workspace ("garage"), its size as first saved ("5.14 m × 2.74 m"),
   and every fact that holds a length with its unit, which Draw the garage starts a session with.

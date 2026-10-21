@@ -40,7 +40,7 @@ export type DrawnPart = z.infer<typeof DrawnPart>;
 /**
  * A planning workspace's main subject, which leads its Home (#603): a Thing drawn as its kind of
  * thing, its parts placed on the drawing by name and those it has no place for listed under it;
- * or a room's floor plan, as last drawn in an answer (#257); or, until a space has one, the space
+ * or a room's floor plan, as last drawn in an answer (#257), or a house's floors (#670); or, until a space has one, the space
  * to draw (#604): a workspace whose facts give a floor's two sides.
  */
 export const HomeSubject = z.discriminatedUnion("kind", [
@@ -59,6 +59,26 @@ export const HomeSubject = z.discriminatedUnion("kind", [
     /** The document it's saved as. */
     document: DocumentSlug,
     plan: FloorPlan,
+  }),
+  /**
+   * A house's floors (#670): two or more plans each of a floor ("Ground floor", "First floor"),
+   * drawn side by side to one scale, from the lowest up.
+   */
+  z.object({
+    kind: z.literal("floors"),
+    /** The workspace's name: "House". */
+    name: z.string(),
+    floors: z
+      .array(
+        z.object({
+          /** The floor, as named above its plan: "Ground". */
+          name: z.string(),
+          /** The document it's saved as. */
+          document: DocumentSlug,
+          plan: FloorPlan,
+        }),
+      )
+      .min(2),
   }),
   z.object({
     kind: z.literal("space"),

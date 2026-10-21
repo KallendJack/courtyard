@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { newWorkspace, startSaving } from "./saving.ts";
+import { shiftsOn } from "./shifts.ts";
 
 /** Where the screenshots go, a whole page or one part of it, when a run asks (COURTYARD_E2E_SHOTS). */
 const shot = async (part: Page | Locator, name: string) => {
@@ -337,10 +338,21 @@ for (const viewport of [
       const block = await edgesOf(plan.locator("xpath=../.."));
       const drawing = await edgesOf(plan.getByRole("group", { name: /^Garage, / }));
       expectInside(drawing, block, "The drawing");
+      // From a tablet up the long garage is turned to fit (#669): its length across the block, the
+      // garage door on the left, the house along the bottom. The cover screen keeps it upright.
+      const tablet = viewport.width >= 600;
+      const roomEdges = await edgesOf(plan.locator('[data-plan-part="room"]'));
       // Its words too, which the drawing would cut off at its edge.
-      const front = await edgesOf(plan.getByText("▲ Front · Garage door"));
+      const front = await edgesOf(plan.getByText(`${tablet ? "▶" : "▲"} Front · Garage door`));
       expectInside(front, drawing, "The front");
-      expectInside(await edgesOf(plan.getByText("House", { exact: true })), drawing, "House");
+      const house = await edgesOf(plan.getByText("House", { exact: true }));
+      expectInside(house, drawing, "House");
+      if (tablet) {
+        expect(front.right, "the front on the left").toBeLessThanOrEqual(roomEdges.left + 1);
+        expect(house.top, "the house along the bottom").toBeGreaterThanOrEqual(
+          roomEdges.bottom - 1,
+        );
+      }
       expectInside(
         await edgesOf(plan.locator('[data-plan-part="opening"]')),
         block,
@@ -352,7 +364,28 @@ for (const viewport of [
       expectInside(await edgesOf(list.locator("xpath=..")), block, "The list");
       // Drawn to scale still.
       const room = await boxOf(plan.locator('[data-plan-part="room"]'));
-      expect(room.width / room.height).toBeCloseTo(274 / 514, 2);
+      const turn = page.getByRole("button", { name: "Turned to fit · tap for full size" });
+      if (tablet) {
+        expect(room.width / room.height).toBeCloseTo(514 / 274, 2);
+        // At least three times the area it had upright in the same room beside the list.
+        const row = await edgesOf(plan.getByRole("group", { name: /^Garage, / }).locator(".."));
+        const [width, height] = [row.right - row.left - 248, row.bottom - row.top];
+        const upright = Math.min((width - 88) / 274, (height - 88) / 514);
+        expect((room.width / 514 / upright) ** 2, "times the area").toBeGreaterThanOrEqual(3);
+        // A tap opens it the right way up.
+        await turn.click();
+        const card = page.getByRole("dialog", { name: "Garage floor plan" });
+        const full = await boxOf(card.locator('[data-plan-part="room"]'));
+        expect(full.width / full.height).toBeCloseTo(274 / 514, 2);
+        await shot(page, `planning-home-plan-upright-${viewport.width}x${viewport.height}`);
+        await card.getByRole("button", { name: "Close" }).click();
+        await expect(card).toBeHidden();
+      } else {
+        expect(room.width / room.height).toBeCloseTo(274 / 514, 2);
+        await expect(turn).toHaveCount(0);
+        // As wide as the block lets it be.
+        expect(drawing.right - drawing.left).toBeGreaterThan(0.9 * (block.right - block.left - 28));
+      }
 
       // No block runs over another, nor, from a tablet up, over the message box (on the cover
       // screen the page scrolls under its pinned Talk and Type).
@@ -364,6 +397,125 @@ for (const viewport of [
         expect(apart(under, box), "the projects and the message box apart").toBe(true);
       }
       await shot(page, `planning-home-plan-${viewport.width}x${viewport.height}`);
+    });
+  });
+}
+
+// A room squarer than the garage stays the right way up on Home (#669).
+test.describe("a squarer room on Home", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 950, height: 712 } });
+
+  test("isn't turned", async ({ page }) => {
+    const name = `Square room ${Date.now()}`;
+    await drawn(page, name, OFFICE);
+    await page.getByRole("link", { name: `Back to ${name}` }).click();
+    const plan = page.getByRole("figure", { name: "Office floor plan" });
+    await expect(plan).toBeVisible();
+    const room = await boxOf(plan.locator('[data-plan-part="room"]'));
+    expect(room.width / room.height).toBeCloseTo(272 / 329, 2);
+    await expect(plan.getByRole("button", { name: /^Turned to fit/ })).toHaveCount(0);
+  });
+});
+
+// A house's floors, as the owner's are (#670): each drawn from the developer's room table.
+const GROUND = {
+  room: "Ground floor",
+  width: 700,
+  depth: 784,
+  front: "Front of house",
+  beyond: { back: "Garden" },
+  zones: [
+    { name: "Utility", fromLeft: 0, fromBack: 0, width: 179, depth: 153 },
+    { name: "WC", fromLeft: 0, fromBack: 163, width: 170, depth: 90 },
+    { name: "Kitchen", fromLeft: 191, fromBack: 0, width: 269, depth: 252 },
+    { name: "Dining", fromLeft: 460, fromBack: 0, width: 240, depth: 252 },
+    { name: "Garage", fromLeft: 0, fromBack: 270, width: 274, depth: 514 },
+    { name: "Lounge", fromLeft: 393, fromBack: 264, width: 307, depth: 446 },
+  ],
+};
+const FIRST = {
+  room: "First floor",
+  width: 700,
+  depth: 723,
+  front: "Front of house",
+  beyond: { back: "Garden" },
+  zones: [
+    { name: "En suite", fromLeft: 0, fromBack: 0, width: 203, depth: 141 },
+    { name: "Bathroom", fromLeft: 217, fromBack: 0, width: 195, depth: 191 },
+    { name: "Bedroom 3", fromLeft: 428, fromBack: 0, width: 272, depth: 329 },
+    { name: "Bedroom 1", fromLeft: 0, fromBack: 150, width: 277, depth: 436 },
+    { name: "Bedroom 2", fromLeft: 393, fromBack: 340, width: 307, depth: 383 },
+  ],
+};
+
+for (const viewport of [
+  { width: 950, height: 662 },
+  { width: 950, height: 712 },
+  { width: 400, height: 900 },
+]) {
+  test.describe(`a house on Home at ${viewport.width}×${viewport.height}`, () => {
+    test.use({ hasTouch: true, isMobile: true, viewport });
+
+    test("shows its floors to one scale, each named and each room sized (#670)", async ({
+      page,
+    }) => {
+      const name = `House ${Date.now()}`;
+      await newWorkspace(page, name);
+      const path = new URL(page.url()).pathname;
+      if (viewport.width < 600) await page.getByRole("button", { name: "Type" }).tap();
+      await startSaving(page, [messageWith(GROUND), messageWith(FIRST)].join("\n\n"));
+      await expect(page.getByRole("list", { name: "Session" })).toContainText(
+        /Your turn · finished/,
+      );
+      await page.getByRole("link", { name: `Back to ${name}` }).click();
+
+      const plans = page.getByRole("figure", { name: `${name} floor plans` });
+      await expect(plans).toBeVisible();
+      await expect(plans).toContainText(`Plan · ${name}`);
+      // No overall size: each floor's outline is added up from its rooms.
+      await expect(plans).not.toContainText(/\d\.\d m/);
+      const block = await edgesOf(plans.locator("xpath=../.."));
+      const ground = plans.getByRole("region", { name: "Ground floor" });
+      const first = plans.getByRole("region", { name: "First floor" });
+      const scaleOf = async (floor: Locator) =>
+        (await boxOf(floor.locator('[data-plan-part="room"]'))).width / 700;
+
+      if (viewport.width >= 600) {
+        // Side by side, ground first, each named above it, to one scale.
+        const [left, right] = [await edgesOf(ground), await edgesOf(first)];
+        expect(left.right).toBeLessThanOrEqual(right.left);
+        await expect(ground.getByText("Ground", { exact: true })).toBeVisible();
+        await expect(first.getByText("First", { exact: true })).toBeVisible();
+        expect(await scaleOf(ground)).toBeCloseTo(await scaleOf(first), 5);
+        expectInside(left, block, "The ground floor");
+        expectInside(right, block, "The first floor");
+        await expect(plans.getByRole("radio")).toHaveCount(0);
+        // Each room with its size under its name.
+        await expect(ground.locator('[data-plan-part="zone-size"]')).toContainText([
+          "2.69 × 2.52",
+          "2.74 × 5.14",
+        ]);
+        await expect(first.locator('[data-plan-part="zone-size"]')).toContainText(["2.77 × 4.36"]);
+      } else {
+        // One floor at a time, with a switch, at the same scale either way.
+        await expect(first).toHaveCount(0);
+        const scale = await scaleOf(ground);
+        await expect(ground.locator('[data-plan-part="zone-size"]')).toContainText(["2.74 × 5.14"]);
+        await shot(page, `planning-home-floors-ground-${viewport.width}x${viewport.height}`);
+        await plans.getByText("First", { exact: true }).tap();
+        await expect(ground).toHaveCount(0);
+        await expect(first).toBeVisible();
+        expect(await scaleOf(first)).toBeCloseTo(scale, 5);
+        expectInside(await edgesOf(first), block, "The first floor");
+      }
+      await shot(page, `planning-home-floors-${viewport.width}x${viewport.height}`);
+
+      // And it loads without moving.
+      const shifts = await shiftsOn(page, path, (loaded) =>
+        expect(loaded.getByRole("figure", { name: `${name} floor plans` })).toBeVisible(),
+      );
+      const total = shifts.reduce((sum, shift) => sum + shift.value, 0);
+      expect(total, JSON.stringify(shifts, null, 2)).toBeLessThan(0.001);
     });
   });
 }

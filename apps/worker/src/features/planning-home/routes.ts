@@ -41,11 +41,12 @@ export const planningHomeRoutes = (target: {
         })
       : null;
     return c.json({
-      subject: subjectOf(
-        read.value.things.map(({ summary }) => summary),
-        plans.ok ? plans.value : [],
+      subject: subjectOf({
+        name: workspaceNow.ok ? workspaceNow.value.summary.name : workspaceId,
+        things: read.value.things.map(({ summary }) => summary),
+        plans: plans.ok ? plans.value : [],
         space,
-      ),
+      }),
       projects: projects.ok ? projects.value.projects.map(({ project }) => project) : [],
       review: await reviews.shown(workspaceId),
     } satisfies PlanningHome);

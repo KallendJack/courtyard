@@ -109,16 +109,45 @@ export const spaceOf = (workspace: {
   };
 };
 
+type PlanSubject = Extract<HomeSubject, { kind: "plan" }>;
+
+/** A plan's room that is a floor, and the floor's own name: "Ground floor", "Ground". */
+const FLOOR_ROOM = /^\s*(.+?)\s+floor\s*$/i;
+
+/** The floors in the order they're drawn, lowest first; any other floor after them. */
+const FLOOR_ORDER = ["basement", "lower ground", "ground", "first", "second", "third", "fourth"];
+const levelOf = (floor: string) => {
+  const level = FLOOR_ORDER.indexOf(floor.toLowerCase());
+  return level === -1 ? FLOOR_ORDER.length : level;
+};
+
+/**
+ * A house's floors (#670): once two or more of its plans are each a floor's, by their room's name
+ * ("Ground floor", "First floor"), all of them, lowest first, each named for its floor; else none.
+ */
+const floorsOf = (name: string, plans: readonly PlanSubject[]): HomeSubject | undefined => {
+  const floors = plans.flatMap(({ document, plan }) => {
+    const floor = FLOOR_ROOM.exec(plan.room)?.[1];
+    return floor === undefined ? [] : [{ name: floor, document, plan }];
+  });
+  const [first, second, ...rest] = floors.sort((a, b) => levelOf(a.name) - levelOf(b.name));
+  if (first === undefined || second === undefined) return undefined;
+  return { kind: "floors", name, floors: [first, second, ...rest] };
+};
+
 /**
  * The workspace's main subject: the Thing with the most parts on the mountain bike's drawing, once
- * enough of them fit it; else its newest floor plan (#257), whose views come newest first; else
- * the space to draw (#604); else none.
+ * enough of them fit it; else its floors, when its plans are a house's (#670); else its newest
+ * floor plan (#257), whose views come newest first; else the space to draw (#604); else none.
  */
-export const subjectOf = (
-  things: readonly ThingSummary[],
-  plans: readonly Extract<HomeSubject, { kind: "plan" }>[] = [],
-  space: Extract<HomeSubject, { kind: "space" }> | null = null,
-): HomeSubject | null => {
+export const subjectOf = (from: {
+  /** The workspace's name, which its floors are shown under. */
+  name: string;
+  things: readonly ThingSummary[];
+  plans?: readonly PlanSubject[];
+  space?: Extract<HomeSubject, { kind: "space" }> | null;
+}): HomeSubject | null => {
+  const { things, plans = [], space = null } = from;
   const slugs = new Set(things.map(({ slug }) => slug));
   const drawn = things
     .filter(({ partOf }) => partOf === undefined || !slugs.has(partOf))
@@ -133,5 +162,5 @@ export const subjectOf = (
       (most, one) => (most === undefined || one.placed.length > most.placed.length ? one : most),
       undefined,
     );
-  return drawn ?? plans[0] ?? space;
+  return drawn ?? floorsOf(from.name, plans) ?? plans[0] ?? space;
 };
