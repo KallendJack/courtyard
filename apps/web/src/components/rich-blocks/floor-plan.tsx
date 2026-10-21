@@ -45,7 +45,8 @@ const STRIP = 7;
 /**
  * A `plan` block (#257; Paper, "Tablet · Floor plan in an answer (#257)" and its Cover board): a
  * room drawn top-down and to scale from the model's JSON, seen from the front of the house with
- * the front at the bottom, its doors, windows, zones and sizes on it; what you have solid and what
+ * the front at the bottom, its doors, windows, zones and measured sizes on it (#661: only what was
+ * given, a thing with no size a dot where it is); what you have solid and what
  * you want dashed. Beside it on a wide screen, under it on a narrow one, what's in it by side: a
  * tap on a thing or its row lights both up in violet and shows its size and why it's there. In an
  * answer it says once it's on the workspace's Home, where the worker saved it. JSON that isn't a
@@ -72,7 +73,9 @@ export default function FloorPlanBlock(props: DrawingProps) {
         <figcaption className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <CapsLabel tone="muted" inline className="flex items-center gap-2">
             <PanelsTopLeft aria-hidden className="size-3.5 text-primary-text" />
-            Plan · {plan.room} · {(plan.depth / 100).toFixed(1)} × {metres(plan.width)}
+            Plan · {plan.room}
+            {plan.measured === true &&
+              ` · ${(plan.depth / 100).toFixed(1)} × ${metres(plan.width)}`}
           </CapsLabel>
           <span className="flex items-center gap-3">
             <Legend />
@@ -177,7 +180,11 @@ function Drawing(props: Drawn) {
     // biome-ignore lint/a11y/useSemanticElements: a drawing can't be a <fieldset>
     <svg
       role="group"
-      aria-label={`${plan.room}, ${metres(plan.width)} wide and ${metres(plan.depth)} deep, seen from the front`}
+      aria-label={
+        plan.measured === true
+          ? `${plan.room}, ${metres(plan.width)} wide and ${metres(plan.depth)} deep, seen from the front`
+          : `${plan.room}, seen from the front`
+      }
       width={layout.width}
       height={layout.height}
       viewBox={`0 0 ${layout.width} ${layout.height}`}
@@ -225,13 +232,16 @@ const zonesOf = (plan: FloorPlan, layout: Layout) =>
     box: layout.box(zone.fromLeft, zone.fromBack, zone.width, zone.depth),
   }));
 
-/** Each thing in the room: a box or round on the floor, a strip on a wall; tapping one chooses it. */
+/**
+ * Each thing in the room: a box or round on the floor, a strip on a wall, or a dot where it is when
+ * no size was given (#661); tapping one chooses it.
+ */
 function Things(props: Drawn) {
   const { plan, layout } = props;
   return (plan.items ?? []).map((item, index) => {
     const chosen = props.chosen === index;
     const wants = item.status === "want";
-    const box = "wall" in item ? layout.stripOn(item, STRIP) : thingBox(layout, item);
+    const box = boxOf(layout, item);
     const look = classes(
       chosen
         ? "fill-primary/30 stroke-primary"
@@ -266,7 +276,9 @@ function Things(props: Drawn) {
         className="cursor-pointer outline-none focus-visible:[&>*]:stroke-ring"
       >
         <title>{item.name}</title>
-        {"wall" in item || item.round !== true ? (
+        {box === undefined ? (
+          <circle {...dotOf(layout, item)} {...shape} />
+        ) : "wall" in item || item.round !== true ? (
           <rect {...box} rx={2} {...shape} />
         ) : (
           <ellipse
@@ -282,8 +294,26 @@ function Things(props: Drawn) {
   });
 }
 
-const thingBox = (layout: Layout, item: Extract<PlanItem, { fromLeft: number }>) =>
-  layout.box(item.fromLeft, item.fromBack, item.width, item.depth);
+/** Where a thing is drawn to its size: none when its size wasn't given. */
+const boxOf = (layout: Layout, item: PlanItem) => {
+  if ("wall" in item) {
+    const { length } = item;
+    return length === undefined ? undefined : layout.stripOn({ ...item, length }, STRIP);
+  }
+  const { width, depth } = item;
+  return width === undefined || depth === undefined
+    ? undefined
+    : layout.box(item.fromLeft, item.fromBack, width, depth);
+};
+
+/** How big a thing with no size is drawn, in pixels round: a dot, the same at any scale. */
+const DOT = 5;
+
+/** A thing with no size as a dot, clear of the walls. */
+const dotOf = (layout: Layout, item: PlanItem) => {
+  const { x, y } = layout.dotAt(item, DOT + WALL / 2);
+  return { cx: x, cy: y, r: DOT };
+};
 
 /** The walls inside the room, with their doorways. */
 function Partitions(props: { plan: FloorPlan; layout: Layout }) {
@@ -425,7 +455,7 @@ const INTO_THE_ROOM: Record<Edge, string> = { bottom: "▲", top: "▼", left: "
 
 /**
  * What's outside the room: the front, marked, and what's beyond each wall, near it; its width
- * across the top and its depth down the right, each with its sizes.
+ * across the top and its depth down the right, each with its sizes, once they were measured (#661).
  */
 function Outside(props: { plan: FloorPlan; layout: Layout }) {
   const { plan, layout } = props;
@@ -457,20 +487,29 @@ function Outside(props: { plan: FloorPlan; layout: Layout }) {
           {words}
         </Label>
       ))}
-      <g className="stroke-muted-foreground/60">
-        <line x1={room.x} x2={room.x + room.width} y1={top} y2={top} />
-        <line x1={room.x} x2={room.x} y1={top - 4} y2={top + 4} />
-        <line x1={room.x + room.width} x2={room.x + room.width} y1={top - 4} y2={top + 4} />
-        <line x1={right} x2={right} y1={room.y} y2={room.y + room.height} />
-        <line x1={right - 4} x2={right + 4} y1={room.y} y2={room.y} />
-        <line x1={right - 4} x2={right + 4} y1={room.y + room.height} y2={room.y + room.height} />
-      </g>
-      <Measure at={{ x: room.x + room.width / 2, y: top, upright: true }}>
-        {metres(acrossCm)}
-      </Measure>
-      <Measure at={{ x: right, y: room.y + room.height / 2, upright: false }}>
-        {metres(downCm)}
-      </Measure>
+      {plan.measured === true && (
+        <>
+          <g className="stroke-muted-foreground/60">
+            <line x1={room.x} x2={room.x + room.width} y1={top} y2={top} />
+            <line x1={room.x} x2={room.x} y1={top - 4} y2={top + 4} />
+            <line x1={room.x + room.width} x2={room.x + room.width} y1={top - 4} y2={top + 4} />
+            <line x1={right} x2={right} y1={room.y} y2={room.y + room.height} />
+            <line x1={right - 4} x2={right + 4} y1={room.y} y2={room.y} />
+            <line
+              x1={right - 4}
+              x2={right + 4}
+              y1={room.y + room.height}
+              y2={room.y + room.height}
+            />
+          </g>
+          <Measure at={{ x: room.x + room.width / 2, y: top, upright: true }}>
+            {metres(acrossCm)}
+          </Measure>
+          <Measure at={{ x: right, y: room.y + room.height / 2, upright: false }}>
+            {metres(downCm)}
+          </Measure>
+        </>
+      )}
     </>
   );
 }
@@ -542,7 +581,10 @@ function ThingsList(props: {
 /** A thing's row: its name and size, and once chosen, why it's there. */
 function ThingRow(props: { item: PlanItem; chosen: boolean; choose: () => void }) {
   const { item, chosen } = props;
-  const size = `${item.status === "want" ? "want · " : ""}${sizeOf(item)}`;
+  // A thing with no size given is listed without one (#661).
+  const size = [item.status === "want" ? "want" : undefined, sizeOf(item)]
+    .filter((part) => part !== undefined)
+    .join(" · ");
   return (
     <RowButton chosen={chosen} compact onClick={props.choose}>
       <span className="flex min-w-0 grow flex-col gap-0.5">

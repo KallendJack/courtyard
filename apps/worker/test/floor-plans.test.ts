@@ -129,6 +129,27 @@ describe("a floor plan in an answer (#257)", () => {
     expect((await home(request)).subject).toMatchObject({ plan: moved });
   });
 
+  it("keeps a thing whose size isn't known without one, and whether the outline was measured (#661)", async () => {
+    // Placed by where it is, never given a stand-in size: the boiler on the left wall, the
+    // projecting wall only as deep as was worked out from two measurements.
+    const sizesKnown = {
+      ...GARAGE,
+      measured: true,
+      items: [
+        ...GARAGE.items,
+        { name: "Boiler", wall: "left", at: 0 },
+        { name: "Projecting wall", fromLeft: 287, fromBack: 480, width: 13 },
+        { name: "Fuse box", fromLeft: 150, fromBack: 0 },
+      ],
+    };
+    const { request, events } = await sessionWith([[{ write: block(sizesKnown) }]]);
+
+    expect(saved(events)).toEqual([
+      { action: "save", document: { slug: "garage-floor-plan", name: "Garage floor plan" } },
+    ]);
+    expect((await home(request)).subject).toMatchObject({ kind: "plan", plan: sizesKnown });
+  });
+
   it("saves nothing for a block that isn't a plan Courtyard can draw", async () => {
     const { request, events } = await sessionWith([
       [{ write: block({ ...GARAGE, width: "three metres" }) }],

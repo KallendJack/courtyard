@@ -98,6 +98,11 @@ export type Turn = {
    * it, as steps or how parts connect should; or none. Left out, it isn't checked.
    */
   readonly diagrams?: boolean;
+  /**
+   * The floor plan the answer should draw (#661), holding only sizes it was given. Left out, it
+   * isn't checked.
+   */
+  readonly plans?: ExpectedPlan;
   /** The most words the answer has, as a brief planning answer should (#599). */
   readonly words?: { readonly atMost: number };
   /**
@@ -162,6 +167,22 @@ export type ExpectedThing = {
   readonly partOf?: string;
 };
 
+/**
+ * A floor plan a turn should draw (#661): a `plan` block the web app can draw, every size on it
+ * one it was given, and nothing nobody gave a size drawn with one.
+ */
+export type ExpectedPlan = {
+  /** The sizes it was given, in cm: every size on the plan is one of these, give or take 1 cm. */
+  readonly sizes: readonly number[];
+  /** Words for what nobody gave a size: nothing on the plan named with one has a size. */
+  readonly unsized: readonly string[];
+  /**
+   * Whether it says its outline was measured (`"measured": true`). Left out, it isn't checked;
+   * either way a measured outline's sizes must be ones it was given.
+   */
+  readonly measured?: boolean;
+};
+
 /** A document a turn should save or update, and words its text must have afterwards. */
 export type ExpectedDocument = {
   readonly action: "save" | "update";
@@ -178,6 +199,58 @@ const LANDSCAPE: TestFile = {
   bytes: pngOf(400, 300, (x, y) => {
     if ((x - 320) ** 2 + (y - 60) ** 2 < 35 ** 2) return [250, 210, 40];
     return y < 180 ? [110, 170, 230] : [60, 150, 60];
+  }),
+};
+
+/** Ink, a window's blue and the paper of the brochure plan below. */
+const INK = [30, 30, 30] as const;
+const GLASS = [90, 150, 220] as const;
+const PAPER = [255, 255, 255] as const;
+
+/** A room's walls on the brochure plan, in cm from its left and back walls. */
+const BROCHURE_ROOMS = [
+  { left: 0, back: 0, right: 700, front: 784 },
+  { left: 0, back: 0, right: 179, front: 153 },
+  { left: 0, back: 163, right: 170, front: 253 },
+  { left: 191, back: 0, right: 460, front: 252 },
+  { left: 460, back: 0, right: 700, front: 252 },
+  { left: 0, back: 270, right: 274, front: 784 },
+  { left: 274, back: 300, right: 393, front: 600 },
+  { left: 274, back: 600, right: 393, front: 784 },
+  { left: 393, back: 264, right: 700, front: 710 },
+];
+
+/** Its windows and French doors, along the back or front wall. */
+const BROCHURE_GLASS = [
+  { from: 450, to: 632, at: 784 },
+  { from: 500, to: 647, at: 0 },
+  { from: 250, to: 350, at: 0 },
+];
+
+/**
+ * A made-up developer's brochure plan of a ground floor (#661), drawn as brochures are, with no
+ * words or sizes: rooms, windows and French doors in blue, the garage door's dashed gap, and the
+ * stairs hatched. Nothing on it is a size anyone gave.
+ */
+const BROCHURE_PLAN: TestFile = {
+  name: "ground-floor-brochure.png",
+  type: "image/png",
+  bytes: pngOf(600, 680, (px, py) => {
+    const x = (px - 20) * 1.25;
+    const y = (py - 20) * 1.25;
+    const near = (a: number, b: number) => Math.abs(a - b) <= 3;
+    const between = (v: number, from: number, to: number) => v >= from && v <= to;
+    if (BROCHURE_GLASS.some((glass) => near(y, glass.at) && between(x, glass.from, glass.to))) {
+      return GLASS;
+    }
+    if (near(y, 784) && between(x, 30, 243)) return Math.floor(x / 12) % 2 === 0 ? INK : PAPER;
+    if (between(x, 274, 393) && between(y, 300, 600) && Math.round(y) % 15 < 2) return INK;
+    const wall = BROCHURE_ROOMS.some(
+      (room) =>
+        ((near(x, room.left) || near(x, room.right)) && between(y, room.back, room.front)) ||
+        ((near(y, room.back) || near(y, room.front)) && between(x, room.left, room.right)),
+    );
+    return wall ? INK : PAPER;
   }),
 };
 
@@ -488,6 +561,52 @@ export const SCENARIOS: readonly Scenario[] = [
         say: "How often should I lube the chain?",
         expect: [],
         diagrams: false,
+      },
+    ],
+  },
+  // A floor plan holds only sizes it was given (#661): a House session scaled doors, windows and
+  // stairs off a developer's brochure, and a Garage session drew the boiler with a stand-in size.
+  {
+    name: "plan-brochure-sizes",
+    rule: "a floor plan drawn from a brochure picture and its room table holds only the table's sizes, the owner's measurement over the developer's, and no door, window or stair sizes scaled off the picture (#661)",
+    workspace: "House",
+    context: {
+      facts: [
+        "Ground floor room sizes from the developer's table (width × depth): lounge 3.07 × 4.46 m, kitchen 2.69 × 2.52 m, dining 2.40 × 2.52 m, utility 1.79 × 1.53 m, WC 1.70 × 0.90 m, garage 2.80 × 5.30 m",
+        "The owner measured the garage at 5.14 m deep × 2.74 m wide inside",
+        "Facing the house from the street, the garage is on the left",
+      ],
+    },
+    turns: [
+      {
+        say: "Here's the developer's ground floor plan from the brochure. Draw the ground floor as a floor plan.",
+        attach: [BROCHURE_PLAN],
+        expect: [],
+        plans: {
+          sizes: [307, 446, 269, 252, 240, 179, 153, 170, 90, 274, 514],
+          unsized: ["door", "window", "stair", "lobby", "hall", "landing", "cupboard"],
+        },
+      },
+    ],
+  },
+  {
+    name: "plan-unmeasured-boiler",
+    rule: "a floor plan gives a thing nobody measured no size, never a stand-in, and no garage door width nobody gave (#661)",
+    workspace: "Garage",
+    context: {
+      facts: [
+        "The garage measures 5.14 m long × 2.74 m wide inside",
+        "The garage door is an up-and-over door across the front",
+        "The house is on the right of the garage, looking in from the garage door",
+        "The boiler is on the left wall, in the back corner",
+        "The fridge freezer stands in the back right corner; it's 60 cm wide and 61 cm deep",
+      ],
+    },
+    turns: [
+      {
+        say: "Draw the garage as a floor plan, to scale, from what's saved:\n- The garage measures 5.14 m long × 2.74 m wide inside\n- The fridge freezer stands in the back right corner; it's 60 cm wide and 61 cm deep",
+        expect: [],
+        plans: { sizes: [514, 274, 60, 61], unsized: ["boiler", "door"], measured: true },
       },
     ],
   },
