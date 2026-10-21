@@ -254,6 +254,19 @@ describe("a space with no floor plan yet (#604)", () => {
     });
   });
 
+  it("reads a floor's two sides saved as a sentence, with words between them (#658)", async () => {
+    // The owner's own fact, as a model saved it.
+    await garage(
+      "The single garage measures approximately 5.137 m long × 2.735 m internally wide.",
+    );
+    const request = await asOwner(testWorker({ root }));
+
+    expect((await garageHome(request)).subject).toMatchObject({
+      kind: "space",
+      size: "5.137 m × 2.735 m",
+    });
+  });
+
   it("isn't a space without a floor's two sides saved, however many lengths are", async () => {
     await garage("The back wall is 2.4 m wide.", "Rides on Sundays.");
     const request = await asOwner(testWorker({ root }));
