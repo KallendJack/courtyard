@@ -24,3 +24,11 @@ labels, opens a pull request with the files, and makes its Paper file.
 - Set up as the owner chose, it makes the labels (only when its work lives on GitHub), files a moved tracker's open
   items as issues, puts the files (from his templates in the pinned copy and the house's own) on a branch of their
   own in a worktree in the data folder, pushes it and opens its pull request, then makes and connects the Paper file.
+- Claude reads the same rules as Codex (#642): Claude Code loads only a project's `CLAUDE.md` (ADR 0022), so where the
+  rules are in `AGENTS.md`, the setup's pull request adds a `CLAUDE.md` of `@AGENTS.md`, or puts that line at the top
+  of a `CLAUDE.md` that doesn't point there yet; one that does is left alone. A repo with only a `CLAUDE.md` keeps its
+  rules there. It isn't a line on the card, and isn't offered on its own: it goes in with the rest.
+- A new repo (#391) gets the same files with its house rules: `AGENTS.md`, `CLAUDE.md` of `@AGENTS.md`, `GLOSSARY.md`
+  and `docs/adr/`. It has no stack yet, so its house rules say the first stack's pull request adds
+  `.github/workflows/ci.yml`, running its own check scripts on every pull request with pinned actions (#642), which
+  Merge needs before it merges anything (ADR 0033).

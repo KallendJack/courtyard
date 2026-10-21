@@ -253,6 +253,7 @@ describe("the setup card", () => {
       "# Domain Docs\n\nRead `GLOSSARY.md` at the root.",
     );
     expect(await onBranch("AGENTS.md")).toBe(AGENT_SKILLS.trim());
+    expect(await onBranch("CLAUDE.md")).toBe("@AGENTS.md");
     // The owner's checkout is as it was, and nothing is offered again.
     expect(await gitIn(repo, "status", "--porcelain")).toBe("");
     expect(await readFile(join(repo, "README.md"), "utf8")).toBe("# A project\n");
@@ -268,6 +269,43 @@ describe("the setup card", () => {
     expect(await onBranch("AGENTS.md")).toBe(
       `# Side project\n\nOur rules.\n\n${AGENT_SKILLS}`.trim(),
     );
+  });
+
+  it("points Claude at AGENTS.md with a CLAUDE.md of `@AGENTS.md`, as its adapter reads only CLAUDE.md (#642)", async () => {
+    await onMain({ "AGENTS.md": "# Side project\n\nOur rules.\n" });
+    const request = await owner([...TRIAGE_LABELS]);
+
+    await answer(request, "allow");
+
+    expect(await onBranch("CLAUDE.md")).toBe("@AGENTS.md");
+  });
+
+  it("adds the pointer to the top of a CLAUDE.md of its own, keeping the rules in AGENTS.md (#642)", async () => {
+    await onMain({
+      "AGENTS.md": "# Side project\n\nOur rules.\n",
+      "CLAUDE.md": "Run the tests with pnpm.\n",
+    });
+    const request = await owner([...TRIAGE_LABELS]);
+
+    await answer(request, "allow");
+
+    expect(await onBranch("CLAUDE.md")).toBe("@AGENTS.md\n\nRun the tests with pnpm.");
+    expect(await onBranch("AGENTS.md")).toBe(
+      `# Side project\n\nOur rules.\n\n${AGENT_SKILLS}`.trim(),
+    );
+  });
+
+  it("leaves a CLAUDE.md that points at AGENTS.md already as it is (#642)", async () => {
+    await onMain({
+      "AGENTS.md": "# Side project\n\nOur rules.\n",
+      "CLAUDE.md": "# Side project\n\n@AGENTS.md\n",
+    });
+    const request = await owner([...TRIAGE_LABELS]);
+
+    await answer(request, "allow");
+
+    expect(await onBranch("CLAUDE.md")).toBe("# Side project\n\n@AGENTS.md");
+    expect(github.pullRequestFrom(await setupBranch())).toBe(1);
   });
 
   it("finds a repository's own tracker and glossary, and recommends moving both to the house standard (#323)", async () => {
