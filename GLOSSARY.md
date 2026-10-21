@@ -427,8 +427,9 @@ from scratch instead.
 _Avoid_: resume, retry (for Continue)
 
 **Update when ready**:
-Update tapped while main's build runs or a session is mid-turn: it waits, and the worker runs it once both are clear.
-Update now runs it at once; Cancel drops it; it's dropped if main fails meanwhile.
+Update tapped while main's build runs: it waits, and the worker runs it once the build has passed. It holds nothing
+back meanwhile and never waits for a turn mid-way, which carries on by itself after the restart (#621). Update now
+runs it at once; Cancel drops it; it's dropped if main fails meanwhile.
 _Avoid_: scheduled update, queued update
 
 **Overflow**:

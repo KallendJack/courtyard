@@ -182,8 +182,14 @@ describe("a Lead's builder (#589)", () => {
       "(a dev server or a preview)",
     );
     expect(builderAccess).not.toBe(access);
+    // A builder starts no helpers (#621, ADR 0031), so its house process says nothing of them.
+    const helpers = houseProcess.slice(
+      houseProcess.indexOf(" Hand parts of the work to helpers"),
+      houseProcess.indexOf(" Base a pull request"),
+    );
+    expect(helpers).toMatch(/^ Hand parts .* when it finishes\.$/);
     expect(told.get(builder.branch ?? "")).toContain(
-      `${builderAccess}\n\n${houseProcess}\n\n${checks}`,
+      `${builderAccess}\n\n${houseProcess.replace(helpers, "")}\n\n${checks}`,
     );
     expect(told.get(own.branch ?? "")).toContain(`${access}\n\n${houseProcess}`);
     expect(told.get(own.branch ?? "")).not.toContain(checks);

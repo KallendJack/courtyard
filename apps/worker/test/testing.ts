@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import {
   ApiError,
   ATTACHMENTS_FIELD,
+  LiveUpdateStarted,
   MESSAGE_FIELD,
   ModelId,
   ProviderId,
@@ -15,6 +16,7 @@ import { MattPin } from "@courtyard/skills";
 import type { Hono } from "hono";
 import { type FetchMattSkills, fetchMattCopy } from "../src/features/matt-skills/index.ts";
 import type { Background } from "../src/features/sessions/index.ts";
+import type { FakeGitHub } from "../src/integrations/github/fake.ts";
 import { makeTemporaryFolder, removeFolder } from "../src/lib/files.ts";
 import { git } from "../src/lib/git.ts";
 import { err, ok, type Result } from "../src/lib/result.ts";
@@ -854,6 +856,37 @@ export const quotedInGuide = async (
     (quote, [name, value]) => quote.replaceAll(`<${name}>`, value),
     text,
   );
+};
+
+/**
+ * For tests: taps Update when ready (#186) on a worker whose live copy is `repo`, a code
+ * workspace's repository (`codeRepo`), once main has moved on past it and main's build still runs
+ * on the fake GitHub, so the Update waits.
+ */
+export const updateWaiting = async (options: {
+  request: Requester;
+  repo: string;
+  github: FakeGitHub;
+}) => {
+  const { request, repo, github } = options;
+  await gitIn(repo, "commit", "--quiet", "--allow-empty", "-m", "Rail and Talk key");
+  await gitIn(repo, "push", "--quiet", "origin", "main");
+  const newest = await gitIn(repo, "rev-parse", "HEAD");
+  await gitIn(repo, "reset", "--quiet", "--hard", "HEAD~1");
+  github.setCommitChecks(newest, [
+    {
+      id: 1,
+      name: "Checks",
+      outcome: "running",
+      url: "https://github.com/octo-owner/side-project/actions/runs/1/job/1",
+      startedAt: "2026-10-20T09:00:00Z",
+      completedAt: null,
+    },
+  ]);
+  const tapped = await postJson(request, "/api/live/update", {});
+  if (tapped.status !== 202 || !LiveUpdateStarted.parse(await tapped.json()).waits) {
+    throw new Error(`The Update didn't wait (status ${tapped.status})`);
+  }
 };
 
 /**

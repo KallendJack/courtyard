@@ -8,6 +8,7 @@ import {
   type FailureReason,
   GitHubConnection,
   LeadStatus,
+  SessionSummary,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { err, ok, type Result } from "../src/lib/result.ts";
@@ -29,6 +30,7 @@ import {
   setUpOwner,
   testBuildsLock,
   testWorker,
+  updateWaiting,
 } from "./testing.ts";
 
 // Each Lead builder's status (#590, ADR 0031): one of eight, recorded by the worker as things
@@ -360,6 +362,38 @@ describe("a Lead builder's status (#590)", () => {
     await settled();
   });
 
+  it("fixes its pull request's failing checks while an Update waits (#621)", async () => {
+    const pushed = gate();
+    const { provider, told } = playing([
+      async ({ input }) => {
+        await pushed.pass();
+        await input.emit("Opened its pull request.");
+        return ok(null);
+      },
+    ]);
+    // Courtyard's live copy is this repository, so an Update can wait on main's build.
+    await signedIn(provider, { COURTYARD_LIVE_COPY: repo });
+    const builder = await build();
+    await pushed.reached;
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: builder.branch ?? "",
+      head: "c0ffee1",
+    });
+    github.setChecks(number, [{ name: "Checks", outcome: "running" }]);
+    pushed.open();
+    await settled();
+    await becomes("in-ci");
+    await updateWaiting({ request, repo, github });
+
+    github.setChecks(number, [{ name: "Checks", outcome: "failed" }]);
+    await runJobs();
+
+    await expect.poll(() => told.length, SLOW).toBe(2);
+    expect(told.at(1)).toMatch(/^The checks on your pull request/);
+    await settled();
+  });
+
   it("waits for the limit, saying when it resets, and carries on by itself once it has (#610)", async () => {
     const resetAt = "2026-10-20T10:00:00.000Z";
     const { provider, told } = playing([
@@ -468,21 +502,7 @@ describe("a Lead builder's status (#590)", () => {
     const builder = await build();
     await settled();
     await becomes("waiting-on-you");
-    await gitIn(repo, "commit", "--quiet", "--allow-empty", "-m", "Rail and Talk key");
-    await gitIn(repo, "push", "--quiet", "origin", "main");
-    const newest = await gitIn(repo, "rev-parse", "HEAD");
-    await gitIn(repo, "reset", "--quiet", "--hard", "HEAD~1");
-    github.setCommitChecks(newest, [
-      {
-        id: 1,
-        name: "Checks",
-        outcome: "running",
-        url: "https://github.com/octo-owner/side-project/actions/runs/1/job/1",
-        startedAt: "2026-10-20T09:00:00Z",
-        completedAt: null,
-      },
-    ]);
-    expect((await postJson(request, "/api/live/update", {})).status).toBe(202);
+    await updateWaiting({ request, repo, github });
 
     await writeFile(join(root, "data", "worktrees", builder.id, "go"), "");
 
@@ -576,5 +596,48 @@ describe("a Lead builder's status (#590)", () => {
     // Told once only: no third turn.
     await settled();
     expect(told).toHaveLength(2);
+  });
+});
+
+describe("a Lead builder's helpers (#621, ADR 0031)", () => {
+  it("starts none: its turns can't start one and aren't told of them, while the owner's sessions keep theirs", async () => {
+    const offered: { worktree: string; helpers: boolean; told: boolean }[] = [];
+    const { provider: played } = playing([
+      async ({ input }) => {
+        await input.emit("Which screen should it go on?");
+        return ok(null);
+      },
+    ]);
+    const provider: Provider = {
+      ...played,
+      runTurn: async (input) => {
+        if (input.code !== null) {
+          offered.push({
+            worktree: input.code.worktree,
+            helpers: input.code.helper !== null,
+            told: /helper|sub-agent/i.test(input.framing.instructions),
+          });
+        }
+        return played.runTurn(input);
+      },
+    };
+    await signedIn(provider);
+
+    const builder = await build();
+    await settled();
+    const asked = await postJson(request, "/api/workspaces/side-project/sessions", {
+      text: "Tidy the README",
+      model: CODING_MODEL,
+    });
+    expect(asked.status).toBe(201);
+    const own = SessionSummary.parse(await asked.json());
+    await settled();
+
+    const turnsOf = (id: string) =>
+      offered
+        .filter((each) => each.worktree.includes(id))
+        .map(({ helpers, told }) => ({ helpers, told }));
+    expect(turnsOf(builder.id)).toEqual([{ helpers: false, told: false }]);
+    expect(turnsOf(own.id)).toEqual([{ helpers: true, told: true }]);
   });
 });

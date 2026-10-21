@@ -762,11 +762,13 @@ const toolsFor = (input: TurnInput, codex: Connection): ReadonlyMap<string, Turn
   const tools = workTools({ input, folder: input.folder, report: input.report, code: input.code });
   const { code } = input;
   const { codeTools } = input.framing;
-  if (code !== null && codeTools !== null) {
+  // Only on a code turn that starts helpers, never a Lead builder's (ADR 0031).
+  const helper = code?.helper ?? null;
+  if (code !== null && helper !== null && codeTools !== null) {
     tools.push({
       tool: codeTools.helper,
       answer: async (args) =>
-        fromToolReply(await startHelper({ codex, input, code, codeTools, args })),
+        fromToolReply(await startHelper({ codex, input, code, helper, codeTools, args })),
     });
   }
   for (const tool of input.framing.tools) tools.push(framingTool(input, tool));
@@ -790,6 +792,8 @@ const startHelper = async (start: {
   codex: Connection;
   input: TurnInput;
   code: CodeTurn;
+  /** The worker's start of a helper, on a turn that starts them. */
+  helper: NonNullable<CodeTurn["helper"]>;
   codeTools: CodeTools;
   args: unknown;
 }): Promise<ToolReply> => {
@@ -797,7 +801,7 @@ const startHelper = async (start: {
   const parsed = HelperArgs.safeParse(start.args);
   if (!parsed.success) return malformedInputReply();
   const { description, prompt, own_branch } = parsed.data;
-  const helper = await code.helper({ id: HelperId.parse(randomUUID()), name: description });
+  const helper = await start.helper({ id: HelperId.parse(randomUUID()), name: description });
   if (helper === undefined) return codeRefusedReply(codeRefusalReason({ kind: "stopped" }));
 
   const run = async (): Promise<HelperEnd> => {

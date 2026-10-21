@@ -18,8 +18,8 @@ Courtyard restarts on it.
   the shared `components/code/build-stages.tsx`: each job's dot violet running, moss passed, red failed, grey
   waiting, its time counting up; as a row, a small graph that opens the full one in a sheet), and Update, offered
   unless it has failed.
-- Tapped before it has passed or while a session is mid-turn, the Update waits, and the row says what for, with Cancel
-  and Update now (#186); Details, the failed job's page on GitHub, once it has failed.
+- Tapped before it has passed, the Update waits, and the row says so, with Cancel and Update now (#186); it never
+  waits for a session mid-turn (#621). Details, the failed job's page on GitHub, once it has failed.
 
 ## How it works
 

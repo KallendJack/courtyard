@@ -419,8 +419,6 @@ export const createWorker = (options: {
       brief: (session) => lead.brief(session),
       tool: (session, input) => lead.tool(session, input),
     },
-    // While an Update waits, nothing new starts on its own (#186); the live copy is made below.
-    holding: () => live.holding(),
     // Next up is made below, from the sessions: it posts their claims on GitHub (#324).
     claims: {
       named: (workspaceId, text) => nextUp.named(workspaceId, text),
@@ -497,12 +495,6 @@ export const createWorker = (options: {
     dataDir,
     now,
     startUpdate: options.startUpdate ?? runUpdateTask,
-    midTurn: sessions.midTurn,
-    released: () => {
-      sessions
-        .releaseHeld()
-        .catch((error: unknown) => console.error("Held messages couldn't be sent", error));
-    },
     // Main's build (#249), on the repository the live copy's remote is on GitHub.
     buildOf: async (find) => {
       const repo = liveCopy === null ? undefined : await code.onGitHub(liveCopy);

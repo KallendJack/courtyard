@@ -88,16 +88,7 @@ const buildOf = (state: "running" | "late" | "passed" | "failed" | "waits") => {
 type State = Parameters<typeof buildOf>[0];
 
 /** What a waiting Update waits for (#186), as the worker gives it. */
-type Waiting =
-  | { kind: "ci" }
-  | {
-      kind: "sessions";
-      count: number;
-      needYou: number;
-      open: { workspaceId: string; sessionId: string } | null;
-    }
-  | { kind: "dropped"; details: string }
-  | null;
+type Waiting = { kind: "ci" } | { kind: "dropped"; details: string } | null;
 
 /**
  * The live copy's status, a version behind main, with main's build in `state` and the Update
@@ -311,50 +302,6 @@ test.describe("Update when ready (#186)", () => {
     await cancelled;
     waiting = null;
     await expect(row.getByRole("button", { name: "Update" })).toBeVisible();
-  });
-
-  test("waiting for sessions mid-turn, the one that needs the owner's OK opens from the row", async ({
-    page,
-  }) => {
-    const open = { workspaceId: "garage-gym", sessionId: "6f1c2b0e-3d4a-4c5b-9e7f-8a9b0c1d2e3f" };
-    for (const viewport of [
-      { name: "tablet", width: 950, height: 712 },
-      { name: "cover", width: 400, height: 900 },
-      { name: "desktop", width: 1440, height: 900 },
-    ]) {
-      await page.setViewportSize(viewport);
-      const row = await homeRow(page, "passed", () => ({
-        kind: "sessions",
-        count: 2,
-        needYou: 1,
-        open,
-      }));
-      await expect(
-        row.getByRole("link", { name: "Waiting for 2 sessions · 1 needs your OK ›" }),
-      ).toBeVisible();
-      await shot(page, `${viewport.name}-home-update-waiting-sessions`);
-      await page.unrouteAll();
-    }
-    const row = await homeRow(page, "passed", () => ({
-      kind: "sessions",
-      count: 2,
-      needYou: 1,
-      open,
-    }));
-    await row.getByRole("link", { name: "Waiting for 2 sessions · 1 needs your OK ›" }).click();
-    await expect(page).toHaveURL(new RegExp(`/sessions/${open.sessionId}$`));
-  });
-
-  test("waiting for sessions with none waiting on the owner says how many must finish", async ({
-    page,
-  }) => {
-    const row = await homeRow(page, "passed", () => ({
-      kind: "sessions",
-      count: 1,
-      needYou: 0,
-      open: null,
-    }));
-    await expect(row.getByRole("status")).toHaveText("Waiting for 1 session to finish");
   });
 
   test("dropped when main failed, it says so, with Details", async ({ page }) => {

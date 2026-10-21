@@ -533,15 +533,17 @@ Where the rest fits:
   in `builders.json`. The Lead decides from it alone (Stuck frees a slot), `sessions/` lists a Stuck builder as
   waiting on the owner with why (Needs you, the Home tile), and the waits end on their own: one carry-on for a turn
   with nothing to show, a turn of the worker's at the usage limit's reset (`carryOnAtReset`), Continue by itself
-  once after any restart (`worker.ts`), and a task's end told even while an Update waits. A Stuck one carries on
-  when the owner taps Retry (`POST /api/sessions/:id/retry`, #592), its one carry-on with it again.
+  once after any restart (`worker.ts`), and a task's end told as it ends. A Stuck one carries on when the owner
+  taps Retry (`POST /api/sessions/:id/retry`, #592), its one carry-on with it again. A builder starts no helpers
+  (#621): `sessions/` gives its code turns no `CodeTurn.helper`, so Claude gets no `Agent` tool and Codex no
+  `start_helper`, and its house process says nothing of them (`prompts/`).
 - **The Builders board** (#592, ADR 0031). The web app's `builders/` reads the Lead (`GET …/lead`): each builder's
   status (`statuses`) beside its listed session (what it's doing now, its approval), and every reason the Lead starts
   no more (`holding`, worked out in `lead/`'s look, not only the first) with what it holds back for a merge
   (`heldBack`). On a code workspace's Home a builder's needs are on the board only; Home's Needs you (`waiting/`'s
   `needsYouOf`) marks a builder's (`builder`) and carries an approval's number and ask, so Allow acts in place.
 - **Helpers** (#117, ADR 0027). A code turn's model can start helpers, its provider's own sub-agents, through
-  `CodeTurn.helper`: `sessions/` records `helper-started` with its name, gives it a place once fewer than three are
+  `CodeTurn.helper` (`null` for a Lead's builder, which starts none, #621): `sessions/` records `helper-started` with its name, gives it a place once fewer than three are
   running (recording it as `waiting` until then, and again once it has one), and hands back a `HelperTurn`, the
   turn's say on edits and commands, tool connections and reports, each recording what the helper does as the
   model's is, tagged with it (`activity` and `approval-requested` carry `helper`), until it reports back
@@ -591,9 +593,8 @@ Where the rest fits:
   naming it (`queued`), checked in the session's queue so one removed meanwhile (`queued-message-removed`) never
   goes; after a usage limit they wait for the owner's next turn (Carry on, say). A queued message going first means
   no fixing turn for failed checks starts then (#172), and no "Turn finished" notification goes. One a stopped
-  worker left waiting goes once the next worker starts (`recoverAll`). While an Update waits (#186), they hold,
-  and go once it has run or no longer waits. The web app's Edit on one removes it and puts its words back in the
-  Reply box (#252).
+  worker left waiting goes once the next worker starts (`recoverAll`). A waiting Update holds none back (#621). The
+  web app's Edit on one removes it and puts its words back in the Reply box (#252).
 - **Steering** (#252). On a provider whose capabilities say it `steers` (Claude, the fake; not Codex or Fake two),
   a message sent while a turn runs (words only, on the turn's own model, starting no skill) is recorded as
   `message-added` where it was sent, marked `afterApproval` when an approval waits, and put in the turn's inbox
