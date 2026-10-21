@@ -27,6 +27,14 @@ const BIKE_WORDS: readonly (readonly [BikePlace, RegExp])[] = [
   ["front-tyre", /\b(?:tyre|tire)s?\b/i],
 ];
 
+/** A place's own word, as a part named just for it is named ("Pedals", "Front tyre"). */
+const placeWord = (name: string) =>
+  name
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, " ")
+    .replace(/s$/, "");
+
 /** A Thing is drawn as a mountain bike once this many of its parts have a place on it. */
 const PARTS_TO_DRAW = 2;
 
@@ -37,13 +45,21 @@ const drawnPart = (part: ThingSummary): DrawnPart => ({
 });
 
 /**
- * A Thing's parts on the mountain bike's drawing, in list order: each on the first free place its
- * name fits, in the drawing's order; those with none, or whose place is taken, under it.
+ * A Thing's fitted parts on the mountain bike's drawing (#603): a wanted one isn't on the bike, so
+ * it's neither drawn nor listed. A part named just for a place ("Pedals") has it first; then, in
+ * list order, each on the first free place its name fits, in the drawing's order; those with none,
+ * or whose place is taken, under it.
  */
 const onTheBike = (top: ThingSummary, parts: readonly ThingSummary[]) => {
+  const fitted = parts.filter(({ status }) => status !== "want");
   const taken = new Map<BikePlace, ThingSummary>();
+  for (const part of fitted) {
+    const own = BIKE_PLACES.find((place) => placeWord(place) === placeWord(part.name));
+    if (own !== undefined && !taken.has(own)) taken.set(own, part);
+  }
   const unplaced: ThingSummary[] = [];
-  for (const part of parts) {
+  for (const part of fitted) {
+    if ([...taken.values()].includes(part)) continue;
     const place = BIKE_WORDS.find(([at, words]) => !taken.has(at) && words.test(part.name))?.[0];
     if (place === undefined) unplaced.push(part);
     else taken.set(place, part);
