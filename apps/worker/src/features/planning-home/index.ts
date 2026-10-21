@@ -79,8 +79,13 @@ const onTheBike = (top: ThingSummary, parts: readonly ThingSummary[]) => {
 
 /** A length as saved: a number, then its unit, or none when the next one's says it ("5.14 × 2.74 m"). */
 const LENGTH = String.raw`(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?`;
-/** A floor's two sides, "5.14 × 2.74 m", "240cm x 180cm": the second with its unit. */
-const FLOOR = new RegExp(String.raw`${LENGTH}\s*[×xX]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b`);
+/**
+ * A floor's two sides, "5.14 × 2.74 m", "240cm x 180cm": the second with its unit. Facts are
+ * sentences, so a few words may come between them, "5.137 m long × 2.735 m" (#658).
+ */
+const FLOOR = new RegExp(
+  String.raw`${LENGTH}(?:\s+[A-Za-z]+){0,3}\s*[×xX]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b`,
+);
 /** Any length with its unit, "2.45 m high": what makes a fact a measurement. */
 const MEASURED = /\d\s*(?:mm|cm|m)\b/;
 
