@@ -1,4 +1,4 @@
-import { FloorPlan, type HomeView, HomeViewId } from "@courtyard/contract";
+import { FloorPlan, type HomeSubject } from "@courtyard/contract";
 import { ok, type Result } from "../../lib/result.ts";
 import {
   type DocumentRefusal,
@@ -70,29 +70,32 @@ export const savePlansFrom = async (
 /** Whether a document's text below its heading is one plan and nothing else. */
 const onlyAPlan = (body: string) => body.replace(PLAN_BLOCK, "").trim() === "";
 
+/** A room's floor plan as a Home's subject. */
+type PlanSubject = Extract<HomeSubject, { kind: "plan" }>;
+
 /**
- * Home's plan views (#257): each document that is a room's plan and nothing else, newest first,
- * whoever saved it.
+ * Each document that is a room's plan and nothing else, newest first, whoever saved it: the
+ * newest is a space's main subject on Home (#257, #603).
  */
-export const planViews = async (
+export const planSubjects = async (
   target: Pick<PlanningFilesTarget, "contextDir" | "workspaceId">,
-): Promise<Result<Extract<HomeView, { kind: "plan" }>[], DocumentRefusal>> => {
+): Promise<Result<PlanSubject[], DocumentRefusal>> => {
   const documents = await listDocuments(target);
   if (!documents.ok) return documents;
-  const views: Extract<HomeView, { kind: "plan" }>[] = [];
+  const plans: { subject: PlanSubject; updatedAt: string }[] = [];
   for (const { slug, updatedAt } of documents.value) {
     const read = await getDocument(target, slug);
     if (!read.ok) continue;
     const [plan] = plansIn(read.value.body);
     if (plan === undefined || !onlyAPlan(read.value.body)) continue;
-    views.push({
-      kind: "plan",
-      id: HomeViewId.parse(`plan:${slug}`),
-      title: `${plan.room} plan`,
-      changedAt: updatedAt,
-      document: slug,
-      plan,
+    plans.push({
+      subject: { kind: "plan", name: `${plan.room} plan`, document: slug, plan },
+      updatedAt,
     });
   }
-  return ok(views);
+  return ok(
+    plans
+      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0))
+      .map(({ subject }) => subject),
+  );
 };

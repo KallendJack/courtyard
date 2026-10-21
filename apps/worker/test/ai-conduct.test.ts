@@ -1523,7 +1523,7 @@ describe("Things (#149, ADR 0020)", () => {
     expect(framing.instructions).not.toContain("Bolted to the floor");
   });
 
-  it("lists what a part needs and its pin on its Thing's photo (#208)", async () => {
+  it("lists what a part needs, and not a pin left in its file by Home's photo view (#208, #603)", async () => {
     await withThings();
     await writeFile(
       join(things(), "pull-up-bar.md"),
@@ -1533,7 +1533,7 @@ describe("Things (#149, ADR 0020)", () => {
     const { framing } = await firstTurn();
 
     expect(framing.instructions).toContain(
-      "[T2] Pull-up bar, replace, condition Bent, needs Order one before Monday, pin 50, 8.5, part of [T1] (things/pull-up-bar.md)",
+      "[T2] Pull-up bar, replace, condition Bent, needs Order one before Monday, part of [T1] (things/pull-up-bar.md)",
     );
   });
 
@@ -1626,8 +1626,8 @@ describe("Things (#149, ADR 0020)", () => {
         tool({ thing: "T1", photo: 1 }),
         tool({ thing: "T1", where: "Back wall" }),
         tool({ name: "Mat", status: "have", bought: "last year" }),
-        tool({ thing: "T1", pin: "40, 20" }),
-        tool({ thing: "T2", pin: "left a bit" }),
+        // Pins went with Home's photo view (#603).
+        tool({ thing: "T2", pin: "40, 20" }),
       ],
       [
         () =>
@@ -1653,8 +1653,7 @@ describe("Things (#149, ADR 0020)", () => {
       await quotedInGuide("There's no photo", { number: "1" }),
       await quotedInGuide("That changes nothing", { name: "Power rack" }),
       "Give the date bought as a year, a month or a day, such as 2026, 2026-03 or 2026-10-09.",
-      await quotedInGuide("Only a part has a pin"),
-      await quotedInGuide("Give the pin as across, then down"),
+      await quotedInGuide("That input doesn't fit this tool: it takes a Thing's"),
       `${await quotedInGuide("<label> has changed since you were shown it.", { label: "T1" })}\n[T1] Power rack, have, where Garage (things/power-rack.md)\n[T2] Pull-up bar, replace, condition Bent, part of [T1] (things/pull-up-bar.md)`,
     ]);
   });

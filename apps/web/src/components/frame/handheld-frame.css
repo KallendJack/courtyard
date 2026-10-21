@@ -34,13 +34,12 @@
  * On a tablet the page's box is in the dock from the moment it's there, the dock showing with it
  * and the page keeping its room in the same frame, rather than once the frame has measured it: the
  * box leaves the page's foot as it goes in, so nothing above moves (#283). Taller than that (what's
- * attached, a long message), the frame's measure takes over. A box tucked away out of sight (#565)
- * keeps no room.
+ * attached, a long message), the frame's measure takes over.
  */
 [data-dock="tablet"]:empty {
   display: none;
 }
-[data-frame-column]:has([data-dock="tablet"]:not(:empty, [hidden])) {
+[data-frame-column]:has([data-dock="tablet"]:not(:empty)) {
   padding-bottom: max(var(--frame-bottom, 0px), calc(--spacing(21) + env(safe-area-inset-bottom)));
 }
 

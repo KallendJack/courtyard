@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import { pngOf } from "../apps/worker/test/test-files.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
 
 // Projects (#603, ADR 0032; Paper, "2 · Agreed", planning workspace row: "Tablet · Mountain biking
@@ -54,20 +53,11 @@ test("Home lists each project under the bike, with its next step and Carry on", 
 }) => {
   const name = `Trail riding ${Date.now()}`;
   await newWorkspace(page, name);
-  // The bike with its photo and parts, as Home's subject, then two projects.
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Add a photo or file" }).click();
-  await (await chooser).setFiles([
-    {
-      name: "bike.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(pngOf(80, 60, () => [120, 120, 120])),
-    },
-  ]);
+  // The bike with its parts, drawn as Home's subject, then two projects.
   await saveAndGoHome(page, name, [
-    "thing add: name Whyte T-140 | status have | photo 1",
-    "thing add: name Pedals | status have | part of T1 | pin 52, 80",
-    "thing add: name Fork | status have | part of T1 | pin 78, 45",
+    "thing add: name Whyte T-140 | status have",
+    "thing add: name Pedals | status have | part of T1 | upcoming DMR V8",
+    "thing add: name Fork | status have | part of T1",
     startProject({
       name: "Ride red trails with confidence",
       add_steps: [{ kind: "you can do this", text: "The cornering drill on Saturday's ride" }],
@@ -78,7 +68,11 @@ test("Home lists each project under the bike, with its next step and Carry on", 
     }),
   ]);
 
-  await expect(page.getByRole("region", { name: "Whyte T-140" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Whyte T-140" })
+      .getByRole("link", { name: "Pedals · DMR V8 next" }),
+  ).toBeVisible();
   const rows = projects(page).getByRole("listitem");
   await expect(rows).toHaveCount(2);
   await expect(rows.first()).toContainText("Bike set up right");

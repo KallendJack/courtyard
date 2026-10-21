@@ -110,10 +110,10 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
   name, ✓ just done · ● now · ○ next (#256), built from its data; a planning workspace has none (#600).
 - [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
 - [`floor-plans/`](../apps/worker/src/features/floor-plans/README.md): each room's last floor plan from an answer,
-  saved as its document once the answer ends, and Home's plan views (#257).
+  saved as its document once the answer ends, the newest a space's main subject on Home (#257, #603).
 - [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents, Things and projects share.
-- [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home views, the one
-  showing, its projects (#603), and its latest session's next steps, which History shows.
+- [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home: its main
+  subject (a Thing drawn as a mountain bike, its parts placed by name, or a room's floor plan) and its projects (#603).
 - [`changes/`](../apps/worker/src/features/changes/README.md): Recent changes and Undo.
 - [`attachments/`](../apps/worker/src/features/attachments/README.md): photos and PDFs sent with a message.
 
@@ -214,8 +214,8 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
     Needs you and a session's Next pill.
   - [`home/`](../apps/web/src/features/home/README.md): the home page's Needs you, tile lines and foot rows.
   - [`planning-home/`](../apps/web/src/features/planning-home/README.md): a planning workspace's page, its pills,
-    and Home now: the view showing (the Breakdown view, a Thing's photo with every part labelled) and its projects
-    under it, no chat.
+    and Home: its main subject (the drawn bike, `components/drawings/`, or a room's floor plan), its projects under
+    it, then the box; no chat.
   - [`new-workspace/`](../apps/web/src/features/new-workspace/README.md): New workspace's form, Planning or Code.
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
   - [`projects/`](../apps/web/src/features/projects/README.md): Home's Projects, a project's page and Carry on
@@ -711,8 +711,6 @@ things live only in the worker's memory and go when it restarts.
   showed, its "Bump fails" issue and whether Dependabot was asked to rebase.
 - `usage-not-now.json`: the warnings before a limit the owner put off with Not now (#66), each until its window
   resets.
-- `planning-home/<workspace>.json`: the Home view the owner picked in a planning workspace (#208), which shows while
-  it's there.
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.

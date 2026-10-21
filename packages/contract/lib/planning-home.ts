@@ -2,99 +2,68 @@ import { z } from "zod";
 import { DocumentSlug } from "./documents.ts";
 import { FloorPlan } from "./floor-plan.ts";
 import { Project } from "./projects.ts";
-import { Effort, ModelRef, SessionId } from "./session.ts";
-import { ThingPin, ThingSlug, ThingStatus } from "./things.ts";
+import { ThingSlug } from "./things.ts";
 
-// A planning workspace's Home (#208, #565): one big view of the workspace's main subject, kept by
-// the worker from the workspace's data, and nothing else: no chat. Each view is general, filled from
-// any workspace's Things, never made for one workspace.
-
-/**
- * A view on Home, by what it shows: `picture:<slug>` for that Thing broken down on its photo, or
- * `plan:<slug>` for the floor plan saved as that document.
- */
-export const HomeViewId = z
-  .string()
-  .regex(/^(?:picture|plan):[a-z0-9]+(?:-[a-z0-9]+)*$/)
-  .brand<"HomeViewId">();
-export type HomeViewId = z.infer<typeof HomeViewId>;
+// A planning workspace's Home (#208, #603): its main subject, then its projects, and nothing else:
+// no chat. The subject is general, filled from any workspace's data, never made for one workspace:
+// a Thing drawn as its kind of thing, or a room's floor plan.
 
 /**
- * A part on its Thing's photo: its pin (`null` until one's placed), and whether it's flagged,
- * which it is only when it needs something (to get, to replace, or a next step).
+ * The places on Courtyard's drawing of a mountain bike (#603), the first kind of thing it draws, in
+ * the order the drawing lists them. A part goes on the place its name says.
  */
-export const PinnedPart = z.object({
+export const BIKE_PLACES = [
+  "saddle",
+  "seatpost",
+  "grips",
+  "fork",
+  "brakes",
+  "drivetrain",
+  "pedals",
+  "front-tyre",
+  "rear-tyre",
+] as const;
+export const BikePlace = z.enum(BIKE_PLACES);
+export type BikePlace = z.infer<typeof BikePlace>;
+
+/** A part on a drawn Thing: its name, and its upcoming replacement's, which its label says. */
+export const DrawnPart = z.object({
   thing: ThingSlug,
   name: z.string(),
-  status: ThingStatus,
-  needs: z.string().optional(),
-  pin: ThingPin.nullable(),
-  flagged: z.boolean(),
+  /** Its upcoming replacement's name (#602): "Pedals · DMR V8 next". */
+  upcoming: z.string().optional(),
 });
-export type PinnedPart = z.infer<typeof PinnedPart>;
-
-const viewBase = {
-  /** Its switch chip's words. */
-  title: z.string(),
-  /** When what it shows last changed, which decides the view showing until the owner picks one. */
-  changedAt: z.iso.datetime(),
-};
+export type DrawnPart = z.infer<typeof DrawnPart>;
 
 /**
- * One of Home's views: the Breakdown view, a Thing's photo with every part pinned and labelled,
- * those that need something first; or a room's floor plan, as last drawn in an answer (#257). The
- * rest of the Plans view (#567) and a Thing's drawing (#566) come with their own issues, as further
- * kinds here.
+ * A planning workspace's main subject, which leads its Home (#603): a Thing drawn as its kind of
+ * thing, its parts placed on the drawing by name and those it has no place for listed under it;
+ * or a room's floor plan, as last drawn in an answer (#257).
  */
-export const HomeView = z.discriminatedUnion("kind", [
+export const HomeSubject = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("drawing"),
+    /** The kind of thing it's drawn as. */
+    drawing: z.literal("mountain-bike"),
+    thing: ThingSlug,
+    name: z.string(),
+    placed: z.array(DrawnPart.extend({ place: BikePlace })),
+    unplaced: z.array(DrawnPart),
+  }),
   z.object({
     kind: z.literal("plan"),
-    id: HomeViewId,
-    ...viewBase,
+    name: z.string(),
     /** The document it's saved as. */
     document: DocumentSlug,
     plan: FloorPlan,
   }),
-  z.object({
-    kind: z.literal("picture"),
-    id: HomeViewId,
-    ...viewBase,
-    /** The Thing whose photo it is. */
-    thing: ThingSlug,
-    parts: z.array(PinnedPart),
-  }),
 ]);
-export type HomeView = z.infer<typeof HomeView>;
-
-/**
- * The owner's last message in the workspace, in the session they last used, and the replies its
- * answer suggested as next steps (none while it's being answered), which History shows under that
- * session's row (#565).
- */
-export const LastQuestion = z.object({
-  session: SessionId,
-  text: z.string(),
-  at: z.iso.datetime(),
-  nextSteps: z.array(z.string()),
-  /** Whether its answer is being written now. */
-  answering: z.boolean(),
-  /** The model and effort it was asked with, which a next step tapped carries on with (#481). */
-  model: ModelRef,
-  effort: Effort.optional(),
-});
-export type LastQuestion = z.infer<typeof LastQuestion>;
+export type HomeSubject = z.infer<typeof HomeSubject>;
 
 /** A planning workspace's Home, as `GET /api/workspaces/:id/home` gives it. */
 export const PlanningHome = z.object({
-  /** Its views: each Thing with a photo and parts, in list order, then each room's floor plan. */
-  views: z.array(HomeView),
-  /** The view showing: the owner's pick while it's there, else the one last changed. */
-  showing: HomeViewId.nullable(),
-  /** Whether `showing` is the owner's pick. */
-  picked: z.boolean(),
-  /** The workspace's photo, top right: its main Thing's, by its file's name. */
-  photo: ThingSlug.nullable(),
-  question: LastQuestion.nullable(),
+  /** Its main subject, or `null` while it has none. */
+  subject: HomeSubject.nullable(),
   /**
    * Its projects (#603): those being carried on first, each by name, then those done; each with
    * its steps and decisions, which its page shows.
@@ -102,7 +71,3 @@ export const PlanningHome = z.object({
   projects: z.array(Project),
 });
 export type PlanningHome = z.infer<typeof PlanningHome>;
-
-/** The owner's pick of the view Home shows (#208), which sticks until they pick another. */
-export const HomeViewPick = z.object({ view: HomeViewId });
-export type HomeViewPick = z.infer<typeof HomeViewPick>;

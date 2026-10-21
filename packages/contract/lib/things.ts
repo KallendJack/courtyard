@@ -79,35 +79,9 @@ export const ThingUpcoming = z.object({
 export type ThingUpcoming = z.infer<typeof ThingUpcoming>;
 
 /**
- * Where a part sits on the photo of the Thing it's part of (#208): how far across and how far
- * down, each a percentage of the photo, to one decimal place.
- */
-export const ThingPin = z.object({
-  x: z.number().min(0).max(100),
-  y: z.number().min(0).max(100),
-});
-export type ThingPin = z.infer<typeof ThingPin>;
-
-/** A pin as a Thing's file writes it: across, then down, such as `42.5, 61`. */
-const PIN_TEXT = /^(\d{1,3}(?:\.\d+)?)\s*,\s*(\d{1,3}(?:\.\d+)?)$/;
-
-/** A pin's text read, or `undefined` when it isn't one: off the photo, say. */
-export const pinOf = (text: string): ThingPin | undefined => {
-  const [, x, y] = PIN_TEXT.exec(text.trim()) ?? [];
-  const pin = ThingPin.safeParse({ x: Number(x), y: Number(y) });
-  return x === undefined || !pin.success ? undefined : pin.data;
-};
-
-/** A pin as a Thing's file writes it, each to one decimal place. */
-export const pinText = (pin: ThingPin) => {
-  const tenths = (value: number) => Math.round(value * 10) / 10;
-  return `${tenths(pin.x)}, ${tenths(pin.y)}`;
-};
-
-/**
  * A Thing's fields as its file's front matter holds them: its name and status, then the details
  * it has, the Thing it's part of (by its file's name, one level only), what it needs next (#208),
- * its pin on that Thing's photo, and its photo.
+ * and its photo.
  */
 export const ThingFields = z
   .object({
@@ -127,14 +101,6 @@ export const ThingFields = z
      * done: what a page shows of it (#208, #220), never background.
      */
     needs: oneLine(THING_FIELD_MAX_CHARACTERS, "next step").optional(),
-    /** A part's pin, as `pinText` writes it. */
-    pin: z
-      .string()
-      .refine(
-        (text) => pinOf(text) !== undefined,
-        "Give the pin as across, then down, each 0 to 100.",
-      )
-      .optional(),
     photo: ThingPhotoPath.optional(),
     /** Its upcoming replacement's name (#602), and the rest of it: see `ThingUpcoming`. */
     upcoming: ThingUpcoming.shape.name.optional(),
@@ -147,19 +113,17 @@ export const ThingFields = z
 export type ThingFields = z.infer<typeof ThingFields>;
 
 /**
- * A Thing as lists show it: its fields, where its file is, whether it has a photo, a part's pin
- * on its Thing's photo (`null` when it has none), and its upcoming replacement, if it has one.
+ * A Thing as lists show it: its fields, where its file is, whether it has a photo, and its
+ * upcoming replacement, if it has one.
  */
 export const ThingSummary = ThingFields.omit({
   photo: true,
-  pin: true,
   upcoming: true,
   upcomingPrice: true,
   upcomingShop: true,
   upcomingLink: true,
   upcomingWhy: true,
 }).extend({
-  pin: ThingPin.nullable(),
   upcoming: ThingUpcoming.optional(),
   slug: ThingSlug,
   /** Its path in the workspace's folder: `things/<slug>.md`. */
@@ -220,16 +184,12 @@ export const ThingForm = z.object({
 });
 export type ThingForm = z.infer<typeof ThingForm>;
 
-/** A part's pin moved by the owner, dragged on its Thing's photo (#208). */
-export const ThingPinMove = z.object({ pin: ThingPin });
-export type ThingPinMove = z.infer<typeof ThingPinMove>;
-
 /**
- * A part's card on Home (#481): Done it (what it needed is done, and it's had again), or Add to
- * wanted (one the owner has, to replace); or its card's "… fitted" (#602), which swaps its
- * upcoming replacement in, the one it had going to its history.
+ * A part's card's "… fitted" (#602), which swaps its upcoming replacement in, the one it had going
+ * to its history. Home's part card, with its Done it and Add to wanted, went with the photo view
+ * (#603).
  */
-export const ThingMark = z.object({ mark: z.enum(["done", "wanted", "fitted"]) });
+export const ThingMark = z.object({ mark: z.literal("fitted") });
 export type ThingMark = z.infer<typeof ThingMark>;
 
 /** The multipart field a Thing's new photo is uploaded in. */
@@ -271,8 +231,6 @@ export const ThingSave = z.object({
       /** The name of the Thing it's now part of. */
       partOf: z.string().nullable(),
       needs: z.string().nullable(),
-      /** Its pin, as `pinText` writes it. */
-      pin: z.string().nullable(),
       /** Its upcoming replacement's name (#602), and the rest of it. */
       upcoming: z.string().nullable(),
       upcomingPrice: z.string().nullable(),

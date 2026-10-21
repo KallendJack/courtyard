@@ -218,19 +218,12 @@ added by a model, by the owner, or from a product named in an answer (+ Add to w
 blocked shops are gone (#600); a buying decision starts from the part instead (ADR 0032).
 _Avoid_: shopping list, basket, cart, recommendations, deals
 
-**Pin**:
-Where a part sits on the photo of the Thing it's part of (#208): placed by a model looking at the photo, or by the
-owner tapping the part, then the photo (#565); moved by the owner dragging it, and gone once the part moves to another
-Thing. A pinned part is **flagged** only when it needs something (to get, to replace, or a next step).
-_Avoid_: marker, hotspot, label (that's a model's `T2`, or a part's name beside the photo)
-
-**Home view**:
-The one big panel a planning workspace's Home shows (#208, #565), filled by the worker from the workspace's data, and
-nothing else: no chat. The **Breakdown view**, a Thing with a photo and parts, every part labelled beside the photo
-with a line to its pin, a tap on one opening its card under it; or a room's floor plan (#257). The one showing is the
-one last changed, unless the owner picked one, whose pick sticks. A Thing's drawing (#566), the rest of the
-workspace's plans (#567), renders and phases come as further kinds; the wanted list is the Things tab's.
-_Avoid_: block (that's a fixed piece of the code Home), card, widget, dashboard
+**Main subject**:
+What a planning workspace's Home leads with (#603), decided by the worker from its data: a Thing drawn as its kind of
+thing, or a space's floor plan (#257). The **drawn bike** is Courtyard's own drawing of a mountain bike, never a
+model's, the Thing's parts placed on it by name, each a label opening its card, one with an upcoming replacement
+saying so ("Pedals · DMR V8 next"), and those it has no place for listed under it. The Thing's photo is on its card.
+_Avoid_: view, Breakdown view, hero, dashboard
 
 **Planning workspace**:
 A workspace whose files models may read but not change.
@@ -258,10 +251,9 @@ A workspace page's first tab (#300, #301), beside the tabs that show once they h
 Sessions, Things, Docs), each with its count. A code workspace's Home shows, in a fixed order, the **Builders
 board**, **Needs you**, **Next up** and **Main** (its repository's newest main commit with its build), the first three
 keeping their place when empty with one quiet line ("Nothing needs you"), then the message box; from a tablet up it fits the
-screen, a block with more rows than fit scrolling inside its card. A planning workspace's Home shows its **Home
-view** (#565); the message box, which starts a new session, is out of sight while there's a view, until Talk, + New
-or a part's Ask about it opens it, and the latest session's next steps are in History. With no view it shows one quiet
-line and the box; an empty workspace only its name, one line and the box.
+screen, a block with more rows than fit scrolling inside its card. A planning workspace's Home shows its **main
+subject**, then its projects, then the message box, which starts a new session (#603). With no subject it shows its
+projects, or one quiet line; an empty workspace only its name, one line and the box.
 _Avoid_: dashboard, overview, landing page
 
 **What Courtyard knows**:

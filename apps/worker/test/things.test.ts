@@ -422,27 +422,8 @@ describe("a Thing's photo", () => {
   });
 });
 
-const movePin = (request: Requester, slug: string, body: unknown) =>
-  sendJson(request, `/api/workspaces/mountain-biking/things/${slug}/pin`, "PUT", body);
-
-describe("a part's pin on its Thing's photo (#208)", () => {
-  it("moves a part's pin where the owner dragged it, as one change, and lists it", async () => {
-    await withKit();
-    const request = await owner();
-
-    const moved = await movePin(request, "chain", { pin: { x: 42.25, y: 61 } });
-
-    expect(moved.status).toBe(200);
-    expect(ThingChanged.parse(await moved.json()).thing.pin).toEqual({ x: 42.3, y: 61 });
-    expect(await thingFile("chain")).toContain("part of: whyte-t-140\npin: 42.3, 61\n---\n");
-    expect((await listed(request)).things.map(({ name, pin }) => [name, pin])).toEqual([
-      ["Whyte T-140", null],
-      ["Chain", { x: 42.3, y: 61 }],
-    ]);
-    expect((await changesIn(contextDir))[0]?.title).toBe("Change Thing: Chain");
-  });
-
-  it("keeps a part's pin and what it needs when the owner's form changes it, and drops the pin once it's no part", async () => {
+describe("a pin left in a Thing's file by Home's photo view (#603)", () => {
+  it("is read past, and goes on the Thing's next save, what it needs kept", async () => {
     await withKit();
     await writeFile(
       join(thingsDir(), "chain.md"),
@@ -452,70 +433,35 @@ describe("a part's pin on its Thing's photo (#208)", () => {
       ),
     );
     const request = await owner();
-    const form = { name: "Chain", status: "have", brand: "KMC X11", bought: "2026-03" };
+    expect((await listed(request)).problems).toEqual([]);
 
-    await changeThing(request, "chain", { ...form, condition: "Dirty", partOf: "whyte-t-140" });
-    expect(await thingFile("chain")).toContain("needs: Lube it\npin: 40, 60\n");
-    await changeThing(request, "chain", { ...form, partOf: null });
+    await changeThing(request, "chain", {
+      name: "Chain",
+      status: "have",
+      brand: "KMC X11",
+      bought: "2026-03",
+      condition: "Dirty",
+      partOf: "whyte-t-140",
+    });
 
-    expect(await thingFile("chain")).toContain("bought: 2026-03\nneeds: Lube it\n---\n");
-  });
-
-  it("refuses a pin on a Thing that isn't part of another, or off the photo", async () => {
-    await withKit();
-    const request = await owner();
-
-    expect(await errorFrom(await movePin(request, "whyte-t-140", { pin: { x: 5, y: 5 } }))).toEqual(
-      [400, "Only a part has a pin: it marks where the part is on its Thing's photo."],
-    );
-    expect((await movePin(request, "chain", { pin: { x: 101, y: 5 } })).status).toBe(400);
+    const file = await thingFile("chain");
+    expect(file).toContain("part of: whyte-t-140\nneeds: Lube it\n---\n");
+    expect(file).not.toContain("pin:");
   });
 });
 
 const markThing = (request: Requester, slug: string, body: unknown) =>
   sendJson(request, `/api/workspaces/mountain-biking/things/${slug}/mark`, "PUT", body);
 
-describe("a part's card on Home: Done it and Add to wanted (#481)", () => {
-  it("marks a Thing done: what it needed goes, it's had again, and its history says so, as one change", async () => {
-    await withKit();
-    await writeFile(
-      join(thingsDir(), "chain.md"),
-      CHAIN.replace("status: have", "status: replace").replace(
-        "part of: whyte-t-140\n",
-        "part of: whyte-t-140\nneeds: Replace: it's stretched\n",
-      ),
-    );
-    const request = await owner();
-
-    const marked = await markThing(request, "chain", { mark: "done" });
-
-    expect(marked.status).toBe(200);
-    const saved = ThingChanged.parse(await marked.json());
-    expect(saved.thing).toMatchObject({ status: "have" });
-    expect(saved.thing.needs).toBeUndefined();
-    const file = await thingFile("chain");
-    expect(file).not.toContain("needs:");
-    expect(file).toMatch(/- \d{4}-\d{2}-\d{2}: Done: Replace: it's stretched\n/);
-    expect((await changesIn(contextDir))[0]?.title).toBe("Change Thing: Chain");
-  });
-
-  it("adds a Thing the owner has to the wanted list, as one to replace", async () => {
-    await withKit();
-    const request = await owner();
-
-    const marked = await markThing(request, "chain", { mark: "wanted" });
-
-    expect(marked.status).toBe(200);
-    expect(ThingChanged.parse(await marked.json()).thing.status).toBe("replace");
-    expect(await thingFile("chain")).toContain("status: replace\n");
-  });
-
-  it("refuses a mark it doesn't know, and a Thing that isn't there", async () => {
+describe("a part's mark (#602)", () => {
+  it("refuses a mark it doesn't know, Home's Done it and Add to wanted among them, and a Thing that isn't there", async () => {
     await withKit();
     const request = await owner();
 
     expect((await markThing(request, "chain", { mark: "sold" })).status).toBe(400);
-    expect((await markThing(request, "saddle", { mark: "done" })).status).toBe(404);
+    expect((await markThing(request, "chain", { mark: "done" })).status).toBe(400);
+    expect((await markThing(request, "chain", { mark: "wanted" })).status).toBe(400);
+    expect((await markThing(request, "saddle", { mark: "fitted" })).status).toBe(404);
   });
 });
 
@@ -756,19 +702,16 @@ describe("the Things tool", () => {
     expect(await thingFile("chain")).toContain("status: replace");
   });
 
-  it("pins a part on its Thing's photo and sets what it needs, then clears both (#208)", async () => {
+  it("sets what a part needs, then clears it (#208)", async () => {
     await withKit();
     const { saver, events } = await sessionWith([
-      [thingTool({ thing: "T2", pin: "42.5, 61", needs: "Lube it before Saturday" })],
-      [thingTool({ thing: "T2", pin: "", needs: "" })],
+      [thingTool({ thing: "T2", needs: "Lube it before Saturday" })],
+      [thingTool({ thing: "T2", needs: "" })],
     ]);
 
     expect(reasons(saver.replies[0])).toEqual(["Changed [T2] Chain."]);
-    expect(thingSaves(events)[0]?.save.fields).toEqual({
-      needs: "Lube it before Saturday",
-      pin: "42.5, 61",
-    });
-    expect(thingSaves(events)[1]?.save.fields).toEqual({ needs: null, pin: null });
+    expect(thingSaves(events)[0]?.save.fields).toEqual({ needs: "Lube it before Saturday" });
+    expect(thingSaves(events)[1]?.save.fields).toEqual({ needs: null });
     expect(await thingFile("chain")).toBe(CHAIN);
   });
 
@@ -879,7 +822,7 @@ describe("the Things tool", () => {
       text: [
         "thing add: name Tyres | status have | brand Maxxis Minion DHF | part of T1",
         "thing T2: history Swapped | price £32",
-        "thing T2: pin 42, 61 | needs Lube it",
+        "thing T2: needs Lube it",
         "thing T9: remove",
         "thing T2: upcoming KMC X11SL | upcoming price £45 | upcoming link https://shop.example/x11sl",
         "thing T2: fitted",
@@ -897,7 +840,7 @@ describe("the Things tool", () => {
       ["change", "Chain"],
     ]);
     expect(await thingFile("chain")).toContain(
-      "brand: KMC X11SL\nbought: 2026-10-09\nprice: £45\npart of: whyte-t-140\npin: 42, 61\n",
+      "brand: KMC X11SL\nbought: 2026-10-09\nprice: £45\npart of: whyte-t-140\n",
     );
     expect(await thingFile("tyres")).toBe(
       "---\nname: Tyres\nstatus: have\nbrand: Maxxis Minion DHF\npart of: whyte-t-140\n---\n",

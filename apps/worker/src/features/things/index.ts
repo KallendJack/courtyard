@@ -2,15 +2,12 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ChangeId,
-  pinOf,
-  pinText,
   THING_DETAILS,
   THING_HISTORY_MAX_CHARACTERS,
   type ThingChange,
   type ThingDetailName,
   ThingFields,
   type ThingHistoryEntry,
-  type ThingPin,
   type ThingProblem,
   type ThingSave,
   ThingSlug,
@@ -88,8 +85,6 @@ export type ThingRefusal =
   | { readonly kind: "stale" }
   /** A photo that can't be read as one. */
   | { readonly kind: "bad-photo" }
-  /** A pin on a Thing that isn't part of another, so has no Thing's photo to sit on (#208). */
-  | { readonly kind: "not-a-part" }
   /** Fitted, with nothing upcoming to fit (#602). */
   | { readonly kind: "nothing-upcoming"; readonly name: string }
   /**
@@ -113,7 +108,6 @@ const FILE_KEYS = [
   ...THING_DETAILS.map((name) => [name, name] as const),
   ["part of", "partOf"],
   ["needs", "needs"],
-  ["pin", "pin"],
   ["photo", "photo"],
   ["upcoming", "upcoming"],
   ["upcoming price", "upcomingPrice"],
@@ -121,6 +115,12 @@ const FILE_KEYS = [
   ["upcoming link", "upcomingLink"],
   ["upcoming why", "upcomingWhy"],
 ] as const satisfies readonly (readonly [string, keyof ThingFields])[];
+
+/**
+ * Keys a file may still have that Courtyard no longer keeps: a part's pin, from Home's photo
+ * view (#603). They're read past, and go on the Thing's next save.
+ */
+const RETIRED_KEYS = new Set(["pin"]);
 
 const HISTORY_LINE = /^(?:[-*][ \t]+)?(?:(\d{4}-\d{2}-\d{2}):[ \t]*)?(.*)$/;
 
@@ -137,6 +137,7 @@ export const readThingText = (
   for (const line of lines.slice(1, end)) {
     if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
     const [, key = "", value = ""] = /^([^:]+):(.*)$/.exec(line) ?? [];
+    if (RETIRED_KEYS.has(key.trim().toLowerCase())) continue;
     const field = FILE_KEYS.find(([name]) => name === key.trim().toLowerCase())?.[1];
     if (field === undefined) return err(`It has a line Courtyard doesn't know: "${line.trim()}".`);
     const unquoted = value.trim().replace(/^(["'])(.*)\1$/, "$2");
@@ -232,16 +233,8 @@ const readThingsIn = async (folder: string): Promise<Result<ReadThings, ThingRef
     } catch {
       return err({ kind: "storage" });
     }
-    const {
-      photo,
-      pin,
-      upcoming,
-      upcomingPrice,
-      upcomingShop,
-      upcomingLink,
-      upcomingWhy,
-      ...fields
-    } = read.value.fields;
+    const { photo, upcoming, upcomingPrice, upcomingShop, upcomingLink, upcomingWhy, ...fields } =
+      read.value.fields;
     things.push({
       summary: {
         ...fields,
@@ -259,7 +252,6 @@ const readThingsIn = async (folder: string): Promise<Result<ReadThings, ThingRef
         slug: slug.data,
         path: thingPath(slug.data),
         photo: photo !== undefined,
-        pin: pin === undefined ? null : (pinOf(pin) ?? null),
         updatedAt,
       },
       history: read.value.history,
@@ -337,7 +329,6 @@ type FieldChange = {
   readonly status?: ThingStatus;
   readonly partOf?: ThingSlug | null;
   readonly needs?: string | null;
-  readonly pin?: ThingPin | null;
 } & { readonly [K in ThingDetailName | UpcomingField]?: string | null };
 
 /** The fields that hold a Thing's upcoming replacement (#602). */
@@ -510,7 +501,7 @@ export const saveThing = async (
       if (was !== undefined && !was.ok) return err({ kind: "storage" });
       const before = was?.value.fields;
       const merged: Record<string, string | undefined> = { ...before };
-      const { pin, ...written } = edit.fields ?? {};
+      const written = edit.fields ?? {};
       // A new upcoming one replaces the last whole (#602): its price, shop and link go with it, and
       // clearing it clears them.
       if (
@@ -551,12 +542,6 @@ export const saveThing = async (
       ) {
         // A part with one coming to take its place is one to replace.
         merged.status = "replace";
-      }
-      // A pin sits on the photo of the Thing it's part of (#208), so it goes once that changes.
-      if (pin !== undefined) merged.pin = pin === null ? undefined : pinText(pin);
-      else if (merged.partOf !== before?.partOf) merged.pin = undefined;
-      if (merged.pin !== undefined && merged.partOf === undefined) {
-        return err({ kind: "not-a-part" });
       }
       if (merged.name === undefined || merged.status === undefined) {
         return err({ kind: "incomplete" });
@@ -720,7 +705,6 @@ const ThingRequest = z.looseObject({
   status: ThingStatus.optional(),
   part_of: z.string().optional(),
   needs: z.string().optional(),
-  pin: z.string().optional(),
   history: z.string().optional(),
   photo: z.number().int().optional(),
   upcoming: z.string().optional(),
@@ -824,7 +808,6 @@ export const createTurnThings = (
       status,
       part_of,
       needs,
-      pin,
       history,
       photo,
       upcoming,
@@ -853,16 +836,6 @@ export const createTurnThings = (
     for (const [input, field] of UPCOMING_INPUTS) {
       const value = upcomingSent[input];
       if (value !== undefined) fields[field] = value.trim() === "" ? null : value.trim();
-    }
-    if (pin !== undefined) {
-      const placed = pin.trim() === "" ? null : pinOf(pin);
-      if (placed === undefined) {
-        return err({
-          kind: "invalid",
-          problem: "Give the pin as across, then down, each 0 to 100, such as 42.5, 61.",
-        });
-      }
-      fields.pin = placed;
     }
     if (part_of !== undefined) {
       const parentLabel = asLabel(part_of);

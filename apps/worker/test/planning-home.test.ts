@@ -1,23 +1,12 @@
-import { mkdir, mkdtemp, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PlanningHome, SessionSummary } from "@courtyard/contract";
+import { PlanningHome } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  asOwner,
-  errorOf,
-  followSession,
-  postJson,
-  type Requester,
-  removeTestFolder,
-  SAVING_MODEL,
-  savingProvider,
-  sendJson,
-  testWorker,
-} from "./testing.ts";
+import { asOwner, type Requester, removeTestFolder, testWorker } from "./testing.ts";
 
-// A planning workspace's Home (#208): the view it shows, kept by the worker from the workspace's
-// Things, with the owner's last question above it and the next steps under it.
+// A planning workspace's Home (#603): its main subject, a Thing drawn as its kind of thing with
+// its parts placed by name, or a room's floor plan; then its projects (projects.test.ts).
 
 let root: string;
 let contextDir: string;
@@ -37,38 +26,26 @@ afterEach(async () => {
   await removeTestFolder(root);
 });
 
-/** A Thing's file, last changed `minutesAgo` before 1 October 2026, so views are told apart by when. */
-const thing = async (slug: string, text: string, minutesAgo: number) => {
+/** A Thing's file, from its front matter's lines. */
+const thing = async (slug: string, ...lines: readonly string[]) => {
   await mkdir(thingsDir(), { recursive: true });
-  const path = join(thingsDir(), `${slug}.md`);
-  await writeFile(path, text);
-  const when = new Date(Date.UTC(2026, 9, 1) - minutesAgo * 60_000);
-  await utimes(path, when, when);
+  await writeFile(join(thingsDir(), `${slug}.md`), `---\n${lines.join("\n")}\n---\n`);
 };
 
-/** The bike with its photo and three parts, and lights wanted for the garage. */
-const withKit = async () => {
-  await thing(
-    "whyte-t-140",
-    "---\nname: Whyte T-140\nstatus: have\nbrand: Whyte\nphoto: photos/whyte-t-140.jpg\n---\n",
-    30,
-  );
-  await thing(
-    "chain",
-    "---\nname: Chain\nstatus: replace\nbrand: KMC X11\npart of: whyte-t-140\nneeds: It's stretched\npin: 48, 55\n---\n",
-    20,
-  );
-  await thing(
-    "fork",
-    "---\nname: Fork\nstatus: have\nsize: 120 mm\npart of: whyte-t-140\npin: 20, 40\n---\n",
-    25,
-  );
-  await thing(
-    "rear-tyre",
-    "---\nname: Rear tyre\nstatus: have\npart of: whyte-t-140\nneeds: Pump it up before Saturday\n---\n",
-    25,
-  );
-  await thing("lights", "---\nname: Lights\nstatus: want\nprice: about £40\n---\n", 10);
+/** A part of the hardtail, by its name. */
+const part = (slug: string, name: string, ...more: readonly string[]) =>
+  thing(slug, `name: ${name}`, "status: have", "part of: hardtail", ...more);
+
+/** The hardtail with its parts as the owner named them, and a helmet that isn't one. */
+const withBike = async () => {
+  await thing("hardtail", "name: Boardman MHT 8.6", "status: have", "photo: photos/hardtail.jpg");
+  await part("saddle", "Saddle");
+  await part("pedals", "Pedals", "upcoming: DMR V8", "upcoming price: £60");
+  await part("front-tyre", "Front tyre");
+  await part("rear-tyre", "Rear tyre");
+  await part("drivetrain", "Drivetrain");
+  await part("bottle-cage", "Bottle cage");
+  await thing("helmet", "name: Helmet", "status: have");
 };
 
 const home = async (request: Requester) => {
@@ -77,167 +54,96 @@ const home = async (request: Requester) => {
   return PlanningHome.parse(await response.json());
 };
 
-const pick = (request: Requester, view: string) =>
-  sendJson(request, "/api/workspaces/mountain-biking/home/showing", "PUT", { view });
-
-describe("a planning workspace's Home (#208)", () => {
-  it("has no view, photo or question before the workspace has anything for them", async () => {
+describe("a planning workspace's Home (#603)", () => {
+  it("has no subject before the workspace has one", async () => {
+    await thing("helmet", "name: Helmet", "status: have");
     const request = await asOwner(testWorker({ root }));
 
-    expect(await home(request)).toEqual({
-      views: [],
-      showing: null,
-      picked: false,
-      photo: null,
-      question: null,
-      projects: [],
-    });
+    expect(await home(request)).toEqual({ subject: null, projects: [] });
   });
 
-  it("breaks a Thing with a photo down into its parts, flagged only when they need something, and leaves the wanted list to the Things tab", async () => {
-    await withKit();
+  it("draws the Thing whose parts fit the mountain bike, each part on its place by name, an upcoming one with it, and lists the rest under it", async () => {
+    await withBike();
     const request = await asOwner(testWorker({ root }));
 
-    const { views, photo } = await home(request);
-
-    expect(photo).toBe("whyte-t-140");
-    expect(views).toEqual([
-      {
-        kind: "picture",
-        id: "picture:whyte-t-140",
-        title: "Whyte T-140",
-        thing: "whyte-t-140",
-        changedAt: "2026-09-30T23:40:00.000Z",
-        parts: [
-          {
-            thing: "chain",
-            name: "Chain",
-            status: "replace",
-            needs: "It's stretched",
-            pin: { x: 48, y: 55 },
-            flagged: true,
-          },
-          {
-            thing: "rear-tyre",
-            name: "Rear tyre",
-            status: "have",
-            needs: "Pump it up before Saturday",
-            pin: null,
-            flagged: true,
-          },
-          { thing: "fork", name: "Fork", status: "have", pin: { x: 20, y: 40 }, flagged: false },
-        ],
-      },
-    ]);
-  });
-
-  /** A road bike with its photo and a saddle wanted for it, changed after the Whyte. */
-  const withRoadBike = async () => {
-    await thing(
-      "road-bike",
-      "---\nname: Road bike\nstatus: have\nphoto: photos/road-bike.jpg\n---\n",
-      5,
-    );
-    await thing("saddle", "---\nname: Saddle\nstatus: want\npart of: road-bike\n---\n", 5);
-  };
-
-  it("shows the view last changed, until the owner picks one, whose pick then sticks", async () => {
-    await withKit();
-    await withRoadBike();
-    const request = await asOwner(testWorker({ root }));
-    expect(await home(request)).toMatchObject({ showing: "picture:road-bike", picked: false });
-
-    const picked = await pick(request, "picture:whyte-t-140");
-    await thing("saddle", "---\nname: Saddle\nstatus: have\npart of: road-bike\n---\n", 1);
-
-    expect(picked.status).toBe(200);
-    expect(await home(request)).toMatchObject({ showing: "picture:whyte-t-140", picked: true });
-  });
-
-  it("refuses a view that isn't there, and goes back to the last changed once a picked one goes", async () => {
-    await withKit();
-    await withRoadBike();
-    const request = await asOwner(testWorker({ root }));
-
-    const refused = await pick(request, "picture:lights");
-    await pick(request, "picture:road-bike");
-    await thing("saddle", "---\nname: Saddle\nstatus: want\n---\n", 5);
-
-    expect([refused.status, await errorOf(refused)]).toEqual([
-      404,
-      "That view isn't on this workspace's Home any more.",
-    ]);
-    expect(await home(request)).toMatchObject({
-      views: [{ id: "picture:whyte-t-140" }],
-      showing: "picture:whyte-t-140",
-      picked: false,
-    });
-  });
-
-  it("puts the owner's last question above the view, with the next steps its answer suggested", async () => {
-    const saver = savingProvider([
-      [
-        {
-          call: "suggest_replies",
-          input: { replies: ["Find a chain under £30", "Which lights?"] },
-        },
+    expect((await home(request)).subject).toEqual({
+      kind: "drawing",
+      drawing: "mountain-bike",
+      thing: "hardtail",
+      name: "Boardman MHT 8.6",
+      // In the drawing's order: saddle, …, drivetrain, pedals, front tyre, rear tyre.
+      placed: [
+        { place: "saddle", thing: "saddle", name: "Saddle" },
+        { place: "drivetrain", thing: "drivetrain", name: "Drivetrain" },
+        { place: "pedals", thing: "pedals", name: "Pedals", upcoming: "DMR V8" },
+        { place: "front-tyre", thing: "front-tyre", name: "Front tyre" },
+        { place: "rear-tyre", thing: "rear-tyre", name: "Rear tyre" },
       ],
-    ]);
-    const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
-    const started = await postJson(request, "/api/workspaces/mountain-biking/sessions", {
-      text: "Is the bike ready for Saturday?",
-      model: SAVING_MODEL,
-    });
-    const session = SessionSummary.parse(await started.json());
-    await followSession(request, { sessionId: session.id, until: "turn-completed" });
-
-    expect((await home(request)).question).toEqual({
-      session: session.id,
-      text: "Is the bike ready for Saturday?",
-      at: expect.any(String),
-      nextSteps: ["Find a chain under £30", "Which lights?"],
-      answering: false,
-      // A reply from Home carries on with the model it was asked with (#481).
-      model: SAVING_MODEL,
+      unplaced: [{ thing: "bottle-cage", name: "Bottle cage" }],
     });
   });
 
-  it("keeps the next steps back while the answer is still being written", async () => {
-    let release: () => void = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let holding: () => void = () => {};
-    const held = new Promise<void>((resolve) => {
-      holding = resolve;
-    });
-    const saver = savingProvider([
-      [
-        {
-          call: "suggest_replies",
-          input: { replies: ["Find a chain under £30", "Which lights?"] },
-        },
-        async () => {
-          holding();
-          await gate;
-        },
-      ],
-    ]);
-    const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
-    const started = await postJson(request, "/api/workspaces/mountain-biking/sessions", {
-      text: "Is the bike ready for Saturday?",
-      model: SAVING_MODEL,
-    });
-    const session = SessionSummary.parse(await started.json());
-    await held;
+  it("places parts by the words in their names, one part to a place, and a second for a taken place goes under it", async () => {
+    await thing("whyte", "name: Whyte T-140", "status: have");
+    const whyte = (slug: string, name: string) =>
+      thing(slug, `name: ${name}`, "status: have", "part of: whyte");
+    await whyte("dropper", "OneUp dropper post");
+    await whyte("chain", "KMC chain");
+    await whyte("cassette", "Cassette");
+    await whyte("brake-pads", "Front brake pads");
+    await whyte("lock-on-grips", "Lock-on grips");
+    await whyte("tyres", "Tyres");
+    await whyte("back-wheel", "Back tyre");
+    const request = await asOwner(testWorker({ root }));
 
-    const whileAnswering = (await home(request)).question;
-    release();
-    expect(whileAnswering).toMatchObject({ answering: true, nextSteps: [] });
-    await followSession(request, { sessionId: session.id, until: "turn-completed" });
-    expect((await home(request)).question).toMatchObject({
-      answering: false,
-      nextSteps: ["Find a chain under £30", "Which lights?"],
+    const subject = (await home(request)).subject;
+
+    expect(subject).toMatchObject({
+      kind: "drawing",
+      placed: [
+        { place: "seatpost", name: "OneUp dropper post" },
+        { place: "grips", name: "Lock-on grips" },
+        { place: "brakes", name: "Front brake pads" },
+        // Cassette comes before the chain by name, so it takes the drivetrain's place.
+        { place: "drivetrain", name: "Cassette" },
+        { place: "front-tyre", name: "Tyres" },
+        { place: "rear-tyre", name: "Back tyre" },
+      ],
+      unplaced: [{ name: "KMC chain" }],
+    });
+  });
+
+  it("draws nothing for a Thing with only one part that fits, nor for a Thing whose parts don't", async () => {
+    await thing("rack", "name: Squat rack", "status: have");
+    await thing("bar", "name: Pull-up bar", "status: have", "part of: rack");
+    await thing("plates", "name: Plates", "status: have", "part of: rack");
+    await thing("road-bike", "name: Road bike", "status: have");
+    await thing("rb-saddle", "name: Saddle", "status: have", "part of: road-bike");
+    const request = await asOwner(testWorker({ root }));
+
+    expect((await home(request)).subject).toBeNull();
+  });
+
+  it("draws the Thing with the most parts on the drawing when two fit", async () => {
+    await withBike();
+    await thing("road-bike", "name: Road bike", "status: have");
+    await thing("rb-saddle", "name: Saddle", "status: have", "part of: road-bike");
+    await thing("rb-pedals", "name: Pedals", "status: have", "part of: road-bike");
+    const request = await asOwner(testWorker({ root }));
+
+    expect((await home(request)).subject).toMatchObject({ thing: "hardtail" });
+  });
+
+  it("reads past a pin left in a Thing's file by the photo view", async () => {
+    await withBike();
+    await part("fork", "Fork", "pin: 30.3, 47.1");
+    const request = await asOwner(testWorker({ root }));
+
+    const things = await request("/api/workspaces/mountain-biking/things");
+
+    expect(await things.json()).toMatchObject({ problems: [] });
+    expect((await home(request)).subject).toMatchObject({
+      placed: expect.arrayContaining([{ place: "fork", thing: "fork", name: "Fork" }]),
     });
   });
 

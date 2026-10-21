@@ -10,7 +10,6 @@ import {
   ThingForm,
   type ThingList,
   ThingMark,
-  ThingPinMove,
   ThingSlug,
   ThingUpcoming,
 } from "@courtyard/contract";
@@ -36,7 +35,6 @@ const ROUTES = {
   things: "/workspaces/:id/things",
   thing: "/workspaces/:id/things/:slug",
   photo: "/workspaces/:id/things/:slug/photo",
-  pin: "/workspaces/:id/things/:slug/pin",
   mark: "/workspaces/:id/things/:slug/mark",
   upcoming: "/workspaces/:id/things/:slug/upcoming",
 } as const;
@@ -97,11 +95,6 @@ export const thingError = (c: Context, refusal: ThingRefusal | ThingUndoRefusal)
       return apiError(c, { status: 400, error: "That changes nothing." });
     case "bad-photo":
       return apiError(c, { status: 400, error: "That photo can't be read." });
-    case "not-a-part":
-      return apiError(c, {
-        status: 400,
-        error: "Only a part has a pin: it marks where the part is on its Thing's photo.",
-      });
     case "nothing-upcoming":
       return apiError(c, {
         status: 409,
@@ -244,22 +237,7 @@ export const thingRoutes = (
     return c.json({ change: removed.value.change ?? null } satisfies ThingDeleted);
   });
 
-  // A part's pin, where the owner dragged it on its Thing's photo (#208).
-  routes.put(ROUTES.pin, async (c) => {
-    const named = thingIn(c);
-    if (named === undefined) return noSuchThing(c);
-    const body = await readBody(c, ThingPinMove);
-    if (!body.ok) return apiError(c, { status: 400, error: body.error });
-    const saved = await saveThing(
-      named.workspace,
-      { slug: named.slug, fields: { pin: body.value.pin } },
-      { now: now() },
-    );
-    return changed(c, named.workspace, saved, 200);
-  });
-
-  // A part's card on Home (#481): Done it, which clears what it needed (its history says what)
-  // and has it again; or Add to wanted, one the owner has, to replace.
+  // A part's card's "… fitted" (#602): its upcoming one swapped in.
   routes.put(ROUTES.mark, async (c) => {
     const named = thingIn(c);
     if (named === undefined) return noSuchThing(c);
@@ -267,18 +245,12 @@ export const thingRoutes = (
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
     const current = await getThing(named.workspace, named.slug);
     if (!current.ok) return thingError(c, current.error);
-    const { needs } = current.value.summary;
-    const edit: ThingEdit =
-      body.value.mark === "done"
-        ? {
-            slug: named.slug,
-            fields: { status: "have", needs: null },
-            ...(needs === undefined ? {} : { history: `Done: ${needs}` }),
-          }
-        : body.value.mark === "fitted"
-          ? { slug: named.slug, fitted: true }
-          : { slug: named.slug, fields: { status: "replace" } };
-    return changed(c, named.workspace, await saveThing(named.workspace, edit, { now: now() }), 200);
+    const fitted = await saveThing(
+      named.workspace,
+      { slug: named.slug, fitted: true },
+      { now: now() },
+    );
+    return changed(c, named.workspace, fitted, 200);
   });
 
   // A pick from Find a replacement's options (#602): the part's upcoming one, its history saying so.

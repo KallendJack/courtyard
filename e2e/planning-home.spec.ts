@@ -1,68 +1,56 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
-import { pngOf } from "../apps/worker/test/test-files.ts";
+import { join } from "node:path";
+import { expect, type Page, test } from "@playwright/test";
 import { newWorkspace, startSaving } from "./saving.ts";
 import { openTab, openWhatCourtyardKnows } from "./workspace-page.ts";
 
-// A planning workspace's Home (#565; Paper, "Tablet · Planning Home: the bike, part by part
-// (#565)" and its Desktop and Cover boards): a view of the workspace's main subject and nothing
-// else, a Thing's photo with every part labelled, a tap on one opening its card at the view's
-// foot; no chat, the next steps in History; its header's photo and pills (+ New · History ·
-// Things · Docs); and with nothing to show, one quiet line.
+// A planning workspace's Home (#603; Paper, "Tablet · Mountain biking Home: the bike, then
+// projects (#603)"): its main subject, the drawn bike with each part placed on it by name, a
+// label each that opens its card, one with an upcoming replacement saying so, and those it has no
+// place for listed under it; then its projects (projects.spec.ts), then the message box. Its
+// header is the name and the pills (+ New · History · Things · Docs); no photo, no view chips, no
+// next steps. With nothing to show, one quiet line.
 
 // Its workspaces sort after the Garage gym fixture: Settings' Get to know me starts its session in
 // the first planning workspace, and that would become this Home's latest session.
 
-/** A tall photo, as a phone takes one: grey. */
-const bikePhoto = () => ({
-  name: "bike.png",
-  mimeType: "image/png",
-  buffer: Buffer.from(pngOf(60, 80, () => [120, 120, 120])),
-});
-
-/** Attaches a photo to the message box with its +. */
-const attachPhoto = async (page: Page) => {
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Add a photo or file" }).click();
-  await (await chooser).setFiles([bikePhoto()]);
+/** Where the boards' screenshots go, when a run asks for them (COURTYARD_E2E_SHOTS). */
+const shot = async (page: Page, name: string) => {
+  const folder = process.env.COURTYARD_E2E_SHOTS;
+  if (folder !== undefined) await page.screenshot({ path: join(folder, `${name}.png`) });
 };
 
 /**
- * A bike with a photo and four parts, as a model would add them: the chain to replace and the
- * rear tyre to pump up, both flagged; the fork fine; the saddle not placed on the photo yet. The
- * answer suggests two next steps. Back on Home after.
+ * The hardtail and its parts as the owner named them, as a model would add them: new pedals
+ * picked for the pedals, and a bottle cage the drawing has no place for. Back on Home after.
  */
 const addBike = async (page: Page, name: string) => {
-  await attachPhoto(page);
+  const part = (named: string, more = "") =>
+    `thing add: name ${named} | status have | part of T1${more}`;
   await startSaving(
     page,
     [
-      "thing add: name Whyte T-140 | status have | brand Whyte | photo 1",
-      "thing add: name Chain | status replace | part of T1 | pin 50, 50 | needs Replace: it's stretched | brand KMC X11",
-      "thing add: name Rear tyre | status have | part of T1 | pin 80, 60 | needs Pump it up before Saturday",
-      "thing add: name Fork | status have | part of T1 | pin 20, 30 | brand RockShox | size 120 mm",
-      "thing add: name Saddle | status have | part of T1",
-      "suggest replies: Find a chain under £30 | Which lights?",
+      "thing add: name Boardman MHT 8.6 | status have | brand Boardman",
+      part("Saddle"),
+      part("Grips"),
+      part("Fork", " | brand RockShox | size 120 mm"),
+      part("Brakes"),
+      part("Drivetrain"),
+      part("Pedals", " | upcoming DMR V8 | upcoming price £60"),
+      part("Front tyre"),
+      part("Rear tyre"),
+      part("Bottle cage"),
     ].join("\n"),
   );
   await expect(page.getByRole("list", { name: "Things saved" }).getByRole("listitem")).toHaveCount(
-    5,
+    10,
   );
   await page.getByRole("link", { name: `Back to ${name}` }).click();
 };
 
-const view = (page: Page) => page.getByRole("region", { name: "Whyte T-140" });
-/** A part's label: beside the photo once it's placed, under it until then. */
-const label = (page: Page, part: string) =>
-  view(page).getByRole("button", { name: part, exact: true });
-const pin = (page: Page, part: string) =>
-  view(page).getByRole("button", { name: `Pin: ${part}`, exact: true });
+const bike = (page: Page) => page.getByRole("region", { name: "Boardman MHT 8.6" });
+const label = (page: Page, words: string) =>
+  bike(page).getByRole("link", { name: words, exact: true });
 const messageBox = (page: Page) => page.getByLabel("Message", { exact: true });
-
-/** Where a pin's middle is on the page. */
-const middleOf = async (pin: Locator) => {
-  const box = await pin.boundingBox();
-  return { x: (box?.x ?? 0) + (box?.width ?? 0) / 2, y: (box?.y ?? 0) + (box?.height ?? 0) / 2 };
-};
 
 test("a new workspace's Home is only its name, one line and the message box", async ({ page }) => {
   const name = `Shed ${Date.now()}`;
@@ -71,182 +59,118 @@ test("a new workspace's Home is only its name, one line and the message box", as
   await expect(page.getByText("Tell Courtyard about this, by voice or photo")).toBeVisible();
   await expect(messageBox(page)).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Workspace tabs" })).toHaveCount(0);
-  // With no photo yet, the header's ring is the workspace's icon, which offers one.
-  await expect(page.getByRole("button", { name: `Add a photo of ${name}` })).toBeVisible();
+  // No photo in the header any more (#603).
+  await expect(page.getByRole("button", { name: `Add a photo of ${name}` })).toHaveCount(0);
 });
 
-test("Home breaks the bike down on its photo, every part labelled, with no chat", async ({
-  page,
-}) => {
-  const name = `Road bikes ${Date.now()}`;
-  await newWorkspace(page, name);
-  await addBike(page, name);
+test.describe("on the unfolded Fold", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 950, height: 712 } });
 
-  // The header: the workspace's photo, and the pills.
-  await expect(page.getByRole("link", { name: "Whyte T-140's card" })).toBeVisible();
-  const pills = page.getByRole("navigation", { name: "Workspace tabs" });
-  await expect(pills.getByRole("button", { name: "+ New" })).toBeVisible();
-  await expect(pills.getByRole("link")).toHaveText(["History1", "Things5"]);
-
-  // The view: every part labelled, not only those that need something; a pin for each placed one.
-  const bike = view(page);
-  await expect(bike.getByRole("img", { name: "Photo of Whyte T-140" })).toBeVisible();
-  for (const part of ["Chain", "Rear tyre", "Fork", "Saddle"]) {
-    await expect(label(page, part)).toBeVisible();
-  }
-  for (const part of ["Chain", "Rear tyre", "Fork"]) await expect(pin(page, part)).toBeVisible();
-  await expect(pin(page, "Saddle")).toHaveCount(0);
-  // Calm: what a part needs waits in its card, and its details too.
-  await expect(bike).not.toContainText("Pump it up before Saturday");
-  await expect(bike).not.toContainText("KMC X11");
-
-  // No chat: no last question, no next steps, and the box out of sight until it's asked for.
-  await expect(page.getByRole("link", { name: /^Your last question/ })).toHaveCount(0);
-  await expect(page.getByRole("list", { name: "Next steps" })).toHaveCount(0);
-  await expect(messageBox(page)).toBeHidden();
-
-  // What Courtyard knows is in the ⋯.
-  await openWhatCourtyardKnows(page);
-  await expect(page.getByRole("region", { name: "Skills" })).toBeVisible();
-});
-
-test("a tap on a part opens its card at the view's foot: what's fitted, what it needs, Done it and Ask about it", async ({
-  page,
-}) => {
-  const name = `Road bikes ${Date.now()}`;
-  await newWorkspace(page, name);
-  await addBike(page, name);
-
-  // From its pin: what's fitted.
-  await pin(page, "Fork").click();
-  const fork = view(page).getByRole("region", { name: "Fork's card" });
-  await expect(fork).toContainText("RockShox · 120 mm");
-  await expect(label(page, "Fork")).toHaveAttribute("aria-pressed", "true");
-
-  // From its label: what it needs, and Done it.
-  await label(page, "Rear tyre").click();
-  const tyre = view(page).getByRole("region", { name: "Rear tyre's card" });
-  await expect(tyre).toContainText("Pump it up before Saturday");
-  await expect(fork).toHaveCount(0);
-  await tyre.getByRole("button", { name: "Done it" }).click();
-  await expect(tyre).not.toContainText("Pump it up before Saturday");
-  await expect(tyre.getByRole("button", { name: "Done it" })).toHaveCount(0);
-
-  // Ask about it opens the box for a new session about the part.
-  await tyre.getByRole("button", { name: "Ask about it" }).click();
-  await expect(messageBox(page)).toBeVisible();
-  await expect(messageBox(page)).toHaveValue("About the Rear tyre on the Whyte T-140: ");
-  await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
-});
-
-test("dragging a pin moves it, and it stays where it was put", async ({ page }) => {
-  const name = `Road bikes ${Date.now()}`;
-  await newWorkspace(page, name);
-  await addBike(page, name);
-
-  // Hovering waits for the pin to be still: the page settles once the frame has measured it.
-  await pin(page, "Fork").hover();
-  const from = await middleOf(pin(page, "Fork"));
-  const saved = page.waitForResponse(
-    (response) => response.url().endsWith("/pin") && response.request().method() === "PUT",
-  );
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  await page.mouse.move(from.x + 30, from.y + 40, { steps: 5 });
-  await page.mouse.up();
-  // A drag isn't a tap: no card opens.
-  await expect(page.getByRole("region", { name: "Fork's card" })).toHaveCount(0);
-  expect((await saved).ok()).toBe(true);
-
-  await page.reload();
-  const moved = await middleOf(pin(page, "Fork"));
-  expect(Math.abs(moved.x - (from.x + 30))).toBeLessThan(4);
-  expect(Math.abs(moved.y - (from.y + 40))).toBeLessThan(4);
-});
-
-test("a part with no pin is placed with a tap on it, then on the photo, and stays", async ({
-  page,
-}) => {
-  const name = `Road bikes ${Date.now()}`;
-  await newWorkspace(page, name);
-  await addBike(page, name);
-
-  await label(page, "Saddle").click();
-  await expect(view(page)).toContainText("Tap the photo where the Saddle is");
-  const photo = await view(page).getByRole("img", { name: "Photo of Whyte T-140" }).boundingBox();
-  const at = {
-    x: (photo?.x ?? 0) + (photo?.width ?? 0) * 0.4,
-    y: (photo?.y ?? 0) + (photo?.height ?? 0) * 0.3,
-  };
-  const saved = page.waitForResponse(
-    (response) => response.url().endsWith("/pin") && response.request().method() === "PUT",
-  );
-  await page.mouse.click(at.x, at.y);
-  expect((await saved).ok()).toBe(true);
-  await expect(pin(page, "Saddle")).toBeVisible();
-  await expect(view(page)).not.toContainText("Tap the photo where the Saddle is");
-
-  await page.reload();
-  const placed = await middleOf(pin(page, "Saddle"));
-  expect(Math.abs(placed.x - at.x)).toBeLessThan(4);
-  expect(Math.abs(placed.y - at.y)).toBeLessThan(4);
-});
-
-test("History's latest session shows its next steps, one replying in it, and + New starts another", async ({
-  page,
-}) => {
-  const name = `Road bikes ${Date.now()}`;
-  await newWorkspace(page, name);
-  await addBike(page, name);
-
-  await openTab(page, "History");
-  const sessions = page.getByRole("region", { name: "Sessions" });
-  await sessions
-    .getByRole("list", { name: "Next steps" })
-    .getByRole("button", { name: "Which lights?" })
-    .click();
-  const session = page.getByRole("list", { name: "Session" });
-  await expect(session).toContainText("You said: Which lights?");
-  await expect(session).toContainText("You said: thing add");
-
-  await page.getByRole("link", { name: `Back to ${name}` }).click();
-  await page.getByRole("button", { name: "+ New" }).click();
-  const box = messageBox(page);
-  await expect(box).toBeFocused();
-  await box.fill("Where do I ride this weekend?");
-  await page.getByRole("button", { name: "Start" }).click();
-  await expect(page.getByRole("list", { name: "Session" })).not.toContainText("Which lights?");
-  await page.getByRole("link", { name: `Back to ${name}` }).click();
-  await openTab(page, "History");
-  await expect(page.getByRole("region", { name: "Sessions" }).getByRole("link")).toHaveCount(2);
-});
-
-test("with two Things broken down, the switch chips pick one, and the pick sticks", async ({
-  page,
-}) => {
-  const name = `Road bikes ${Date.now()}`;
-  await newWorkspace(page, name);
-  await addBike(page, name);
-  await page.getByRole("button", { name: "+ New" }).click();
-  await attachPhoto(page);
-  await startSaving(
+  test("Home leads with the drawn bike, each part on it by name, the upcoming one said, the rest under it, and the box", async ({
     page,
-    // The bike's five Things are T1 to T5, so the road bike is T6.
-    "thing add: name Road bike | status have | photo 1\nthing add: name Bar tape | status want | part of T6 | pin 40, 20",
-  );
-  await page.getByRole("link", { name: `Back to ${name}` }).click();
+  }) => {
+    const name = `Trail bike ${Date.now()}`;
+    await newWorkspace(page, name);
+    await addBike(page, name);
 
-  // The road bike changed last, so it shows; the chip picks the other.
-  const chips = page.getByRole("group", { name: "Views" });
-  await expect(chips.getByRole("radio", { name: "Road bike" })).toBeChecked();
-  await chips.getByText("Whyte T-140").click();
-  await expect(view(page)).toBeVisible();
-  await page.reload();
-  await expect(view(page)).toBeVisible();
-  await expect(chips.getByRole("radio", { name: "Whyte T-140" })).toBeChecked();
+    // The header: the name and the pills, no photo.
+    const pills = page.getByRole("navigation", { name: "Workspace tabs" });
+    await expect(pills.getByRole("button", { name: "+ New" })).toBeVisible();
+    await expect(pills.getByRole("link")).toHaveText(["History1", "Things10"]);
+    await expect(page.getByRole("link", { name: /'s card$/ })).toHaveCount(0);
+
+    // The drawing, not the photo, with every part that has a place on it labelled.
+    await expect(
+      bike(page).getByRole("img", { name: "Drawing of Boardman MHT 8.6" }),
+    ).toBeVisible();
+    for (const part of [
+      "Saddle",
+      "Grips",
+      "Fork",
+      "Brakes",
+      "Drivetrain",
+      "Front tyre",
+      "Rear tyre",
+    ]) {
+      await expect(label(page, part)).toBeVisible();
+    }
+    await expect(label(page, "Pedals · DMR V8 next")).toBeVisible();
+    // Calm: details wait on the part's card.
+    await expect(bike(page)).not.toContainText("RockShox");
+    // A part it has no place for is listed under it.
+    await expect(bike(page).getByRole("list", { name: "Parts" })).toHaveText(["Bottle cage"]);
+
+    // No view chips, no next steps, and the box that starts a session is there, under it all.
+    await expect(page.getByRole("group", { name: "Views" })).toHaveCount(0);
+    await expect(page.getByRole("list", { name: "Next steps" })).toHaveCount(0);
+    await expect(messageBox(page)).toBeVisible();
+    await expect(messageBox(page)).toHaveAttribute(
+      "placeholder",
+      "Talk or type to start a session…",
+    );
+    await shot(page, "planning-home-drawn-bike");
+
+    // A label opens the part's card.
+    await label(page, "Pedals · DMR V8 next").tap();
+    await expect(page.getByRole("heading", { level: 1, name: "Pedals" })).toBeVisible();
+    await page.goBack();
+    await bike(page).getByRole("list", { name: "Parts" }).getByRole("link").tap();
+    await expect(page.getByRole("heading", { level: 1, name: "Bottle cage" })).toBeVisible();
+  });
+
+  test("the drawing never runs past its panel, and a label points at its place", async ({
+    page,
+  }) => {
+    const name = `Trail bike ${Date.now()}`;
+    await newWorkspace(page, name);
+    await addBike(page, name);
+
+    const panel = await bike(page).boundingBox();
+    const drawing = await bike(page).getByRole("img").boundingBox();
+    expect(drawing).not.toBeNull();
+    expect(panel).not.toBeNull();
+    if (drawing === null || panel === null) return;
+    expect(drawing.y).toBeGreaterThanOrEqual(panel.y - 1);
+    expect(drawing.y + drawing.height).toBeLessThanOrEqual(panel.y + panel.height + 1);
+    // The drawing keeps its shape.
+    expect(drawing.width / drawing.height).toBeCloseTo(622 / 300, 1);
+    // The saddle's label is up and left of the pedals' one, as the drawing places them.
+    const saddle = await label(page, "Saddle").boundingBox();
+    const pedals = await label(page, "Pedals · DMR V8 next").boundingBox();
+    expect((saddle?.y ?? 0) < (pedals?.y ?? 0)).toBe(true);
+    expect((saddle?.x ?? 0) < (pedals?.x ?? 0)).toBe(true);
+  });
 });
 
-test("the tabs appear as the workspace fills, and Home with nothing to break down is one quiet line", async ({
+test.describe("on the cover screen", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 400, height: 900 } });
+
+  test("the bike has its pins, and every part is listed under it", async ({ page }) => {
+    const name = `Trail bike ${Date.now()}`;
+    await newWorkspace(page, name);
+    // On the cover screen the box opens with Type.
+    await page.getByRole("button", { name: "Type" }).tap();
+    await addBike(page, name);
+
+    await expect(
+      bike(page).getByRole("img", { name: "Drawing of Boardman MHT 8.6" }),
+    ).toBeVisible();
+    await expect(bike(page).getByRole("list", { name: "Parts" }).getByRole("link")).toHaveText([
+      "Saddle",
+      "Grips",
+      "Fork",
+      "Brakes",
+      "Drivetrain",
+      "Pedals · DMR V8 next",
+      "Front tyre",
+      "Rear tyre",
+      "Bottle cage",
+    ]);
+    await shot(page, "planning-home-drawn-bike-cover");
+  });
+});
+
+test("the tabs appear as the workspace fills, and Home with nothing to draw is one quiet line and the box", async ({
   page,
 }) => {
   const name = `Garage ${Date.now()}`;
@@ -266,10 +190,8 @@ test("the tabs appear as the workspace fills, and Home with nothing to break dow
 
   const tabs = page.getByRole("navigation", { name: "Workspace tabs" });
   await expect(tabs.getByRole("link")).toHaveText(["History1", "Things1", "Docs1"]);
-  const quiet = page.getByText("A Thing with a photo and parts shows here, part by part.");
+  const quiet = page.getByText("A bike and its parts, or a room's floor plan, shows here.");
   await expect(quiet).toBeVisible();
-  await expect(page.getByRole("link", { name: /^Your last question/ })).toHaveCount(0);
-  // With nothing to show, the box stays, to start a session.
   await expect(messageBox(page)).toBeVisible();
   await expect(messageBox(page)).toHaveAttribute("placeholder", "Talk or type to start a session…");
 
@@ -281,6 +203,24 @@ test("the tabs appear as the workspace fills, and Home with nothing to break dow
   await expect(page.getByRole("region", { name: "Sessions" }).getByRole("link")).toHaveCount(1);
   await openTab(page, "Home");
   await expect(quiet).toBeVisible();
+});
+
+test("+ New opens the box to start another session", async ({ page }) => {
+  const name = `Trail bike ${Date.now()}`;
+  await newWorkspace(page, name);
+  await addBike(page, name);
+
+  await page.getByRole("button", { name: "+ New" }).click();
+  const box = messageBox(page);
+  await expect(box).toBeFocused();
+  await box.fill("Where do I ride this weekend?");
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page.getByRole("list", { name: "Session" })).toContainText(
+    "You said: Where do I ride this weekend?",
+  );
+  await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await openTab(page, "History");
+  await expect(page.getByRole("region", { name: "Sessions" }).getByRole("link")).toHaveCount(2);
 });
 
 test("What Courtyard knows holds the facts, plans and ideas, and a line is fixed by starting a session on it", async ({
@@ -302,55 +242,4 @@ test("What Courtyard knows holds the facts, plans and ideas, and a line is fixed
   await expect(page.getByRole("list", { name: "Session" })).toContainText(
     "You said: This line is wrong: Rubber flooring.",
   );
-});
-
-test.describe("on the unfolded Fold", () => {
-  test.use({ hasTouch: true, isMobile: true, viewport: { width: 950, height: 712 } });
-
-  /** A finger on a pin: pressed, then moved by `by`, after holding it `heldMs`. */
-  const touchDrag = async (pin: Locator, by: { x: number; y: number }, heldMs: number) => {
-    const from = await middleOf(pin);
-    const at = (x: number, y: number) => ({
-      pointerId: 7,
-      pointerType: "touch",
-      isPrimary: true,
-      clientX: x,
-      clientY: y,
-      bubbles: true,
-    });
-    await pin.dispatchEvent("pointerdown", at(from.x, from.y));
-    await pin.page().waitForTimeout(heldMs);
-    await pin.dispatchEvent("pointermove", at(from.x + by.x / 2, from.y + by.y / 2));
-    await pin.dispatchEvent("pointermove", at(from.x + by.x, from.y + by.y));
-    await pin.dispatchEvent("pointerup", at(from.x + by.x, from.y + by.y));
-    return from;
-  };
-
-  test("a pin moves only once held; a quick tap opens its card; the box waits for Talk or + New", async ({
-    page,
-  }) => {
-    const name = `Road bikes ${Date.now()}`;
-    await newWorkspace(page, name);
-    await addBike(page, name);
-    await expect(page.getByRole("button", { name: "Add", exact: true })).toBeVisible();
-    await expect(messageBox(page)).toBeHidden();
-
-    const fork = () => pin(page, "Fork");
-    // A finger sliding over it at once is a scroll: the pin stays.
-    const before = await touchDrag(fork(), { x: 30, y: 30 }, 0);
-    expect(await middleOf(fork())).toEqual(before);
-    // Held, then dragged, it moves.
-    await touchDrag(fork(), { x: 30, y: 30 }, 700);
-    await expect.poll(async () => (await middleOf(fork())).x).toBeGreaterThan(before.x + 20);
-
-    // A quick tap opens its card, at the view's foot.
-    await pin(page, "Chain").tap();
-    await expect(view(page).getByRole("region", { name: "Chain's card" })).toContainText(
-      "Replace: it's stretched",
-    );
-
-    // + New opens the box, to start a session.
-    await page.getByRole("button", { name: "+ New" }).tap();
-    await expect(messageBox(page)).toBeVisible();
-  });
 });

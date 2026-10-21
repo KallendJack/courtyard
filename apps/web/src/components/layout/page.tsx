@@ -69,11 +69,8 @@ export function Page(props: {
   );
 }
 
-/**
- * What a workspace's Home puts on its title's row: a line under the name, its tabs, and a planning
- * workspace's photo in the top right corner (#481).
- */
-export type TitleBeside = { under?: ReactNode; tabs?: ReactNode; photo?: ReactNode };
+/** What a workspace's Home puts on its title's row: a line under the name, and its tabs. */
+export type TitleBeside = { under?: ReactNode; tabs?: ReactNode };
 
 /**
  * A page's title, with an optional line above it (a workspace chip, say), buttons beside it
@@ -114,14 +111,7 @@ export function PageTitle(
   return (
     <div className="flex flex-col gap-2">
       {props.above}
-      {props.photo === undefined ? (
-        title
-      ) : (
-        <div className="flex items-start gap-3 md:gap-4">
-          <div className="min-w-0 grow">{title}</div>
-          {props.photo}
-        </div>
-      )}
+      {title}
     </div>
   );
 }

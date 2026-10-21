@@ -12,10 +12,8 @@ A planning workspace's Things (ADR 0020): one file each, `things/<slug>.md`, rea
 - `GET`, `POST /api/workspaces/:id/things`: the list, and Add Thing.
 - `GET`, `PUT`, `DELETE /api/workspaces/:id/things/:slug`: one Thing.
 - `GET`, `POST /api/workspaces/:id/things/:slug/photo`: its photo.
-- `PUT /api/workspaces/:id/things/:slug/pin`: a part's pin, where the owner dragged it on its Thing's photo (#208).
-- `PUT /api/workspaces/:id/things/:slug/mark`: a part's card on Home (#481), `ThingMark`: `done` clears what it
-  needs and has it again, its history saying "Done: …"; `wanted` makes one the owner has one to replace; `fitted` swaps its upcoming one in (#602), the one
-  it had going to its history.
+- `PUT /api/workspaces/:id/things/:slug/mark`: `ThingMark`, `fitted`, which swaps its upcoming one in (#602), the
+  one it had going to its history.
 - `PUT /api/workspaces/:id/things/:slug/upcoming`: a pick from an answer's options (#602), `ThingUpcoming`, kept as
   the Thing's upcoming one, its history saying "Picked … as upcoming".
 
@@ -24,8 +22,8 @@ A planning workspace's Things (ADR 0020): one file each, `things/<slug>.md`, rea
 - Reads each file against the contract's schema, listing a file that fails with its problem. A Thing bought from
   the wanted list keeps what was paid as its price and where as its shop (#245).
 - Lists them with each part after its Thing.
-- A part's pin (`pin: 42.5, 61`, across then down, each a percentage of its Thing's photo) and a Thing's `needs`
-  (its next step) are kept by the owner's form as they are; a pin goes when its part moves to another Thing or none.
+- A Thing's `needs` (its next step) is kept by the owner's form as it is. A `pin:` line left by Home's photo view
+  is read past, and goes on the Thing's next save (#603).
 - Adds, changes and removes one as one change through `context-folder/`, its photo with it.
 - Keeps a photo resized with `sharp` (`keptPhoto`).
 - A Thing's **upcoming** one (#602) is its `upcoming …` lines: a new name replaces the last whole, and a Thing the

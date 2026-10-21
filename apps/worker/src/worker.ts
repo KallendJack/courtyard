@@ -78,7 +78,6 @@ import { sendWebPush } from "./features/notifications/web-push.ts";
 import { createOfflineCopy } from "./features/offline-copy/index.ts";
 import { offlineCopyRoutes } from "./features/offline-copy/routes.ts";
 import { readOwnerContext, startOwnerContext } from "./features/owner-context/index.ts";
-import { createHomePicks } from "./features/planning-home/index.ts";
 import { planningHomeRoutes } from "./features/planning-home/routes.ts";
 import { createPreviews } from "./features/preview/index.ts";
 import { previewRoutes } from "./features/preview/routes.ts";
@@ -606,14 +605,7 @@ export const createWorker = (options: {
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
   api.route("/", documentRoutes({ contextDir, contextFolder }));
   api.route("/", thingRoutes({ contextDir, contextFolder, now }));
-  api.route(
-    "/",
-    planningHomeRoutes({
-      contextDir,
-      picks: createHomePicks({ dataDir }),
-      lastQuestion: sessions.lastQuestion,
-    }),
-  );
+  api.route("/", planningHomeRoutes({ contextDir }));
   api.route("/", statusLineRoutes(statusLines));
   api.route(
     "/",
