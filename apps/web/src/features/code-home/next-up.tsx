@@ -8,11 +8,10 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronRight, Clock, Flame, Play, Zap } from "lucide-react";
+import { ChevronRight, Clock, Flame, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/buttons/button";
 import { FormError } from "@/components/forms/form-error";
-import { DialogCard } from "@/components/layout/dialog-card";
 import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
 import { PlaceholderRows } from "@/components/layout/kept";
 import { useAction } from "@/hooks/use-action";
@@ -21,7 +20,7 @@ import { clockWords } from "@/lib/when";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { behindName } from "../builders/words.ts";
 import { codingModelIn } from "../pull-requests/api.ts";
-import { runLead, startOnIssue } from "./api.ts";
+import { startOnIssue } from "./api.ts";
 
 /** How many titles the Then line names. */
 const THEN = 3;
@@ -42,11 +41,10 @@ const COLUMN = "flex min-w-0 flex-col md:min-h-0 md:w-72.5 md:shrink-0 xl:w-80";
  * the session, which the worker claims the issue for. When an issue needs grilling first, Grill
  * takes the top in gold on the first in order (#363, #463), and the first ready issue sits under
  * it with a small Build. Under them, one faint Then line names the next few titles, and Whole
- * roadmap opens the Roadmap tab, saying how many more there are: the queue lives there. Under
- * Build, Run the build order starts the workspace's Lead, once the owner has seen what it does
- * (#347; Paper, "Code Home, Lead not started"); while it runs, the first issue says the Lead starts
- * it next, in Build's place ("Lead running"). With Grill on top, both sit under the small Build
- * (#550; Paper, "Code Home: Grill on top, Run the build order"). With none offered it says so.
+ * roadmap opens the Roadmap tab, saying how many more there are: the queue lives there. The Lead
+ * is run from the Builders board (#648); while it runs, the first issue says the Lead starts it
+ * next, in Build's place ("Lead running"), and the small Build under Grill is simply Next. With
+ * none offered it says so.
  */
 export function NextUp(
   props: Offered & {
@@ -110,10 +108,8 @@ type Offered = {
   unread?: NextUpAnswer["unread"];
   workspaceId: WorkspaceId;
   providers: ProviderList["providers"];
-  /** The workspace's Lead (#347), once known: Run the build order sits under Build. */
+  /** The workspace's Lead (#347), once known: while it runs, it starts the first issue next. */
   lead: LeadStatus | undefined;
-  /** The Lead started or woke. */
-  onLead: (lead: LeadStatus) => void;
 };
 
 /** Next up with at least one issue to offer. */
@@ -160,21 +156,17 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
               {...on}
               issue={first}
               does={first.ready ? "build" : "grill"}
-              {...(first.ready && props.lead !== undefined
-                ? { lead: { status: props.lead, onLead: props.onLead } }
-                : {})}
+              {...(first.ready && props.lead !== undefined ? { lead: props.lead } : {})}
             />
           )}
-          {/* With Grill on top, the Lead's controls go with the first ready issue under it (#550). */}
+          {/* With Grill on top, what the Lead does goes with the first ready issue under it (#550). */}
           {under !== undefined && (
             <StartOnIssue
               {...on}
               issue={under}
               does="build"
               small
-              {...(props.lead === undefined
-                ? {}
-                : { lead: { status: props.lead, onLead: props.onLead } })}
+              {...(props.lead === undefined ? {} : { lead: props.lead })}
             />
           )}
           {held.length > 0 && (
@@ -264,20 +256,17 @@ function StartOnIssue(props: {
   does: keyof typeof STARTS;
   small?: boolean;
   /**
-   * On the first ready issue, the workspace's Lead (#347): Run the build order under Build, or,
-   * while it runs, that it starts this next in Build's place. On the small card under Grill, both
-   * go under the card (#550).
+   * On the first ready issue, the workspace's Lead (#347): while it runs, that it starts this next
+   * in Build's place; on the small card under Grill, that it's Next (#550).
    */
-  lead?: { status: LeadStatus; onLead: (lead: LeadStatus) => void };
+  lead?: LeadStatus;
 }) {
   const { issue } = props;
   const look = STARTS[props.does];
   const Icon = look.icon;
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
-  /** Run the build order, tapped: what starts shows first, in a dialog, with Run the build order. */
-  const [running, setRunning] = useState(false);
-  const leading = props.lead?.status.state === "running";
+  const leading = props.lead?.state === "running";
   /** Start and Cancel, brought into view when they open in a column too short for them (#335). */
   const choices = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -297,14 +286,6 @@ function StartOnIssue(props: {
       to: "/workspaces/$workspaceId/sessions/$sessionId",
       params: { workspaceId: props.workspaceId, sessionId: started.data.id },
     });
-    return undefined;
-  });
-  const runOrder = useAction(async () => {
-    if (model === undefined) return "No model that codes is available right now.";
-    const started = await runLead(props.workspaceId, { model: model.ref });
-    if (started.kind !== "loaded") return describeProblem(started).body;
-    setRunning(false);
-    props.lead?.onLead(started.data);
     return undefined;
   });
   /** Grill's card (#503; Paper, "Code Home, roomier on the Fold"): its title in two lines at most. */
@@ -328,12 +309,12 @@ function StartOnIssue(props: {
   );
   /** The builder the Lead holds this one back for (#423), changing the same files, by name. */
   const behind = leading
-    ? props.lead?.status.heldBack?.find((held) => held.issue === issue.number)?.behind
+    ? props.lead?.heldBack?.find((held) => held.issue === issue.number)?.behind
     : undefined;
   const waits =
     behind === undefined || props.lead === undefined
       ? undefined
-      : `Next · waits for ${behindName(props.lead.status, behind)} to merge`;
+      : `Next · waits for ${behindName(props.lead, behind)} to merge`;
   const status = grilling
     ? "Needs grilling first"
     : (waits ?? (leading ? "The Lead starts this next" : "Ready to build"));
@@ -344,13 +325,7 @@ function StartOnIssue(props: {
       Lead is running the order
     </p>
   );
-  const runTheOrder = props.lead !== undefined && (
-    <Button variant="outline" fullWidth onClick={() => setRunning(true)}>
-      <Play aria-hidden />
-      Run the build order
-    </Button>
-  );
-  const card = (
+  return (
     <section
       aria-label={`${look.label} #${issue.number}`}
       className={classes(
@@ -427,62 +402,12 @@ function StartOnIssue(props: {
         (leading ? (
           leadRuns
         ) : (
-          <>
-            <Button variant={look.variant} fullWidth onClick={() => setConfirming(true)}>
-              <Icon aria-hidden />
-              {look.label}
-            </Button>
-            {runTheOrder}
-          </>
+          <Button variant={look.variant} fullWidth onClick={() => setConfirming(true)}>
+            <Icon aria-hidden />
+            {look.label}
+          </Button>
         ))
       )}
-      {props.lead !== undefined && (
-        // Run the build order, tapped: what starts, and how it runs (#591).
-        <DialogCard
-          title="Run the build order"
-          says={
-            model === undefined
-              ? "No model that codes is available right now."
-              : `The Lead runs the build order with ${model.label}: it starts the next issues ${props.lead.status.builders} at a time, beginning with #${issue.number} ${issue.title}.${props.small ? " Issues that need grilling wait for you." : ""} Each is in a session of its own that claims its issue and allows all until its PR opens, still asking before anything outside its own branch. It keeps going through the night, and pauses itself while 4 PRs wait for your review. Merging stays yours.`
-          }
-          open={running}
-          onClose={() => setRunning(false)}
-          actions={
-            <>
-              <Button
-                variant="outline"
-                size="lg"
-                waiting={runOrder.busy}
-                onClick={() => setRunning(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="lg"
-                grow
-                disabled={model === undefined}
-                busy={runOrder.busy}
-                busyLabel="Starting…"
-                onClick={() => void runOrder.run()}
-              >
-                Run the build order
-              </Button>
-            </>
-          }
-        >
-          <FormError message={runOrder.error} />
-        </DialogCard>
-      )}
     </section>
-  );
-  // Under Grill, Run the build order sits under the small card, not in it (#550); while the Lead
-  // runs, the Builders board says so (#592).
-  if (!props.small || props.lead === undefined || confirming || leading) return card;
-  return (
-    <>
-      {card}
-      {runTheOrder}
-    </>
   );
 }

@@ -1,5 +1,6 @@
 import {
   type BuilderStatus,
+  buildable,
   type CodeSessionList,
   LEAD_REVIEWS_AT_MOST,
   type LeadBuilderStatus,
@@ -11,11 +12,12 @@ import {
 } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/buttons/button";
 import { ButtonLink } from "@/components/buttons/button-link";
 import { doingWords } from "@/components/chat/session-state";
 import { FormError } from "@/components/forms/form-error";
+import { DialogCard } from "@/components/layout/dialog-card";
 import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
 import { PlaceholderRows } from "@/components/layout/kept";
 import { useAction } from "@/hooks/use-action";
@@ -119,28 +121,25 @@ export function BuildersBoard(props: {
       </Block>
     );
   }
-  if (lead.state === "not-started") {
-    return (
-      <Block label="Builders" tall>
-        <BlockEmpty>No builders yet · Run the build order from Next up</BlockEmpty>
-      </Block>
-    );
-  }
   return <Board {...props} lead={lead} />;
 }
 
 /**
- * The board once its Lead has run (#592), with its controls: Pause while the Lead runs, Run while
- * it's paused or resting, and Merge in order (#423) once more than one of its builders' pull
- * requests is ready.
+ * The board once its Lead is known (#592), with its controls: Pause while the Lead runs, Run
+ * while it doesn't, and Merge in order (#423) once more than one of its builders' pull requests is
+ * ready. With nothing running (never run, or paused with no builders) it's the same in every
+ * workspace: Run and one quiet line (#648). Run the first time shows what the Lead does first.
  */
 function Board(props: Parameters<typeof BuildersBoard>[0] & { lead: LeadStatus }) {
   const { lead } = props;
   const header = headerWords(lead, props.issues ?? [], LEAD_REVIEWS_AT_MOST);
   const rows = lead.statuses.filter(({ status }) => shownToday(status));
   const running = lead.state === "running";
+  const neverRun = lead.state === "not-started";
+  /** Run, tapped on a Lead that has never run: what it does shows first, in a dialog (#591). */
+  const [explaining, setExplaining] = useState(false);
+  const model = props.providers === undefined ? undefined : codingModelIn(props.providers);
   const act = useAction(async () => {
-    const model = props.providers === undefined ? undefined : codingModelIn(props.providers);
     const done = running
       ? await pauseLead(props.workspaceId)
       : model === undefined
@@ -148,9 +147,13 @@ function Board(props: Parameters<typeof BuildersBoard>[0] & { lead: LeadStatus }
         : await runLead(props.workspaceId, { model: model.ref });
     if (done === undefined) return "No model that codes is available right now.";
     if (done.kind !== "loaded") return describeProblem(done).body;
+    setExplaining(false);
     props.onLead(done.data);
     return undefined;
   });
+  /** The first issue it builds, and whether any wait for grilling first, as Next up has them. */
+  const first = props.issues?.find(buildable);
+  const grilling = props.issues?.some((issue) => !issue.ready) === true;
   const merge = useMergeInOrder({
     workspaceId: props.workspaceId,
     pullRequests: lead.ready.map((ready) => ready.pullRequest),
@@ -178,8 +181,8 @@ function Board(props: Parameters<typeof BuildersBoard>[0] & { lead: LeadStatus }
             variant="outline"
             size="xs"
             busy={act.busy}
-            busyLabel={running ? "Pausing…" : "Waking…"}
-            onClick={() => void act.run()}
+            busyLabel={running ? "Pausing…" : neverRun ? "Starting…" : "Waking…"}
+            onClick={() => (neverRun ? setExplaining(true) : void act.run())}
           >
             {running ? "Pause" : "Run"}
           </Button>
@@ -196,10 +199,45 @@ function Board(props: Parameters<typeof BuildersBoard>[0] & { lead: LeadStatus }
         >
           {header.reasons}
         </p>
-        <FormError message={act.error ?? merge.error} />
+        <FormError message={explaining ? undefined : (act.error ?? merge.error)} />
       </div>
-      {/* Paused with no builders, nothing runs: its one line says so (#646). Too short for its
-          empty line, the board scrolls it inside, as it would a row. */}
+      <DialogCard
+        title="Run"
+        says={
+          model === undefined
+            ? "No model that codes is available right now."
+            : `The Lead runs the build order with ${model.label}: it starts the next issues ${lead.builders} at a time${first === undefined ? "" : `, beginning with #${first.number} ${first.title}`}.${grilling ? " Issues that need grilling wait for you." : ""} Each is in a session of its own that claims its issue and allows all until its PR opens, still asking before anything outside its own branch. It keeps going through the night, and pauses itself while 4 PRs wait for your review. Merging stays yours.`
+        }
+        open={explaining}
+        onClose={() => setExplaining(false)}
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="lg"
+              waiting={act.busy}
+              onClick={() => setExplaining(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
+              grow
+              disabled={model === undefined}
+              busy={act.busy}
+              busyLabel="Starting…"
+              onClick={() => void act.run()}
+            >
+              Run
+            </Button>
+          </>
+        }
+      >
+        <FormError message={act.error} />
+      </DialogCard>
+      {/* Nothing runs (never run, or paused with no builders): its one line says so (#646, #648).
+          Too short for its empty line, the board scrolls it inside, as it would a row. */}
       {header.stopped ? null : rows.length === 0 ? (
         <BlockRows>
           <BlockEmpty>No builders right now</BlockEmpty>

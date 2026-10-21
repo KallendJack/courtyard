@@ -2,7 +2,7 @@
 
 A code workspace's Lead (#347): runs builders in the milestone's order, and merges in order when you say so.
 
-**Example:** you tap Run the build order. The Lead starts a builder on the first ready issue, holds back the next one
+**Example:** you tap Run on the Builders board. The Lead starts a builder on the first ready issue, holds back the next one
 because it changes the same file, and starts it once the first one's PR merges.
 
 - **Uses:** `next-up/` (the order), `sessions/` (starting builders, merging, `stopBuilding`), `builders/` (each

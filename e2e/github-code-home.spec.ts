@@ -30,8 +30,8 @@ const showsHome = async (page: Page) => {
   const ready = needsYou.getByRole("listitem", { name: /Builds take turns/ });
   await expect(ready).toContainText("Checks passed · ready to merge");
   await expect(ready.getByRole("button", { name: /^Merge/ })).toBeVisible();
-  // No Lead yet: the Builders board keeps its place with one quiet line (#283, #592).
-  await expect(builders).toContainText("No builders yet");
+  // No Lead yet: the Builders board keeps its place, with Run and one quiet line (#283, #648).
+  await expect(builders).toContainText("Not running · Run starts the next issue");
 
   // The next in order needs grilling, so Grill is on top (#363); under it the first of the ready
   // issues nobody claimed, with Build; then only the next few titles and the way to the Roadmap,
@@ -283,20 +283,21 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await request.post("/api/github/sign-out", { data: {} });
     });
 
-    // Owner, 2026-10-19: with an issue to grill on top there was no way to start the Lead (#550;
-    // Paper, "Code Home: Grill on top, Run the build order" and "…Lead running").
-    test("with Grill on top, Run the build order sits under the small Build, which says Next once the Lead runs", async ({
+    // Owner, 2026-10-19: with an issue to grill on top there was no way to start the Lead (#550);
+    // the board's Run starts it, in every workspace (#648).
+    test("with Grill on top, the board's Run starts the Lead, and the small Build says Next once it runs", async ({
       page,
       request,
     }) => {
       await signIn(request);
       await page.goto(HOME);
-      const { nextUp } = blocks(page);
+      const { nextUp, builders } = blocks(page);
       await expect(nextUp.getByRole("region", { name: "Grill #117" })).toBeVisible();
       const build = nextUp.getByRole("region", { name: "Build #197" });
       await expect(build).toContainText("Ready");
-      await nextUp.getByRole("button", { name: "Run the build order" }).click();
-      const dialog = page.getByRole("dialog", { name: "Run the build order" });
+      await expect(nextUp.getByRole("button", { name: /Run/ })).toHaveCount(0);
+      await builders.getByRole("button", { name: "Run" }).click();
+      const dialog = page.getByRole("dialog", { name: "Run", exact: true });
       await expect(dialog).toContainText("beginning with #197 The rail on desktop");
       await expect(dialog).toContainText("Issues that need grilling wait for you.");
       // Every builder allows all until its PR opens (#591): there's no switch for it.
@@ -307,7 +308,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await expect(dialog).toBeHidden();
 
       // Once the Lead runs, the small Build is simply Next (#592; Paper, "Tablet · Builders board,
-      // running"): the Builders board says the Lead runs, so Run the build order goes.
+      // running"): the Builders board says the Lead runs.
       await page.route("**/api/workspaces/workbench/lead", async (route) => {
         const response = await route.fetch();
         const lead = (await response.json()) as object;
@@ -316,7 +317,7 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       await page.goto(HOME);
       await expect(build.getByText("Next", { exact: true })).toBeVisible();
       await expect(build.getByRole("button", { name: "Build" })).toBeVisible();
-      await expect(nextUp.getByRole("button", { name: "Run the build order" })).toHaveCount(0);
+      await expect(nextUp.getByRole("button", { name: /Run/ })).toHaveCount(0);
       await shot(page, "tablet-code-home-grill-on-top-lead-running");
       await page.unrouteAll({ behavior: "ignoreErrors" });
       await request.post("/api/github/sign-out", { data: {} });
