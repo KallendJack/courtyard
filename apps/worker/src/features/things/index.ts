@@ -56,7 +56,7 @@ const PHOTOS_FOLDER = "photos";
 export const thingPath = (slug: ThingSlug) => `${THINGS_FOLDER}/${slug}.md`;
 
 /** A Thing's photo, as its front matter names it: beside it, in the photos folder. */
-const photoName = (slug: ThingSlug) => `${PHOTOS_FOLDER}/${slug}.jpg`;
+export const photoName = (slug: ThingSlug) => `${PHOTOS_FOLDER}/${slug}.jpg`;
 
 /** Why a Thing wasn't saved, removed or read. */
 export type ThingRefusal =
@@ -164,7 +164,7 @@ export const readThingText = (
 };
 
 /** A Thing's file, written from its fields and its history, oldest first. */
-const thingText = (fields: ThingFields, history: readonly ThingHistoryEntry[]) => {
+export const thingText = (fields: ThingFields, history: readonly ThingHistoryEntry[]) => {
   const front = FILE_KEYS.flatMap(([key, field]) => {
     const value = fields[field];
     return value === undefined ? [] : [`${key}: ${value}`];

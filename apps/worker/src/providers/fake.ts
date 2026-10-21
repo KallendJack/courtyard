@@ -63,12 +63,11 @@ const EFFORTS = [
 
 const SECTIONS = {
   fact: "facts",
-  plan: "plans",
   idea: "ideas",
   preference: "answers",
 } as const;
-const ADD = /^save (owner )?(fact|plan|idea|preference): (.+)$/i;
-const CHANGE = /^change (\w+) to (owner )?(fact|plan|idea|preference): (.+)$/i;
+const ADD = /^save (owner )?(fact|idea|preference): (.+)$/i;
+const CHANGE = /^change (\w+) to (owner )?(fact|idea|preference): (.+)$/i;
 const REMOVE = /^remove (\w+)$/i;
 
 /**
@@ -78,14 +77,13 @@ const REMOVE = /^remove (\w+)$/i;
  */
 const whereTo = (owner: string | undefined, word: string) => {
   const lower = word.toLowerCase();
-  const section =
-    SECTIONS[lower === "plan" || lower === "idea" || lower === "preference" ? lower : "fact"];
+  const section = SECTIONS[lower === "idea" || lower === "preference" ? lower : "fact"];
   return owner ? { place: "owner", section } : { section };
 };
 
 /**
  * The saves a message scripts, one per line: "save fact: …", "save owner fact: …", "save
- * preference: …", "change F1 to plan: …", "remove I2".
+ * preference: …", "change I1 to fact: …", "remove I2".
  */
 const scriptedSaves = (message: string): Record<string, string>[] =>
   message.split("\n").flatMap((line): Record<string, string>[] => {
@@ -348,6 +346,56 @@ const scriptedNote = (message: string): Result<Record<string, string>, FailureRe
   }
   return ok(note);
 };
+
+const MOVE = /^move: (\{.*\})\s*$/i;
+
+/**
+ * The move review a workspace's files script (#603), one move per line anywhere in them: "move: "
+ * then the move as JSON, its title and about, and of the rest only what it does (a missing
+ * project or field is none, a missing list empty). With none, it proposes nothing, so a workspace's files
+ * never move unless a test says so.
+ */
+const scriptedMoves = (message: string) => ({
+  moves: message.split("\n").flatMap((line) => {
+    const [, json] = MOVE.exec(line.trim()) ?? [];
+    if (json === undefined) return [];
+    try {
+      const move: Record<string, unknown> = JSON.parse(json);
+      const fields = (value: unknown): Record<string, unknown> =>
+        typeof value === "object" && value !== null ? { ...value } : {};
+      const list = (value: unknown) => (Array.isArray(value) ? value.map(fields) : []);
+      const project =
+        move.project === undefined || move.project === null ? null : fields(move.project);
+      return [
+        {
+          documents: [],
+          archive: [],
+          ...move,
+          project:
+            project === null
+              ? null
+              : {
+                  slug: null,
+                  name: null,
+                  goal: null,
+                  ...project,
+                  steps: list(project.steps).map((step) => ({ detail: null, ...step })),
+                },
+          upcoming: list(move.upcoming).map((part) => ({
+            price: null,
+            shop: null,
+            link: null,
+            why: null,
+            ...part,
+          })),
+          remove: { documents: [], things: [], lines: [], ...fields(move.remove) },
+        },
+      ];
+    } catch {
+      return [];
+    }
+  }),
+});
 
 const READ_SESSION = /^read session: (\S+)$/i;
 
@@ -918,6 +966,8 @@ export const createFakeProvider = (
           return scriptedQuickAnswer(message);
         case "session-note":
           return scriptedNote(message);
+        case "move-review":
+          return ok(scriptedMoves(message));
       }
     },
   };

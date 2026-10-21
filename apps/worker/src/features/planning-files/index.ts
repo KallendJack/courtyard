@@ -65,8 +65,11 @@ export const pathInFolder = (workspaceId: WorkspaceId, path: string) => `${works
 /** A path from the context folder's top, as changes name it, in its workspace's folder. */
 export const pathInWorkspace = (path: string) => path.split("/").slice(1).join("/");
 
-/** The kinds of file a planning workspace keeps: documents, Things (ADR 0020) and projects (#603). */
-export type PlanningFileKind = "document" | "thing" | "project";
+/**
+ * The kinds of change to a planning workspace's files: its documents', Things' (ADR 0020) or
+ * projects', or a move the owner ticked, which may touch any of them and its context file (#603).
+ */
+export type PlanningFileKind = "document" | "thing" | "project" | "move";
 
 /**
  * A change to a planning workspace's documents, Things or projects, described for the context

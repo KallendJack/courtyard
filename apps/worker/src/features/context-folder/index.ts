@@ -27,8 +27,8 @@ import { ARCHIVED_FOLDER, CONTEXT_FILE } from "../workspaces/index.ts";
  * the workspaces arranged), the
  * owner context started from the app, a model's save and the owner undoing or editing one, a
  * tidy the owner ticked, a document saved, updated, renamed or deleted or a Thing added, changed
- * or removed (ADR 0020), a project started or changed (#603), or a fresh start clearing the whole
- * folder.
+ * or removed (ADR 0020), a project started or changed or a move the owner ticked (#603), or a fresh
+ * start clearing the whole folder.
  */
 export const ChangeKind = z.enum([
   "setup",
@@ -42,6 +42,7 @@ export const ChangeKind = z.enum([
   "document",
   "thing",
   "project",
+  "move",
   "fresh-start",
 ]);
 export type ChangeKind = z.infer<typeof ChangeKind>;

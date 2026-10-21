@@ -89,8 +89,11 @@ function EditForm(props: {
 }) {
   const [line, setLine] = useState(props.line.line);
   const [where, setWhere] = useState(whereOf(props.line));
+  // A line saved under Plans, from before projects (#603), is edited into Facts or Ideas.
   const [section, setSection] = useState<ContextSection>(
-    props.line.section === "answers" ? "facts" : props.line.section,
+    props.line.section === "answers" || props.line.section === "plans"
+      ? "facts"
+      : props.line.section,
   );
   const save = useAction(props.save);
   const box = useRef<HTMLInputElement>(null);

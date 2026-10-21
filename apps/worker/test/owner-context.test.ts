@@ -42,7 +42,7 @@ describe("reading the owner context", () => {
     expect(await readOwnerContext()).toBeNull();
   });
 
-  it("reads About me's facts, plans and ideas, and how the owner likes answers", async () => {
+  it("reads About me's facts and ideas, Plans kept as written (#603), and how the owner likes answers", async () => {
     await writeFile(
       OWNER_FILE(),
       [
@@ -74,7 +74,6 @@ describe("reading the owner context", () => {
     expect(await readOwnerContext()).toEqual({
       intro: "Shared with every workspace.",
       facts: ["Lives in the UK.", "Has a dog."],
-      plans: ["Moving house in spring."],
       ideas: ["An allotment."],
       answers: ["Metric units and pounds.", "Short answers first, detail after."],
       characters: expect.any(Number),
@@ -94,7 +93,7 @@ describe("starting the owner context", () => {
 
     expect(response.status).toBe(201);
     const { ownerContext } = OwnerContextDetail.parse(await response.json());
-    expect(ownerContext).toMatchObject({ facts: [], plans: [], ideas: [], answers: [] });
+    expect(ownerContext).toMatchObject({ facts: [], ideas: [], answers: [] });
     expect(ownerContext?.intro).toContain("every workspace");
     const markdown = await readFile(OWNER_FILE(), "utf8");
     expect(markdown).toMatch(/^# Owner context\n/);

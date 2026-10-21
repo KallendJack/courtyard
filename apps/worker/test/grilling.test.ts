@@ -5,7 +5,6 @@ import { SessionSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   asOwner,
-  errorOf,
   followSession,
   postJson,
   quotedInGuide,
@@ -15,7 +14,8 @@ import {
   testWorker,
 } from "./testing.ts";
 
-// Grilling, Courtyard's house skill, and Grill this plan (docs/ai-conduct.md, Grilling).
+// Grilling, Courtyard's house skill (docs/ai-conduct.md, Grilling). Grill this plan, the flame
+// beside each Plan line, went with the Plans section (#603).
 
 let root: string;
 
@@ -24,7 +24,7 @@ beforeEach(async () => {
   await mkdir(join(root, "context", "garage-gym"), { recursive: true });
   await writeFile(
     join(root, "context", "garage-gym", "CONTEXT.md"),
-    `# Garage gym\n\n## Plans\n\n- ${PLAN}\n`,
+    "# Garage gym\n\n## Facts\n\n- A single garage.\n",
   );
 });
 
@@ -34,33 +34,16 @@ afterEach(async () => {
 
 const PLAN = "Move the squat rack to the back wall before the rubber mats go down in November";
 
-describe("Grill this plan", () => {
-  it("starts a new session on the plan with the Grilling tag, titled after it, on a model that saves", async () => {
+describe("Grilling", () => {
+  it("starts Courtyard's Grilling when the owner picks it, written as the guide words it", async () => {
     const saver = savingProvider([[]]);
     const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
 
-    const response = await postJson(request, "/api/workspaces/garage-gym/grill", { plan: PLAN });
-
-    expect(response.status).toBe(201);
-    const session = SessionSummary.parse(await response.json());
-    expect(session.title).toBe("Move the squat rack to the back wall before the rubber mats…");
-    const events = await followSession(request, { sessionId: session.id, until: "turn-completed" });
-    expect(events[0]).toMatchObject({
-      type: "owner-message",
+    const response = await postJson(request, "/api/workspaces/garage-gym/sessions", {
       text: PLAN,
       skill: "grilling",
       model: SAVING_MODEL,
     });
-    expect(saver.framings[0]?.instructions).toContain(
-      "The owner started the grilling skill with their new message",
-    );
-  });
-
-  it("starts Courtyard's Grilling, written as the guide words it", async () => {
-    const saver = savingProvider([[]]);
-    const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
-
-    const response = await postJson(request, "/api/workspaces/garage-gym/grill", { plan: PLAN });
     const { id } = SessionSummary.parse(await response.json());
     await followSession(request, { sessionId: id, until: "turn-completed" });
 
@@ -71,28 +54,11 @@ describe("Grill this plan", () => {
     expect(instructions).toContain(`\n${await quotedInGuide("# Grilling")}\n</skill>`);
   });
 
-  it("grills only a plan the workspace's context file has", async () => {
-    const request = await asOwner(testWorker({ root, providers: [savingProvider([]).provider] }));
-
-    const response = await postJson(request, "/api/workspaces/garage-gym/grill", {
-      plan: "Buy a second-hand barbell",
-    });
-
-    expect(response.status).toBe(409);
-    expect(await errorOf(response)).toBe(
-      "That plan isn't in the context file any more. Reload the page to see it as it is now.",
-    );
-  });
-
-  it("isn't offered in a code workspace, whose models can't save to its context file", async () => {
-    await writeFile(
-      join(root, "context", "garage-gym", "workspace.json"),
-      '{ "mode": "code", "repoPath": "/path/to/repo" }',
-    );
+  it("has no Grill this plan any more: the Plans section went with projects (#603)", async () => {
     const request = await asOwner(testWorker({ root, providers: [savingProvider([]).provider] }));
 
     const response = await postJson(request, "/api/workspaces/garage-gym/grill", { plan: PLAN });
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(404);
   });
 });

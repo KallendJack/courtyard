@@ -19,18 +19,9 @@ import {
 
 // Recent changes: a place's changes from the context folder's history, and Undo from them (ADR 0013).
 
-const CONTEXT = [
-  "# Garage gym",
-  "",
-  "## Facts",
-  "",
-  "- Single garage.",
-  "",
-  "## Plans",
-  "",
-  "## Ideas",
-  "",
-].join("\n");
+const CONTEXT = ["# Garage gym", "", "## Facts", "", "- Single garage.", "", "## Ideas", ""].join(
+  "\n",
+);
 
 let root: string;
 let contextDir: string;
@@ -78,7 +69,7 @@ const undoChange = (request: Requester, id: string) =>
   postJson(request, `/api/changes/${id}/undo`, {});
 
 const fact = (line: string) => ({ place: "workspace", section: "facts", line });
-const plan = (line: string) => ({ place: "workspace", section: "plans", line });
+const idea = (line: string) => ({ place: "workspace", section: "ideas", line });
 
 describe("Recent changes", () => {
   // Many real git changes in a row: slow on Windows while every test file runs at once.
@@ -90,7 +81,7 @@ describe("Recent changes", () => {
     const [padel, rowing] = saves;
     await postJson(request, `/api/sessions/${session.id}/saves/${padel}/edit`, {
       place: "workspace",
-      section: "plans",
+      section: "ideas",
       line: "Padel lessons, Tuesdays at 7pm.",
     });
     await postJson(request, `/api/sessions/${session.id}/saves/${rowing}/undo`, {});
@@ -117,7 +108,7 @@ describe("Recent changes", () => {
       {
         kind: "edit",
         removed: [fact("Padel lessons on Tuesdays.")],
-        added: [plan("Padel lessons, Tuesdays at 7pm.")],
+        added: [idea("Padel lessons, Tuesdays at 7pm.")],
         undo: "none",
       },
       {

@@ -32,6 +32,11 @@ const undoRefused = (c: Context, refusal: ChangeUndoRefusal) => {
         status: 409,
         error: "That project has changed since, so undoing this would lose the newer change.",
       });
+    case "move-changed-since":
+      return apiError(c, {
+        status: 409,
+        error: "Something this moved has changed since, so undoing it would lose the newer change.",
+      });
     case "session":
       return sessionError(c, refusal.error);
     case "storage":

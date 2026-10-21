@@ -128,7 +128,8 @@ type Verdict =
 const passed = (verdict: Verdict) =>
   verdict.kind === "judged" && verdict.checks.every((check) => check.miss === null);
 
-const sectionsOf = (section: Sections) => (typeof section === "string" ? [section] : section);
+const sectionsOf = <S extends string>(section: S | readonly S[]): readonly S[] =>
+  typeof section === "string" ? [section] : section;
 
 const anyOf = (word: string | readonly string[]) => (typeof word === "string" ? [word] : word);
 
@@ -148,7 +149,7 @@ const placesOf = (place: Places | undefined) =>
   place === undefined ? ["workspace"] : typeof place === "string" ? [place] : place;
 
 /** Sections, with the place unless it's only the workspace: "owner facts or plans". */
-const describeSections = (place: Places | undefined, section: Sections) => {
+const describeSections = (place: Places | undefined, section: Sections | PlacedLine["section"]) => {
   const places = placesOf(place);
   if (places.length === 1 && places[0] === "workspace") return sectionsOf(section).join(" or ");
   const named = places.map((p) => (p === "owner" ? "owner context" : p)).join(" or ");
@@ -203,7 +204,7 @@ const fullyMatches = (expected: ExpectedSave, save: Save) => {
   if (save.action === "remove") return false;
   return (
     placesOf(expected.place).includes(save.saved.place) &&
-    sectionsOf(expected.section).includes(save.saved.section) &&
+    sectionsOf(expected.section).some((one) => one === save.saved.section) &&
     hasWords(save.saved.line, {
       words: expected.words,
       without: expected.action === "add" ? expected.without : undefined,

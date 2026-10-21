@@ -13,17 +13,17 @@ import { Button, IconButton } from "@/components/buttons/button";
 import { FormError } from "@/components/forms/form-error";
 import { EmptyState, StatusPill } from "@/components/layout/notice";
 import { CARD, SectionTitle } from "@/components/layout/page";
-import { FactsPlansIdeas } from "@/components/workspace/context-lines";
+import { FactsAndIdeas } from "@/components/workspace/context-lines";
 import { SkillList } from "@/components/workspace/skill-list";
 import { useAction } from "@/hooks/use-action";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { startSession } from "../sessions/composer/messages.ts";
 import { GetToKnow } from "../sessions/notes/get-to-know.tsx";
-import { GrillablePlan } from "../sessions/notes/grill-plan.tsx";
 
 /**
- * What Courtyard knows (#300): the workspace's Facts, Plans and Ideas, each line with Fix (and each
- * plan with Grill this plan), what else its models read, and Recent changes; then its skills. Opened from the one row at the foot of Home.
+ * What Courtyard knows (#300): the workspace's Facts and Ideas, each line with Fix, the rest of its
+ * context file as written, what else its models read, and Recent changes; then its skills. Opened
+ * from the one row at the foot of Home.
  */
 export function WhatCourtyardKnows(props: {
   workspaceId: WorkspaceId;
@@ -42,7 +42,7 @@ export function WhatCourtyardKnows(props: {
           <EmptyState>Nothing yet.</EmptyState>
         ) : (
           <div className="mt-4 space-y-6">
-            <FactsPlansIdeas {...contextFile} />
+            <FactsAndIdeas {...contextFile} />
           </div>
         )}
       </section>
@@ -75,20 +75,14 @@ export function WhatCourtyardKnows(props: {
               </div>
             )}
             <div className="mt-4 space-y-6">
-              <FactsPlansIdeas
+              <FactsAndIdeas
                 {...contextFile}
-                line={(line, section) =>
-                  section === "plans" ? (
-                    <GrillablePlan workspaceId={workspaceId} plan={line}>
-                      <FixLine workspaceId={workspaceId} line={line} />
-                    </GrillablePlan>
-                  ) : (
-                    <div className="flex flex-wrap items-start gap-x-2.5">
-                      <span className="min-w-0 flex-1 py-0.5">{line}</span>
-                      <FixLine workspaceId={workspaceId} line={line} />
-                    </div>
-                  )
-                }
+                line={(line) => (
+                  <div className="flex flex-wrap items-start gap-x-2.5">
+                    <span className="min-w-0 flex-1 py-0.5">{line}</span>
+                    <FixLine workspaceId={workspaceId} line={line} />
+                  </div>
+                )}
               />
               {contextFile.other !== "" && (
                 <pre className="whitespace-pre-wrap font-sans text-sm text-muted-foreground">

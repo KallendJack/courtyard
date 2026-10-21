@@ -9,7 +9,7 @@ import { FormError } from "@/components/forms/form-error";
 import { CapsLabel } from "@/components/layout/caps-label";
 import { StatusPill } from "@/components/layout/notice";
 import { SectionTitle } from "@/components/layout/page";
-import { ContextLines, FactsPlansIdeas } from "@/components/workspace/context-lines";
+import { ContextLines, FactsAndIdeas } from "@/components/workspace/context-lines";
 import { useAction } from "@/hooks/use-action";
 import type { FromWorker } from "../../api/worker.ts";
 import { startOwnerContext } from "../../api/worker-calls.ts";
@@ -86,7 +86,7 @@ export function OwnerContextPanel(props: {
           )}
           <div className="mt-5 space-y-6">
             <CapsLabel tone="muted">About me</CapsLabel>
-            <FactsPlansIdeas {...ownerContext} />
+            <FactsAndIdeas {...ownerContext} />
             <ContextLines
               title="How to answer me"
               hint="Every workspace"

@@ -8,7 +8,8 @@ import { WorkspaceId } from "./workspace.ts";
 
 /**
  * The kinds of change Recent changes lists: a model's save, the owner's undo or edit, a hand edit,
- * a tidy, a change to a document or a Thing (ADR 0020), or to a project (#603).
+ * a tidy, a change to a document or a Thing (ADR 0020), or to a project, or a move the owner
+ * ticked (#603).
  */
 export const RecentChangeKind = z.enum([
   "save",
@@ -19,6 +20,7 @@ export const RecentChangeKind = z.enum([
   "document",
   "thing",
   "project",
+  "move",
 ]);
 export type RecentChangeKind = z.infer<typeof RecentChangeKind>;
 
@@ -51,6 +53,8 @@ export const RecentChange = z.object({
   thing: ThingChange.optional(),
   /** For a change to a project, and its undo: what it did to the project, with no lines (#603). */
   project: ProjectChange.optional(),
+  /** For a move the owner ticked in the move review (#603), and its undo: what moved where. */
+  move: z.object({ title: z.string() }).optional(),
   undo: RecentChangeUndo,
 });
 export type RecentChange = z.infer<typeof RecentChange>;

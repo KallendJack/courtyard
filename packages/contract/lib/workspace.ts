@@ -48,23 +48,37 @@ export const CONTEXT_FILE_LONG_CHARACTERS = 8000;
 /** A line longer than this is more than one fact (docs/ai-conduct.md, Context lines). */
 export const CONTEXT_LINE_MAX_CHARACTERS = 250;
 
-/** The three sections of a context file that hold its lines. */
-export const ContextSection = z.enum(["facts", "plans", "ideas"]);
+/**
+ * The sections of a context file that hold its lines: Facts and Ideas. Plans went with projects
+ * (#603, ADR 0032): what the owner means to do is a project's steps now.
+ */
+export const ContextSection = z.enum(["facts", "ideas"]);
 export type ContextSection = z.infer<typeof ContextSection>;
 
+/**
+ * The sections a line was ever saved in: those, and Plans, which held lines until projects did
+ * (#603), so saves recorded before then still read, and a Plans line still in a file can be moved.
+ */
+export const SavedSection = z.enum(["facts", "plans", "ideas"]);
+export type SavedSection = z.infer<typeof SavedSection>;
+
 /** Each section's name, as its heading and the app write it. */
-export const CONTEXT_SECTION_NAMES: Record<ContextSection, string> = {
+export const CONTEXT_SECTION_NAMES: Record<SavedSection, string> = {
   facts: "Facts",
   plans: "Plans",
   ideas: "Ideas",
 };
 
 /**
- * The sections of the owner context that hold lines: About me's Facts, Plans and Ideas, and How
- * to answer me (`answers`), one preference per line (ADR 0010).
+ * The sections of the owner context that hold lines: About me's Facts and Ideas, and How to answer
+ * me (`answers`), one preference per line (ADR 0010).
  */
-export const OwnerSection = z.enum(["facts", "plans", "ideas", "answers"]);
+export const OwnerSection = z.enum(["facts", "ideas", "answers"]);
 export type OwnerSection = z.infer<typeof OwnerSection>;
+
+/** The sections of the owner context a line was ever saved in: those, and About me's Plans (#603). */
+export const SavedOwnerSection = z.enum(["facts", "plans", "ideas", "answers"]);
+export type SavedOwnerSection = z.infer<typeof SavedOwnerSection>;
 
 /** One line of a context file, as the owner writes it in the app. */
 export const ContextLine = z
@@ -101,15 +115,14 @@ export const NewWorkspace = z.object({
 });
 export type NewWorkspace = z.infer<typeof NewWorkspace>;
 
-/** A context file, read into its sections. Each fact, plan or idea is one line. */
+/** A context file, read into its sections. Each fact or idea is one line. */
 export const ContextFile = z.object({
   title: z.string().optional(),
   /** Text above the first section. */
   intro: z.string(),
   facts: z.array(z.string()),
-  plans: z.array(z.string()),
   ideas: z.array(z.string()),
-  /** Any other sections, exactly as written. */
+  /** Any other sections, exactly as written: a Plans section from before projects among them. */
   other: z.string(),
   /** The whole file's length, as sent to a model. */
   characters: z.number().int().nonnegative(),
@@ -122,13 +135,12 @@ export type ContextFile = z.infer<typeof ContextFile>;
  */
 export const OWNER_CONTEXT_LONG_CHARACTERS = 2000;
 
-/** The owner context (`OWNER.md`), read into its sections. Each line is one fact, plan, idea or preference. */
+/** The owner context (`OWNER.md`), read into its sections. Each line is one fact, idea or preference. */
 export const OwnerContext = z.object({
   /** Text above About me. */
   intro: z.string(),
   /** About me. */
   facts: z.array(z.string()),
-  plans: z.array(z.string()),
   ideas: z.array(z.string()),
   /** How to answer me. */
   answers: z.array(z.string()),
@@ -138,15 +150,14 @@ export const OwnerContext = z.object({
 export type OwnerContext = z.infer<typeof OwnerContext>;
 
 /**
- * Whether a context file or the owner context has any lines yet: facts, plans, ideas or (in the
- * owner context) preferences. Only lines count: an untouched starter has none.
+ * Whether a context file or the owner context has any lines yet: facts, ideas or (in the owner
+ * context) preferences. Only lines count: an untouched starter has none.
  */
 export const hasLines = (read: {
   readonly facts: readonly string[];
-  readonly plans: readonly string[];
   readonly ideas: readonly string[];
   readonly answers?: readonly string[];
-}) => [read.facts, read.plans, read.ideas, read.answers ?? []].some((lines) => lines.length > 0);
+}) => [read.facts, read.ideas, read.answers ?? []].some((lines) => lines.length > 0);
 
 export const OwnerContextDetail = z.object({
   /** Absent until the owner starts one. */
@@ -157,13 +168,6 @@ export type OwnerContextDetail = z.infer<typeof OwnerContextDetail>;
 /** What of the owner context a workspace's models read: all of it, How to answer me, or nothing. */
 export const OwnerContextShared = z.enum(["all", "answers", "none"]);
 export type OwnerContextShared = z.infer<typeof OwnerContextShared>;
-
-/** A plan that names the day it's due (#300), and that day, as `2026-10-18`. */
-export const DuePlan = z.object({
-  plan: z.string(),
-  due: z.iso.date(),
-});
-export type DuePlan = z.infer<typeof DuePlan>;
 
 export const WorkspaceDetail = z.object({
   workspace: WorkspaceSummary,
@@ -178,10 +182,5 @@ export const WorkspaceDetail = z.object({
    */
   description: z.string().optional(),
   ownerContextShared: OwnerContextShared,
-  /**
-   * A planning workspace's plans that name a day from today to 7 days on, soonest first, for its
-   * Home's Next up (#300). Absent in a code workspace.
-   */
-  duePlans: z.array(DuePlan).optional(),
 });
 export type WorkspaceDetail = z.infer<typeof WorkspaceDetail>;

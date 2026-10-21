@@ -80,11 +80,11 @@ sessions ─► prompts ─► providers ─► Claude ─► answer ─► sour
 ### 🗂️ What Courtyard knows
 
 **Worker features:** `context-folder` · `context-file` · `owner-context` · `workspaces` · `things` ·
-`projects` · `status-line` · `documents` · `floor-plans` · `planning-files` · `planning-home` · `changes` ·
-`attachments`
+`projects` · `move-review` · `status-line` · `documents` · `floor-plans` · `planning-files` · `planning-home` ·
+`changes` · `attachments`
 
-**Web features:** `home` · `planning-home` · `new-workspace` · `things` · `projects` · `status-line` ·
-`documents` · `changes` · `settings`
+**Web features:** `home` · `planning-home` · `new-workspace` · `things` · `projects` · `move-review` ·
+`status-line` · `documents` · `changes` · `settings`
 
 You say "swapped the chain today":
 
@@ -98,6 +98,8 @@ the chain  a time            changed                   Undo
 - **`floor-plans`** keeps each room's last floor plan, drawn in an answer, as a document Home shows.
 - **`projects`** keeps what you carry over days (the garage into an office): its steps (you can do this, needs a
   pro, decided), its decisions and what's next, which Home lists with Carry on.
+- **`move-review`** proposes, once, where a planning workspace's guides, Plans lines and wanted Things go now
+  (projects, parts, the archive), which the owner ticks on Home, each move with Undo.
 - **`status-line`** builds the line under a code workspace's name, ✓ just done · ● now · ○ next, from its pull
   requests and issues.
 

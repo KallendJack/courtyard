@@ -267,6 +267,26 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
     );
   }
 
+  // A move the owner ticked in the move review (#603), by what moved where.
+  if (change.move !== undefined) {
+    return (
+      <NoteRow
+        icon={muted ? <Undo2 /> : <ListChecks />}
+        muted={muted}
+        tall
+        actions={actions}
+        error={undo.error}
+      >
+        <NoteWords label={muted ? "Undone" : "Moved"} line={change.move.title} muted={muted} />
+        <Meta
+          workspace={workspace}
+          change={change}
+          note={muted ? "moved, then undone" : undefined}
+        />
+      </NoteRow>
+    );
+  }
+
   if (change.kind === "hand-edit" || change.kind === "tidy") {
     const { pairs, gone } = pairedLines(change);
     const tidy = change.kind === "tidy";

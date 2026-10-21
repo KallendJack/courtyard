@@ -561,20 +561,10 @@ export const withoutStarterHint = (markdown: string) => {
 
 /**
  * A new workspace's context file: its title, its intro line (what it's for, when the owner said;
- * none otherwise), then empty Facts, Plans and Ideas (docs/ai-conduct.md, "Starter context file").
+ * none otherwise), then empty Facts and Ideas (docs/ai-conduct.md, "Starter context file").
  */
 export const starterContextFile = (name: string, intro?: string) =>
-  [
-    `# ${name}`,
-    "",
-    ...(intro ? [intro, ""] : []),
-    "## Facts",
-    "",
-    "## Plans",
-    "",
-    "## Ideas",
-    "",
-  ].join("\n");
+  [`# ${name}`, "", ...(intro ? [intro, ""] : []), "## Facts", "", "## Ideas", ""].join("\n");
 
 /**
  * Writes a new workspace's files into its empty folder: a planning workspace's context file and

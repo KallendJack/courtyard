@@ -39,14 +39,14 @@ test("Edit changes a saved line's wording and section where it is", async ({ pag
     .getByRole("textbox", { name: "Saved line" })
     .fill("Gym on Monday and Thursday evenings.");
   // Clicked as a person would: the radio itself is hidden behind its pill.
-  await notes.getByRole("group", { name: "Section" }).getByText("Plans").click();
+  await notes.getByRole("group", { name: "Section" }).getByText("Ideas").click();
   await notes.getByRole("button", { name: "Save" }).click();
 
-  await expect(notes).toContainText("Saved to Plans · edited");
+  await expect(notes).toContainText("Saved to Ideas · edited");
   await expect(notes).toContainText("Gym on Monday and Thursday evenings.");
   await page.getByRole("link", { name: `Back to ${name}` }).click();
   await openWhatCourtyardKnows(page);
-  await expect(page.getByRole("region", { name: "Plans" })).toContainText(
+  await expect(page.getByRole("region", { name: "Ideas" })).toContainText(
     "Gym on Monday and Thursday evenings.",
   );
   await expect(page.getByRole("region", { name: "Facts" })).toContainText("Nothing yet.");

@@ -44,7 +44,6 @@ import { changeRoutes } from "./features/changes/routes.ts";
 import { allowsOf, createCode, namedAs } from "./features/code/index.ts";
 import { createConnections, makePaperFile } from "./features/connections/index.ts";
 import { connectionRoutes } from "./features/connections/routes.ts";
-import { plansDue } from "./features/context-file/index.ts";
 import {
   createContextFolder,
   WORKSPACES_ARRANGED,
@@ -70,6 +69,8 @@ import {
 } from "./features/matt-skills/index.ts";
 import { createModelDefaults } from "./features/model-defaults/index.ts";
 import { modelDefaultRoutes } from "./features/model-defaults/routes.ts";
+import { createMoveReviews } from "./features/move-review/index.ts";
+import { moveReviewRoutes } from "./features/move-review/routes.ts";
 import { createNextUp } from "./features/next-up/index.ts";
 import { nextUpRoutes } from "./features/next-up/routes.ts";
 import { createNotifications, type SendPush } from "./features/notifications/index.ts";
@@ -221,6 +222,9 @@ const READ_USAGE_EVERY_MS = 15 * 60 * 1000;
 
 /** How often planning sessions are looked at for one quiet long enough to leave its note (#601). */
 const WRITE_NOTES_EVERY_MS = 5 * 60 * 1000;
+
+/** How often the workspaces with no move review yet are asked again for one (#603). */
+const WRITE_REVIEWS_EVERY_MS = 30 * 60 * 1000;
 
 /** Runs a job now and every `everyMs`, never overlapping itself. */
 export type Repeat = (everyMs: number, job: () => Promise<void>) => void;
@@ -560,8 +564,18 @@ export const createWorker = (options: {
   repeat(READ_USAGE_EVERY_MS, () => usage.read());
   // Each planning session quiet for half an hour leaves its note for the next ones (#601).
   repeat(WRITE_NOTES_EVERY_MS, sessions.writeQuietNotes);
+  // Each planning workspace's move review, once (#603): as it starts, then now and then.
+  const reviews = createMoveReviews({
+    contextDir,
+    dataDir,
+    contextFolder,
+    providers,
+    now,
+    background,
+  });
+  repeat(WRITE_REVIEWS_EVERY_MS, reviews.writeDue);
 
-  /** A workspace's page's detail: its context file, what of the owner context it reads, and its plans due. */
+  /** A workspace's page's detail: its context file, and what of the owner context it reads. */
   const workspaceDetail = async (id: string): Promise<Result<WorkspaceDetail, WorkspaceError>> => {
     const [workspace, ownerContext] = await Promise.all([
       getWorkspace(contextDir, id),
@@ -574,22 +588,11 @@ export const createWorker = (options: {
       ownerContext: ownerContext.value,
     });
     const { description, contextFile, summary } = workspace.value;
-    // Today on the worker machine's calendar, which is the owner's.
-    const today = new Date(now());
     return ok({
       workspace: summary,
       contextFile,
       ...(description === null ? {} : { description }),
       ownerContextShared: shared,
-      ...(summary.mode === "planning"
-        ? {
-            duePlans: plansDue(contextFile?.plans ?? [], {
-              year: today.getFullYear(),
-              month: today.getMonth(),
-              day: today.getDate(),
-            }),
-          }
-        : {}),
     });
   };
 
@@ -618,8 +621,9 @@ export const createWorker = (options: {
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
   api.route("/", documentRoutes({ contextDir, contextFolder }));
   api.route("/", thingRoutes({ contextDir, contextFolder, now }));
-  api.route("/", planningHomeRoutes({ contextDir }));
+  api.route("/", planningHomeRoutes({ contextDir, reviews }));
   api.route("/", projectRoutes({ contextDir, contextFolder, now }));
+  api.route("/", moveReviewRoutes(reviews));
   api.route("/", statusLineRoutes(statusLines));
   api.route(
     "/",
