@@ -216,6 +216,8 @@ export type FoundPullRequest = {
   };
   /** It conflicts with its base, so GitHub can't merge it. */
   readonly conflicts: boolean;
+  /** It's a draft, not yet ready for review (#653). */
+  readonly draft: boolean;
   /** The branch it merges from (#278). */
   readonly branch: string;
   /** It comes from a fork, so its branch isn't in the repository itself. */
@@ -405,6 +407,7 @@ const Pull = z.object({
   changed_files: z.number().int().nonnegative(),
   /** `null` while GitHub is still working it out. */
   mergeable: z.boolean().nullable(),
+  draft: z.boolean(),
 });
 const PullFiles = z.array(
   z.object({
@@ -868,6 +871,7 @@ export const createGitHubApi = (options: { clientId: string; fetch?: typeof fetc
         files: pull.changed_files,
       },
       conflicts: pull.mergeable === false,
+      draft: pull.draft,
       branch: pull.head.ref,
       fork: pull.head.repo?.full_name !== repo,
       author: pull.user.login,

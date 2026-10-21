@@ -155,6 +155,7 @@ describe("a code session's pull request", () => {
       head: "c0ffee1",
       changes,
       conflicts: false,
+      draft: false,
     };
     expect(pullRequestsIn(await eventsOf(id))).toEqual([
       { ...pullRequest, checks: { kind: "none" } },
@@ -757,6 +758,30 @@ describe("the PRs list (#278)", () => {
     expect(waiting(ready)).toBe("merge");
     expect(waiting(conflicting)).toBe("conflict");
     expect(waiting(running)).toBe("nothing");
+  });
+
+  it("waits on the owner for nothing while it's a draft, whatever its checks, and for a merge once it's ready (#653)", async () => {
+    const opened = (branch: string) =>
+      github.openPullRequest({ repo: onGitHub, branch, head: "c0ffee1", author: "someone-else" });
+    const passing = opened("parked-adr");
+    github.setChecks(passing, [{ name: "e2e", outcome: "passed" }]);
+    const failing = opened("parked-failing");
+    github.setChecks(failing, [{ name: "e2e", outcome: "failed" }]);
+    const conflicting = opened("parked-conflicting");
+    github.setConflicts(conflicting, true);
+    for (const number of [passing, failing, conflicting]) github.setDraft(number, true);
+
+    const waiting = async (number: number) =>
+      (await openPullRequests()).find((open) => open.pullRequest.number === number);
+    for (const number of [passing, failing, conflicting]) {
+      expect(await waiting(number)).toMatchObject({
+        pullRequest: { draft: true },
+        waiting: "nothing",
+      });
+    }
+
+    github.setDraft(passing, false);
+    expect((await waiting(passing))?.waiting).toBe("merge");
   });
 
   it("doesn't wait on the owner for checks the session is fixing, and does once it's done", async () => {

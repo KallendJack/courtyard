@@ -41,6 +41,11 @@ export const PullRequest = z.object({
    * left out in ones recorded before.
    */
   conflicts: z.boolean().optional(),
+  /**
+   * A draft on GitHub (#653): parked by whoever opened it, so it waits on the owner for nothing;
+   * left out in ones recorded before.
+   */
+  draft: z.boolean().optional(),
 });
 export type PullRequest = z.infer<typeof PullRequest>;
 

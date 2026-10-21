@@ -367,6 +367,8 @@ const samePullRequest = (now: PullRequest, was: PullRequest | undefined) =>
   now.head === was.head &&
   // One recorded before conflicts were (#278) didn't conflict.
   (now.conflicts ?? false) === (was.conflicts ?? false) &&
+  // One recorded before drafts were (#653) wasn't one.
+  (now.draft ?? false) === (was.draft ?? false) &&
   JSON.stringify(now.changes) === JSON.stringify(was.changes) &&
   JSON.stringify(now.checks) === JSON.stringify(was.checks);
 
