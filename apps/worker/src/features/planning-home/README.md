@@ -18,10 +18,11 @@ pedals saying DMR V8, and the bottle cage under it, with no place on the drawing
 
 ## How it works
 
-- **The drawn bike** (`subjectOf`): each Thing that isn't a part has its parts placed on the mountain bike's drawing
-  by the words in their names (seatpost or dropper, saddle, grips, fork, brakes, drivetrain or chain or cassette,
-  pedals, a rear or back tyre, then any tyre for the front), in list order, one part to a place; a part with no place,
-  or whose place is taken, goes under it. A Thing with two or more parts placed is drawn; of several, the one with the
+- **The drawn bike** (`subjectOf`): each Thing that isn't a part has its fitted parts (any not wanted) placed on the
+  mountain bike's drawing. A part named just for a place ("Pedals") has it first; then the rest by the words in their
+  names (seatpost or dropper, saddle, grips, fork, brakes, drivetrain or chain or cassette, pedals, a rear or back
+  tyre, then any tyre for the front), in list order, one part to a place; a part with no place, or whose place is
+  taken, goes under it. A wanted part isn't on the bike, so it's neither drawn nor listed (#603). A Thing with two or more parts placed is drawn; of several, the one with the
   most. Each placed part comes with its upcoming replacement's name (#602).
 - **A space's floor plan:** with no drawn Thing, the newest document that is a room's plan and nothing else (#257).
 - The places themselves (`BIKE_PLACES`) are the contract's; where each sits on the drawing is the web app's.

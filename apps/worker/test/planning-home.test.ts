@@ -113,6 +113,52 @@ describe("a planning workspace's Home (#603)", () => {
     });
   });
 
+  it("draws only fitted parts: a wanted one is neither on the bike nor under it (the owner's pedals, #603)", async () => {
+    await thing("hardtail", "name: Boardman MHT 8.6", "status: have");
+    await part("saddle", "Saddle");
+    // As the owner's real files have them: the wanted DMR V8s beside the fitted Wellgo flats.
+    await thing(
+      "dmr-v8-pedals",
+      "name: DMR V8 pedals",
+      "status: want",
+      "brand: DMR V8",
+      "price: about £30",
+      "part of: hardtail",
+    );
+    await part(
+      "pedals",
+      "Pedals",
+      "brand: Wellgo alloy flats",
+      "condition: Pins short and domed; slippy",
+      "where: On the bike",
+    );
+    const request = await asOwner(testWorker({ root }));
+
+    expect((await home(request)).subject).toMatchObject({
+      placed: [
+        { place: "saddle", thing: "saddle", name: "Saddle" },
+        { place: "pedals", thing: "pedals", name: "Pedals" },
+      ],
+      unplaced: [],
+    });
+  });
+
+  it("gives a place two fitted parts fit to the one named just for it, the other under the bike", async () => {
+    await thing("hardtail", "name: Boardman MHT 8.6", "status: have");
+    await part("saddle", "Saddle");
+    await part("clipless-pedals", "Clipless pedals");
+    await part("pedals", "Pedals");
+    const request = await asOwner(testWorker({ root }));
+
+    expect((await home(request)).subject).toMatchObject({
+      placed: [
+        { place: "saddle", name: "Saddle" },
+        { place: "pedals", name: "Pedals" },
+      ],
+      unplaced: [{ name: "Clipless pedals" }],
+    });
+  });
+
   it("draws nothing for a Thing with only one part that fits, nor for a Thing whose parts don't", async () => {
     await thing("rack", "name: Squat rack", "status: have");
     await thing("bar", "name: Pull-up bar", "status: have", "part of: rack");
