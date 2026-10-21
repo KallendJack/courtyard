@@ -216,9 +216,26 @@ for (const [screen, viewport] of [
   });
 }
 
-// With no builders (#635), the board's one quiet line sits under its header's two lines, inside the
+/** Where a locator is drawn, top to bottom. */
+const span = async (of: Locator) => {
+  const drawn = await of.boundingBox();
+  if (drawn === null) throw new Error("not drawn");
+  return { top: drawn.y, bottom: drawn.y + drawn.height };
+};
+
+/** Running with nothing to build: no builders, nothing next. */
+const IDLE = { state: "running" } as const;
+/** Paused with no builders, two merges to tidy and Merge in order stopped (#591, #423). */
+const STOPPED = {
+  state: "paused",
+  toTidy: 2,
+  merge: { kind: "stopped", pullRequest: 612, why: "its e2e check failed" },
+} as const;
+
+// With no builders (#635), the board's one quiet line sits under its reasons line, inside the
 // block, and nothing moves or overlaps: on the Fold, on the Fold with less room (the browser's bars,
-// a bigger text size), and on the cover screen.
+// a bigger text size), and on the cover screen. With nothing building or for review, it has no
+// counts (#646).
 for (const [screen, viewport, name] of [
   ["the unfolded Fold", { width: 950, height: 712 }, "tablet-builders-board-empty"],
   [
@@ -233,11 +250,7 @@ for (const [screen, viewport, name] of [
   }) => {
     await page.setViewportSize(viewport);
     await given(page, {
-      lead: {
-        state: "paused",
-        toTidy: 2,
-        merge: { kind: "stopped", pullRequest: 612, why: "its e2e check failed" },
-      },
+      lead: IDLE,
       sessions: [],
       issues: [issue(45, "Tidy, one shared piece", false)],
     });
@@ -245,18 +258,14 @@ for (const [screen, viewport, name] of [
     const shifts = await shiftsOn(page, HOME, () => expect(empty).toBeVisible());
     expect(shifts.reduce((sum, shift) => sum + shift.value, 0)).toBeLessThan(0.001);
 
-    const reasons = board(page).getByText(/^Paused · builders carry on/);
-    await expect(reasons).toContainText("Merge in order stopped at #612");
-    const box = async (of: Locator) => {
-      const drawn = await of.boundingBox();
-      if (drawn === null) throw new Error("not drawn");
-      return { top: drawn.y, bottom: drawn.y + drawn.height };
-    };
-    const block = await box(board(page));
-    const line = await box(empty);
-    const header = await box(reasons);
-    const needs = await box(page.getByRole("region", { name: "Needs you" }));
-    const main = await box(page.getByRole("region", { name: "Main" }));
+    const reasons = board(page).getByText("Runs all night", { exact: true });
+    await expect(reasons).toBeVisible();
+    await expect(board(page)).not.toContainText("building");
+    const block = await span(board(page));
+    const line = await span(empty);
+    const header = await span(reasons);
+    const needs = await span(page.getByRole("region", { name: "Needs you" }));
+    const main = await span(page.getByRole("region", { name: "Main" }));
     await shot(page, name);
     expect(line.top).toBeGreaterThanOrEqual(header.bottom);
     // Inside the block's padding, not on or past its edge.
@@ -264,6 +273,160 @@ for (const [screen, viewport, name] of [
     // Needs you, under it, still ends above Main.
     expect(needs.top).toBeGreaterThanOrEqual(block.bottom);
     expect(needs.bottom).toBeLessThanOrEqual(main.top);
+  });
+}
+
+test("paused with no builders, nothing runs: the board says so in one quiet line, with Run", async ({
+  page,
+}) => {
+  await given(page, {
+    lead: STOPPED,
+    sessions: [],
+    issues: [issue(45, "Tidy, one shared piece", false)],
+  });
+  await page.goto(HOME);
+
+  const line = board(page).getByText(/^Not running · Run starts the next issue/);
+  await expect(line).toHaveText(
+    "Not running · Run starts the next issue · 2 merges to tidy · Merge in order stopped at #612: its e2e check failed",
+  );
+  await expect(line).toHaveClass(/text-muted-foreground/);
+  await expect(board(page).getByRole("button", { name: "Run" })).toBeVisible();
+  // No counts, no "builders carry on" with none, and no second line saying there are none.
+  await expect(board(page)).not.toContainText("building");
+  await expect(board(page)).not.toContainText("carry on");
+  await expect(board(page)).not.toContainText("No builders right now");
+  await shot(page, "tablet-builders-board-not-running");
+});
+
+/** Two pull requests a Claude Code helper opened, checks passed: two rows in Needs you. */
+const READY_PULLS = [645, 644].map((number, at) => ({
+  pullRequest: {
+    number,
+    title: `ADR ${number}: a rule of the house`,
+    url: `https://github.com/octo-owner/toolshed/pull/${number}`,
+    state: "open",
+    head: `c0ffee${at}`,
+    checks: { kind: "passed" },
+    changes: { additions: 3, deletions: 1, files: 1 },
+    conflicts: false,
+  },
+  branch: `helper-${number}`,
+  from: { kind: "claude-code" },
+  waiting: "merge",
+}));
+
+/** Both providers past 80%, as the worker warns them (#66): Fake at its limit, Fake two at 83%. */
+const bothNearTheirLimits = () => {
+  const resetAt = from(150);
+  const warning = (provider: string, label: string, window: string, used: number) => ({
+    provider,
+    label,
+    window,
+    used,
+    resetAt,
+  });
+  return {
+    providers: [],
+    warnings: [
+      warning("fake-two", "Fake two", "weekly", 83),
+      warning("fake", "Fake", "five-hour", 100),
+    ],
+  };
+};
+
+// No block is ever drawn over another, at any size (#646): the owner's case, a Fold with the
+// browser's bars (the Builders board empty and paused, Needs you with two rows, both providers
+// near their limits, Main), and shorter ones; then the Fold and the cover screen. A block too short
+// for its rows scrolls them inside itself; where there's room, the board's last line sits whole
+// inside it (#635).
+for (const [screen, viewport, lead, roomy, name] of [
+  ["the owner's Fold", { width: 950, height: 662 }, STOPPED, true, "spill-tablet-owner"],
+  ["the owner's Fold, running", { width: 950, height: 662 }, IDLE, true, "spill-tablet-owner-idle"],
+  ["the Fold with less room", { width: 950, height: 556 }, STOPPED, false, "spill-tablet-short"],
+  [
+    "the Fold with less room, running",
+    { width: 950, height: 556 },
+    IDLE,
+    false,
+    "spill-tablet-idle",
+  ],
+  [
+    "the Fold with even less room",
+    { width: 950, height: 480 },
+    IDLE,
+    false,
+    "spill-tablet-shorter",
+  ],
+  ["the unfolded Fold", { width: 950, height: 712 }, IDLE, true, "spill-tablet-fold"],
+  ["the cover screen", { width: 400, height: 900 }, STOPPED, true, "spill-cover"],
+] as const) {
+  test(`with both providers near their limits, nothing is drawn over another, on ${screen}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await given(page, {
+      lead,
+      sessions: [],
+      issues: [issue(45, "Tidy, one shared piece"), issue(46, "Pin to Home")],
+    });
+    await page.route(`**${API}/pull-requests`, (route) =>
+      route.fulfill({ json: { pullRequests: READY_PULLS } }),
+    );
+    const usage = bothNearTheirLimits();
+    await page.route("**/api/usage**", (route) => route.fulfill({ json: usage }));
+    // The status line under the name, as on the owner's screen: it takes some of the blocks' room.
+    await page.route(`**${API}/status-line`, (route) =>
+      route.fulfill({
+        json: { done: { text: "Notifications" }, now: null, next: { text: "New workspace" } },
+      }),
+    );
+    await page.goto(HOME);
+
+    const needs = page.getByRole("region", { name: "Needs you" });
+    const usageLine = page.getByRole("region", { name: "Usage" });
+    const main = page.getByRole("region", { name: "Main" });
+    const last = board(page).getByText(
+      lead.state === "paused" ? /^Not running/ : "No builders right now",
+    );
+    await expect(needs.getByRole("listitem")).toHaveCount(2);
+    // One usage row, whatever the providers (#646): the fullest first, with when it's back.
+    await expect(usageLine).toHaveCount(1);
+    await expect(usageLine).toContainText(
+      /^UsageFake at its limit · back .+· Fake two 83% this week$/i,
+    );
+    await expect(main).toBeVisible();
+    await expect(last).toBeVisible();
+    await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
+    // The frame, with the message box that takes the foot of the page, comes in after the page.
+    await expect(page.getByRole("button", { name: /^Model: / })).toBeEnabled();
+    await shot(page, name);
+
+    // Each block in the column ends before the next begins, in the page's order.
+    const order = [board(page), needs, usageLine, main];
+    const spans = await Promise.all(order.map(span));
+    for (const [at, below] of spans.slice(1).entries()) {
+      expect(below.top, `block ${at + 1} under block ${at}`).toBeGreaterThanOrEqual(
+        spans[at]?.bottom ?? Number.POSITIVE_INFINITY,
+      );
+    }
+    // What's drawn near each block's top, at its middle and near its foot is its own: nothing of
+    // another block is drawn over it.
+    for (const block of order) {
+      await block.scrollIntoViewIfNeeded();
+      const ownsItsArea = await block.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        return [box.top + 4, box.top + box.height / 2, box.bottom - 4].every((y) => {
+          const drawn = document.elementFromPoint(box.left + box.width / 2, y);
+          return drawn !== null && element.contains(drawn);
+        });
+      });
+      expect(ownsItsArea, (await block.getAttribute("aria-label")) ?? "a block").toBe(true);
+    }
+    // With room, the board's last line sits whole inside it, clear of its edge (#635).
+    if (roomy) {
+      expect((await span(last)).bottom).toBeLessThanOrEqual((await span(board(page))).bottom - 14);
+    }
   });
 }
 

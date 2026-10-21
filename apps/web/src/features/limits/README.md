@@ -23,7 +23,8 @@ above its models.
 - **The warning above the Reply box** (`usage-warning.tsx`), for the provider the box's model is on: Not now puts it
   off on every screen until the window resets (or passes 95%); Switch changes the box's model to the other
   provider's default, so the next message goes there. No Switch when no other provider is connected with room.
-- **Home's usage lines** (`usage-lines.tsx`): nothing while there's room; one gold line per provider from 80%,
-  fullest first, at most two, each opening the Model sheet.
+- **Home's usage line** (`usage-lines.tsx`): nothing while there's room; from 80%, one gold row whatever the
+  providers (#646), opening the Model sheet: the fullest first, in bold with when it's back ("Codex at its limit ·
+  back 13:50"), then the others, quiet ("· Claude 83% this week"), cut first when the row is short.
 - `api.ts` holds the calls and the one kept answer every screen shares (`useUsage`): the sheet asks the worker to read
   afresh while it's open; the others show what the worker last read. `words.ts` says it all in words.

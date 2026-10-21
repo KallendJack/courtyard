@@ -3,51 +3,50 @@ import { OpenRow } from "@/components/code/build-stages";
 import { useDock } from "@/components/frame/handheld";
 import { CapsLabel } from "@/components/layout/caps-label";
 import { useUsage } from "./api.ts";
-import { resetsWords, warningWords } from "./words.ts";
+import { usageLineWords } from "./words.ts";
 
 /**
- * The warnings before a limit on a code workspace's Home (#66; Paper, "Tablet · Code Home: usage
- * line (#66)"), in the foot rows above Main: nothing while there's room; from 80%, one gold line
- * per provider, fullest first, at most two, each opening the Model sheet with its meters.
+ * The warnings before a limit on a code workspace's Home (#66; Paper, "Tablet · Code Home: one
+ * usage line (#646)"), in the foot rows above Main: nothing while there's room; from 80%, one gold
+ * row whatever the providers, opening the Model sheet with their meters. The fullest leads, in
+ * bold with when it's back; the others follow, quiet, and are cut first when the row is short.
  */
 export function UsageLines() {
   const usage = useUsage();
   const dock = useDock();
-  const warnings = usage?.warnings ?? [];
-  if (warnings.length === 0) return null;
+  const warnings = [...(usage?.warnings ?? [])].sort((one, other) => other.used - one.used);
+  const [first, ...others] = warnings;
+  if (first === undefined) return null;
+  const lead = usageLineWords(first, { reset: true });
+  const rest = others.map((warning) => `· ${usageLineWords(warning, { reset: false })}`).join(" ");
   return (
-    <div className="flex flex-col gap-2">
-      {warnings.map((warning) => {
-        const words = warningWords(warning);
-        const resets = resetsWords(warning.resetAt);
-        return (
-          <section
-            key={warning.provider}
-            aria-label="Usage"
-            className="flex items-center rounded-bubble border border-warning/25 bg-surface py-3 pr-2.5 pl-3.5"
-          >
-            <OpenRow
-              label={`${words}${resets === undefined ? "" : `, ${resets}`}: open the Model sheet`}
-              onOpen={() => dock?.chooseModel()}
-            >
-              <CapsLabel tone="warning" inline className="shrink-0">
-                Usage
-              </CapsLabel>
-              <span className="min-w-0 truncate text-meta font-bold text-foreground">{words}</span>
-              {resets !== undefined && (
-                <span className="min-w-0 flex-1 truncate text-meta font-medium text-warning">
-                  {resets}
-                </span>
-              )}
-              <ChevronRight
-                aria-hidden
-                strokeWidth={1.6}
-                className="ml-auto size-4 shrink-0 text-muted-foreground"
-              />
-            </OpenRow>
-          </section>
-        );
-      })}
-    </div>
+    <section
+      aria-label="Usage"
+      className="flex items-center rounded-bubble border border-warning/25 bg-surface py-3 pr-2.5 pl-3.5"
+    >
+      <OpenRow
+        label={`${[lead, rest].join(" ").trim()}: open the Model sheet`}
+        onOpen={() => dock?.chooseModel()}
+      >
+        <CapsLabel tone="warning" inline className="shrink-0">
+          Usage
+        </CapsLabel>
+        <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+          <span className="max-w-full shrink-0 truncate text-meta font-bold text-foreground">
+            {lead}
+          </span>
+          {rest !== "" && (
+            <span className="min-w-0 truncate text-meta font-medium text-muted-foreground">
+              {rest}
+            </span>
+          )}
+        </span>
+        <ChevronRight
+          aria-hidden
+          strokeWidth={1.6}
+          className="ml-auto size-4 shrink-0 text-muted-foreground"
+        />
+      </OpenRow>
+    </section>
   );
 }
