@@ -222,7 +222,7 @@ const OFFICE = {
 };
 
 test("a one-room plan at a developer's size shows its overall size (#668)", async ({ page }) => {
-  const plan = await drawn(page, `Office ${Date.now()}`, OFFICE);
+  const plan = await drawn(page, `Developer size ${Date.now()}`, OFFICE);
   await expect(plan).toContainText("Plan · Office · 3.3 × 2.7 m");
   await expect(
     plan.getByRole("group", { name: /^Office, 2\.7 m wide and 3\.3 m deep/ }),
