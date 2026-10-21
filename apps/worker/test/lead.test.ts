@@ -14,7 +14,6 @@ import { err, ok } from "../src/lib/result.ts";
 import { createFakeProvider } from "../src/providers/fake.ts";
 import type { Provider } from "../src/providers/index.ts";
 import {
-  asOwner,
   CODING_MODEL,
   codeRepo,
   codeWorkspace,
@@ -32,8 +31,10 @@ import {
   quotedInGuide,
   type Requester,
   removeTestFolder,
+  requesterFor,
   SAVING_MODEL,
   savingProvider,
+  setUpOwner,
   testWorker,
   updateWaiting,
 } from "./testing.ts";
@@ -79,13 +80,18 @@ const signedInWith = async (
     env?: Record<string, string>;
     now?: () => number;
   } = {},
-): Promise<{ github: FakeGitHub; request: Requester }> => {
+): Promise<{
+  github: FakeGitHub;
+  request: Requester;
+  /** Starts the worker again on the same folders, as a restart does: the owner's way in to it. */
+  restart: () => Requester;
+}> => {
   await codeWorkspace(root, "side-project", repo, { name: "Side project" });
   const github = createFakeGitHub({
     issues: { [onGitHub]: issues },
     milestones: { [onGitHub]: more.milestones ?? ORDER },
   });
-  const request = await asOwner(
+  const worker = () =>
     testWorker({
       root,
       github: github.api,
@@ -96,14 +102,20 @@ const signedInWith = async (
       repeat: (_everyMs, job) => {
         jobs.push(job);
       },
-    }),
-  );
+    });
+  const app = worker();
+  const cookie = await setUpOwner(app);
+  const request = requesterFor(app, cookie);
   await postJson(request, "/api/github/sign-in", {});
   github.approve();
   await expect
     .poll(async () => GitHubConnection.parse(await (await request("/api/github")).json()).kind)
     .toBe("signed-in");
-  return { github, request };
+  const restart = () => {
+    jobs = [];
+    return requesterFor(worker(), cookie);
+  };
+  return { github, request, restart };
 };
 
 const leadOf = async (request: Requester) => {
@@ -785,6 +797,65 @@ describe("builders that fail or go Stuck (#474, #590)", () => {
 
     expect((await builderOf(request, 22)).waiting).not.toBe("stuck");
     expect((await leadOf(request)).building.map((each) => each.issue)).toContain(22);
+  });
+});
+
+describe("builders started before statuses were kept (#635)", () => {
+  /** The worker starts again with no builder's status kept, as one from before #590 finds them. */
+  const restartWithoutStatuses = async (restart: () => Requester) => {
+    await writeFile(join(root, "data", "builders.json"), JSON.stringify({ builders: {} }));
+    return restart();
+  };
+
+  it("ends one with no pull request: none counted as building, none on the board, and Run starts new builders", async () => {
+    const { request: before, restart } = await signedInWith([
+      ...ISSUES,
+      { number: 25, title: "Fourth", milestone: "4 · Code workspaces" },
+    ]);
+    const started = await run(before);
+    await settledAll(before);
+    const request = await restartWithoutStatuses(restart);
+
+    const ghosts = await leadOf(request);
+    expect(ghosts.building).toEqual([]);
+    expect(ghosts.statuses).toEqual([]);
+
+    const ran = await run(request);
+    const old = started.building.map((each) => each.session);
+    expect(ran.building).toHaveLength(2);
+    expect(ran.building.filter((each) => old.includes(each.session))).toEqual([]);
+    // The header counts the builders the board shows.
+    expect(ran.statuses.map((each) => each.session)).toEqual(
+      ran.building.map((each) => each.session),
+    );
+    await settledAll(request);
+  });
+
+  it("stands one with an open pull request as its pull request does: ready once its checks pass, with its row on the board", async () => {
+    const { github, request: before, restart } = await signedInWith(ISSUES);
+    await run(before);
+    const builder = await builderOf(before, 22);
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: builder.branch ?? "",
+      head: "c0ffee1",
+    });
+    github.setChecks(number, [{ name: "Checks", outcome: "passed" }]);
+    await runJobs();
+    await settledAll(before);
+    const request = await restartWithoutStatuses(restart);
+
+    const lead = await leadOf(request);
+    const title = "Build #22: Which session waits";
+    expect(lead.ready).toEqual([{ session: builder.id, title, issue: 22, pullRequest: number }]);
+    expect(lead.statuses.filter((each) => each.issue === 22)).toEqual([
+      {
+        session: builder.id,
+        title,
+        issue: 22,
+        status: { kind: "ready-for-review", since: expect.any(String), pullRequest: number },
+      },
+    ]);
   });
 });
 

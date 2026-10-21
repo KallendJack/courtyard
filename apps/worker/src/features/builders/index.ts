@@ -95,6 +95,15 @@ const fromPullRequest = (pullRequest: PullRequest): Unstamped => {
     : { kind: "in-ci", pullRequest: number };
 };
 
+/**
+ * Where a builder whose status was never recorded stands (#635), one started before statuses were
+ * kept: as its pull request does, since `since`.
+ */
+export const statusFromPullRequest = (pullRequest: PullRequest, since: string) => {
+  const status = BuilderStatus.safeParse({ ...fromPullRequest(pullRequest), since });
+  return status.success ? status.data : undefined;
+};
+
 /** Why a turn that failed leaves a builder where it does. */
 const fromFailure = (reason: FailureReason): Unstamped => {
   switch (reason.kind) {
