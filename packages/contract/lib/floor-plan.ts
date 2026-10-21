@@ -79,27 +79,29 @@ const itemBase = {
 /**
  * Something standing on the floor: `fromLeft` and `fromBack` are its corner nearest the back left,
  * `width` its size left to right and `depth` back to front, all in cm. A round one (a chair, a
- * workstand's room to walk round) is drawn as a circle or an oval in that box.
+ * workstand's room to walk round) is drawn as a circle or an oval in that box. A size nobody gave
+ * is left out, never made up (#661): without both, it's drawn as a dot where it is.
  */
 export const PlanFloorItem = z.object({
   ...itemBase,
   fromLeft: Centimetres,
   fromBack: Centimetres,
-  width: Length,
-  depth: Length,
+  width: Length.optional(),
+  depth: Length.optional(),
   round: z.boolean().optional(),
 });
 export type PlanFloorItem = z.infer<typeof PlanFloorItem>;
 
 /**
  * Something on a wall (a tool wall, a charging point): drawn as a thin strip along it, so the plan
- * shows which walls are used without taking floor. `at` is measured as an opening's is.
+ * shows which walls are used without taking floor. `at` is measured as an opening's is. With no
+ * length known (#661), it's drawn as a dot at `at`.
  */
 export const PlanWallItem = z.object({
   ...itemBase,
   wall: PlanWall,
   at: Centimetres,
-  length: Length,
+  length: Length.optional(),
 });
 export type PlanWallItem = z.infer<typeof PlanWallItem>;
 
@@ -122,6 +124,12 @@ export const FloorPlan = z
     width: Length,
     /** Back wall to front wall, in cm. */
     depth: Length,
+    /**
+     * Whether the width and depth were measured (#661): the owner's own measurement of the room, or
+     * one saved as its size. Only then are they shown as sizes; an outline drawn from its rooms'
+     * sizes is drawn to scale without them.
+     */
+    measured: z.boolean().optional(),
     /** What's at the front, such as the garage door, under the plan's Front marker. */
     front: Words.optional(),
     /** What's beyond each wall (the house, the garden), written along it. */
@@ -147,9 +155,9 @@ export const FloorPlan = z
     (plan) =>
       [...(plan.zones ?? []), ...(plan.items ?? [])].every((part) =>
         "wall" in part
-          ? part.at + part.length <= wallLength(plan, part.wall) + SLACK
-          : part.fromLeft + part.width <= plan.width + SLACK &&
-            part.fromBack + part.depth <= plan.depth + SLACK,
+          ? part.at + (part.length ?? 0) <= wallLength(plan, part.wall) + SLACK
+          : part.fromLeft + (part.width ?? 0) <= plan.width + SLACK &&
+            part.fromBack + (part.depth ?? 0) <= plan.depth + SLACK,
       ),
     "Everything on the plan is inside the room.",
   );

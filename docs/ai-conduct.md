@@ -50,7 +50,10 @@ Claude asks that way). It never runs in CI or `pnpm verify`, since it needs the 
 - **Rich blocks.** A turn can say whether its answer should hold a table (`tables`), judged from its Markdown: a
   table, with a sentence of its own before it; or none. Likewise a chart (`charts`): a `chart` block the contract's
   `Chart` schema accepts, after a sentence of its own; or none. And a diagram (`diagrams`): a `mermaid` block after a
-  sentence of its own; or none.
+  sentence of its own; or none. And a floor plan (`plans`, #661): `plan` blocks the contract's `FloorPlan` schema
+  accepts, every size on them (zones', things', doors' and windows' widths, and the outline when it says it was
+  measured) one the turn was given, give or take 1 cm, and nothing named with words nobody gave a size for (a door, the
+  stairs) drawn with one.
 - **How an answer reads (#599).** A turn can give the most words its answer has (`words`), the most steps it gives
   (`steps`, counting numbered list items and "Step 1" lines), and that the products it names are linked (`links`: it
   links a page, and every list item or table row with a price in it has a link).
@@ -287,11 +290,29 @@ rooms to draw, so it isn't told (#599):
 > gives its back left corner (`fromLeft`, `fromBack`) and its size (`round` for a chair or a stand); something on a
 > wall, such as a tool wall or a socket, gives its wall, where it starts along it and its length, as doors and windows
 > do (kind `door`, `window`, `garage-door` or `doorway`, `at` measured from a side wall's back corner or the back or
-> front wall's left corner). A partition goes across the room (`fromBack`) or down it (`fromLeft`). Mark what the
-> owner wants but doesn't have `"status": "want"`, and say in `why` why each thing is where it is. Turn a plan only
-> for a reason, written in it: `"turned": {"to": "right", "why": "…"}`. To move something, draw the whole plan again
-> with it moved; Courtyard keeps each room's latest plan on the workspace's Home. Where a room's front is, once you
-> know, is worth keeping as a fact, so every later plan agrees. Write a sentence or two of your own before it.
+> front wall's left corner). A partition goes across the room (`fromBack`) or down it (`fromLeft`). Draw only sizes
+> the owner gave you or that are saved here, never one scaled off a picture: a developer's floor plan or a photo is
+> seldom to scale, and where the owner's measurement and a developer's differ, the owner's own measurement wins.
+> Something whose size isn't known is left off, or its size asked for, or placed only by where it is, its size left
+> out (on the floor just `fromLeft` and `fromBack`, on a wall just its wall and `at`), which is drawn as a dot; never
+> with a stand-in size. A door or window whose width isn't known is left off, the one at the front named in `front`.
+> Add `"measured": true` only when the width and depth are the room's own measured size; a plan drawn from its rooms'
+> sizes, such as a whole floor, leaves it out, and Courtyard shows no overall size. When you leave things off, say in
+> a line what you've left off. Mark what the owner wants but doesn't have `"status": "want"`, and say in `why` why
+> each thing is where it is. Turn a plan only for a reason, written in it: `"turned": {"to": "right", "why": "…"}`.
+> To move something, draw the whole plan again with it moved; Courtyard keeps each room's latest plan on the
+> workspace's Home. Where a room's front is, once you know, is worth keeping as a fact, so every later plan agrees.
+> Write a sentence or two of your own before it.
+
+Built with #661, after a House session given a developer's brochure plans and room-size table saved doors, windows,
+stairs and an outline it had scaled off the pictures, and a Garage session drew the boiler and a projecting wall with
+stand-in sizes, said so only in `why`, and a garage door width nobody gave. A thing on the floor or a wall may leave
+its size out (the contract's `FloorPlan`), drawn as a dot where it is and listed without a size; doors and windows
+keep theirs, so one with no known width stays off. The plan's width and depth are shown as sizes (in its heading and
+along its top and side) only when it says `"measured": true`; a plan saved before that is drawn to scale without them
+until it's drawn again. The eval's `plan-*` scenarios check it on both providers: a brochure picture with a room table
+gives a plan holding only the table's sizes and the owner's measurement over the developer's, and a garage with a
+boiler nobody measured gives it no size.
 
 **Draw the garage** (#604; Paper, "Tablet · Garage Home: Draw the garage, then projects (#604)") leads the Home of a
 planning workspace whose facts give a floor's two sides ("5.14 × 2.74 m") until it has a plan, named from the

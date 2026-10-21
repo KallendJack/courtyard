@@ -414,6 +414,30 @@ describe("what every turn tells a model", () => {
     expect(instructions).not.toContain(await quotedInGuide("A `mermaid` block"));
   });
 
+  it("asks for a floor plan holding only sizes it was given, never one scaled off a picture or a stand-in (#661)", async () => {
+    const plans = await quotedInGuide("A room's layout");
+
+    const { instructions } = (await firstTurn()).framing;
+
+    expect(instructions).toContain(plans);
+    for (const rule of [
+      // A House session scaled windows, doors and stairs off a developer's brochure plan (#661).
+      "Draw only sizes the owner gave you or that are saved here",
+      "never one scaled off a picture",
+      "the owner's own measurement wins",
+      // A Garage session drew the boiler 50 cm "as a stand-in" (#661).
+      "never with a stand-in size",
+      "is drawn as a dot",
+      "A door or window whose width isn't known is left off",
+      // A whole floor's outline was shown as 7.8 m, the rooms plus guessed gaps (#661).
+      '`"measured": true`',
+      "shows no overall size",
+      "say in a line what you've left off",
+    ]) {
+      expect(plans).toContain(rule);
+    }
+  });
+
   it("tells a planning turn how to help there: brief, one step at a time, asking, real products, what's saved, a pro (ADR 0032, #599)", async () => {
     const planning = await quotedInGuide("The owner often reads your answers on their phone");
 

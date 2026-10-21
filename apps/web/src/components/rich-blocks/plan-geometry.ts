@@ -98,6 +98,20 @@ export const layoutOf = (plan: FloorPlan, fit: { width: number; height: number }
       const radius = door.width * scale;
       return `M${hinge.x},${hinge.y} L${open.x},${open.y} A${radius},${radius} 0 0 ${turn > 0 ? 1 : 0} ${jamb.x},${jamb.y}`;
     },
+    /**
+     * Where a thing with no size is drawn as a dot `radius` pixels round, kept inside the walls
+     * (#661): by its wall `at` cm along it, or on the floor where it is.
+     */
+    dotAt: (item: PlanItem, radius: number): Point => {
+      const inside = radius / scale;
+      const within = (cm: number, most: number) =>
+        Math.min(Math.max(cm, inside), Math.max(most - inside, inside));
+      const [x, y] =
+        "wall" in item
+          ? along(plan, item.wall, item.at)
+          : [item.fromLeft + (item.width ?? 0) / 2, item.fromBack + (item.depth ?? 0) / 2];
+      return point(within(x, plan.width), within(y, plan.depth));
+    },
     /** A thing on a wall, as a strip along its inside `thickness` pixels deep. */
     stripOn: (item: { wall: PlanWall; at: number; length: number }, thickness: number) => {
       const deep = thickness / scale;
@@ -148,8 +162,8 @@ export const sideOf = (plan: FloorPlan, item: PlanItem): PlanWall | "middle" => 
   const gaps: [PlanWall, number][] = [
     ["left", item.fromLeft],
     ["back", item.fromBack],
-    ["right", plan.width - item.fromLeft - item.width],
-    ["front", plan.depth - item.fromBack - item.depth],
+    ["right", plan.width - item.fromLeft - (item.width ?? 0)],
+    ["front", plan.depth - item.fromBack - (item.depth ?? 0)],
   ];
   const [wall, gap] = gaps.reduce((nearest, one) => (one[1] < nearest[1] ? one : nearest));
   return gap <= BY_A_WALL ? wall : "middle";
@@ -169,11 +183,18 @@ export const SIDES: readonly (PlanWall | "middle")[] = ["left", "back", "right",
 /** Centimetres as metres to one place: `3.0 m`. */
 export const metres = (cm: number) => `${(cm / 100).toFixed(1)} m`;
 
-/** A thing's size in words: its longer side first, `120 × 60 cm`; a wall's thing, its length. */
+/**
+ * A thing's size in words: its longer side first, `120 × 60 cm`; a wall's thing, its length; only
+ * the side that was given, `13 cm wide`; or none, when no size was given (#661).
+ */
 export const sizeOf = (item: PlanItem) => {
-  if ("wall" in item) return `${round(item.length)} cm`;
-  if (item.round && item.width === item.depth) return `${round(item.width)} cm round`;
-  const [long, short] = [item.width, item.depth].sort((a, b) => b - a);
+  if ("wall" in item) return item.length === undefined ? undefined : `${round(item.length)} cm`;
+  const { width, depth } = item;
+  if (width === undefined && depth === undefined) return undefined;
+  if (depth === undefined) return `${round(width ?? 0)} cm wide`;
+  if (width === undefined) return `${round(depth)} cm deep`;
+  if (item.round && width === depth) return `${round(width)} cm round`;
+  const [long, short] = [width, depth].sort((a, b) => b - a);
   return `${round(long ?? 0)} × ${round(short ?? 0)} cm`;
 };
 
