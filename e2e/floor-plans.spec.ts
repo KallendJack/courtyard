@@ -519,3 +519,54 @@ for (const viewport of [
     });
   });
 }
+
+// The owner's garage, as saved (2026-10-21): no garage door width, a boiler and a projecting wall
+// with no length, the fridge freezer at its Thing's size.
+const OWNERS_GARAGE = {
+  room: "Garage",
+  width: 274,
+  depth: 514,
+  measured: true,
+  front: "Garage door",
+  beyond: { right: "House" },
+  items: [
+    { name: "Projecting wall", fromLeft: 261, fromBack: 454, width: 13 },
+    { name: "Boiler", wall: "left", at: 0 },
+    { name: "Fridge freezer", fromLeft: 214, fromBack: 0, width: 60, depth: 61 },
+  ],
+};
+
+test.describe("on Home, opened small and then grown (#674)", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 1000, height: 690 } });
+
+  test("the garage's plan still draws, turned: its frame settles instead of looping", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(String(error)));
+    const name = `Grown garage ${Date.now()}`;
+    await newWorkspace(page, name);
+    await startSaving(
+      page,
+      [
+        `Here's the garage:\n\n\`\`\`plan\n${JSON.stringify(OWNERS_GARAGE)}\n\`\`\`\n`,
+        project("Remootio reset and sensor fix", "Get a replacement magnet"),
+        project("Split the garage in two", "Use half the garage as a tidy work area"),
+      ].join("\n"),
+    );
+    await expect(page.getByRole("list", { name: "Session" })).toContainText(/Your turn · finished/);
+    // As the Fold does while it settles: Home first laid out small, then at its full size.
+    await page.setViewportSize({ width: 1000, height: 160 });
+    await page.getByRole("link", { name: `Back to ${name}` }).click();
+    await expect(
+      page.getByText(/Plan · Garage|Couldn't draw this floor plan/i).first(),
+    ).toBeAttached();
+    await page.setViewportSize({ width: 1000, height: 690 });
+
+    const plan = page.getByRole("figure", { name: "Garage floor plan" });
+    await expect(plan).toBeVisible();
+    await expect(plan.getByText("Turned to fit")).toBeVisible();
+    await expect(page.getByText("Couldn't draw this floor plan")).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+});
