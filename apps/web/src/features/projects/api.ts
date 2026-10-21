@@ -1,9 +1,12 @@
 import {
   nextStepOf,
   type Project,
+  ProjectDecided,
+  type ProjectDecision,
   type ProjectSlug,
   type SessionId,
   Undone,
+  type WorkspaceId,
 } from "@courtyard/contract";
 import { sendJson } from "../../api/worker.ts";
 
@@ -32,6 +35,22 @@ export const stepDetail = (step: { kind: string; detail?: string | undefined }) 
   [`${step.kind.charAt(0).toUpperCase()}${step.kind.slice(1)}`, step.detail]
     .filter((said) => said !== undefined)
     .join(" · ");
+
+/**
+ * Pick on an options block in a session that belongs to a project (#603): the project's decision,
+ * with the options, the pick and why, as a change Undo takes back from Recent changes.
+ */
+export const pickDecision = (
+  workspaceId: WorkspaceId,
+  slug: ProjectSlug,
+  decision: ProjectDecision,
+) =>
+  sendJson({
+    path: `/workspaces/${encodeURIComponent(workspaceId)}/projects/${slug}/decision`,
+    method: "PUT",
+    body: decision,
+    schema: ProjectDecided,
+  });
 
 /** Undoes one of a session's project saves, named by its event number (#603). */
 export const undoProjectSave = (sessionId: SessionId, save: number) =>

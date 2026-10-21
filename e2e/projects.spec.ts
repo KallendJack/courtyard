@@ -122,6 +122,63 @@ test("a project's page shows its goal, what's next and its steps, and Carry on s
   await expect(projects(page)).toBeVisible();
 });
 
+/** Options for the office's desk, as a model would answer in its session, the fake echoing them. */
+const DESKS = [
+  "Two that fit the back wall. The Flexispot is the one: you can stand at it.",
+  "",
+  "```options",
+  JSON.stringify({
+    about: "Desk",
+    options: [
+      {
+        name: "Flexispot E7",
+        price: "about £300",
+        shop: "Flexispot",
+        link: "https://shop.example/e7",
+        why: "Stands up, fits the back wall",
+      },
+      { name: "IKEA Lagkapten", price: "about £60", why: "Cheapest, sits only" },
+    ],
+  }),
+  "```",
+].join("\n");
+
+test("Pick on an options block, in a session that belongs to a project, records its decision", async ({
+  page,
+}) => {
+  const name = `Garage ${Date.now()}`;
+  await newWorkspace(page, name);
+  await saveAndGoHome(page, name, [startProject(OFFICE)]);
+  await projects(page).getByRole("button", { name: "Carry on" }).click();
+  const session = page.getByRole("list", { name: "Session" });
+  await expect(session).toContainText(/Your turn · finished/);
+
+  await page.getByLabel("Message", { exact: true }).fill(DESKS);
+  await page.getByRole("button", { name: "Send" }).click();
+  const options = page.getByRole("list", { name: "Options for Desk" });
+  await expect(options.getByRole("listitem")).toHaveCount(2);
+  // An option with no link shows its price alone.
+  await expect(options.getByRole("listitem", { name: "IKEA Lagkapten" })).toContainText(
+    "about £60",
+  );
+  const e7 = options.getByRole("listitem", { name: "Flexispot E7" });
+  await e7.getByRole("button", { name: "Pick" }).click();
+  await expect(e7).toContainText("Decided");
+  await expect(options.getByRole("button", { name: "Pick" })).toHaveCount(1);
+  await shot(page, "p3-decision-pick");
+
+  // The project keeps it as a decided step, first among its steps.
+  await page.getByRole("link", { name: `Back to ${name}` }).click();
+  await projects(page).getByRole("link", { name: OFFICE.name }).click();
+  await expect(page.getByRole("region", { name: "Steps" }).getByRole("listitem")).toHaveText([
+    "DecidedSplit: storage at the front, office at the back",
+    "DecidedDesk: Flexispot E7",
+    "You can do thisPick a desk and chair that fit the back wall",
+    "Needs a proSockets by the desk · an electrician (Part P)",
+    "Needs a proA door through to the house · a builder, building regs",
+  ]);
+});
+
 test("a project save's note opens the project, and Undo takes it back", async ({ page }) => {
   const name = `Shed ${Date.now()}`;
   await newWorkspace(page, name);

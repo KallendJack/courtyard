@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   PlanningHome,
+  ProjectDecided,
   RecentChanges,
+  SessionDetail,
   type SessionEvent,
   SessionSummary,
 } from "@courtyard/contract";
@@ -19,6 +21,7 @@ import {
   SAVING_MODEL,
   type ScriptedStep,
   savingProvider,
+  sendJson,
   testWorker,
 } from "./testing.ts";
 
@@ -316,6 +319,81 @@ describe("the project tool", () => {
       {},
     );
     expect([again.status, await errorOf(again)]).toEqual([409, "This change is already undone."]);
+  });
+});
+
+describe("Pick on an options block, in a session that belongs to a project (#603)", () => {
+  const DECISION = "/api/workspaces/garage/projects/turn-the-garage-into-an-office/decision";
+  const desk = {
+    about: "Desk",
+    options: ["IKEA Lagkapten", "Flexispot E7"],
+    pick: "Flexispot E7",
+    why: "Stands up, fits the back wall",
+  };
+
+  it("records the project's decision with its options, pick and why, one change with Undo", async () => {
+    await withOffice();
+    const { request, session } = await sessionWith([[]], {
+      project: "turn-the-garage-into-an-office",
+    });
+    const detail = SessionDetail.parse(await (await request(`/api/sessions/${session.id}`)).json());
+    expect(detail.project).toBe("turn-the-garage-into-an-office");
+
+    const picked = await sendJson(request, DECISION, "PUT", desk);
+
+    expect(picked.status).toBe(200);
+    const { change, project } = ProjectDecided.parse(await picked.json());
+    expect(project.steps.slice(0, 2)).toEqual([
+      { kind: "decided", text: "Layout: Split, storage at the front, office at the back" },
+      { kind: "decided", text: "Desk: Flexispot E7" },
+    ]);
+    const file = await projectFile("turn-the-garage-into-an-office");
+    expect(file).toContain(
+      "### Desk\n\n- Pick: Flexispot E7\n- Why: Stands up, fits the back wall\n- Options: IKEA Lagkapten; Flexispot E7\n",
+    );
+    expect(file).toContain("- 2026-10-20: Decided Desk: Flexispot E7\n");
+    const [latest] = await changesIn(contextDir);
+    expect(latest?.title).toBe("Change project: Turn the garage into an office");
+    expect(latest?.trailers).not.toContainEqual(expect.stringMatching(/^Courtyard-Session/));
+
+    // Another Pick replaces it, as a decision about the same thing again does.
+    const again = await sendJson(request, DECISION, "PUT", { ...desk, pick: "IKEA Lagkapten" });
+    expect(ProjectDecided.parse(await again.json()).project.decisions[1]?.pick).toBe(
+      "IKEA Lagkapten",
+    );
+    // The first Pick's change can't be undone over the second.
+    const undone = await postJson(request, `/api/changes/${change}/undo`, {});
+    expect(undone.status).toBe(409);
+  });
+
+  it("is undone from Recent changes, the file back as it was", async () => {
+    await withOffice();
+    const request = await asOwner(testWorker({ root, now: () => TODAY }));
+    const picked = ProjectDecided.parse(
+      await (await sendJson(request, DECISION, "PUT", desk)).json(),
+    );
+
+    const undone = await postJson(request, `/api/changes/${picked.change}/undo`, {});
+
+    expect(undone.status).toBe(204);
+    expect(await projectFile("turn-the-garage-into-an-office")).toBe(OFFICE);
+  });
+
+  it("refuses a project the workspace hasn't got, and a decision with no pick", async () => {
+    await withOffice();
+    const request = await asOwner(testWorker({ root, now: () => TODAY }));
+
+    const missing = await sendJson(
+      request,
+      "/api/workspaces/garage/projects/loft-conversion/decision",
+      "PUT",
+      desk,
+    );
+    const unpicked = await sendJson(request, DECISION, "PUT", { ...desk, pick: "" });
+
+    expect([missing.status, await errorOf(missing)]).toEqual([404, "No such project."]);
+    expect(unpicked.status).toBe(400);
+    expect(await projectFile("turn-the-garage-into-an-office")).toBe(OFFICE);
   });
 });
 

@@ -183,6 +183,7 @@ export {
   PROJECT_LINE_MAX_CHARACTERS,
   Project,
   ProjectChange,
+  ProjectDecided,
   ProjectDecision,
   ProjectFields,
   ProjectSave,

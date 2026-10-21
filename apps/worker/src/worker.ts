@@ -82,6 +82,7 @@ import { planningHomeRoutes } from "./features/planning-home/routes.ts";
 import { createPreviews } from "./features/preview/index.ts";
 import { previewRoutes } from "./features/preview/routes.ts";
 import type { Screenshot } from "./features/preview/screenshot.ts";
+import { projectRoutes } from "./features/projects/routes.ts";
 import { createPullRequests } from "./features/pull-requests/index.ts";
 import { pullRequestRoutes } from "./features/pull-requests/routes.ts";
 import { createQuickQuestions } from "./features/quick-questions/index.ts";
@@ -618,6 +619,7 @@ export const createWorker = (options: {
   api.route("/", documentRoutes({ contextDir, contextFolder }));
   api.route("/", thingRoutes({ contextDir, contextFolder, now }));
   api.route("/", planningHomeRoutes({ contextDir }));
+  api.route("/", projectRoutes({ contextDir, contextFolder, now }));
   api.route("/", statusLineRoutes(statusLines));
   api.route(
     "/",

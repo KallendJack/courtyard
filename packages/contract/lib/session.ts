@@ -207,6 +207,11 @@ export const SessionSummary = z.object({
   byLead: z.literal(true).optional(),
   /** It's allowing all now (#428): its strip, and the gold mark on its row in Running. */
   allowingAll: AllowingAll.optional(),
+  /**
+   * The planning workspace's project it belongs to (#603), by its file's name: Pick on an options
+   * block in it records that project's decision.
+   */
+  project: ProjectSlug.optional(),
 });
 export type SessionSummary = z.infer<typeof SessionSummary>;
 
