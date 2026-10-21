@@ -104,14 +104,16 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`owner-context/`](../apps/worker/src/features/owner-context/README.md): `OWNER.md`.
 - [`workspaces/`](../apps/worker/src/features/workspaces/README.md): the workspaces, their icons and order.
 - [`things/`](../apps/worker/src/features/things/README.md): a planning workspace's Things.
+- [`projects/`](../apps/worker/src/features/projects/README.md): a planning workspace's projects (#603): steps,
+  decisions and history, a file each, kept by the model's project tool; a session started from one belongs to it.
 - [`status-line/`](../apps/worker/src/features/status-line/README.md): the status line under a code workspace's
   name, ✓ just done · ● now · ○ next (#256), built from its data; a planning workspace has none (#600).
 - [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
 - [`floor-plans/`](../apps/worker/src/features/floor-plans/README.md): each room's last floor plan from an answer,
   saved as its document once the answer ends, and Home's plan views (#257).
-- [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents and Things share.
+- [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents, Things and projects share.
 - [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home views, the one
-  showing, and its latest session's next steps, which History shows.
+  showing, its projects (#603), and its latest session's next steps, which History shows.
 - [`changes/`](../apps/worker/src/features/changes/README.md): Recent changes and Undo.
 - [`attachments/`](../apps/worker/src/features/attachments/README.md): photos and PDFs sent with a message.
 
@@ -212,9 +214,12 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
     Needs you and a session's Next pill.
   - [`home/`](../apps/web/src/features/home/README.md): the home page's Needs you, tile lines and foot rows.
   - [`planning-home/`](../apps/web/src/features/planning-home/README.md): a planning workspace's page, its pills,
-    and Home now: the view showing (the Breakdown view, a Thing's photo with every part labelled), no chat.
+    and Home now: the view showing (the Breakdown view, a Thing's photo with every part labelled) and its projects
+    under it, no chat.
   - [`new-workspace/`](../apps/web/src/features/new-workspace/README.md): New workspace's form, Planning or Code.
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
+  - [`projects/`](../apps/web/src/features/projects/README.md): Home's Projects, a project's page and Carry on
+    (#603).
   - [`status-line/`](../apps/web/src/features/status-line/README.md): the status line under a code workspace's
     name (#256).
   - [`documents/`](../apps/web/src/features/documents/README.md): the Documents section.
@@ -458,6 +463,12 @@ Where the rest fits:
   ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)). A Thing's
   **upcoming** one (#602, ADR 0032) is kept in its file the same way: set by the model's tool, or by Pick on an
   answer's `options` block (Find a replacement's answer), and swapped in by "… fitted" or the tool's `fitted`.
+- **Projects** (#603, ADR 0032). The model calls the project tool by the labels its turn listed; `projects/` checks
+  the call and writes the project's file as a change through `context-folder/`; the session records a
+  `project-saved` event and the browser shows a note with Open (the project's place on the workspace's page,
+  `#project/<slug>`) and Undo. Home's answer (`planning-home/`) carries the projects. Carry on, or the box on a
+  project's place, starts a session with `project` in its first message: `sessions/` keeps it in the session's file
+  (as the tool's `session` does), and each of its turns is given the project's file whole.
 - **The status line** (#256). A code workspace's line is built from `sessions/`' list and `next-up/` when asked, with
   no model. A planning workspace has none (#600).
 - **Session notes** (#601, ADR 0032). `sessions/notes.ts` asks the errand model for a planning session's note
@@ -667,6 +678,8 @@ things live only in the worker's memory and go when it restarts.
 - `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter (an upcoming
   replacement among them, its `upcoming …` lines, #602) and a dated history, each file named by the Thing's name when it was added; `<workspace>/things/photos/<slug>.jpg`: a Thing's
   photo, resized to fit 1600 px and 300 KB, in plain git.
+- `<workspace>/projects/<slug>.md`: a planning workspace's projects (#603, ADR 0032): name, goal and status in front
+  matter, then its steps, decisions and a dated history, each file named by the project's name when it was started.
 - `.agents/skills/<skill>/` at the top: the owner's skills for every workspace; `<workspace>/.agents/skills/<skill>/`:
   their skills for one workspace (ADR 0016). Added by hand, so they're kept and backed up like everything else.
 - `archived/<workspace>/`: archived workspaces.

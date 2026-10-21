@@ -189,6 +189,29 @@ budget talked), which the model answers with real options side by side in an **o
 a pick becoming the Thing's upcoming one.
 _Avoid_: shop for, search, compare (that's a table)
 
+**Project**:
+What the owner carries on over days and sessions in a planning workspace (#603, ADR 0032), such as turning the garage
+into an office: a file with its goal, its **steps**, its **decisions** and a dated history, kept by a model's project
+tool with Undo. Its first step that isn't decided is **what's next**, which Home lists with **Carry on**.
+_Avoid_: plan (that's a context line), task, goal (that's the line saying what it's for), todo list
+
+**Step**:
+One thing to do in a project, marked by what it asks of the owner: **you can do this** (with what it takes),
+**needs a pro** (work on electrics, gas or a building's structure, with who to get) or **decided**. A step done
+leaves the list, its history saying so.
+_Avoid_: task, todo, action item
+
+**Decision**:
+A choice made for a project, as buying a part is made (#603): the options weighed, the pick and why, kept on the
+project with a decided step for it.
+_Avoid_: plan, verdict, answer
+
+**Carry on (a project)**:
+Starting a session from a project, on Home or its page (#603): its first message the project and what's next, and the
+session **belongs to** the project, so each of its turns is given the project whole. A model can also attach a
+session that's clearly about one.
+_Avoid_: resume, open, continue (that's after a restart)
+
 **Wanted list**:
 A planning workspace's Things wanted or to replace (#245): Things like any other, with the status Want or Replace,
 added by a model, by the owner, or from a product named in an answer (+ Add to wanted). Its picks, price checks and

@@ -33,5 +33,6 @@ The session page (`routes/_app/workspaces.$workspaceId.sessions.$sessionId.tsx`)
   (`attaching.ts` shrinks photos to JPEG and checks each file). `messages.ts` sends a message with its files, beside
   `api/worker.ts` so it's not on the first load.
 - **`notes/`:** save notes (`save-note.tsx`), Save as document with each document's note (`documents.tsx`), each Thing
-  save's note (`things.tsx`), Grill this plan beside each plan (`grill-plan.tsx`), and the Get to know offer
+  save's note (`things.tsx`), each project save's note (`projects.tsx`, #603), Grill this plan beside each plan
+  (`grill-plan.tsx`), and the Get to know offer
   (`get-to-know.tsx`).

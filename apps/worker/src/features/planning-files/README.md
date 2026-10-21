@@ -1,12 +1,12 @@
 # planning-files
 
-What `documents/` and `things/` share.
+What `documents/`, `things/` and `projects/` share.
 
 **Example:** "Packing list" becomes the file name `packing-list.md` in the workspace's folder, and the change note
 names that file.
 
 - **Uses:** `context-folder/`, `workspaces/`.
-- **Used by:** `documents/`, `things/`.
+- **Used by:** `documents/`, `things/`, `projects/`.
 
 ## API
 

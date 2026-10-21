@@ -15,7 +15,8 @@ const PILL =
  * The way back above a page's title: to a workspace, named, with its icon, or with no workspace
  * (the owner context's Recent changes and Tidy, Fresh start), to Settings, where they're opened
  * from (#102); from a pull request's review, to the workspace's pull requests, as "All PRs"
- * (#240): its PRs tab (#301); from Find a replacement, to its Thing, by name (#602). From a session, a button: its only way out, now the right rail no
+ * (#240): its PRs tab (#301); from Find a replacement, to its Thing, by name (#602); from a project, to
+ * Home's Projects (#603). From a session, a button: its only way out, now the right rail no
  * longer lists the workspace's sessions (#521; Paper, "Tablet · Session: back button, no rail list").
  */
 export function BackLink(props: {
@@ -30,9 +31,23 @@ export function BackLink(props: {
   button?: boolean;
   /** Back to one of the workspace's Things, by its name: from Find a replacement (#602). */
   thing?: { readonly slug: ThingSlug; readonly name: string };
+  /** Back to the workspace's Home, where its projects are, as "Projects": from a project (#603). */
+  projects?: boolean;
 }) {
   const workspaces = loggedIn.useLoaderData();
   const { workspaceId, within, thing } = props;
+  if (workspaceId !== undefined && props.projects) {
+    return (
+      <Link
+        to="/workspaces/$workspaceId"
+        params={{ workspaceId }}
+        className={`${BACK} gap-1.5 font-semibold`}
+      >
+        <ChevronLeft aria-hidden className="size-3.5" />
+        Projects
+      </Link>
+    );
+  }
   if (workspaceId !== undefined && thing !== undefined) {
     return (
       <Link

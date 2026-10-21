@@ -15,6 +15,8 @@ const TONES = {
   running: "text-primary-text",
   failed: "text-destructive",
   quiet: "text-muted-foreground",
+  /** What a planning row says next, calm and readable: a project's next step (#603). */
+  plain: "text-foreground/75",
 } as const;
 
 export type RowTone = keyof typeof TONES;
@@ -43,6 +45,11 @@ export function Block(props: {
   /** Its size is its slot's, set by the page (Home's Needs you, #492); its rows scroll inside. */
   fillsSlot?: boolean;
   /**
+   * Two rows tall whatever it holds, under a block that fills the rest (a planning Home's projects
+   * under its subject, #603); more rows scroll inside, and one leaves the room for another.
+   */
+  twoRows?: boolean;
+  /**
    * From a tablet up, never shorter than one whole row (Needs you under the Builders board, #592),
    * however little of the page's height its share is.
    */
@@ -62,6 +69,7 @@ export function Block(props: {
           ),
         props.tall && "md:min-h-0 md:flex-3 max-md:h-88 max-md:shrink-0",
         props.fillsSlot && "h-full min-h-0",
+        props.twoRows && "h-44 shrink-0",
       )}
     >
       <div

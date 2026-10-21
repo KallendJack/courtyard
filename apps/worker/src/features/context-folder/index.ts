@@ -27,7 +27,8 @@ import { ARCHIVED_FOLDER, CONTEXT_FILE } from "../workspaces/index.ts";
  * the workspaces arranged), the
  * owner context started from the app, a model's save and the owner undoing or editing one, a
  * tidy the owner ticked, a document saved, updated, renamed or deleted or a Thing added, changed
- * or removed (ADR 0020), or a fresh start clearing the whole folder.
+ * or removed (ADR 0020), a project started or changed (#603), or a fresh start clearing the whole
+ * folder.
  */
 export const ChangeKind = z.enum([
   "setup",
@@ -40,6 +41,7 @@ export const ChangeKind = z.enum([
   "tidy",
   "document",
   "thing",
+  "project",
   "fresh-start",
 ]);
 export type ChangeKind = z.infer<typeof ChangeKind>;
@@ -204,9 +206,10 @@ export const placeFile = (place: Place) =>
 
 /**
  * The folders in a workspace's folder whose files are changed whole, rather than line by line, so
- * Recent changes lists their changes too: its documents and its Things, photos included (ADR 0020).
+ * Recent changes lists their changes too: its documents and its Things, photos included (ADR 0020),
+ * and its projects (#603).
  */
-export const WHOLE_FILE_FOLDERS = ["docs", "things"] as const;
+export const WHOLE_FILE_FOLDERS = ["docs", "things", "projects"] as const;
 
 /** Every path whose changes Recent changes lists for a place, from the folder's top. */
 const historyPaths = (place: Place) =>

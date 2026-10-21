@@ -6,6 +6,7 @@
  */
 @reference "../../styles.css";
 @source ".//**/*.tsx";
+@source "../projects/**/*.tsx";
 @source "../../components/workspace/workspace-tabs.tsx";
 @source "../../components/layout/home-block.tsx";
 

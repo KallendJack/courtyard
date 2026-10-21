@@ -35,6 +35,7 @@ import { firstSavingModel, type Provider } from "../../providers/index.ts";
 import { type PreparedAttachment, prepareAttachments } from "../attachments/index.ts";
 import type { BranchRefusal } from "../code/index.ts";
 import { documentError } from "../documents/routes.ts";
+import { projectError } from "../projects/routes.ts";
 import type { NoteRefusal } from "../saves/index.ts";
 import { thingError } from "../things/routes.ts";
 import { getWorkspace, isArchived, listWorkspaces, type Workspace } from "../workspaces/index.ts";
@@ -188,6 +189,8 @@ export const sessionError = (c: Context, error: SessionError) => {
       return documentError(c, error.refusal);
     case "thing-refused":
       return thingError(c, error.refusal);
+    case "project-refused":
+      return projectError(c, error.refusal);
     case "cannot-code":
       return apiError(c, {
         status: 409,
@@ -618,6 +621,16 @@ export const sessionRoutes = (options: {
   // Undo from a Thing save's note (ADR 0020).
   routes.post("/sessions/:id/things/:save/undo", async (c) => {
     const undone = await sessions.undoThing({
+      rawId: c.req.param("id"),
+      save: SaveNumber.parse(c.req.param("save")),
+    });
+    if (!undone.ok) return sessionError(c, undone.error);
+    return c.body(null, 204);
+  });
+
+  // Undo from a project save's note (#603).
+  routes.post("/sessions/:id/projects/:save/undo", async (c) => {
+    const undone = await sessions.undoProject({
       rawId: c.req.param("id"),
       save: SaveNumber.parse(c.req.param("save")),
     });

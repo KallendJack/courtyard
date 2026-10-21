@@ -1473,6 +1473,7 @@ describe("Courtyard's tools on a Codex turn", () => {
       "save_to_context",
       "save_document",
       "save_thing",
+      "save_project",
       "use_skill",
       "suggest_replies",
     ]);

@@ -5,7 +5,7 @@ Sessions as event logs: runs each turn through a provider and follows it live, f
 **Example:** you send "which tyres for winter?". It's written to the session's event log, the turn runs on
 Claude, and every page that has the session open gets the answer as it's written.
 
-- **Uses:** `providers/`, `prompts/`, `code/`, `tasks/` (a code session's long commands, #182), `saves/`, `documents/`, `things/`, `attachments/`,
+- **Uses:** `providers/`, `prompts/`, `code/`, `tasks/` (a code session's long commands, #182), `saves/`, `documents/`, `things/`, `projects/`, `attachments/`,
   `suggested-replies/`, `skills/`, `matt-skills/`, `waiting/`, `allow-all/`, `paper/`, `github/`,
   `context-folder/`, `owner-context/`, `workspaces/`; and, handed in by `worker.ts`, `notifications/`
   (`notify`), `next-up/`'s claims (`named`, `claim`, `release`) and `builders/` (#590: told what happens in a
@@ -16,7 +16,8 @@ Claude, and every page that has the session open gets the answer as it's written
 ## API
 
 - `GET /api/providers`: the providers and their models.
-- `GET /api/workspaces/:id/sessions`, `POST` the same with a first message: a workspace's sessions, and a new one.
+- `GET /api/workspaces/:id/sessions`, `POST` the same with a first message: a workspace's sessions, and a new one;
+  a first message naming a `project` (#603) starts one that belongs to that project.
 - `POST /api/workspaces/:id/seen`: Mark all read (#345).
 - `POST /api/workspaces/:id/grill`, `…/get-to-know`, `POST /api/owner-context/get-to-know`: Grill this plan, and Get
   to know (a session started with its house skill).
@@ -28,7 +29,7 @@ Claude, and every page that has the session open gets the answer as it's written
 - `POST /api/sessions/:id/approvals/:approval`: Allow or Deny; `…/allow-all` and `…/allow-all/off`.
 - `GET /api/sessions/:id/pull-request` and its `merge`, `close` and `bring-up-to-date`.
 - `POST /api/sessions/:id/documents` (Save as document), `…/documents/:save/undo`, `…/things/:save/undo`,
-  `…/saves/:save/undo` and `…/saves/:save/edit`.
+  `…/projects/:save/undo` (#603), `…/saves/:save/undo` and `…/saves/:save/edit`.
 
 ## How it works
 

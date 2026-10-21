@@ -90,6 +90,7 @@ describe("a planning workspace's Home (#208)", () => {
       picked: false,
       photo: null,
       question: null,
+      projects: [],
     });
   });
 

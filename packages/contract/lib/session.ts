@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ProjectSlug } from "./projects.ts";
 import { SkillName } from "./skill-name.ts";
 import {
   CONTEXT_SECTION_NAMES,
@@ -154,12 +155,16 @@ export type NewMessage = z.infer<typeof NewMessage>;
 
 /**
  * A new session's first message. With no model named, the worker starts it on the first model
- * that isn't at its usage limit, at its default effort.
+ * that isn't at its usage limit, at its default effort. Started from one of a planning workspace's
+ * projects (#603), the session belongs to it, by the project's file's name.
  */
-export const FirstMessage = NewMessage.extend({ model: ModelRef.optional() }).refine(
-  (message) => message.model !== undefined || message.effort === undefined,
-  { message: "Name the model the effort is for", path: ["effort"] },
-);
+export const FirstMessage = NewMessage.extend({
+  model: ModelRef.optional(),
+  project: ProjectSlug.optional(),
+}).refine((message) => message.model !== undefined || message.effort === undefined, {
+  message: "Name the model the effort is for",
+  path: ["effort"],
+});
 export type FirstMessage = z.infer<typeof FirstMessage>;
 
 /**

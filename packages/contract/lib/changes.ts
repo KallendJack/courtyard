@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { ChangeId } from "./change-id.ts";
 import { DocumentChange } from "./documents.ts";
+import { ProjectChange } from "./projects.ts";
 import { PlacedLine, SessionId } from "./session.ts";
 import { ThingChange } from "./things.ts";
 import { WorkspaceId } from "./workspace.ts";
 
 /**
  * The kinds of change Recent changes lists: a model's save, the owner's undo or edit, a hand edit,
- * a tidy, a change to a document or a Thing (ADR 0020).
+ * a tidy, a change to a document or a Thing (ADR 0020), or to a project (#603).
  */
 export const RecentChangeKind = z.enum([
   "save",
@@ -17,6 +18,7 @@ export const RecentChangeKind = z.enum([
   "tidy",
   "document",
   "thing",
+  "project",
 ]);
 export type RecentChangeKind = z.infer<typeof RecentChangeKind>;
 
@@ -47,6 +49,8 @@ export const RecentChange = z.object({
   document: DocumentChange.optional(),
   /** For a change to a Thing, and its undo: what it did to the Thing, with no lines. */
   thing: ThingChange.optional(),
+  /** For a change to a project, and its undo: what it did to the project, with no lines (#603). */
+  project: ProjectChange.optional(),
   undo: RecentChangeUndo,
 });
 export type RecentChange = z.infer<typeof RecentChange>;

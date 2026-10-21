@@ -84,13 +84,13 @@ const mainPhoto = (things: readonly ThingSummary[]) =>
       undefined,
     )?.top.slug ?? null;
 
-/** Home without its question: its views, the one showing, and its photo. */
+/** Home without its question and projects: its views, the one showing, and its photo. */
 export const homeOf = (
   things: readonly ThingSummary[],
   pick: HomeViewId | undefined,
   /** Its saved floor plans' views (#257). */
   plans: readonly HomeView[] = [],
-): Omit<PlanningHome, "question"> => {
+): Omit<PlanningHome, "question" | "projects"> => {
   const views = homeViews(things, plans);
   const picked = views.find(({ id }) => id === pick);
   const lastChanged = views.reduce<HomeView | undefined>(

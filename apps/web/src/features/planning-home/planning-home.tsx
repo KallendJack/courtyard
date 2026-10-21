@@ -4,6 +4,7 @@ import type {
   ContextFile,
   DocumentList,
   OwnerContextShared,
+  Project,
   ProviderList,
   SkillList,
   ThingList,
@@ -29,6 +30,9 @@ import type { OfflinePage } from "../../api/workspace-page.ts";
 import { useDock } from "../../components/frame/handheld.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { DocumentsSection } from "../documents/documents-section.tsx";
+import { projectInHash } from "../projects/api.ts";
+import { ProjectView } from "../projects/project-view.tsx";
+import { ProjectsBlock } from "../projects/projects-block.tsx";
 import { Composer } from "../sessions/composer/composer.tsx";
 import { sendMessage, startSession } from "../sessions/composer/messages.ts";
 import { SessionLinks } from "../sessions/session-links.tsx";
@@ -44,13 +48,18 @@ import css from "./planning-home.css?inline";
 addStylesheet("planning-home", css);
 
 /**
- * The places a planning workspace's page shows by its hash: its tabs, and What Courtyard knows.
- * Home is `#new` too, as the frame's New session opens it, with the box open.
+ * The places a planning workspace's page shows by its hash: its tabs, What Courtyard knows, and a
+ * project (`project/<slug>`, #603). Home is `#new` too, as the frame's New session opens it, with
+ * the box open.
  */
-type Place = "" | "sessions" | "things" | "docs" | "knows";
+type Place = "" | "sessions" | "things" | "docs" | "knows" | "project";
 
 const placeIn = (hash: string): Place =>
-  hash === "sessions" || hash === "things" || hash === "docs" || hash === "knows" ? hash : "";
+  hash === "sessions" || hash === "things" || hash === "docs" || hash === "knows"
+    ? hash
+    : projectInHash(hash) !== undefined
+      ? "project"
+      : "";
 
 /** How often Home asks again while its latest session is being answered, for its next steps. */
 const ANSWERING_EVERY_MS = 3000;
@@ -142,6 +151,7 @@ export default function PlanningHome(props: {
         ? "things"
         : "docs"
       : asked === "knows" ||
+          asked === "project" ||
           (asked === "things" && addingThing) ||
           tabs.some((tab) => tab.hash === asked)
         ? asked
@@ -176,6 +186,9 @@ export default function PlanningHome(props: {
 
   const homeNow = offline === undefined ? home : undefined;
   const latest = homeNow?.question ?? null;
+  /** The project the page shows (#603), by the hash's name for it, once Home has it. */
+  const projectSlug = place === "project" ? projectInHash(props.hash) : undefined;
+  const project = homeNow?.projects.find(({ slug }) => slug === projectSlug);
   const photoThing = allThings.find((thing) => thing.slug === homeNow?.photo);
   /**
    * While Home shows a view, the box is out of sight until it's asked for: the view needs the room.
@@ -235,7 +248,7 @@ export default function PlanningHome(props: {
                   <WorkspaceTabs
                     workspaceId={workspace.id}
                     tabs={tabs}
-                    chosen={place === "knows" ? "" : place}
+                    chosen={place === "knows" || place === "project" ? "" : place}
                     pills={{
                       action: {
                         label: "+ New",
@@ -292,7 +305,12 @@ export default function PlanningHome(props: {
               ? { skills: { workspaceName: workspace.name, list: skills.data.skills } }
               : {})}
             send={async (message, files) => {
-              const session = await startSession({ workspaceId: workspace.id, message, files });
+              // From a project's page, the session belongs to it (#603).
+              const session = await startSession({
+                workspaceId: workspace.id,
+                message: project === undefined ? message : { ...message, project: project.slug },
+                files,
+              });
               if (session.kind !== "loaded") return describeProblem(session).body;
               await navigate({
                 to: "/workspaces/$workspaceId/sessions/$sessionId",
@@ -350,6 +368,14 @@ export default function PlanningHome(props: {
                 onUndone={props.onUndone}
               />
             )
+          ) : place === "project" ? (
+            project !== undefined ? (
+              <ProjectView workspaceId={workspace.id} project={project} />
+            ) : (
+              homeNow !== undefined && (
+                <p className="text-body text-muted-foreground">This project isn't here any more.</p>
+              )
+            )
           ) : place === "knows" ? (
             <WhatCourtyardKnows
               workspaceId={workspace.id}
@@ -371,13 +397,23 @@ export default function PlanningHome(props: {
             </Link>
           ) : (
             homeNow !== undefined && (
-              <HomeNow
-                workspaceId={workspace.id}
-                home={homeNow}
-                things={allThings}
-                ask={startWith}
-                changed={changed}
-              />
+              <>
+                {/* With projects and no subject to show, the projects fill Home (#603). */}
+                {(homeNow.views.length > 0 || !hasActive(homeNow.projects)) && (
+                  <HomeNow
+                    workspaceId={workspace.id}
+                    home={homeNow}
+                    things={allThings}
+                    ask={startWith}
+                    changed={changed}
+                  />
+                )}
+                <ProjectsBlock
+                  workspaceId={workspace.id}
+                  projects={homeNow.projects}
+                  alone={homeNow.views.length === 0}
+                />
+              </>
             )
           )}
         </div>
@@ -418,6 +454,10 @@ export default function PlanningHome(props: {
     </Page>
   );
 }
+
+/** Whether any of the workspace's projects is being carried on, so Home lists it (#603). */
+const hasActive = (projects: readonly Project[]) =>
+  projects.some((project) => project.status === "active");
 
 /** Whether some of the workspace's Things files can't be read, which its Things tab says. */
 const hasProblems = (things: FromWorker<ThingList>) =>
