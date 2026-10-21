@@ -1280,24 +1280,22 @@ Built with #149 (ADR 0020). A planning workspace keeps **Things**: the owner's k
 as a bike and its parts or a padel racket, each one a Markdown file at `<workspace>/things/<slug>.md` in the context
 folder. Its front matter holds its fields: name, status (`have`, `want`, or `replace` for one the owner has and means
 to replace), brand, bought (a year, a month or a day), price, shop (where it was bought, #245), condition, size, where,
-part of (another Thing's file
-name, one level only), needs (the next thing to do about it, in a few words, until it's done; #208),
-photo (`photos/<slug>.jpg`, beside it) and its **upcoming** replacement (#602): upcoming (its make and model),
-upcoming price, upcoming shop, upcoming link (the page it's sold on) and upcoming why (one line); all but name and
-status can be left out. A part holds what's on it and what's coming next: a new one of a part that's there is
+part of (another Thing's file name, one level only), photo (`photos/<slug>.jpg`, beside it) and its **upcoming**
+replacement (#602): upcoming (its make and model), upcoming price, upcoming shop, upcoming link (the page it's sold
+on) and upcoming why (one line); all but name and status can be left out. A part holds what's on it and what's coming next: a new one of a part that's there is
 upcoming on it, never a Thing of its own. A Thing with an upcoming one is one to replace, and once it's bought or
 fitted the upcoming one is swapped in (its name as the brand, its price and shop, bought today, had again, with no
-condition, needs or upcoming), the one it had going to its history ("Fitted DMR V8, replacing Wellgo alloy flats
-(bought 2025-04)"). A new upcoming one replaces the last whole. A part's pin went with Home's photo view (#603): a
-file that still has one is read past it, and loses it on its next save. Its body is
-a dated history, a line each (`- 2026-10-09: Swapped, the old one was past 0.75%`). A Thing's file keeps the name it
+condition or upcoming), the one it had going to its history ("Fitted DMR V8, replacing Wellgo alloy flats
+(bought 2025-04)"). A new upcoming one replaces the last whole. A part's pin went with Home's photo view, and a Thing's
+needs (what to do about it next) with the projects that hold next steps now (#603): a file that still has either is
+read past it, and loses it on its next save. Its body is a dated history, a line each (`- 2026-10-09: Swapped, the old one was past 0.75%`). A Thing's file keeps the name it
 was added with when the Thing is renamed, so its parts still find it. A hand-edited file that isn't a Thing as written
 is listed with what's wrong with it, never breaking a turn. Every write is one change, listed in Recent changes with
 Undo, and the chat shows each of a model's saves as a note with Undo. Code workspaces and the owner context have none.
 
 What a model is told (Every turn, item 8), on every turn in a planning workspace, with the Things one per line between
 `<things>` markers, each part straight after the Thing it's part of, both in order of name
-(`[T2] Chain, replace, KMC X11, bought 2026-03, needs Lube it, upcoming KMC X11SL (price £45, shop
+(`[T2] Chain, replace, KMC X11, bought 2026-03, upcoming KMC X11SL (price £45, shop
 Tredz), part of [T1] (things/chain.md)`: its label, name, status, brand, then each other field it has by name, its
 upcoming one with its price, shop, link and why, then its file), and each file that isn't a Thing as written
 (`- things/fork.md can't be read as a Thing: <problem>`):
@@ -1333,9 +1331,8 @@ tool is offered beside the document tool.
 > part: offer to move it, and once the owner agrees, set it as the part's upcoming one and remove the wanted Thing.
 > What a Thing holds goes in the Thing, not in a context line as well. To compare options, such as which racket to buy,
 > answer with a table, and offer to save the comparison as a document; once the owner picks one, add it as a Thing, or
-> set it as the upcoming one of the part it replaces. The workspace's page shows what each Thing needs next, so
-> keep its needs to the next action and what it takes ("Pump it up before Saturday"), never background such as its
-> brand, size or specs, which stay on its card, and clear it once it's done. The owner sees each Thing you save as a note under your answer, so leave saves unmentioned.
+> set it as the upcoming one of the part it replaces. The owner sees each Thing you save as a note under your answer,
+> so leave saves unmentioned.
 
 **What goes on a page (#208, #220, #565, #603).** Whatever a model puts where the workspace's page shows it (today
 a part's name and its upcoming one, on Home's drawn bike, and a project's next step) is the next action and what it
@@ -1361,8 +1358,6 @@ Thing's card, one tap away (on Home, a part's label opens it).
 > - where: Where it's kept or fitted, such as On the bike.
 > - part_of: The label of the Thing it's part of, such as T1, which isn't a part itself. An empty text makes it a
 >   Thing of its own.
-> - needs: The next thing to do about it, in a few words, such as Pump it up before Saturday: never background such
->   as its brand or size. An empty text clears it once it's done.
 > - history: A line for its history, dated today, saying what happened, such as Swapped, the old one was past 0.75%.
 > - photo: The number of one of the owner's photos with this message, 1 for Image 1, to keep as its photo.
 > - upcoming: Its upcoming one: what the owner means to fit next in its place, by its make and model, such as DMR V8.
@@ -1441,8 +1436,7 @@ As with saves, a refused Thing can be put right once: the next call is its retry
 "Added [T3] Whyte T-140.", "Changed [T2] Chain." or "Removed Chain.". The chat shows "Added Thing", "Updated Thing" or
 "Removed Thing" with its name and, in grey, what changed; a refusal shows nothing to the owner. The fake saves one for
 each line "thing add: name Tyres | status have | part of T1", or "thing T2: history Swapped | price £32", "thing T2:
-needs Lube it", "thing T2: upcoming DMR V8 | upcoming price £28", "thing T2: fitted", "thing T2: photo 1"
-or "thing T2: remove".
+upcoming DMR V8 | upcoming price £28", "thing T2: fitted", "thing T2: photo 1" or "thing T2: remove".
 
 The eval's `thing-*` scenarios check it on both providers: "swapped the chain today" changes the chain, with a line in
 its history, and nothing else; a bike's typical parts are offered but saved only once the owner agrees; and

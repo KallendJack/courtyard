@@ -172,9 +172,8 @@ _Avoid_: layout diagram, ASCII plan, map, blueprint
 **Thing**:
 One item the owner has, wants or means to replace in a workspace, such as a bike, its chain or a padel racket: a card
 with a photo, its details and a dated history. A Thing can be part of another. Models keep Things current as they
-save context lines, and the owner undoes or edits (ADR 0020). What it **needs** is the next thing to do about it, in
-a few words ("Pump it up before Saturday"), until it's done: the only part of it a page shows besides its name and
-status (#208, #220).
+save context lines, and the owner undoes or edits (ADR 0020). What's next to do about one is a project's step, never
+something the Thing holds (#603).
 _Avoid_: item, kit (that's the list of them), gear, asset, part (that's a Thing part of another)
 
 **Upcoming**:

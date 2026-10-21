@@ -80,8 +80,8 @@ export type ThingUpcoming = z.infer<typeof ThingUpcoming>;
 
 /**
  * A Thing's fields as its file's front matter holds them: its name and status, then the details
- * it has, the Thing it's part of (by its file's name, one level only), what it needs next (#208),
- * and its photo.
+ * it has, the Thing it's part of (by its file's name, one level only), its photo and its upcoming
+ * replacement. What's next is a project's step (#603), never a Thing's.
  */
 export const ThingFields = z
   .object({
@@ -96,11 +96,6 @@ export const ThingFields = z
     size: oneLine(THING_FIELD_MAX_CHARACTERS, "size").optional(),
     where: oneLine(THING_FIELD_MAX_CHARACTERS, "where").optional(),
     partOf: ThingSlug.optional(),
-    /**
-     * The next thing to do about it, in a few words ("Pump it up before Saturday"), until it's
-     * done: what a page shows of it (#208, #220), never background.
-     */
-    needs: oneLine(THING_FIELD_MAX_CHARACTERS, "next step").optional(),
     photo: ThingPhotoPath.optional(),
     /** Its upcoming replacement's name (#602), and the rest of it: see `ThingUpcoming`. */
     upcoming: ThingUpcoming.shape.name.optional(),
@@ -230,7 +225,6 @@ export const ThingSave = z.object({
       where: z.string().nullable(),
       /** The name of the Thing it's now part of. */
       partOf: z.string().nullable(),
-      needs: z.string().nullable(),
       /** Its upcoming replacement's name (#602), and the rest of it. */
       upcoming: z.string().nullable(),
       upcomingPrice: z.string().nullable(),
