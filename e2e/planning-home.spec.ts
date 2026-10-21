@@ -21,9 +21,10 @@ const shot = async (page: Page, name: string) => {
 
 /**
  * The hardtail and its parts as the owner named them, as a model would add them: new pedals
- * picked for the pedals, and a bottle cage the drawing has no place for. Back on Home after.
+ * picked for the pedals, and a bottle cage the drawing has no place for, then any `more` lines (its
+ * projects). Back on Home after.
  */
-const addBike = async (page: Page, name: string) => {
+const addBike = async (page: Page, name: string, more: readonly string[] = []) => {
   const part = (named: string, more = "") =>
     `thing add: name ${named} | status have | part of T1${more}`;
   await startSaving(
@@ -39,6 +40,7 @@ const addBike = async (page: Page, name: string) => {
       part("Front tyre"),
       part("Rear tyre"),
       part("Bottle cage"),
+      ...more,
     ].join("\n"),
   );
   await expect(page.getByRole("list", { name: "Things saved" }).getByRole("listitem")).toHaveCount(
@@ -141,6 +143,66 @@ test.describe("on the unfolded Fold", () => {
     expect((saddle?.x ?? 0) < (pedals?.x ?? 0)).toBe(true);
   });
 });
+
+// The owner's Fold, its browser's bars in (950×662) and not (950×712), and a shorter panel: with
+// the projects under it the bike is drawn small, and its labels still never overlap (#657).
+for (const viewport of [
+  { width: 950, height: 662 },
+  { width: 950, height: 712 },
+  { width: 950, height: 560 },
+]) {
+  test.describe(`at ${viewport.width}×${viewport.height}`, () => {
+    test.use({ hasTouch: true, isMobile: true, viewport });
+
+    test("with projects under the bike, no two labels overlap and each stays in the panel", async ({
+      page,
+    }) => {
+      const name = `Trail bike ${Date.now()}`;
+      await newWorkspace(page, name);
+      const project = (named: string, step: string) =>
+        `project: ${JSON.stringify({ name: named, add_steps: [{ kind: "you can do this", text: step }] })}`;
+      await addBike(page, name, [
+        project("Ride red trails with confidence", "The cornering drill on Saturday's ride"),
+        project("Bike set up right", "Fit the DMR V8 pedals when they arrive"),
+      ]);
+      await expect(
+        page.getByRole("region", { name: "Projects" }).getByRole("listitem"),
+      ).toHaveCount(2);
+      await expect(label(page, "Pedals · DMR V8 next")).toBeVisible();
+
+      const panel = await bike(page).boundingBox();
+      expect(panel).not.toBeNull();
+      if (panel === null) return;
+      const boxes = await bike(page)
+        .getByRole("link")
+        .evaluateAll((links) =>
+          links.map((link) => {
+            const { left, top, right, bottom } = link.getBoundingClientRect();
+            return { name: link.textContent ?? "", left, top, right, bottom };
+          }),
+        );
+      expect(boxes).toHaveLength(9);
+      for (const box of boxes) {
+        expect(box.left, `${box.name} inside the panel`).toBeGreaterThanOrEqual(panel.x - 1);
+        expect(box.right, `${box.name} inside the panel`).toBeLessThanOrEqual(
+          panel.x + panel.width + 1,
+        );
+        expect(box.top, `${box.name} inside the panel`).toBeGreaterThanOrEqual(panel.y - 1);
+        expect(box.bottom, `${box.name} inside the panel`).toBeLessThanOrEqual(
+          panel.y + panel.height + 1,
+        );
+      }
+      for (const [i, a] of boxes.entries()) {
+        for (const b of boxes.slice(i + 1)) {
+          const apart =
+            a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+          expect(apart, `${a.name} and ${b.name} don't overlap`).toBe(true);
+        }
+      }
+      await shot(page, `planning-home-bike-labels-${viewport.height}`);
+    });
+  });
+}
 
 test.describe("on the cover screen", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 400, height: 900 } });

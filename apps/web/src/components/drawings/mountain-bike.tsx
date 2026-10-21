@@ -1,5 +1,6 @@
 import type { BikePlace } from "@courtyard/contract";
 import { classes } from "@/lib/classes";
+import type { Point } from "./labels-apart.ts";
 
 // Courtyard's drawing of a mountain bike (#603; Paper, "Tablet · Mountain biking Home: the bike,
 // then projects (#603)"), the first kind of thing it draws: side on, front wheel on the right, in
@@ -10,8 +11,6 @@ import { classes } from "@/lib/classes";
 /** The drawing's size, as its coordinates count. */
 export const BIKE_WIDTH = 622;
 export const BIKE_HEIGHT = 300;
-
-type Point = readonly [x: number, y: number];
 
 /** Where each place's pin is on the bike, where its line ends at the label, and the label's top left. */
 export const BIKE_SPOTS: Readonly<
@@ -113,13 +112,16 @@ const STROKES: readonly Stroke[] = [
 /**
  * The bike, its parts' pins and the lines out to their labels (the labels themselves are the
  * page's, as links, over it). `pins` are the places that have a part; `lit` is the one whose label
- * is pointed at or focused, drawn in violet. It fills its box, which keeps the drawing's shape.
+ * is pointed at or focused, drawn in violet. It fills its box, which keeps the drawing's shape;
+ * a line out to a label moved off its spot (`shifts`, #657) follows it, past the box if need be.
  */
 export function MountainBike(props: {
   pins: readonly BikePlace[];
   lit: BikePlace | undefined;
   /** The lines out to labels: off on the cover screen, where the labels are listed under it. */
   lines: boolean;
+  /** How far each label was moved from its spot, so no two overlap, in the drawing's units. */
+  shifts?: Partial<Record<BikePlace, Point>>;
   label: string;
 }) {
   return (
@@ -127,7 +129,7 @@ export function MountainBike(props: {
       viewBox={`0 0 ${BIKE_WIDTH} ${BIKE_HEIGHT}`}
       role="img"
       aria-label={props.label}
-      className="absolute inset-0 size-full"
+      className="absolute inset-0 size-full overflow-visible"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -148,12 +150,13 @@ export function MountainBike(props: {
       <path d={ring(452, 200, 4)} className="fill-muted-foreground" />
       {props.pins.map((place) => {
         const { pin, line } = BIKE_SPOTS[place];
+        const [dx, dy] = props.shifts?.[place] ?? [0, 0];
         const lit = place === props.lit;
         return (
           <g key={place} data-pin={place}>
             {props.lines && (
               <path
-                d={`M${line[0]} ${line[1]} L${pin[0]} ${pin[1]}`}
+                d={`M${line[0] + dx} ${line[1] + dy} L${pin[0]} ${pin[1]}`}
                 strokeWidth={1.5}
                 className={lit ? "stroke-primary-text" : "stroke-foreground/30"}
               />

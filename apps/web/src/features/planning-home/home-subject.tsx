@@ -1,6 +1,7 @@
 import type { BikePlace, DrawnPart, HomeSubject, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useLabelsApart } from "@/components/drawings/labels-apart";
 import {
   BIKE_HEIGHT,
   BIKE_SPOTS,
@@ -67,6 +68,17 @@ function DrawnBike(props: { workspaceId: WorkspaceId; subject: Drawing }) {
   const cover = useLayout() === "cover";
   /** The place whose label is pointed at or focused, lit on the bike. */
   const [lit, setLit] = useState<BikePlace>();
+  const room = useRef<HTMLDivElement>(null);
+  const drawing = useRef<HTMLDivElement>(null);
+  // Labels that would overlap on a small bike are pushed apart along their row (#657).
+  const shifts = useLabelsApart({
+    room,
+    drawing,
+    width: BIKE_WIDTH,
+    spots: BIKE_SPOTS,
+    keys: subject.placed.map(({ place }) => place),
+    on: !cover,
+  });
   const label = (part: DrawnPart, place?: BikePlace) => (
     <PartLabel
       key={part.thing}
@@ -91,8 +103,12 @@ function DrawnBike(props: { workspaceId: WorkspaceId; subject: Drawing }) {
       className={classes("flex flex-col gap-2.5", !cover && "min-h-0 grow")}
     >
       {/* From a tablet up the panel's room is measured as a container, so the bike is as big as fits. */}
-      <div className={classes("relative", !cover && "min-h-0 grow [container-type:size]")}>
+      <div
+        ref={room}
+        className={classes("relative", !cover && "min-h-0 grow [container-type:size]")}
+      >
         <div
+          ref={drawing}
           className={classes(
             "aspect-[622/300]",
             cover
@@ -104,18 +120,21 @@ function DrawnBike(props: { workspaceId: WorkspaceId; subject: Drawing }) {
             pins={subject.placed.map(({ place }) => place)}
             lit={lit}
             lines={!cover}
+            shifts={shifts}
             label={`Drawing of ${subject.name}`}
           />
           {!cover &&
             subject.placed.map((part) => {
               const [x, y] = BIKE_SPOTS[part.place].label;
+              const [dx, dy] = shifts[part.place] ?? [0, 0];
               return (
                 <div
                   key={part.thing}
-                  className="absolute"
+                  data-label={part.place}
+                  className="absolute w-max"
                   style={{
-                    left: `${(x / BIKE_WIDTH) * 100}%`,
-                    top: `${(y / BIKE_HEIGHT) * 100}%`,
+                    left: `${((x + dx) / BIKE_WIDTH) * 100}%`,
+                    top: `${((y + dy) / BIKE_HEIGHT) * 100}%`,
                   }}
                 >
                   {label(part, part.place)}

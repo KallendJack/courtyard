@@ -26,9 +26,10 @@ its card opens.
 - **The drawn bike** (`home-subject.tsx`, `components/drawings/mountain-bike.tsx`): Courtyard's own drawing, never a
   model's, as big as the panel lets it be and keeping its shape. Each part the worker placed on it has a pin and a
   label linking to its card (`/workspaces/:id/things/:slug`), which says its upcoming replacement when it has one;
-  pointed at or focused, its line, pin and strokes light violet. Parts with no place on it are listed under it as
-  labels too. On the cover screen the bike has its pins only, and every part is listed under it. The bike's photo is
-  on its card.
+  pointed at or focused, its line, pin and strokes light violet. On a small bike, labels that would overlap are pushed
+  apart along their row, past the bike into the panel if need be, each line following its label (#657). Parts with no
+  place on it are listed under it as labels too. On the cover screen the bike has its pins only, and every part is
+  listed under it. The bike's photo is on its card.
 - **A room's floor plan** (#257; Paper, "Tablet · Floor plan in an answer (#257)"): drawn by the same rich block as in
   an answer (`components/rich-blocks/floor-plan.tsx`, told it's `OnHome`), its list of things scrolling inside the
   block, which keeps its size.
