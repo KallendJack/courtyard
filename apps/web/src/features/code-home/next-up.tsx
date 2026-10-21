@@ -19,14 +19,18 @@ import { useAction } from "@/hooks/use-action";
 import { classes } from "@/lib/classes";
 import { clockWords } from "@/lib/when";
 import { describeProblem } from "../../components/layout/problems.tsx";
+import { behindName } from "../builders/words.ts";
 import { codingModelIn } from "../pull-requests/api.ts";
 import { runLead, startOnIssue } from "./api.ts";
 
 /** How many titles the Then line names. */
 const THEN = 3;
 
+/** How many issues Next up shows above it, cards and rows (#592): the next three. */
+const NEXT = 3;
+
 /**
- * From a tablet up, a narrow column beside Needs you and Running, as tall as theirs, wide enough
+ * From a tablet up, a narrow column beside the Builders board and Needs you, as tall as theirs, wide enough
  * that most titles fit on one line (#503).
  */
 const COLUMN = "flex min-w-0 flex-col md:min-h-0 md:w-72.5 md:shrink-0 xl:w-80";
@@ -123,10 +127,27 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
   const under = grill === undefined ? undefined : build;
   /** The other issues in order, those to grill and blocked ones in their place. */
   const rest = props.issues.filter((issue) => issue !== grill && issue !== build);
+  /**
+   * Those the running Lead holds back for a builder's merge (#592), up to the next three in all:
+   * each a row saying so, "Next · waits for Journey book to merge".
+   */
+  const lead = props.lead?.state === "running" ? props.lead : undefined;
+  const cards = [first, under].filter((card) => card !== undefined).length;
+  const held = rest
+    .flatMap((issue) => {
+      const behind = lead?.heldBack?.find((each) => each.issue === issue.number)?.behind;
+      return lead === undefined || behind === undefined
+        ? []
+        : [{ issue, behind: behindName(lead, behind) }];
+    })
+    .slice(0, Math.max(0, NEXT - cards));
   /** What comes after the cards, by title: those blocked wait, so they aren't next. */
-  const then = rest.filter((issue) => !issue.ready || issue.after === null).slice(0, THEN);
+  const then = rest
+    .filter((issue) => !held.some((each) => each.issue === issue))
+    .filter((issue) => !issue.ready || issue.after === null)
+    .slice(0, THEN);
   /** How many more the Roadmap has on Next up's list. */
-  const more = rest.length - then.length;
+  const more = rest.length - held.length - then.length;
   const on = { workspaceId: props.workspaceId, providers: props.providers };
   return (
     <div className={COLUMN}>
@@ -155,6 +176,29 @@ function Offering(props: Offered & { issues: readonly NextUpIssue[] }) {
                 ? {}
                 : { lead: { status: props.lead, onLead: props.onLead } })}
             />
+          )}
+          {held.length > 0 && (
+            <ul className="flex flex-col gap-0.5">
+              {held.map(({ issue, behind }) => (
+                <li
+                  key={issue.number}
+                  aria-label={issue.title}
+                  className="flex shrink-0 flex-col gap-0.5 rounded-md px-2.5 py-2"
+                >
+                  <a
+                    href={issue.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="truncate text-meta font-semibold text-foreground/90 hover:underline"
+                  >
+                    {issue.title}
+                  </a>
+                  <p className="text-label font-medium text-muted-foreground">
+                    Next · waits for {behind} to merge
+                  </p>
+                </li>
+              ))}
+            </ul>
           )}
         </BlockRows>
         {(then.length > 0 || more > 0) && (
@@ -282,17 +326,17 @@ function StartOnIssue(props: {
       {props.small || props.does === "grill" ? issue.title : `#${issue.number} ${issue.title}`}
     </a>
   );
-  /** The builder's issue the Lead holds this one back behind (#423), changing the same files. */
+  /** The builder the Lead holds this one back for (#423), changing the same files, by name. */
   const behind = leading
     ? props.lead?.status.heldBack?.find((held) => held.issue === issue.number)?.behind
     : undefined;
+  const waits =
+    behind === undefined || props.lead === undefined
+      ? undefined
+      : `Next · waits for ${behindName(props.lead.status, behind)} to merge`;
   const status = grilling
     ? "Needs grilling first"
-    : behind !== undefined
-      ? `Held back · same files as #${behind}, starts once it merges`
-      : leading
-        ? "The Lead starts this next"
-        : "Ready to build";
+    : (waits ?? (leading ? "The Lead starts this next" : "Ready to build"));
   /** While the Lead runs, it starts this one: there's no Build to tap (Paper, "Lead running"). */
   const leadRuns = (
     <p className="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-primary/35 bg-secondary text-meta font-bold text-primary-text">
@@ -319,11 +363,12 @@ function StartOnIssue(props: {
         <div className="flex items-center gap-2.5">
           <div className="flex min-w-0 grow flex-col">
             {title}
+            {/* Under Grill, it's simply next (#592; Paper, "Tablet · Builders board"). */}
             <p className={classes("text-meta font-medium", look.status)}>
-              {leading ? status : "Ready"}
+              {waits ?? (leading ? "Next" : "Ready")}
             </p>
           </div>
-          {!confirming && !leading && (
+          {!confirming && (
             <Button variant={look.variant} size="xs" onClick={() => setConfirming(true)}>
               <Icon aria-hidden />
               {look.label}
@@ -431,12 +476,13 @@ function StartOnIssue(props: {
       )}
     </section>
   );
-  if (!props.small || props.lead === undefined || confirming) return card;
-  // Under Grill, the Lead's control sits under the small card, not in it (#550).
+  // Under Grill, Run the build order sits under the small card, not in it (#550); while the Lead
+  // runs, the Builders board says so (#592).
+  if (!props.small || props.lead === undefined || confirming || leading) return card;
   return (
     <>
       {card}
-      {leading ? leadRuns : runTheOrder}
+      {runTheOrder}
     </>
   );
 }

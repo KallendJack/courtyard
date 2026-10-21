@@ -67,6 +67,16 @@ const VARIANTS = {
   needs: "border-transparent bg-warning text-background hover:bg-warning/85",
   /** A quiet action on something gold, such as Turn off on the Lead's row allowing all (#551). */
   needsOutline: "border-warning/40 bg-transparent text-warning hover:bg-warning/10",
+  /** What needs the owner, in gold words with no pill: Allow on Home's Needs you (#592). */
+  needsWords: "border-transparent bg-transparent text-warning hover:bg-warning/10",
+  /** On something passed, in moss: a builder's Review (#592). */
+  passed: "border-transparent bg-success text-background hover:bg-success/85",
+  /** On something failed, ringed in red: a stuck builder's Retry (#592). */
+  failedOutline:
+    "border-destructive bg-transparent text-foreground hover:bg-destructive/10 focus-visible:ring-destructive/20",
+  /** What failed, in red words with no pill: Retry on Home's Needs you (#592). */
+  failedWords:
+    "border-transparent bg-transparent text-destructive-text hover:bg-destructive/10 focus-visible:ring-destructive/20",
   /** Any other action, such as Cancel. */
   outline: "border-input bg-input/30 text-foreground hover:bg-input/50",
   /** Archiving, deleting, logging out. */
@@ -97,6 +107,10 @@ const SIZES = {
   xs: classes(ONE_LINE, "h-9 px-3 text-sm md:h-7 md:px-2"),
   /** Beside text or in a box (a notice, a form in a list). */
   sm: classes(ONE_LINE, "h-8 px-4 text-sm"),
+  /** A row's one action, the same width on every row: a builder's Allow, Retry, Review (#592). */
+  row: "h-7.5 min-w-19.5 px-3 text-meta font-bold whitespace-nowrap",
+  /** Words that act, in a row's first column: Home's Needs you's Allow and Retry (#592). */
+  words: "-mx-1.5 h-8 px-1.5 text-meta font-bold whitespace-nowrap",
   md: classes(ONE_LINE, "h-9 px-5 text-sm"),
   /** A form's only action on its own page (logging in). */
   lg: classes(ONE_LINE, "h-11 px-5 text-sm"),

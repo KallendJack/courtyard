@@ -232,9 +232,9 @@ _Avoid_: preferences, account, profile
 
 **Home**:
 A workspace page's first tab (#300, #301), beside the tabs that show once they have something (Sessions, PRs or
-Sessions, Things, Docs), each with its count. A code workspace's Home shows, in a fixed order, **Needs you**,
-**Running**, **Next up** and **Main** (its repository's newest main commit with its build), the first three keeping
-their place when empty with one quiet line ("Nothing running"), then the message box; from a tablet up it fits the
+Sessions, Things, Docs), each with its count. A code workspace's Home shows, in a fixed order, the **Builders
+board**, **Needs you**, **Next up** and **Main** (its repository's newest main commit with its build), the first three
+keeping their place when empty with one quiet line ("Nothing needs you"), then the message box; from a tablet up it fits the
 screen, a block with more rows than fit scrolling inside its card. A planning workspace's Home shows its **Home
 view** (#565); the message box, which starts a new session, is out of sight while there's a view, until Talk, + New
 or a part's Ask about it opens it, and the latest session's next steps are in History. With no view it shows one quiet
@@ -248,10 +248,23 @@ and its skills.
 _Avoid_: context file (that's the file it reads), memory, knowledge base
 
 **Needs you**:
-The block on a code workspace's Home of everything waiting on the owner (AGENTS.md): approvals, failing checks, new
-replies, pull requests ready to merge, conflicts, and the setup check's offer, each a row with its one-tap action
-(Approve, Review, Open, Merge, Bring up to date).
+The block on a code workspace's Home of everything else waiting on the owner (AGENTS.md): approvals, failing checks,
+new replies, pull requests ready to merge, conflicts, and the setup check's offer, each a row with its one-tap action
+(Approve, Review, Open, Merge, Bring up to date). A Lead's builder that waits on the owner shows on the **Builders
+board** instead, and Needs you says "Nothing else needs you" (#592). Home's Needs you lists every workspace's,
+builders too, whose **Allow** and **Retry** act in place and whose **Review** opens the pull request.
 _Avoid_: inbox, notifications, to-do, alerts
+
+**Builders board**:
+The block at the top of a code workspace's Home (#592, ADR 0031): everything the Lead and its builders are doing, in
+the eight **builder statuses**. Its header says how many build of how many may and how many pull requests wait for
+review of the 4 that hold it back ("2 of 2 building · 1 of 4 for review"), then every reason it starts no more at once
+("Not starting more: the usage limit, until 18:10 · Pin to Home waits for Journey book to merge"), with Pause or Run,
+and Merge in order once more than one is ready. Then a row per builder: its issue's name, its status and since when
+("Checking · 2 min"), what it's doing now, and one action only when it acts: **Allow** (or **Answer**, Waiting on
+you), **Review** (Ready for review), **Retry** (Stuck); a row that's only working opens its session. A merged one
+leaves at the end of the day. The owner's own sessions aren't on it: they're in Sessions.
+_Avoid_: Running, Lead row, dashboard, queue
 
 **Merge in order**:
 The Lead's one tap for its builders' pull requests ready to merge (#423): it merges them one at a time in the
@@ -266,10 +279,11 @@ failing one as **Bump fails** (first, one per bump) for the Lead, asks Dependabo
 hands one still failing after it to the owner. A green one waits in Needs you for Merge; it never merges itself.
 _Avoid_: dependency update, upgrade, Dependabot PR (in the UI, "From Dependabot")
 
-**Held back**:
+**Waits for a merge**:
 A ready issue the Lead doesn't start yet because a builder still at work is changing the code files it names
-(#423); it starts once that builder's pull request merges.
-_Avoid_: queued, paused, deferred
+(#423); it starts once that builder's pull request merges. Next up and the Builders board say "Next · waits for
+<name> to merge" (#592).
+_Avoid_: held back, holding back, queued, paused, deferred
 
 **Builder status**:
 Where one of the Lead's builders stands, one of eight, each with since when (#590, ADR 0031), recorded by the worker
@@ -278,9 +292,10 @@ in the builds lock), **Waiting on you** (an approval, a question it asked, or Co
 for the limit** (until its reset), **In CI** (its pull request's checks run), **Ready for review**, **Merged**, and
 **Stuck** (Courtyard gave up, saying why). A failing check is Building again. A turn that ends with no pull request
 and no question is told once to **carry on**; ending so again, it's Stuck. One at the limit carries on at the
-reset, and one a restart cut off carries on by itself once (cut off again, it's Stuck). A Stuck one waits in Needs
-you, saying why, its slot free.
-_Avoid_: state, phase, health, stalled, hung, idle
+reset, and one a restart cut off carries on by itself once (cut off again, it's Stuck). A Stuck one waits on the
+Builders board and in Home's Needs you, saying why, its slot free, until the owner taps **Retry** (#592), which
+starts it afresh. Only these eight words name where a builder stands, on every screen.
+_Avoid_: state, phase, health, stalled, hung, idle, resting, held back
 
 **Roadmap**:
 A code workspace's tab of the whole plan (#532): every open milestone in the roadmap's order, Later last, with its
@@ -294,7 +309,7 @@ The first block on a workspace's Home. A code workspace's: what starts the next 
 GitHub. It also counts every issue that isn't ready yet (`needs-triage` or `needs-info`, #463), in its place; a
 milestone's Build order line only orders them. **Grill** takes the top in gold on the first of them (#363): it starts
 a session with the grilling skill on that issue, which ends with it marked ready; the first ready issue sits under it
-with a small Build. A grill claims nothing and takes no builder's place in Running. A ready issue blocked by an open
+with a small Build. A grill claims nothing and takes no builder's place. A ready issue blocked by an open
 one (GitHub's blocked by) gets no Build until that closes (#377). Under the cards, one faint **Then** line names the
 next few titles, and **Whole roadmap · N more** opens the **Roadmap**. A planning workspace's (#300): the session to
 pick up again (one waiting on the owner, else the last used in the past week), then the plans that name a day in the

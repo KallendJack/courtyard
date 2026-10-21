@@ -1802,6 +1802,13 @@ export const BUILDER_CARRY_ON_MESSAGE =
   "Carry on with your issue: your turn ended without a pull request or a question for the owner. Finish the work and open its pull request, or ask the owner what you need to know.";
 
 /**
+ * What Retry sends a Lead's builder that's Stuck (#592; docs/ai-conduct.md, Coding): the owner's
+ * tap, in their words.
+ */
+export const BUILDER_RETRY_MESSAGE =
+  "Try again with your issue: you were stopped, and I'd like you to carry on. First check what already happened, then finish the work and open its pull request, or ask me what you need to know.";
+
+/**
  * What the worker sends a Lead's builder once the usage limit its last turn met has reset (#610;
  * docs/ai-conduct.md, Coding).
  */

@@ -27,6 +27,13 @@ export function Block(props: {
   needs?: boolean;
   /** Beside the label, on the right: "1 of 3", a milestone. */
   aside?: ReactNode;
+  /** In the aside's place, the block's own controls: the Builders board's Pause (#592). */
+  actions?: ReactNode;
+  /**
+   * The Builders board's size (#592; Paper, "Tablet · Builders board"): from a tablet up, three
+   * shares of the page's height to the block under it's one; on a phone, as tall as three rows.
+   */
+  tall?: boolean;
   /**
    * Its size is set by the layout, never by its rows (#398; Paper, "Code Home, fixed block sizes"):
    * from a tablet up, its share of the page's height; on a phone, two rows tall, the page scrolling
@@ -35,6 +42,11 @@ export function Block(props: {
   fill?: boolean;
   /** Its size is its slot's, set by the page (Home's Needs you, #492); its rows scroll inside. */
   fillsSlot?: boolean;
+  /**
+   * From a tablet up, never shorter than one whole row (Needs you under the Builders board, #592),
+   * however little of the page's height its share is.
+   */
+  aRowAtLeast?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -43,11 +55,21 @@ export function Block(props: {
       className={classes(
         "flex min-w-0 flex-col gap-1.5 rounded-card border bg-surface p-3.5",
         props.needs && "border-warning/25",
-        props.fill && "md:min-h-0 md:flex-1 max-md:h-46 max-md:shrink-0",
+        props.fill &&
+          classes(
+            "md:flex-1 max-md:h-46 max-md:shrink-0",
+            props.aRowAtLeast ? "md:min-h-30" : "md:min-h-0",
+          ),
+        props.tall && "md:min-h-0 md:flex-3 max-md:h-88 max-md:shrink-0",
         props.fillsSlot && "h-full min-h-0",
       )}
     >
-      <div className="flex items-center justify-between gap-2 pb-1.5">
+      <div
+        className={classes(
+          "flex items-center justify-between gap-2",
+          props.actions === undefined ? "pb-1.5" : "pb-0.5",
+        )}
+      >
         <CapsLabel
           tone={props.needs ? "warning" : "muted"}
           heading={{ level: 2 }}
@@ -57,8 +79,14 @@ export function Block(props: {
           {props.label}
           {props.count !== undefined && ` · ${props.count}`}
         </CapsLabel>
-        {props.aside !== undefined && (
-          <span className="truncate text-label font-semibold text-placeholder">{props.aside}</span>
+        {props.actions === undefined ? (
+          props.aside !== undefined && (
+            <span className="truncate text-label font-semibold text-placeholder">
+              {props.aside}
+            </span>
+          )
+        ) : (
+          <div className="flex shrink-0 items-center gap-2">{props.actions}</div>
         )}
       </div>
       {props.children}

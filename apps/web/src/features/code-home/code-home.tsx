@@ -21,6 +21,8 @@ import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace/workspa
 import { addStylesheet } from "@/lib/stylesheet";
 import type { FromWorker } from "../../api/worker.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
+import { KEPT_LEAD, useLead } from "../builders/api.ts";
+import { BuildersBoard, needsTheOwner } from "../builders/builders-board.tsx";
 import { UsageLines } from "../limits/usage-lines.tsx";
 import { loadMattSetup } from "../matt-setup/api.ts";
 import PullRequests, { useOpenPullRequests } from "../pull-requests/pull-requests.tsx";
@@ -28,14 +30,13 @@ import { Composer } from "../sessions/composer/composer.tsx";
 import { startSession } from "../sessions/composer/messages.ts";
 import { SessionLinks } from "../sessions/session-links.tsx";
 import { WorkspaceStatusLine } from "../status-line/status-line.tsx";
-import { loadConnections, loadLead, loadNextUp } from "./api.ts";
+import { loadConnections, loadNextUp } from "./api.ts";
 import css from "./code-home.css?inline";
 import { ConnectionsSheet } from "./connections.tsx";
 import { MainRow } from "./main-row.tsx";
-import { NeedsYou, needsOf } from "./needs-you.tsx";
+import { NeedsYou, needsOf, onTheBoard } from "./needs-you.tsx";
 import { NextUp } from "./next-up.tsx";
 import { Roadmap } from "./roadmap.tsx";
-import { Running } from "./running.tsx";
 
 // The Home's own stylesheet (code-home.css), added once, when a code workspace's page first opens.
 addStylesheet("code-home", css);
@@ -69,7 +70,6 @@ const tabIn = (hash: string): Tab =>
 const KEPT_CONNECTIONS = createKept<WorkspaceConnections>();
 const KEPT_SETUP = createKept<MattSetup>();
 const KEPT_NEXT_UP = createKept<NextUpAnswer>();
-const KEPT_LEAD = createKept<LeadStatus>();
 
 const NO_SETUP: MattSetup = { state: "none" };
 
@@ -79,8 +79,8 @@ const known = <T,>(loaded: FromWorker<T>) => (loaded.kind === "loaded" ? loaded.
 /**
  * A code workspace's page under its name (#301; Paper, "Code workspace Home", desktop, tablet and
  * cover screen): its connections line (#308), its tabs (Home · Roadmap · Sessions · PRs; the
- * Roadmap, #532, its milestones and their issues), and on Home, in a
- * fixed order, Needs you, Running, Next up, Main, then the message box at the foot. From a tablet
+ * Roadmap, #532, its milestones and their issues), and on Home, in a fixed order, the Builders
+ * board (#592), Needs you, Next up, Main, then the message box at the foot. From a tablet
  * up it's exactly the screen tall and never scrolls (#335): the blocks share the height left, each
  * keeping its place, empty or not (#283), and scroll inside their cards. Its one line, What it's
  * for, stays in its workspace.json for the home chat and turns, never on the page (#333). Its
@@ -130,12 +130,11 @@ export default function CodeHome(props: {
     },
     again: list.sessions.length,
   });
-  // The Lead (#347), asked for again as its sessions change, as Next up is.
-  const lead = useKept(KEPT_LEAD, {
-    key: workspace.id,
-    load: async () => known(await loadLead(workspace.id)),
-    again: `${list.sessions.length}-${list.sessions.filter((session) => session.busy).length}-${again}`,
-  });
+  // The Lead (#347) and its builders' statuses (#590), asked for again as its sessions change.
+  const lead = useLead(
+    workspace.id,
+    `${list.sessions.length}-${list.sessions.filter((session) => session.busy).length}-${again}`,
+  );
   const [connecting, setConnecting] = useState(false);
   const line = useAnchorName();
 
@@ -168,7 +167,11 @@ export default function CodeHome(props: {
   };
 
   const pulls = open?.pullRequests ?? [];
-  const needs = needsOf({ sessions: list.sessions, pulls, setup, lead });
+  // A Lead's builder that needs the owner shows on the Builders board only (#592).
+  const needs = needsOf({ sessions: list.sessions, pulls, setup, lead }).filter(
+    (need) => !onTheBoard(need, lead),
+  );
+  const boardNeedsYou = lead?.statuses.some(needsTheOwner) === true;
   /** Whether what Needs you shows is still to come, on a first visit. */
   const needsPending = open === undefined;
   // Opened on PRs before they're known, it stays on PRs, its list in its faint place.
@@ -298,6 +301,15 @@ export default function CodeHome(props: {
           <div className="mt-4 flex flex-col gap-3 md:min-h-0 md:flex-1">
             <div className="flex flex-col items-stretch gap-3.5 md:min-h-0 md:flex-1 md:flex-row">
               <div className="flex min-w-0 grow basis-0 flex-col gap-3.5 md:min-h-0">
+                <BuildersBoard
+                  workspaceId={workspace.id}
+                  lead={lead}
+                  sessions={list.sessions}
+                  issues={nextUp?.issues}
+                  providers={providers.kind === "loaded" ? providers.data.providers : undefined}
+                  onLead={leadChanged}
+                  onChanged={changed}
+                />
                 <NeedsYou
                   workspaceId={workspace.id}
                   needs={needs}
@@ -305,14 +317,7 @@ export default function CodeHome(props: {
                   setup={setup}
                   onSetup={(now) => KEPT_SETUP.set(workspace.id, now)}
                   onChanged={changed}
-                />
-                <Running
-                  workspaceId={workspace.id}
-                  sessions={list.sessions}
-                  running={list.running}
-                  lead={lead}
-                  providers={providers.kind === "loaded" ? providers.data.providers : undefined}
-                  onLead={leadChanged}
+                  {...(boardNeedsYou ? { nothing: "Nothing else needs you" } : {})}
                 />
               </div>
               {providers.kind === "loaded" && (

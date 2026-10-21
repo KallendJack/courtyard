@@ -50,6 +50,8 @@ export type TurnEnding =
 /** Something that happened in a builder's session, which may move its status on. */
 export type Happening =
   | { readonly kind: "turn-started" }
+  /** The owner tapped Retry on it while Stuck (#592): its turn starts afresh, its one carry-on with it. */
+  | { readonly kind: "retried" }
   /** A heavy check waits for its place, with this many ahead of it (#281, #306). */
   | { readonly kind: "check-waiting"; readonly command: string; readonly ahead: number }
   | { readonly kind: "check-started"; readonly command: string }
@@ -154,6 +156,12 @@ const next = (
   switch (happening.kind) {
     case "turn-started":
       return to({ kind: "building" }, { turning: true });
+    case "retried":
+      // Still Stuck until its turn starts; told to carry on once more, as a fresh start is.
+      return {
+        kept: { ...base, carriedOn: false, cutOff: false, status },
+        carryOn: false,
+      };
     case "check-waiting":
       return to({ kind: "checking", command: happening.command, ahead: happening.ahead });
     case "check-started":

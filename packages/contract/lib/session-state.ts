@@ -66,10 +66,12 @@ export const SessionList = z.object({ sessions: z.array(ListedSession) });
 export type SessionList = z.infer<typeof SessionList>;
 
 /**
- * One thing waiting on the owner (#492), in any workspace: a session's approval, its turn cut off
- * by a restart, its builder stuck (#590, with why), or its new reply; or its pull request's failing
- * checks, merge or conflict. Each names its workspace and session, so a row or the Next pill opens
- * it in one tap.
+ * One thing waiting on the owner (#492), in any workspace: a session's approval (what it asks, by
+ * its event number, so a row can Allow it in place, #592), its turn cut off by a restart, its
+ * builder stuck (#590, with why), or its new reply; or its pull request's failing checks, merge or
+ * conflict. Each names its workspace and session, so a row or the Next pill opens it in one tap,
+ * and says when the session is a Lead's builder (#592), whose row Home words as the Builders board
+ * does.
  */
 export const NeedYou = z.discriminatedUnion("kind", [
   z.object({
@@ -79,6 +81,9 @@ export const NeedYou = z.discriminatedUnion("kind", [
     since: z.iso.datetime(),
     /** Why a stuck builder is (#590). */
     reason: z.string().optional(),
+    /** The approval it waits on, by its event number, and what it asks. */
+    approval: z.object({ number: z.number().int().positive(), ask: ApprovalAsk }).optional(),
+    builder: z.literal(true).optional(),
   }),
   z.object({
     kind: z.enum(["failed", "merge", "conflict"]),
@@ -86,6 +91,7 @@ export const NeedYou = z.discriminatedUnion("kind", [
     session: z.object({ id: SessionId, title: z.string() }),
     since: z.iso.datetime(),
     pullRequest: z.object({ number: z.number().int().positive(), title: z.string().optional() }),
+    builder: z.literal(true).optional(),
   }),
 ]);
 export type NeedYou = z.infer<typeof NeedYou>;

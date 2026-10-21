@@ -31,7 +31,12 @@ export type Need =
   | { readonly kind: "approval"; readonly session: Listed }
   /** Its last turn, cut off by a restart, waits for Continue (#186). */
   | { readonly kind: "cut-off"; readonly session: Listed }
-  | { readonly kind: "failed"; readonly pull: OpenPullRequest; readonly count: number }
+  | {
+      readonly kind: "failed";
+      readonly pull: OpenPullRequest;
+      readonly count: number;
+      readonly session?: Listed;
+    }
   | { readonly kind: "reply"; readonly session: Listed }
   /** Its session, when one opened it: a Lead's builder says so (#347). */
   | { readonly kind: "merge"; readonly pull: OpenPullRequest; readonly session?: Listed }
@@ -82,11 +87,14 @@ export const needsOf = (given: {
     kind: "cut-off",
     session,
   }));
-  const failed: Need[] = pullsWaiting("failed").map((pull) => ({
-    kind: "failed",
-    pull,
-    count: pull.pullRequest.checks.kind === "failed" ? pull.pullRequest.checks.failed.length : 0,
-  }));
+  const failed: Need[] = pullsWaiting("failed").map((pull) => {
+    const session = sessionOf(pull);
+    const count =
+      pull.pullRequest.checks.kind === "failed" ? pull.pullRequest.checks.failed.length : 0;
+    return session === undefined
+      ? { kind: "failed", pull, count }
+      : { kind: "failed", pull, count, session };
+  });
   const replies: Need[] = sessionsWaiting("reply").map((session) => ({ kind: "reply", session }));
   const ready = (given.lead?.ready ?? []).flatMap((each) => {
     const pull = given.pulls.find(
@@ -123,6 +131,27 @@ export const needsOf = (given: {
     ...conflicts,
     ...setup,
   ];
+};
+
+/**
+ * Whether a need is one of the Lead's builders' (#592): on a code workspace's Home it shows on the
+ * Builders board only, in that builder's row (its approval, its pull request ready for review,
+ * Merge in order in the board's header), so its Needs you holds the rest.
+ */
+export const onTheBoard = (need: Need, lead: LeadStatus | undefined) => {
+  switch (need.kind) {
+    case "merge-in-order":
+      return true;
+    case "setup":
+      return false;
+    default: {
+      const { session } = need;
+      return (
+        session !== undefined &&
+        (lead?.statuses ?? []).some((builder) => builder.session === session.id)
+      );
+    }
+  }
 };
 
 /** A session waiting on the owner: a builder stuck, an approval, a turn cut off, or a new reply. */

@@ -3,7 +3,7 @@ import { type APIRequestContext, expect, type Page, test } from "@playwright/tes
 import { chooseModel } from "./frame.ts";
 
 // Allow all for this task (#428; Paper, "2 · Agreed": the approval's line, how long, the session's
-// strip and marked steps, Running's marks), in start-worker.mjs's Side project, on the fake, which
+// strip and marked steps), in start-worker.mjs's Side project, on the fake, which
 // runs "run command: …" as the worker or the owner allows. The worker's side is in
 // allow-all.test.ts.
 
@@ -98,7 +98,7 @@ test("from an approval: how long, then the turn runs on without asking, each ste
 });
 
 test("from the session's ⋯, for an hour, on a session between turns", async ({ page, request }) => {
-  // Running's marks are in lead.spec.ts, on the Lead's builders: this one holds no place.
+  // This one holds no place.
   const id = await startCoding(request, "Tidy the notes");
   await page.goto(`/workspaces/side-project/sessions/${id}`);
   await expect(page.getByRole("list", { name: "Session" })).toContainText(

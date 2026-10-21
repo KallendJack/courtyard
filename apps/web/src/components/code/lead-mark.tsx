@@ -1,5 +1,5 @@
 // A code workspace's Lead (#347; Paper, "Tablet · Code Home, Lead running"): its small violet
-// mark, first in Running, and the tag its builders carry in every list of sessions.
+// mark, first in Sessions, and the tag its builders carry in every list of sessions.
 
 /** The Lead's mark: "LEAD" in a violet pill, before its row. */
 export function LeadMark() {

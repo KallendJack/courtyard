@@ -5,9 +5,11 @@ import {
   CODE_SESSIONS_AT_ONCE,
   type CodeSessionList,
   LEAD_BUILDERS,
+  LEAD_REVIEWS_AT_MOST,
   type LeadBuilder,
   type LeadBuilderStatus,
   LeadHeldBack,
+  LeadHolding,
   type LeadMerge,
   type LeadMergeRequest,
   type LeadReady,
@@ -59,9 +61,6 @@ const NOTES_KEPT = 10;
 /** The title the Lead's session has. */
 const LEAD_TITLE = "Lead";
 
-/** It holds back (#591) while this many of its builders' pull requests wait for the owner's review. */
-const REVIEWS_AT_MOST = 4;
-
 /** A numbered milestone's title ("4 · Code workspaces"): Later, or none, is never built (#591). */
 const NUMBERED = /^\d/;
 
@@ -100,6 +99,8 @@ const Kept = z.object({
   state: z.enum(["running", "paused", "resting"]),
   /** Why it's holding back while running, why it's resting. */
   why: z.string().optional(),
+  /** Every reason it starts no more builders now, while running (#592). */
+  holding: z.array(LeadHolding).optional(),
   // One kept with more than it may now runs as many as it may (#591).
   builders: z
     .number()
@@ -451,6 +452,7 @@ export const createLead = (options: {
       ready,
       toTidy: kept === undefined ? 0 : toTidyOf(kept, listed).length,
       ...(merge === undefined ? {} : { merge }),
+      ...(kept?.holding === undefined || kept.state !== "running" ? {} : { holding: kept.holding }),
       ...(kept?.heldBack === undefined || kept.state !== "running"
         ? {}
         : { heldBack: kept.heldBack }),
@@ -536,9 +538,17 @@ export const createLead = (options: {
     const { building, ready } = buildersOf(kept, listed, statuses);
     // What waits on the owner holds back only its own builder (#591); the Lead holds back while
     // the owner's reviews pile up, or its model is at its usage limit, until its reset.
-    const reviewing = ready.length >= REVIEWS_AT_MOST;
+    const reviewing = ready.length >= LEAD_REVIEWS_AT_MOST;
     const limited = limitOf(statuses, options.now());
-    const red = !reviewing && limited === undefined && (await options.mainRed(workspaceId));
+    const red = await options.mainRed(workspaceId);
+    // Every reason at once, for the Builders board (#592); `why`, the first, for its chat.
+    const holding: LeadHolding[] = [
+      ...(reviewing ? [{ kind: "reviews" as const, waiting: ready.length }] : []),
+      ...(limited === undefined
+        ? []
+        : [{ kind: "limit" as const, until: new Date(limited).toISOString() }]),
+      ...(red ? [{ kind: "main-red" as const }] : []),
+    ];
     let why = reviewing
       ? `${ready.length} pull requests wait for your review, so the next builder starts once one merges.`
       : limited !== undefined
@@ -597,6 +607,7 @@ export const createLead = (options: {
         // One place always stays free for the owner's own sessions.
         if (sessions.codeRunning() >= CODE_SESSIONS_AT_ONCE - 1) {
           why ??= "your own sessions are using the machine, so the next builder waits.";
+          holding.push({ kind: "own-sessions" });
           break;
         }
         const model = await sessions.lastModelOf(kept.session);
@@ -645,9 +656,12 @@ export const createLead = (options: {
             ? ""
             : ` ${plural(waiting, "issue waits", "issues wait")} on another still open.`
         }`;
-        return noted({ ...kept, state: "resting", why: rest }, rest);
+        const { holding: _holding, ...resting } = kept;
+        return noted({ ...resting, state: "resting", why: rest }, rest);
       }
     }
+    const { holding: _holding, ...unholding } = kept;
+    kept = holding.length === 0 ? unholding : { ...unholding, holding };
     if (why === kept.why) return kept;
     const { why: _, ...rest } = kept;
     if (why === undefined) return noted(rest, "Carrying on.");

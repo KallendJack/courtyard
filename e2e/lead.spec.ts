@@ -1,9 +1,9 @@
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
 import { LeadStatus } from "../packages/contract/index.ts";
 
-// A code workspace's Lead (#347; Paper, "2 · Agreed", Code workspace row: Lead not started, Lead
-// running, the Lead's chat, Lead resting), on start-worker.mjs's Toolshed: three ready issues on
+// A code workspace's Lead (#347; Paper, "2 · Agreed", Code workspace row: Lead not started, the
+// Builders board (#592), the Lead's chat), on start-worker.mjs's Toolshed: three ready issues on
 // the fake GitHub, in a build order. Tests here run in order, on one Lead.
 
 test.describe.configure({ mode: "serial" });
@@ -49,24 +49,27 @@ test("Run the build order starts the Lead, which starts two builders and keeps t
   await dialog.getByRole("button", { name: "Run the build order" }).click();
   await expect(dialog).toBeHidden();
 
-  const running = page.getByRole("region", { name: "Running" });
-  await expect(running).toContainText("Lead");
-  await expect(running.getByRole("listitem")).toHaveCount(3);
-  // Its builders allow all, each marked (#591).
-  await expect(running.getByText("Allowing all", { exact: true })).toHaveCount(2);
+  // The Builders board (#592): two building of two, each a row; the e2e builders ask a question,
+  // so each waits on the owner, answered in its session.
+  const board = page.getByRole("region", { name: "Builders" });
+  await expect(board).toContainText("2 of 2 building · 0 of 4 for review");
+  await expect(board.getByRole("listitem")).toHaveCount(2);
+  await expect(board.getByRole("link", { name: /^Answer / })).toHaveCount(2);
+  await expect(board.getByRole("button", { name: "Pause" })).toBeVisible();
   await shot(page, "lead-running");
 });
 
+/** The Lead's chat (#347), which stays as its history (#592), opened by its session. */
+const openLeadChat = async (page: Page, request: APIRequestContext) => {
+  const real = LeadStatus.parse(await (await request.get(`/api${HOME}/lead`)).json());
+  await page.goto(`${HOME}/sessions/${real.session ?? ""}`);
+};
+
 test("the Lead's chat shows what it builds, what's next and what's ready to merge", async ({
   page,
+  request,
 }) => {
-  await page.goto(HOME);
-  const running = page.getByRole("region", { name: "Running" });
-  await running
-    .getByRole("listitem", { name: "Lead", exact: true })
-    .getByRole("link")
-    .first()
-    .click();
+  await openLeadChat(page, request);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Lead");
   await expect(page.getByText("Started building Hooks on the pegboard")).toBeVisible();
   await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
@@ -81,14 +84,9 @@ test("the Lead's chat shows what it builds, what's next and what's ready to merg
 
 test("told to pause, the Lead's builders carry on and nothing new starts; Run wakes it", async ({
   page,
+  request,
 }) => {
-  await page.goto(HOME);
-  const running = page.getByRole("region", { name: "Running" });
-  await running
-    .getByRole("listitem", { name: "Lead", exact: true })
-    .getByRole("link")
-    .first()
-    .click();
+  await openLeadChat(page, request);
   // The chat drawn first, so the box typed in is the one that stays.
   await expect(page.getByRole("region", { name: "Build order" })).toContainText("Building · 2");
   await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
@@ -99,14 +97,13 @@ test("told to pause, the Lead's builders carry on and nothing new starts; Run wa
   await expect(page.getByText("Paused", { exact: false }).first()).toBeVisible();
 
   await page.goto(HOME);
-  const lead = running.getByRole("listitem").first();
-  await expect(lead).toContainText("Paused");
-  await expect(lead).toContainText("Builders carry on · nothing new starts");
+  const board = page.getByRole("region", { name: "Builders" });
+  await expect(board).toContainText("Paused · builders carry on, nothing new starts");
   await shot(page, "lead-paused");
 
-  await lead.getByRole("button", { name: "Run" }).click();
-  await expect(lead).toContainText("building");
-  await expect(lead.getByRole("button", { name: "Pause" })).toBeVisible();
+  await board.getByRole("button", { name: "Run" }).click();
+  await expect(board.getByRole("button", { name: "Pause" })).toBeVisible();
+  await expect(board).not.toContainText("Paused");
 });
 
 // Merge in order and holding back (#423; Paper, "Code Home, Merge in order", "Lead chat, merging
@@ -155,15 +152,19 @@ test("ready pull requests merge in order from one row, and the Lead's chat says 
   );
 
   await page.goto(HOME);
+  // Merge in order is the Builders board's (#592): the builders' pull requests aren't in Needs you.
+  const board = page.getByRole("region", { name: "Builders" });
+  await expect(board).toContainText("3 of 4 for review");
   const needsYou = page.getByRole("region", { name: /^Needs you/ });
-  const row = needsYou.getByRole("listitem", { name: "3 PRs ready, in build order" });
-  await expect(row).toContainText("#344 → #340 → #338 · all passed");
-  // One row for them all: none of them has a Merge of its own.
-  await expect(needsYou.getByRole("button", { name: /^Merge #/ })).toHaveCount(0);
+  await expect(needsYou).not.toContainText("#344");
+  await expect(needsYou.getByRole("button", { name: /^Merge/ })).toHaveCount(0);
   if (real.next[0] !== undefined) {
+    // Held back goes: it waits for the builder's merge, by name.
+    const name = first.title.replace(/^Build #\d+: /, "");
     await expect(page.getByRole("region", { name: "Next up" })).toContainText(
-      `Held back · same files as #${first.issue}, starts once it merges`,
+      `Next · waits for ${name} to merge`,
     );
+    await expect(board).toContainText(`waits for ${name} to merge`);
   }
   await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
   for (const [name, size] of [
@@ -172,7 +173,7 @@ test("ready pull requests merge in order from one row, and the Lead's chat says 
     ["desktop", { width: 1440, height: 900 }],
   ] as const) {
     await page.setViewportSize(size);
-    await row.scrollIntoViewIfNeeded();
+    await board.scrollIntoViewIfNeeded();
     await shot(page, `${name}-code-home-merge-in-order`);
   }
   await page.setViewportSize({ width: 950, height: 712 });
@@ -184,9 +185,9 @@ test("ready pull requests merge in order from one row, and the Lead's chat says 
   await shot(page, "tablet-lead-chat-merging-in-order");
 
   await page.goto(HOME);
-  await row.getByRole("button", { name: "Merge in order" }).click();
-  await expect(row).toContainText("Merging #344 · #344 → #340 → #338");
-  await expect(row.getByRole("button", { name: "Merge in order" })).toHaveCount(0);
+  await board.getByRole("button", { name: "Merge in order" }).click();
+  await expect(board).toContainText("Merging #344 in order");
+  await expect(board.getByRole("button", { name: "Merge in order" })).toHaveCount(0);
 
   // Stopped at a check: the chat's To merge says where, in gold.
   merge = { kind: "stopped", pullRequest: 340, why: "its e2e check failed" };
@@ -198,7 +199,7 @@ test("ready pull requests merge in order from one row, and the Lead's chat says 
 
 // Paused with merges to tidy (#591): the e2e builders open no pull requests, so the Lead's status
 // is given here as the worker would give it.
-test("a paused Lead's row says how many merges it tidies up once it runs again", async ({
+test("a paused Lead's board says how many merges it tidies up once it runs again", async ({
   page,
   request,
 }) => {
@@ -209,12 +210,9 @@ test("a paused Lead's row says how many merges it tidies up once it runs again",
 
   await page.goto(HOME);
 
-  const lead = page
-    .getByRole("region", { name: "Running" })
-    .getByRole("listitem", { name: "Lead" });
-  await expect(lead).toContainText("Paused");
-  await expect(lead).toContainText("Builders carry on · 2 merges to tidy");
-  await expect(lead.getByRole("button", { name: "Run" })).toBeVisible();
+  const board = page.getByRole("region", { name: "Builders" });
+  await expect(board).toContainText("Paused · builders carry on · 2 merges to tidy");
+  await expect(board.getByRole("button", { name: "Run" })).toBeVisible();
   await shot(page, "tablet-lead-row-paused-to-tidy");
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });

@@ -13,6 +13,7 @@
 @source "../../components/code/connections-line.tsx";
 @source "../../components/buttons/thumb-button.tsx";
 @source "../../components/buttons/row-button.tsx";
+@source "../builders/builders-board.tsx";
 
 :where([data-code-home]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */

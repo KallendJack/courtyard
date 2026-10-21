@@ -77,6 +77,7 @@ import { err, ok, type Result } from "../../lib/result.ts";
 import {
   BUILDER_CARRY_ON_MESSAGE,
   BUILDER_LIMIT_RESET_MESSAGE,
+  BUILDER_RETRY_MESSAGE,
   bringUpToDateMessage,
   CONTINUE_MESSAGE,
   checksFailedMessage,
@@ -228,6 +229,8 @@ export type SessionError =
   | { readonly kind: "nothing-to-carry-on" }
   /** Continue named a turn that isn't the last one, or wasn't cut off by a restart (#186). */
   | { readonly kind: "nothing-to-continue" }
+  /** Retry was asked of a session that isn't a Lead's builder Stuck (#592). */
+  | { readonly kind: "not-stuck" }
   /** There's no other provider to carry on with right now, and why. */
   | {
       readonly kind: "no-overflow";
@@ -2900,6 +2903,42 @@ export const createSessions = (options: {
   };
 
   /**
+   * Retry (#592): a Lead's builder that's Stuck carries on, told so in the owner's words, on the
+   * model and effort its last message went to, its one carry-on with it again.
+   */
+  const retryBuilder = async (rawId: string): Promise<Result<null, SessionError>> => {
+    const since = freshStarts;
+    const found = await findSession(rawId);
+    if (!found.ok) return found;
+    const { id, workspaceId } = found.value;
+    if ((await options.builders?.statusOf(id))?.kind !== "stuck") {
+      return err({ kind: "not-stuck" });
+    }
+    await settled(id);
+    const events = await readEvents(id);
+    if (!events.ok) return events;
+    const last = events.value.findLast((event) => event.type === "owner-message");
+    if (last?.type !== "owner-message") return err({ kind: "not-stuck" });
+    const message: NewMessage = {
+      text: BUILDER_RETRY_MESSAGE,
+      model: last.model,
+      ...(last.effort === undefined ? {} : { effort: last.effort }),
+    };
+    const provider = await providerIn(workspaceId, message);
+    if (!provider.ok) return provider;
+    await options.builders?.heard(id, { kind: "retried" });
+    return startTurn({
+      id,
+      workspaceId,
+      provider: provider.value.provider,
+      message,
+      since,
+      coding: found.value.branch !== undefined,
+      placeless: found.value.placeless === true,
+    });
+  };
+
+  /**
    * Starts a turn asking the model to fix the checks that failed on a pull request's latest
    * commit, or say why it can't (#172), on the model the owner last used: once per commit.
    */
@@ -3732,6 +3771,9 @@ export const createSessions = (options: {
      * turn's model, effort and skill. The owner's tap, or the worker's after an Update now.
      */
     continue: (rawId: string, request: ContinueRequest) => continueTurn(rawId, request.turn),
+
+    /** Retry (#592): a Lead's builder that's Stuck carries on, as the owner tapped. */
+    retry: retryBuilder,
 
     /**
      * Continue the session's last turn, cut off by an update the worker started itself (#186):

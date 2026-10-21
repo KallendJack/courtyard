@@ -387,6 +387,7 @@ describe("the Lead's rules (#591)", () => {
     expect(holding.why).toBe(
       "4 pull requests wait for your review, so the next builder starts once one merges.",
     );
+    expect(holding.holding).toEqual([{ kind: "reviews", waiting: 4 }]);
     expect(github.commentsOn(onGitHub, 26)).toEqual([]);
 
     github.merge(fourth);
@@ -430,6 +431,55 @@ describe("the Lead's rules (#591)", () => {
     await runJobs();
 
     expect(github.commentsOn(onGitHub, 24)).toEqual([expect.stringMatching(/^Building this/)]);
+    expect((await leadOf(request)).holding).toBeUndefined();
+    await settledAll(request);
+  });
+
+  it("says every reason it starts no more at once, not only the first (#592)", async () => {
+    const clock = { now: Date.parse("2026-10-20T09:00:00Z") };
+    const resetAt = "2026-10-20T10:00:00.000Z";
+    const { provider: coder } = codingProvider([]);
+    let limited = true;
+    const limiting: Provider = {
+      ...coder,
+      runTurn: async (input) => {
+        if (input.framing.newMessage.startsWith("Build issue #22") && limited) {
+          limited = false;
+          return err({ kind: "rate-limited", resetAt });
+        }
+        await input.emit("Which screen should it go on?");
+        return ok(null);
+      },
+    };
+    // Main is red, and its fix, the first in order, meets the usage limit.
+    const { github, request } = await signedInWith(
+      [
+        {
+          number: 22,
+          title: "Main fails: the PR page refreshes",
+          milestone: "4 · Code workspaces",
+        },
+        ...ISSUES.slice(1),
+      ],
+      { providers: [limiting], now: () => clock.now },
+    );
+    github.setCommitChecks(await gitIn(repo, "rev-parse", "HEAD"), [
+      {
+        id: 1,
+        name: "Checks",
+        outcome: "failed",
+        url: "https://github.com/octo-owner/side-project/actions/runs/1/job/1",
+        startedAt: "2026-10-20T08:00:00Z",
+        completedAt: "2026-10-20T08:03:00Z",
+      },
+    ]);
+    await run(request, CODING_MODEL);
+    await settledAll(request);
+    await runJobs();
+
+    const lead = await leadOf(request);
+    expect(lead.why).toMatch(/^its model is at its usage limit until /);
+    expect(lead.holding).toEqual([{ kind: "limit", until: resetAt }, { kind: "main-red" }]);
     await settledAll(request);
   });
 
@@ -671,6 +721,8 @@ describe("builders that fail or go Stuck (#474, #590)", () => {
       kind: "stuck",
       session: { id: stuck.id },
       reason: "It ended two turns in a row with no pull request and no question.",
+      // A Lead's builder, so Home's row says Retry (#592).
+      builder: true,
     });
     // Nothing is posted on the issue: its claim stands, so nobody else starts it.
     expect(github.commentsOn(onGitHub, 22)).toEqual([expect.stringMatching(/^Building this/)]);

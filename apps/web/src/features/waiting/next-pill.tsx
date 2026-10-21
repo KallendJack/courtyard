@@ -1,7 +1,7 @@
 import type { SessionId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
-import { NEED_WORDS, needLink, useNeedsYou } from "./api.ts";
+import { needLink, needWords, useNeedsYou } from "./api.ts";
 
 /**
  * The Next pill (#492; Paper, "Session, Next pill"): in a session's chip row, gold, the first
@@ -13,7 +13,7 @@ export function NextPill(props: { sessionId: SessionId; again?: unknown }) {
   const known = useNeedsYou(props.again);
   const next = known?.needs.find((need) => need.session.id !== props.sessionId);
   if (next === undefined) return null;
-  const words = `Next · ${NEED_WORDS[next.kind]} in ${next.session.title}`;
+  const words = `Next · ${needWords(next)} in ${next.session.title}`;
   return (
     <Link
       {...needLink(next)}

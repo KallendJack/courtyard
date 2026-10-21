@@ -397,6 +397,12 @@ is told once, in a turn of its own started by the worker (#590):
 
 Ending so again, it's Stuck, and Courtyard says so where the owner sees it, rather than telling it a third time.
 
+A Stuck builder carries on when the owner taps Retry on it (the Builders board, or Needs you; #592), in a turn of
+its own on the model it last used, which starts it afresh, its one carry-on with it:
+
+> Try again with your issue: you were stopped, and I'd like you to carry on. First check what already happened, then
+> finish the work and open its pull request, or ask me what you need to know.
+
 A builder whose turn met the usage limit waits for it, then carries on by itself once the limit has reset (at the
 reset its provider gave, or an hour on when it gave none; #610), on the same model, told in a turn of the worker's:
 

@@ -132,8 +132,10 @@ export const needsYouOf = (
       const where = {
         workspace: { id: workspace.id, name: workspace.name },
         session: { id: session.id, title: session.title },
+        ...(session.byLead === true ? { builder: true as const } : {}),
       };
-      const since = session.now.kind === "needs-you" ? session.now.since : session.updatedAt;
+      const { now } = session;
+      const since = now.kind === "needs-you" ? now.since : session.updatedAt;
       const own: NeedYou[] =
         session.waiting === "nothing"
           ? []
@@ -143,6 +145,9 @@ export const needsYouOf = (
                 ...where,
                 since,
                 ...(session.stuck === undefined ? {} : { reason: session.stuck }),
+                ...(now.kind === "needs-you"
+                  ? { approval: { number: now.approval, ask: now.ask } }
+                  : {}),
               },
             ];
       const { pullRequest } = session;

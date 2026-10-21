@@ -94,8 +94,7 @@ export function AllowingAllStrip(props: {
 }
 
 /**
- * Allow all's small gold mark (#428): "Allowing all" on a session's row in Running while it allows
- * all, "ran under Allow all" on a step that ran without asking.
+ * Allow all's small gold mark (#428): "ran under Allow all" on a step that ran without asking.
  */
 export function AllowAllMark(props: { children: string }) {
   return (
