@@ -33,7 +33,8 @@ export function Block(props: {
   actions?: ReactNode;
   /**
    * The Builders board's size (#592; Paper, "Tablet · Builders board"): from a tablet up, three
-   * shares of the page's height to the block under it's one; on a phone, as tall as three rows.
+   * shares of the page's height to the block under it's one, never shorter than its label, its
+   * header's two lines and its empty line (#635); on a phone, as tall as three rows.
    */
   tall?: boolean;
   /**
@@ -67,7 +68,7 @@ export function Block(props: {
             "md:flex-1 max-md:h-46 max-md:shrink-0",
             props.aRowAtLeast ? "md:min-h-30" : "md:min-h-0",
           ),
-        props.tall && "md:min-h-0 md:flex-3 max-md:h-88 max-md:shrink-0",
+        props.tall && "md:min-h-42 md:flex-3 max-md:h-88 max-md:shrink-0",
         props.fillsSlot && "h-full min-h-0",
         props.twoRows && "h-44 shrink-0",
       )}

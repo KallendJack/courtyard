@@ -838,8 +838,8 @@ export const createLead = (options: {
       changing(rawId, async (workspaceId, kept) => {
         if (kept === undefined) return err({ kind: "session", error: { kind: "not-found" } });
         const listed = await listedIn(workspaceId);
-        const ready = buildersOf(kept, listed, await statusesOf(kept, listed)).ready.filter((each) =>
-          request.pullRequests.includes(each.pullRequest),
+        const ready = buildersOf(kept, listed, await statusesOf(kept, listed)).ready.filter(
+          (each) => request.pullRequests.includes(each.pullRequest),
         );
         if (ready.length === 0) return err({ kind: "nothing-to-merge" });
         const order = ready.map((each) => `#${each.pullRequest}`).join(" → ");

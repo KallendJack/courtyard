@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   type BuilderStatus,
   builderHash,
@@ -213,6 +213,57 @@ for (const [screen, viewport] of [
     );
     const total = shifts.reduce((sum, shift) => sum + shift.value, 0);
     expect(total, JSON.stringify(shifts, null, 2)).toBeLessThan(0.001);
+  });
+}
+
+// With no builders (#635), the board's one quiet line sits under its header's two lines, inside the
+// block, and nothing moves or overlaps: on the Fold, on the Fold with less room (the browser's bars,
+// a bigger text size), and on the cover screen.
+for (const [screen, viewport, name] of [
+  ["the unfolded Fold", { width: 950, height: 712 }, "tablet-builders-board-empty"],
+  [
+    "the unfolded Fold with less room",
+    { width: 950, height: 556 },
+    "tablet-short-builders-board-empty",
+  ],
+  ["the cover screen", { width: 400, height: 900 }, "cover-builders-board-empty"],
+] as const) {
+  test(`with no builders, the board's empty line sits inside it, on ${screen}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await given(page, {
+      lead: {
+        state: "paused",
+        toTidy: 2,
+        merge: { kind: "stopped", pullRequest: 612, why: "its e2e check failed" },
+      },
+      sessions: [],
+      issues: [issue(45, "Tidy, one shared piece", false)],
+    });
+    const empty = board(page).getByText("No builders right now");
+    const shifts = await shiftsOn(page, HOME, () => expect(empty).toBeVisible());
+    expect(shifts.reduce((sum, shift) => sum + shift.value, 0)).toBeLessThan(0.001);
+
+    const reasons = board(page).getByText(/^Paused · builders carry on/);
+    await expect(reasons).toContainText("Merge in order stopped at #612");
+    const box = async (of: Locator) => {
+      const drawn = await of.boundingBox();
+      if (drawn === null) throw new Error("not drawn");
+      return { top: drawn.y, bottom: drawn.y + drawn.height };
+    };
+    const block = await box(board(page));
+    const line = await box(empty);
+    const header = await box(reasons);
+    const needs = await box(page.getByRole("region", { name: "Needs you" }));
+    const main = await box(page.getByRole("region", { name: "Main" }));
+    await shot(page, name);
+    expect(line.top).toBeGreaterThanOrEqual(header.bottom);
+    // Inside the block's padding, not on or past its edge.
+    expect(line.bottom).toBeLessThanOrEqual(block.bottom - 14);
+    // Needs you, under it, still ends above Main.
+    expect(needs.top).toBeGreaterThanOrEqual(block.bottom);
+    expect(needs.bottom).toBeLessThanOrEqual(main.top);
   });
 }
 
