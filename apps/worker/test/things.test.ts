@@ -422,8 +422,8 @@ describe("a Thing's photo", () => {
   });
 });
 
-describe("a pin left in a Thing's file by Home's photo view (#603)", () => {
-  it("is read past, and goes on the Thing's next save, what it needs kept", async () => {
+describe("a pin or what it needs, left in a Thing's file from before (#603)", () => {
+  it("is read past, and goes on the Thing's next save", async () => {
     await withKit();
     await writeFile(
       join(thingsDir(), "chain.md"),
@@ -445,8 +445,9 @@ describe("a pin left in a Thing's file by Home's photo view (#603)", () => {
     });
 
     const file = await thingFile("chain");
-    expect(file).toContain("part of: whyte-t-140\nneeds: Lube it\n---\n");
+    expect(file).toContain("part of: whyte-t-140\n---\n");
     expect(file).not.toContain("pin:");
+    expect(file).not.toContain("needs:");
   });
 });
 
@@ -702,16 +703,14 @@ describe("the Things tool", () => {
     expect(await thingFile("chain")).toContain("status: replace");
   });
 
-  it("sets what a part needs, then clears it (#208)", async () => {
+  it("refuses what a part needs next, which a project's steps hold now (#603)", async () => {
     await withKit();
     const { saver, events } = await sessionWith([
       [thingTool({ thing: "T2", needs: "Lube it before Saturday" })],
-      [thingTool({ thing: "T2", needs: "" })],
     ]);
 
-    expect(reasons(saver.replies[0])).toEqual(["Changed [T2] Chain."]);
-    expect(thingSaves(events)[0]?.save.fields).toEqual({ needs: "Lube it before Saturday" });
-    expect(thingSaves(events)[1]?.save.fields).toEqual({ needs: null });
+    expect(reasons(saver.replies[0])[0]).toMatch(/^That input doesn't fit this tool/);
+    expect(thingSaves(events)).toEqual([]);
     expect(await thingFile("chain")).toBe(CHAIN);
   });
 
@@ -822,7 +821,6 @@ describe("the Things tool", () => {
       text: [
         "thing add: name Tyres | status have | brand Maxxis Minion DHF | part of T1",
         "thing T2: history Swapped | price £32",
-        "thing T2: needs Lube it",
         "thing T9: remove",
         "thing T2: upcoming KMC X11SL | upcoming price £45 | upcoming link https://shop.example/x11sl",
         "thing T2: fitted",
@@ -834,7 +832,6 @@ describe("the Things tool", () => {
 
     expect(thingSaves(events).map(({ save }) => [save.action, save.thing.name])).toEqual([
       ["add", "Tyres"],
-      ["change", "Chain"],
       ["change", "Chain"],
       ["change", "Chain"],
       ["change", "Chain"],

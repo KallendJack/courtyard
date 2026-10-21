@@ -531,7 +531,6 @@ const thingLine = ({ label, thing }: LabelledThing, all: readonly LabelledThing[
       const value = thing[field];
       return value === undefined ? [] : [`${field} ${said(value)}`];
     }),
-    ...(thing.needs === undefined ? [] : [`needs ${said(thing.needs)}`]),
     ...(thing.upcoming === undefined ? [] : [upcomingWords(thing.upcoming, said)]),
     ...(parent !== undefined
       ? [`part of [${parent.label}]`]
@@ -568,7 +567,7 @@ const thingsPart = (workspace: FramingWorkspace, readsFiles: boolean) => {
 };
 
 /** When and how a model keeps Things current (docs/ai-conduct.md, Things). */
-const KEEPING_THINGS = `The owner's kit for this workspace, what they have, want, or have and mean to replace, are its Things, which you keep current yourself with the ${THING_TOOL_NAME} tool as you answer, by the same rules as saves: save what the owner tells you, never your own suggestions until the owner agrees, and ask rather than guess which Thing they mean, or whether they've bought it. When the owner says they bought, fitted, swapped, sold or did something to one ("swapped the chain today"), change that Thing: set the fields that changed, such as bought and price, and add a line to its history saying what happened. When they add something that has typical parts, such as a bike's chain, tyres and fork, add only what they told you about, offer to add its parts, and once the owner agrees add them straight away with what you know, since details can come later. Name each Thing as the owner does ("Whyte T-140", not "Mountain bike"), one Thing for each they name ("the tyres" is one). A Thing is part of at most one other, which isn't a part itself. A part holds what's on it and what's coming next: when the owner wants a new one of a part that's there ("I want new pedals"), it's that part's upcoming one, never a new Thing. Once they've said which, set the part's upcoming (with its price, shop, link and why, those you know); until then mark it replace and help them choose. When they say they've bought or fitted it, change the part with fitted, which swaps it in and keeps the old one in its history. A wanted Thing that's a new one of a part that's there, such as wanted pedals beside the bike's pedals, belongs on that part: offer to move it, and once the owner agrees, set it as the part's upcoming one and remove the wanted Thing. What a Thing holds goes in the Thing, not in a context line as well. To compare options, such as which racket to buy, answer with a table, and offer to save the comparison as a document; once the owner picks one, add it as a Thing, or set it as the upcoming one of the part it replaces. The workspace's page shows what each Thing needs next, so keep its needs to the next action and what it takes ("Pump it up before Saturday"), never background such as its brand, size or specs, which stay on its card, and clear it once it's done. The owner sees each Thing you save as a note under your answer, so leave saves unmentioned.`;
+const KEEPING_THINGS = `The owner's kit for this workspace, what they have, want, or have and mean to replace, are its Things, which you keep current yourself with the ${THING_TOOL_NAME} tool as you answer, by the same rules as saves: save what the owner tells you, never your own suggestions until the owner agrees, and ask rather than guess which Thing they mean, or whether they've bought it. When the owner says they bought, fitted, swapped, sold or did something to one ("swapped the chain today"), change that Thing: set the fields that changed, such as bought and price, and add a line to its history saying what happened. When they add something that has typical parts, such as a bike's chain, tyres and fork, add only what they told you about, offer to add its parts, and once the owner agrees add them straight away with what you know, since details can come later. Name each Thing as the owner does ("Whyte T-140", not "Mountain bike"), one Thing for each they name ("the tyres" is one). A Thing is part of at most one other, which isn't a part itself. A part holds what's on it and what's coming next: when the owner wants a new one of a part that's there ("I want new pedals"), it's that part's upcoming one, never a new Thing. Once they've said which, set the part's upcoming (with its price, shop, link and why, those you know); until then mark it replace and help them choose. When they say they've bought or fitted it, change the part with fitted, which swaps it in and keeps the old one in its history. A wanted Thing that's a new one of a part that's there, such as wanted pedals beside the bike's pedals, belongs on that part: offer to move it, and once the owner agrees, set it as the part's upcoming one and remove the wanted Thing. What a Thing holds goes in the Thing, not in a context line as well. To compare options, such as which racket to buy, answer with a table, and offer to save the comparison as a document; once the owner picks one, add it as a Thing, or set it as the upcoming one of the part it replaces. The owner sees each Thing you save as a note under your answer, so leave saves unmentioned.`;
 
 /** Each of a Thing's details as the Things tool describes it to a model. */
 const THING_DETAIL_INPUTS: Readonly<Record<ThingDetailName, string>> = {
@@ -607,12 +606,6 @@ const THING_TOOL: TurnTool = {
       .optional()
       .describe(
         "The label of the Thing it's part of, such as T1, which isn't a part itself. An empty text makes it a Thing of its own.",
-      ),
-    needs: z
-      .string()
-      .optional()
-      .describe(
-        "The next thing to do about it, in a few words, such as Pump it up before Saturday: never background such as its brand or size. An empty text clears it once it's done.",
       ),
     history: z
       .string()

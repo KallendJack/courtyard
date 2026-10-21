@@ -107,7 +107,6 @@ const FILE_KEYS = [
   ["status", "status"],
   ...THING_DETAILS.map((name) => [name, name] as const),
   ["part of", "partOf"],
-  ["needs", "needs"],
   ["photo", "photo"],
   ["upcoming", "upcoming"],
   ["upcoming price", "upcomingPrice"],
@@ -118,9 +117,10 @@ const FILE_KEYS = [
 
 /**
  * Keys a file may still have that Courtyard no longer keeps: a part's pin, from Home's photo
- * view (#603). They're read past, and go on the Thing's next save.
+ * view, and what a Thing needs next, which a project's steps hold now (#603). They're read past,
+ * and go on the Thing's next save.
  */
-const RETIRED_KEYS = new Set(["pin"]);
+const RETIRED_KEYS = new Set(["pin", "needs"]);
 
 const HISTORY_LINE = /^(?:[-*][ \t]+)?(?:(\d{4}-\d{2}-\d{2}):[ \t]*)?(.*)$/;
 
@@ -328,7 +328,6 @@ type FieldChange = {
   readonly name?: string;
   readonly status?: ThingStatus;
   readonly partOf?: ThingSlug | null;
-  readonly needs?: string | null;
 } & { readonly [K in ThingDetailName | UpcomingField]?: string | null };
 
 /** The fields that hold a Thing's upcoming replacement (#602). */
@@ -367,7 +366,7 @@ const samePlace = (part: string, added: string) => {
 
 /**
  * A Thing's upcoming one swapped in (#602): its name as the brand, its price and shop, bought
- * today, had again, with nothing upcoming, needed or worn; and a history line for the one it had.
+ * today, had again, with nothing upcoming or worn; and a history line for the one it had.
  */
 const swappedIn = (swap: {
   /** The Thing as it was. */
@@ -388,7 +387,6 @@ const swappedIn = (swap: {
     bought: swap.today,
     status: "have",
     condition: undefined,
-    needs: undefined,
   };
   for (const field of UPCOMING_FIELDS) fields[field] = undefined;
   return {
@@ -704,7 +702,6 @@ const ThingRequest = z.looseObject({
   name: z.string().optional(),
   status: ThingStatus.optional(),
   part_of: z.string().optional(),
-  needs: z.string().optional(),
   history: z.string().optional(),
   photo: z.number().int().optional(),
   upcoming: z.string().optional(),
@@ -807,7 +804,6 @@ export const createTurnThings = (
       name,
       status,
       part_of,
-      needs,
       history,
       photo,
       upcoming,
@@ -831,7 +827,6 @@ export const createTurnThings = (
       ...(name === undefined ? {} : { name }),
       ...(status === undefined ? {} : { status }),
       ...details,
-      ...(needs === undefined ? {} : { needs: needs.trim() === "" ? null : needs }),
     };
     for (const [input, field] of UPCOMING_INPUTS) {
       const value = upcomingSent[input];

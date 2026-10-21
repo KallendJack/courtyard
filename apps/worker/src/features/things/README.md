@@ -22,8 +22,8 @@ A planning workspace's Things (ADR 0020): one file each, `things/<slug>.md`, rea
 - Reads each file against the contract's schema, listing a file that fails with its problem. A Thing bought from
   the wanted list keeps what was paid as its price and where as its shop (#245).
 - Lists them with each part after its Thing.
-- A Thing's `needs` (its next step) is kept by the owner's form as it is. A `pin:` line left by Home's photo view
-  is read past, and goes on the Thing's next save (#603).
+- A `pin:` line left by Home's photo view, and a `needs:` line (what a Thing needed next, which a project's steps
+  hold now), are read past, and go on the Thing's next save (#603).
 - Adds, changes and removes one as one change through `context-folder/`, its photo with it.
 - Keeps a photo resized with `sharp` (`keptPhoto`).
 - A Thing's **upcoming** one (#602) is its `upcoming …` lines: a new name replaces the last whole, and a Thing the
