@@ -71,7 +71,7 @@ test("Home lists each project under the bike, with its next step and Carry on", 
   await expect(
     page
       .getByRole("region", { name: "Whyte T-140" })
-      .getByRole("link", { name: "Pedals · DMR V8 next" }),
+      .getByRole("link", { name: "Pedals, DMR V8 next" }),
   ).toBeVisible();
   const rows = projects(page).getByRole("listitem");
   await expect(rows).toHaveCount(2);
