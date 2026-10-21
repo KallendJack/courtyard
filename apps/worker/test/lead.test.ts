@@ -6,6 +6,7 @@ import {
   GitHubConnection,
   LeadStatus,
   NeedsYou,
+  PushNotice,
   SessionEvent,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -160,6 +161,25 @@ const notesIn = async (request: Requester) => {
     event.type === "lead-note" ? [event.text] : [],
   );
 };
+
+/** Turns notifications on for one device, as Settings does. */
+const notificationsOn = (request: Requester) =>
+  postJson(request, "/api/notifications/on", {
+    endpoint: "https://push.example/fold",
+    keys: { p256dh: "p256dh-of-fold", auth: "auth-of-fold" },
+  });
+
+/** The notifications sent that the Lead paused itself (#593). */
+const pausedNotices = (push: FakePush) =>
+  push.sent
+    .map(({ payload }) => payload)
+    .filter(
+      (payload) =>
+        typeof payload === "object" &&
+        payload !== null &&
+        "title" in payload &&
+        payload.title === "The Lead paused itself",
+    );
 
 describe("Run the build order (#347)", () => {
   it("isn't started until the owner starts it", async () => {
@@ -372,8 +392,10 @@ describe("the Lead's rules (#591)", () => {
   });
 
   it("runs at most 2 builders, and holds back while 4 pull requests wait for review, starting again as one merges", async () => {
-    const { github, request } = await signedInWith(SIX);
-    await run(request);
+    const push = createFakePush();
+    const { github, request } = await signedInWith(SIX, { sendPush: push.send });
+    await notificationsOn(request);
+    const lead = await run(request);
     expect((await leadOf(request)).building).toHaveLength(2);
     await readyToMerge(github, request, 22);
     await readyToMerge(github, request, 23);
@@ -390,12 +412,23 @@ describe("the Lead's rules (#591)", () => {
     );
     expect(holding.holding).toEqual([{ kind: "reviews", waiting: 4 }]);
     expect(github.commentsOn(onGitHub, 26)).toEqual([]);
+    // The owner hears it paused itself, once while it holds (#593).
+    const paused = {
+      title: "The Lead paused itself",
+      body: "4 pull requests wait for you",
+      session: lead.session,
+      page: "/workspaces/side-project",
+    };
+    await expect.poll(() => pausedNotices(push)).toEqual([paused]);
+    await runJobs();
+    expect(pausedNotices(push)).toEqual([paused]);
 
     github.merge(fourth);
     await runJobs();
 
     expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([26, 27]);
     await settledAll(request);
+    expect(pausedNotices(push)).toEqual([paused]);
   });
 
   it("starts no builder while its model is at its usage limit, and one once it has reset", async () => {
@@ -414,11 +447,14 @@ describe("the Lead's rules (#591)", () => {
         return ok(null);
       },
     };
+    const push = createFakePush();
     const { github, request } = await signedInWith(ISSUES, {
       providers: [limiting],
       now: () => clock.now,
+      sendPush: push.send,
     });
-    await run(request, CODING_MODEL);
+    await notificationsOn(request);
+    const lead = await run(request, CODING_MODEL);
     await settledAll(request);
     // #23's builder's pull request merges, which frees its place.
     github.merge(await readyToMerge(github, request, 23));
@@ -426,6 +462,18 @@ describe("the Lead's rules (#591)", () => {
 
     expect(github.commentsOn(onGitHub, 24)).toEqual([]);
     expect((await leadOf(request)).why).toMatch(/^its model is at its usage limit until /);
+    // On the worker's clock, as its chat says it.
+    const until = new Date(resetAt).toTimeString().slice(0, 5);
+    await expect
+      .poll(() => pausedNotices(push))
+      .toEqual([
+        {
+          title: "The Lead paused itself",
+          body: `the usage limit until ${until}`,
+          session: lead.session,
+          page: "/workspaces/side-project",
+        },
+      ]);
 
     clock.now = Date.parse(resetAt);
     await runJobs();
@@ -534,13 +582,10 @@ const settledAll = (request: Requester) =>
     .toHaveLength(0);
 
 describe("watching its builders (#347)", () => {
-  it("tells the owner a builder's pull request is ready to merge, once, and starts the next issue in its place", async () => {
+  it("notes in its chat that a builder's pull request is ready to merge, once, with no notification, and starts the next issue in its place (#593)", async () => {
     const push = createFakePush();
     const { github, request } = await signedInWith(ISSUES, { sendPush: push.send });
-    await postJson(request, "/api/notifications/on", {
-      endpoint: "https://push.example/fold",
-      keys: { p256dh: "p256dh-of-fold", auth: "auth-of-fold" },
-    });
+    await notificationsOn(request);
     await run(request);
     const builder = await builderOf(request, 22);
     const number = github.openPullRequest({
@@ -567,30 +612,14 @@ describe("watching its builders (#347)", () => {
     expect(
       (await notesIn(request)).filter((note) => note.includes("ready for you to merge")),
     ).toEqual([`Which session waits is ready for you to merge (#${number}).`]);
-    await expect
-      .poll(() => push.sent.map(({ payload }) => payload))
-      .toContainEqual({
-        title: "Build #22: Which session waits",
-        body: "Ready to merge",
-        session: builder.id,
-      });
+    await settledAll(request);
+    // Only what waits on the owner is notified (its builders' questions, say): not a pull request
+    // ready for review, nor a turn of the Lead's or its builders' ending.
+    const sent = push.sent.map(({ payload }) => PushNotice.parse(payload));
+    expect(sent.length).toBeGreaterThan(0);
     expect(
-      push.sent.filter(
-        ({ payload }) =>
-          typeof payload === "object" &&
-          payload !== null &&
-          "body" in payload &&
-          payload.body === "Ready to merge",
-      ),
-    ).toHaveLength(1);
-    // The Lead's and its builders' turns end quietly: only what's ready and what needs a decision.
-    expect(
-      push.sent.filter(
-        ({ payload }) =>
-          typeof payload === "object" &&
-          payload !== null &&
-          "body" in payload &&
-          payload.body === "Turn finished",
+      sent.filter(
+        (notice) => !/ is waiting on you$| is Stuck$|^The Lead paused itself$/.test(notice.title),
       ),
     ).toEqual([]);
   });

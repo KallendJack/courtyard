@@ -331,3 +331,15 @@ export const LeadStatus = z.object({
   heldBack: z.array(LeadHeldBack).optional(),
 });
 export type LeadStatus = z.infer<typeof LeadStatus>;
+
+/**
+ * The hash on a code workspace's Home that puts a builder's row on its Builders board in view
+ * (#593), as a notification about it opens it: `builder-<session>`.
+ */
+export const builderHash = (session: SessionId) => `builder-${session}`;
+
+/** The builder whose row a Home's hash puts in view (#593), or none for any other hash. */
+export const builderIn = (hash: string): SessionId | undefined => {
+  const session = SessionId.safeParse(/^builder-(.+)$/.exec(hash)?.[1]);
+  return session.success ? session.data : undefined;
+};

@@ -46,6 +46,8 @@ export {
   BuilderStatus,
   BuildIssue,
   buildable,
+  builderHash,
+  builderIn,
   GitHubLink,
   GitHubUnread,
   LEAD_BUILDERS,

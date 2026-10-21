@@ -83,14 +83,17 @@ self.addEventListener("fetch", (event) => {
 
 // Notifications (#173): the worker pushes one when a session needs the owner's OK, and when a
 // turn finishes or fails. It carries only the session's title, what it needs, and the session's
-// id, since it shows on a locked screen; a tap opens that session.
+// id, since it shows on a locked screen; a tap opens that session. One about the Lead or its
+// builders (#593) also names the page a tap opens: its workspace's Home, at the Builders board.
 
 /** A notification's parts, or nothing when a push isn't one of Courtyard's. */
 const noticeIn = (data) => {
   try {
     const notice = data?.json();
     const parts = [notice?.title, notice?.body, notice?.session];
-    return parts.every((part) => typeof part === "string") ? notice : undefined;
+    const page = notice?.page;
+    const named = page === undefined || (typeof page === "string" && page.startsWith("/"));
+    return parts.every((part) => typeof part === "string") && named ? notice : undefined;
   } catch {
     return undefined;
   }
@@ -117,7 +120,7 @@ self.addEventListener("push", (event) => {
         icon: "/icons/icon-192.png",
         // A session's newer notification replaces its older one.
         tag: notice.session,
-        data: { session: notice.session },
+        data: { session: notice.session, page: notice.page },
       });
     }),
   );
@@ -142,12 +145,15 @@ const pageOf = async (session) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const session = event.notification.data?.session;
+  const { session, page: named } = event.notification.data ?? {};
   if (typeof session !== "string") return;
   event.waitUntil(
-    pageOf(session).then(async (page) => {
+    (typeof named === "string" ? Promise.resolve(named) : pageOf(session)).then(async (page) => {
       const windows = await self.clients.matchAll({ type: "window" });
-      const open = windows.find((window) => new URL(window.url).pathname === page);
+      const open = windows.find((window) => {
+        const url = new URL(window.url);
+        return url.pathname + url.hash === page;
+      });
       if (open) return open.focus();
       // Courtyard already open: that window goes to the session, rather than another opening.
       const app = windows[0];

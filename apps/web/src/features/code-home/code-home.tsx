@@ -1,12 +1,13 @@
-import type {
-  CodeSessionList,
-  LeadStatus,
-  MattSetup,
-  NextUp as NextUpAnswer,
-  ProviderList,
-  SkillList,
-  WorkspaceConnections,
-  WorkspaceSummary,
+import {
+  builderIn,
+  type CodeSessionList,
+  type LeadStatus,
+  type MattSetup,
+  type NextUp as NextUpAnswer,
+  type ProviderList,
+  type SkillList,
+  type WorkspaceConnections,
+  type WorkspaceSummary,
 } from "@courtyard/contract";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
@@ -93,7 +94,10 @@ export default function CodeHome(props: {
   list: CodeSessionList;
   providers: FromWorker<ProviderList>;
   skills: FromWorker<SkillList>;
-  /** The address's hash: the tab, or `connections` to open the Connections sheet. */
+  /**
+   * The address's hash: the tab, `connections` to open the Connections sheet, or a builder's row
+   * to put in view on Home's Builders board, as its notification opens it (#593).
+   */
   hash: string;
 }) {
   const { workspace, list, providers } = props;
@@ -303,6 +307,7 @@ export default function CodeHome(props: {
               <div className="flex min-w-0 grow basis-0 flex-col gap-3.5 md:min-h-0">
                 <BuildersBoard
                   workspaceId={workspace.id}
+                  inView={builderIn(props.hash)}
                   lead={lead}
                   sessions={list.sessions}
                   issues={nextUp?.issues}

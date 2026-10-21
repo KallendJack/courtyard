@@ -8,7 +8,8 @@ its event log.
 holds the machine's builds lock. It's **Checking**, one ahead, since it asked; still Checking once the check runs;
 **Building** again once it ends. Its turn ends with its pull request open and CI running: **In CI**.
 
-- **Uses:** the contract (`BuilderStatus`), `lib/files.ts`.
+- **Uses:** the contract (`BuilderStatus`), `lib/files.ts`; `notifications/` through `waitsOnYou`, passed in
+  (#593).
 - **Used by:** `sessions/`, which tells it what happens in a builder's session and starts each carry-on, and lists a
   stuck builder as waiting on the owner, saying why; `lead/`, which decides from each builder's status and serves
   it (`LeadStatus.statuses`); `worker.ts`, which carries on a builder a restart cut off (`carriesOnAfterRestart`)
@@ -44,3 +45,5 @@ None of its own: `GET /api/workspaces/:id/lead` gives each builder's status (`st
   it's **Stuck**.
 - **A task's end** always reaches its builder, even while an Update waits (`sessions/`' `tellTasks`).
 - **Merged** is where a builder ends: nothing moves it on.
+- **Telling the owner** (#593): each time a builder comes to be Waiting on you (but for a turn a restart cut off,
+  which carries on by itself) or Stuck, `waitsOnYou` is told once; never again while that status holds.

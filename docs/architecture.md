@@ -341,7 +341,8 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   each table and drawing is wrapped in, never a fallback: coming after the theme's stylesheet, they would otherwise
   outrank its screen-size variants on every page.
 - Beside `src/`: **`public/`** has the service worker (which also shows a pushed notification, unless that
-  session is open in front of the owner, and opens the session on a tap, asking the worker which workspace it's in)
+  session is open in front of the owner, and opens the session on a tap, asking the worker which workspace it's in,
+  or the page the notification names, #593)
   and the install manifest, and **`scripts/finish-build.mjs`**
   runs after each build to stamp the service worker with the files it keeps on install (all but Mermaid's, which it
   keeps once a diagram needs them) and check the first-load budget. `vite.config.ts` keeps everything
@@ -659,7 +660,12 @@ Where the rest fits:
   service worker shows it and opens the session on a tap. What goes depends on the session's workspace's Notify me
   (#493, `notify` in its `workspace.json`), decided in `notifications/` alone: Everything; Only what needs me, which
   leaves out a turn that just finished unless its answer ends asking the owner something ("Has a question for
-  you"); or Nothing.
+  you"); or Nothing. A Lead's builder is heard of by its status alone (#593, ADR 0031): `builders/` tells
+  `notifications/` each time one comes to be Waiting on you ("Journey book is waiting on you", with the command or
+  the question) or Stuck (with why), and `lead/` each time it pauses itself ("4 pull requests wait for you", "the
+  usage limit until 18:10"), once each, never while it holds. Nothing else of theirs is notified. Those three carry
+  the page a tap opens: the code workspace's Home, a builder's with its row on the Builders board in view
+  (`#builder-<session>`).
 
 ## Where things live
 

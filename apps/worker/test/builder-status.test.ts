@@ -19,7 +19,9 @@ import {
   codeWorkspace,
   codingProvider,
   createFakeGitHub,
+  createFakePush,
   type FakeGitHub,
+  type FakePush,
   followSession,
   gitIn,
   postJson,
@@ -110,6 +112,8 @@ const isBuilderWorktree = async (worktree: string) => {
 };
 
 let request: Requester;
+/** The notifications the worker sends, to the one device that turned them on (#593). */
+let push: FakePush;
 /** The owner's login, kept across restarts. */
 let cookie: string | undefined;
 /** Starts the worker again on the same folders, as a restart (a crash, the PC restarting) does. */
@@ -126,6 +130,7 @@ const signedIn = async (provider: Provider, env: Record<string, string> = {}) =>
     milestones: { [onGitHub]: { "4 · Code": "NOW. Build order: #22." } },
   });
   builderIds = [];
+  push = createFakePush();
   restart = async () => {
     jobs = [];
     const app = testWorker({
@@ -133,6 +138,7 @@ const signedIn = async (provider: Provider, env: Record<string, string> = {}) =>
       env,
       github: github.api,
       providers: [provider],
+      sendPush: push.send,
       now: () => now,
       repeat: (everyMs, job) => {
         if (everyMs === 30_000 && !jobs.some((each) => each === followPullRequests)) {
@@ -146,6 +152,10 @@ const signedIn = async (provider: Provider, env: Record<string, string> = {}) =>
   };
   cookie = undefined;
   await restart();
+  await postJson(request, "/api/notifications/on", {
+    endpoint: "https://push.example/fold",
+    keys: { p256dh: "p256dh-of-fold", auth: "auth-of-fold" },
+  });
   await postJson(request, "/api/github/sign-in", {});
   github.approve();
   await expect
@@ -596,6 +606,145 @@ describe("a Lead builder's status (#590)", () => {
     // Told once only: no third turn.
     await settled();
     expect(told).toHaveLength(2);
+  });
+});
+
+/** What the notifications sent so far carried, oldest first. */
+const notices = () => push.sent.map(({ payload }) => payload);
+
+/** The page a builder's notification opens: its workspace's Home, its row on the Builders board. */
+const rowOf = (session: string) => `/workspaces/side-project#builder-${session}`;
+
+describe("notifying the owner of a Lead builder (#593, ADR 0031)", () => {
+  it("notifies once when it waits on you for an approval, saying the command, and again for its question", async () => {
+    const answered = gate();
+    const { provider } = playing([
+      async ({ code, input }) => {
+        await code.run("curl https://courtyard.example/status");
+        await answered.pass();
+        await input.emit("Done. Which screen should it go on?");
+        return ok(null);
+      },
+    ]);
+    await signedIn(provider);
+
+    const builder = await build();
+    const waits = await becomes("waiting-on-you");
+    const approval = {
+      title: "Which session waits is waiting on you",
+      body: "curl https://courtyard.example/status",
+      session: builder.id,
+      page: rowOf(builder.id),
+    };
+    await expect.poll(notices, SLOW).toEqual([approval]);
+    // No repeat while it waits.
+    await runJobs();
+    await runJobs();
+    expect(notices()).toEqual([approval]);
+
+    const number = waits?.kind === "waiting-on-you" ? waits.approval : undefined;
+    await postJson(request, `/api/sessions/${builder.id}/approvals/${number}`, {
+      answer: "allow",
+    });
+    answered.open();
+    await settled();
+
+    await expect
+      .poll(notices, SLOW)
+      .toEqual([approval, { ...approval, body: "Which screen should it go on?" }]);
+  });
+
+  it("notifies when it's Stuck, saying why, and nothing more of its failed turn", async () => {
+    const { provider } = playing([
+      async () => err({ kind: "unknown", message: "The model connection stopped unexpectedly." }),
+    ]);
+    await signedIn(provider);
+
+    const builder = await build();
+    await settled();
+    await becomes("stuck");
+    await runJobs();
+
+    await expect.poll(notices, SLOW).toEqual([
+      {
+        title: "Which session waits is Stuck",
+        body: "Its turn failed: The model connection stopped unexpectedly.",
+        session: builder.id,
+        page: rowOf(builder.id),
+      },
+    ]);
+  });
+
+  it("sends none as it starts, is In CI, Ready for review or Merged", async () => {
+    const pushed = gate();
+    const { provider } = playing([
+      async ({ input }) => {
+        await pushed.pass();
+        await input.emit("Opened its pull request.");
+        return ok(null);
+      },
+    ]);
+    await signedIn(provider);
+    const builder = await build();
+    await pushed.reached;
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: builder.branch ?? "",
+      head: "c0ffee1",
+    });
+    github.setChecks(number, [{ name: "Checks", outcome: "running" }]);
+    pushed.open();
+    await settled();
+    await becomes("in-ci");
+    github.setChecks(number, [{ name: "Checks", outcome: "passed" }]);
+    await runJobs();
+    await becomes("ready-for-review");
+    await runJobs();
+    github.merge(number);
+    await followPullRequests();
+    await becomes("merged");
+    await runJobs();
+
+    expect(notices()).toEqual([]);
+  });
+
+  it("sends none while a restart's cut-off carries on by itself; cut off again, only that it's Stuck", async () => {
+    const first = gate();
+    const second = gate();
+    const { provider } = playing([
+      async ({ input }) => {
+        await first.pass();
+        await input.emit("Which screen should it go on?");
+        return ok(null);
+      },
+      async ({ input }) => {
+        await second.pass();
+        await input.emit("Which screen should it go on?");
+        return ok(null);
+      },
+    ]);
+    await signedIn(provider);
+    const builder = await build();
+    await first.reached;
+
+    await restart();
+    await sessionsList();
+    await second.reached;
+    expect(notices()).toEqual([]);
+
+    await restart();
+    await sessionsList();
+    await becomes("stuck");
+    await expect.poll(notices, SLOW).toEqual([
+      {
+        title: "Which session waits is Stuck",
+        body: "A restart cut its turn off twice.",
+        session: builder.id,
+        page: rowOf(builder.id),
+      },
+    ]);
+    first.open();
+    second.open();
   });
 });
 

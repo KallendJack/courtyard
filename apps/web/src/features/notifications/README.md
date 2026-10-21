@@ -17,6 +17,8 @@ is ready.
 
 - It subscribes the browser with the worker's key and sends the subscription, sends it again each time the page opens
   (so it follows the device's login), and unsubscribes on off.
-- The service worker (`public/sw.js`) shows each one, and opens the session on a tap.
+- The service worker (`public/sw.js`) shows each one, and opens the session on a tap, or the page it names: one
+  about the Lead or its builders (#593) opens the code workspace's Home, a builder's with its row on the Builders
+  board in view (`features/builders/`).
 - Which ones each workspace sends is its Notify me (#493), picked in the workspace ⋯'s sheet
   (`components/sheets/notify-me-sheet.tsx`) and decided by the worker.
