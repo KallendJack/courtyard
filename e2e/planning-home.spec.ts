@@ -5,8 +5,8 @@ import { openTab, openWhatCourtyardKnows } from "./workspace-page.ts";
 
 // A planning workspace's Home (#603; Paper, "Tablet · Mountain biking Home: the bike, then
 // projects (#603)"): its main subject, the drawn bike with each part placed on it by name, a
-// label each that opens its card, one with an upcoming replacement saying so, and those it has no
-// place for listed under it; then its projects (projects.spec.ts), then the message box. Its
+// label each that opens its card, one with an upcoming replacement a quiet dot (#664), and those it
+// has no place for listed under it; then its projects (projects.spec.ts), then the message box. Its
 // header is the name and the pills (+ New · History · Things · Docs); no photo, no view chips, no
 // next steps. With nothing to show, one quiet line.
 
@@ -96,9 +96,12 @@ test.describe("on the unfolded Fold", () => {
     ]) {
       await expect(label(page, part)).toBeVisible();
     }
-    await expect(label(page, "Pedals · DMR V8 next")).toBeVisible();
+    // An upcoming part is its plain label and a quiet dot (#664): its name says what's next, the
+    // drawing doesn't.
+    await expect(label(page, "Pedals, DMR V8 next")).toHaveText("Pedals");
     // Calm: details wait on the part's card.
     await expect(bike(page)).not.toContainText("RockShox");
+    await expect(bike(page)).not.toContainText("DMR V8");
     // A part it has no place for is listed under it.
     await expect(bike(page).getByRole("list", { name: "Parts" })).toHaveText(["Bottle cage"]);
 
@@ -113,8 +116,10 @@ test.describe("on the unfolded Fold", () => {
     await shot(page, "planning-home-drawn-bike");
 
     // A label opens the part's card.
-    await label(page, "Pedals · DMR V8 next").tap();
+    await label(page, "Pedals, DMR V8 next").tap();
     await expect(page.getByRole("heading", { level: 1, name: "Pedals" })).toBeVisible();
+    // The card names what's next.
+    await expect(page.getByRole("region", { name: "Upcoming" })).toContainText("DMR V8");
     await page.goBack();
     await bike(page).getByRole("list", { name: "Parts" }).getByRole("link").tap();
     await expect(page.getByRole("heading", { level: 1, name: "Bottle cage" })).toBeVisible();
@@ -138,7 +143,7 @@ test.describe("on the unfolded Fold", () => {
     expect(drawing.width / drawing.height).toBeCloseTo(622 / 300, 1);
     // The saddle's label is up and left of the pedals' one, as the drawing places them.
     const saddle = await label(page, "Saddle").boundingBox();
-    const pedals = await label(page, "Pedals · DMR V8 next").boundingBox();
+    const pedals = await label(page, "Pedals, DMR V8 next").boundingBox();
     expect((saddle?.y ?? 0) < (pedals?.y ?? 0)).toBe(true);
     expect((saddle?.x ?? 0) < (pedals?.x ?? 0)).toBe(true);
   });
@@ -168,7 +173,7 @@ for (const viewport of [
       await expect(
         page.getByRole("region", { name: "Projects" }).getByRole("listitem"),
       ).toHaveCount(2);
-      await expect(label(page, "Pedals · DMR V8 next")).toBeVisible();
+      await expect(label(page, "Pedals, DMR V8 next")).toBeVisible();
 
       const panel = await bike(page).boundingBox();
       expect(panel).not.toBeNull();
@@ -223,11 +228,12 @@ test.describe("on the cover screen", () => {
       "Fork",
       "Brakes",
       "Drivetrain",
-      "Pedals · DMR V8 next",
+      "Pedals",
       "Front tyre",
       "Rear tyre",
       "Bottle cage",
     ]);
+    await expect(label(page, "Pedals, DMR V8 next")).toBeVisible();
     await shot(page, "planning-home-drawn-bike-cover");
   });
 });

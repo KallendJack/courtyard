@@ -73,7 +73,7 @@ type Drawing = Extract<HomeSubject, { kind: "drawing" }>;
 
 /**
  * The drawn bike (#603): Courtyard's drawing of a mountain bike, each of the Thing's parts on its
- * place by name, a label each that opens its card, one with an upcoming replacement saying so.
+ * place by name, a label each that opens its card, one with an upcoming replacement a quiet dot.
  * Parts it has no place for are listed under it, as labels too. From a tablet up the labels sit
  * round the bike, each with a line to its pin, the drawing as big as the panel lets it be; on the
  * cover screen the bike has its pins only, and every part is listed under it.
@@ -170,8 +170,9 @@ function DrawnBike(props: { workspaceId: WorkspaceId; subject: Drawing }) {
 }
 
 /**
- * A part's label on the drawn bike, which opens its card: its name, and its upcoming replacement
- * in violet when it has one ("Pedals · DMR V8 next").
+ * A part's label on the drawn bike, which opens its card: its name, and a quiet violet dot when it
+ * has an upcoming replacement (#664). The replacement's name waits on the card, one tap away; the
+ * label's name still says it ("Pedals, DMR V8 next").
  */
 function PartLabel(props: {
   workspaceId: WorkspaceId;
@@ -180,7 +181,6 @@ function PartLabel(props: {
   light?: (on: boolean) => void;
 }) {
   const { part, light } = props;
-  const upcoming = part.upcoming !== undefined;
   return (
     <Link
       to="/workspaces/$workspaceId/things/$slug"
@@ -189,17 +189,15 @@ function PartLabel(props: {
       onPointerLeave={() => light?.(false)}
       onFocus={() => light?.(true)}
       onBlur={() => light?.(false)}
-      className={classes(
-        "flex h-6.5 max-w-56 items-center rounded-full px-2.5 text-meta font-semibold whitespace-nowrap outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
-        upcoming
-          ? "bg-primary/15 text-foreground inset-ring inset-ring-primary-text"
-          : "bg-secondary text-foreground/90 inset-ring inset-ring-input",
-      )}
+      {...(part.upcoming === undefined
+        ? {}
+        : { "aria-label": `${part.name}, ${part.upcoming} next` })}
+      className="flex h-6.5 max-w-56 items-center gap-1.5 rounded-full bg-secondary px-2.5 text-meta font-semibold whitespace-nowrap text-foreground/90 inset-ring inset-ring-input outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
     >
-      <span className="truncate">
-        {part.name}
-        {upcoming && ` · ${part.upcoming} next`}
-      </span>
+      <span className="truncate">{part.name}</span>
+      {part.upcoming !== undefined && (
+        <span aria-hidden="true" className="size-1.75 shrink-0 rounded-full bg-primary-text" />
+      )}
     </Link>
   );
 }
