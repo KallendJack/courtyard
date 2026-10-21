@@ -8,7 +8,6 @@ import {
   LiveUpdateResult,
   type LiveVersion,
   type MainBuild,
-  type SessionSummary,
   type UpdateWaiting,
 } from "@courtyard/contract";
 import { z } from "zod";
@@ -64,23 +63,19 @@ type WaitingFile = z.infer<typeof WaitingFile>;
 /** The worker started an update itself (#186), at this time: the turns it cuts off carry on. */
 const RestartFile = z.object({ at: z.iso.datetime() });
 
-/** A session with a turn running, and whether it waits on the owner's OK (#186). */
-export type MidTurn = { readonly session: SessionSummary; readonly needsYou: boolean };
-
 export type Live = {
   /** What the live copy runs, whether main is newer, how the last update went, and what waits. */
   status(): Promise<LiveStatus>;
   /**
-   * Update (#186): at once when main's build has passed and no session is mid-turn, or with
-   * `now`; otherwise it waits, and `watch` runs it once both are clear. Says whether it waits.
+   * Update (#186): at once unless main's build still runs, or with `now`; otherwise it waits, and
+   * `watch` runs it once the build has passed, never waiting for turns mid-way (#621). Says
+   * whether it waits.
    */
   update(request?: LiveUpdateRequest): Promise<Result<{ waits: boolean }, LiveError>>;
   /** Drops the Update waiting (#186), if one is. */
   cancel(): Promise<void>;
   /** For the worker's repeating jobs (#186): runs the waiting Update once it can, or drops it. */
   watch(): Promise<void>;
-  /** Whether an Update waits to run (#186): meanwhile nothing new starts on its own. */
-  holding(): boolean;
   /**
    * Whether this worker's start follows an update the worker started itself (#186), so the turns
    * it cut off carry on. Asked once, as the worker starts.
@@ -110,10 +105,6 @@ export const createLive = (options: {
   dataDir: string;
   now: () => number;
   startUpdate: (command: UpdateCommand) => void | Promise<void>;
-  /** The sessions with a turn running now (#186), which a waiting Update waits for. */
-  midTurn?: () => Promise<readonly MidTurn[]>;
-  /** An Update no longer waits without having run (#186): what held meanwhile can go. */
-  released?: () => void;
   /**
    * Main's build on `commit` (#249), with main's commits before it, newest first, to judge how
    * long each job takes (#337); `null` when GitHub can't be asked.
@@ -127,7 +118,6 @@ export const createLive = (options: {
       update: async () => err({ kind: "off" }),
       cancel: async () => {},
       watch: async () => {},
-      holding: () => false,
       restartedByUpdate: async () => false,
       forget: () => {},
     };
@@ -143,7 +133,6 @@ export const createLive = (options: {
     waiting = read.ok ? read.value : undefined;
   });
   const keepWaiting = async (now: WaitingFile | undefined) => {
-    const was = waiting?.kind === "waiting";
     waiting = now;
     if (now === undefined) {
       await removeFile(waitingFile);
@@ -152,7 +141,6 @@ export const createLive = (options: {
       const written = await writeJsonFile(waitingFile, now);
       if (!written.ok) console.error("The waiting Update couldn't be kept in the data folder");
     }
-    if (was && now?.kind !== "waiting") options.released?.();
   };
   /** The last answer from the remote, and when to ask again. */
   let check: { readonly newest: Promise<string | undefined>; readonly until: number } | undefined;
@@ -256,21 +244,10 @@ export const createLive = (options: {
     return { running, newest, newerOnMain, build };
   };
 
-  /** The sessions mid-turn, as the waiting Update says them (#186). */
-  const sessionsWaitedFor = async (): Promise<UpdateWaiting | null> => {
-    const busy = (await options.midTurn?.()) ?? [];
-    if (busy.length === 0) return null;
-    const needYou = busy.filter((each) => each.needsYou);
-    const first = needYou[0]?.session;
-    return {
-      kind: "sessions",
-      count: busy.length,
-      needYou: needYou.length,
-      open: first === undefined ? null : { workspaceId: first.workspaceId, sessionId: first.id },
-    };
-  };
-
-  /** What the Update waiting waits for now (#186), or `null` when it can run, or none waits. */
+  /**
+   * What the Update waiting waits for now (#186): main's build while it runs, and nothing else, as
+   * it holds nothing back (#621, ADR 0031); `null` when it can run, or none waits.
+   */
   const waitingNow = async (main: {
     newest: LiveVersion | null;
     build: MainBuild | null;
@@ -282,8 +259,7 @@ export const createLive = (options: {
         : null;
     }
     if (waiting === undefined) return null;
-    if (main.build?.kind === "running") return { kind: "ci" };
-    return sessionsWaitedFor();
+    return main.build?.kind === "running" ? { kind: "ci" } : null;
   };
 
   /**
@@ -331,9 +307,9 @@ export const createLive = (options: {
       if (last.value?.outcome === "running") return err({ kind: "running" });
       if (request.now !== true) {
         const main = await mainNow();
-        // Main's build still runs, or a session is mid-turn: it waits, and runs itself (#186).
-        const waits = main.build?.kind === "running" || (await sessionsWaitedFor()) !== null;
-        if (waits) {
+        // Main's build still runs: it waits, and runs itself once it passes (#186). Turns mid-way
+        // don't hold it: those it cuts off carry on after the restart (#621).
+        if (main.build?.kind === "running") {
           await keepWaiting({ kind: "waiting", since: new Date(now()).toISOString() });
           return ok({ waits: true });
         }
@@ -392,7 +368,6 @@ export const createLive = (options: {
       const started = await start();
       if (!started.ok) console.error("The waiting Update couldn't be started", started.error);
     },
-    holding: () => waiting?.kind === "waiting",
     restartedByUpdate: async () => {
       const read = await readJsonFile(restartFile, RestartFile);
       await removeFile(restartFile);

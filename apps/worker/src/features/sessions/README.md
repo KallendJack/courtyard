@@ -10,8 +10,8 @@ Claude, and every page that has the session open gets the answer as it's written
   `context-folder/`, `owner-context/`, `workspaces/`; and, handed in by `worker.ts`, `notifications/`
   (`notify`), `next-up/`'s claims (`named`, `claim`, `release`) and `builders/` (#590: told what happens in a
   Lead builder's session as it happens; it starts the builder's one carry-on).
-- **Used by:** `worker.ts`, `pull-requests/`, `next-up/`, `lead/`, `changes/`, `fresh-start/`, `matt-skills/`,
-  `live/` (`midTurn`); in the web app, [`features/sessions/`](../../../../web/src/features/sessions/README.md).
+- **Used by:** `worker.ts`, `pull-requests/`, `next-up/`, `lead/`, `changes/`, `fresh-start/`, `matt-skills/`;
+  in the web app, [`features/sessions/`](../../../../web/src/features/sessions/README.md).
 
 ## API
 
@@ -85,5 +85,7 @@ most 10 seconds, timed by the `wait` the worker is given; past that it answers w
   message to merge it in (`bringUpToDateMessage`, worded by `prompts/`), on the model the owner last used there, or
   queues it while a turn runs.
 
+A Lead's builder starts no helpers: its code turns get no `CodeTurn.helper` (#621, ADR 0031). A waiting Update
+holds nothing back here: queued messages, fixing turns, task reports and the Lead's merge notes start as usual.
 The rest of a turn (saves, approvals, helpers, steering, recovery) is in
 [How a turn flows](../../../../../docs/architecture.md#how-a-turn-flows).

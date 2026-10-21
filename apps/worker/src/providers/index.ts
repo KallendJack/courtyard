@@ -202,11 +202,15 @@ export type CodeTurn = {
    * records it, and waits for a place when as many helpers as run at once are running. Answers
    * what the helper does through, each tagged with it, once it has a place; `undefined` when the
    * turn was stopped first. A provider starts helpers only on the turn's model and effort.
+   * `null` on a turn that starts none, a Lead builder's (ADR 0031): its provider offers the model
+   * no way to start one.
    */
-  readonly helper: (helper: {
-    readonly id: HelperId;
-    readonly name: string;
-  }) => Promise<HelperTurn | undefined>;
+  readonly helper:
+    | ((helper: {
+        readonly id: HelperId;
+        readonly name: string;
+      }) => Promise<HelperTurn | undefined>)
+    | null;
   /**
    * Makes a worktree and branch of its own for a helper that writes code (#395): branched from
    * the session branch's last commit, in a folder beside the session's worktree, never inside the

@@ -529,6 +529,8 @@ const scriptedHelper = async (
 ) => {
   const [, ownName] = OWN_BRANCH.exec(helper.name) ?? [];
   const name = ownName ?? helper.name;
+  // A turn that starts no helpers, a Lead builder's (ADR 0031), offers no way to.
+  if (code.helper === null) return;
   const turn = await code.helper({ id: HelperId.parse(`helper-${helper.id}`), name });
   if (turn === undefined) return;
   if (ownName !== undefined) {

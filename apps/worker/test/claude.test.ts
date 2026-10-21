@@ -1691,6 +1691,22 @@ describe("helpers on a Claude code turn (#117, ADR 0027)", () => {
     await rm(worktree, { recursive: true, force: true });
   });
 
+  it("offers no Agent tool on a code turn that starts no helpers, a Lead builder's, and refuses one (#621)", async () => {
+    const { worktree, code, started } = await helpingSession();
+    const { claudeCode, runs } = stubClaudeCode({ messages: [success] });
+    await runTurn(claudeCode, { folder: worktree, code: { ...code, helper: null } });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+
+    expect(options.tools).not.toContain("Agent");
+    const agent = { description: "Review against standards", prompt: "Review it." };
+    expect(await call(options, { name: "Agent", input: agent })).toMatchObject({
+      permissionDecision: "deny",
+    });
+    expect(started).toEqual([]);
+    await rm(worktree, { recursive: true, force: true });
+  });
+
   it("starts a helper once the worker gives it a place, named by what it's for, never in the background or on another model", async () => {
     const { worktree, code, started } = await helpingSession();
     const { claudeCode, runs } = stubClaudeCode({ messages: [success] });

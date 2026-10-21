@@ -34,6 +34,7 @@ import {
   SAVING_MODEL,
   savingProvider,
   testWorker,
+  updateWaiting,
 } from "./testing.ts";
 
 // A lead session per code workspace (#347): Run the build order starts the Lead, which starts
@@ -762,21 +763,7 @@ describe("while Courtyard waits to update (#186)", () => {
   it("starts its builders all the same: an Update holds nothing back (#591)", async () => {
     // Courtyard's live copy is this repository, a version behind main, whose build still runs.
     const { github, request } = await signedInWith(ISSUES, { env: { COURTYARD_LIVE_COPY: repo } });
-    await gitIn(repo, "commit", "--quiet", "--allow-empty", "-m", "Rail and Talk key");
-    await gitIn(repo, "push", "--quiet", "origin", "main");
-    const newest = await gitIn(repo, "rev-parse", "HEAD");
-    await gitIn(repo, "reset", "--quiet", "--hard", "HEAD~1");
-    github.setCommitChecks(newest, [
-      {
-        id: 1,
-        name: "Checks",
-        outcome: "running",
-        url: "https://github.com/octo-owner/side-project/actions/runs/1/job/1",
-        startedAt: "2026-10-12T09:00:00Z",
-        completedAt: null,
-      },
-    ]);
-    expect((await postJson(request, "/api/live/update", {})).status).toBe(202);
+    await updateWaiting({ request, repo, github });
 
     await run(request);
 
@@ -784,6 +771,33 @@ describe("while Courtyard waits to update (#186)", () => {
     expect(lead.building.map((each) => each.issue)).toEqual([22, 23]);
     expect(lead.why).toBeUndefined();
     expect(github.commentsOn(onGitHub, 22)).toEqual([expect.stringMatching(/^Building this/)]);
+  });
+
+  it("sends the Lead its turn as a builder's pull request merges all the same (#621)", async () => {
+    const { github, request } = await signedInWith(ISSUES, { env: { COURTYARD_LIVE_COPY: repo } });
+    const lead = await run(request);
+    const builder = await builderOf(request, 22);
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: builder.branch ?? "",
+      head: "c0ffee1",
+    });
+    await runJobs();
+    await updateWaiting({ request, repo, github });
+    github.merge(number);
+
+    await runJobs();
+
+    const events = await followSession(request, {
+      sessionId: lead.session ?? "",
+      until: (event) => event.type === "owner-message" && event.merged !== undefined,
+    });
+    expect(events.at(-1)).toMatchObject({ merged: { pullRequest: number } });
+    await followSession(request, {
+      sessionId: lead.session ?? "",
+      until: "turn-completed",
+      after: events.at(-1)?.seq ?? 0,
+    });
   });
 });
 

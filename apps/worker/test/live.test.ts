@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -16,10 +16,8 @@ import { createFakeProvider, type Provider } from "../src/providers/index.ts";
 import type { UpdateCommand } from "../src/worker.ts";
 import {
   asOwner,
-  CODING_MODEL,
   codeRepo,
   codeWorkspace,
-  codingProvider,
   createFakeGitHub,
   errorOf,
   FAKE_MODEL,
@@ -746,51 +744,34 @@ describe("Update when ready (#186)", () => {
     expect(await waitingOf(request)).toBeNull();
   });
 
-  it("waits for each session mid-turn to finish, saying how many", async () => {
-    ciIs("passed");
+  it("waits only for main's build, never for a turn mid-way, which carries on by itself after the restart (#621)", async () => {
+    ciIs("running");
     const gated = gatedProvider();
     const request = await start([gated.provider]);
     const session = await startSession(request, "Build the quick questions");
     await gated.held;
 
     await startUpdate(request);
-    await watchUpdate();
-
-    expect(started).toEqual([]);
-    expect(await waitingOf(request)).toEqual({
-      kind: "sessions",
-      count: 1,
-      needYou: 0,
-      open: null,
-    });
-    gated.release();
-    await followSession(request, { sessionId: session.id, until: "turn-completed" });
-    await watchUpdate();
-    expect(started).toHaveLength(1);
-  });
-
-  it("counts a session waiting on the owner's OK as busy, and names it", async () => {
+    expect(await waitingOf(request)).toEqual({ kind: "ci" });
     ciIs("passed");
-    const { repo } = await codeRepo(root);
-    await codeWorkspace(root, "side-project", repo);
-    const request = await start([codingProvider([{ run: "pnpm add left-pad" }]).provider]);
-    const asked = await postJson(request, "/api/workspaces/side-project/sessions", {
-      text: "Add left-pad",
-      model: CODING_MODEL,
-    });
-    const { id } = SessionSummary.parse(await asked.json());
-    await followSession(request, { sessionId: id, until: "approval-requested" });
+    later();
+    await watchUpdate();
 
-    await startUpdate(request);
-
-    expect(await waitingOf(request)).toEqual({
-      kind: "sessions",
-      count: 1,
-      needYou: 1,
-      open: { workspaceId: "side-project", sessionId: id },
+    expect(started).toEqual([{ task: "Courtyard update" }]);
+    // The update restarts the worker.
+    const restarted = await start();
+    const events = await followSession(restarted, {
+      sessionId: session.id,
+      until: "turn-completed",
     });
-    await postJson(request, `/api/sessions/${id}/stop`, { turn: 1 });
-    await followSession(request, { sessionId: id, until: "turn-stopped" });
+    expect(events.flatMap((event) => (event.type === "text-delta" ? [] : [event.type]))).toEqual([
+      "owner-message",
+      "turn-failed",
+      "owner-message",
+      "turn-completed",
+    ]);
+    expect(events[2]).toMatchObject({ continues: { turn: 1 } });
+    gated.release();
   });
 
   it("runs at once with Update now, and the turns it cuts off carry on by themselves", async () => {
@@ -895,10 +876,10 @@ describe("Update when ready (#186)", () => {
     expect(await waitingOf(request)).toBeNull();
   });
 
-  it("while it waits, queued messages hold and the owner's own still start, until it's cancelled", async () => {
+  it("while it waits, holds nothing back: a queued message still goes (#621)", async () => {
     ciIs("running");
     const gated = gatedProvider();
-    const request = await start([gated.provider, createFakeProvider({ delayMs: 0, second: true })]);
+    const request = await start([gated.provider]);
     const session = await startSession(request, "Build the quick questions");
     await gated.held;
     await postJson(request, `/api/sessions/${session.id}/messages`, {
@@ -908,24 +889,50 @@ describe("Update when ready (#186)", () => {
     await startUpdate(request);
 
     gated.release();
-    await followSession(request, { sessionId: session.id, until: "turn-completed" });
-    const own = await startSession(request, "Something else", {
-      provider: "fake-two",
-      model: "echo",
-    });
-    await followSession(request, { sessionId: own.id, until: "turn-completed" });
-    const log = await readFile(join(dataDir, "sessions", session.id, "events.jsonl"), "utf8");
-    expect(log).not.toContain('"queued":');
 
-    await cancel(request);
     const sent = await followSession(request, {
       sessionId: session.id,
       until: (event) => event.type === "owner-message" && event.queued !== undefined,
     });
     expect(sent.at(-1)).toMatchObject({ text: "Then the tests" });
+    expect(await waitingOf(request)).toEqual({ kind: "ci" });
     await followSession(request, {
       sessionId: session.id,
       until: (event) => event.type === "turn-completed" && event.seq > 4,
+    });
+  });
+
+  it("while it waits, a session is still told its task has ended (#621)", async () => {
+    ciIs("running");
+    const { repo } = await codeRepo(root);
+    await writeFile(
+      join(repo, "wait.mjs"),
+      'import { existsSync } from "node:fs";\nconst timer = setInterval(() => { if (existsSync("go")) { clearInterval(timer); console.log("Went"); } }, 50);\n',
+    );
+    await git(repo, "add", ".");
+    await git(repo, "commit", "-qm", "A task that waits");
+    await git(repo, "push", "-q", "origin", "main");
+    await codeWorkspace(root, "side-project", repo);
+    const request = await start();
+    const asked = await postJson(request, "/api/workspaces/side-project/sessions", {
+      text: "start task: node wait.mjs (for: Waits)",
+      model: FAKE_MODEL,
+    });
+    const { id } = SessionSummary.parse(await asked.json());
+    await followSession(request, { sessionId: id, until: "turn-completed" });
+    await startUpdate(request);
+
+    await writeFile(join(dataDir, "worktrees", id, "go"), "");
+
+    const events = await followSession(request, {
+      sessionId: id,
+      until: (event) => event.type === "owner-message" && event.tasksEnded !== undefined,
+    });
+    expect(events.at(-1)).toMatchObject({ type: "owner-message" });
+    expect(await waitingOf(request)).toEqual({ kind: "ci" });
+    await followSession(request, {
+      sessionId: id,
+      until: (event) => event.type === "turn-completed" && event.seq > (events.at(-1)?.seq ?? 0),
     });
   });
 });

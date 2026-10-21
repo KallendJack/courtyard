@@ -162,10 +162,14 @@ async function* turnPrompt(turn: {
 const PLANNING_TOOLS = ["Read", "Glob", "Grep"];
 /**
  * The tools a code session gets as well: editing files and running commands, each asked of the
- * worker first (ADR 0007), its task list, loading the skills it was given (ADRs 0024, 0025), and
- * starting helpers, Claude Code's own sub-agents (#117, ADR 0027).
+ * worker first (ADR 0007), its task list, and loading the skills it was given (ADRs 0024, 0025).
  */
-const CODING_TOOLS = ["Edit", "Write", "Bash", "TodoWrite", "Skill", "Agent"];
+const CODING_TOOLS = ["Edit", "Write", "Bash", "TodoWrite", "Skill"];
+/**
+ * Starting helpers, Claude Code's own sub-agents (#117, ADR 0027): on a code turn that starts
+ * them, never a Lead builder's (ADR 0031).
+ */
+const HELPER_TOOL = "Agent";
 /**
  * How long Claude Code waits on the worker's say in a code session, which may be an approval the
  * owner answers in the morning (#171), or a heavy check's turn in the builds queue (#281): the
@@ -1244,7 +1248,8 @@ const decision = (allowed: boolean, reason?: string): SyncHookJSONOutput => ({
  */
 const startHelper = async (start: {
   helpers: Helpers;
-  code: CodeTurn;
+  /** The worker's start of a helper, on a turn that starts them. */
+  start: NonNullable<CodeTurn["helper"]>;
   input: { tool_input: unknown; tool_use_id: string; agent_id?: string | undefined };
 }): Promise<SyncHookJSONOutput> => {
   const { helpers, input } = start;
@@ -1256,7 +1261,7 @@ const startHelper = async (start: {
   if (!helpers.types.includes(type)) return decision(false, HELPER_NOT_HERE);
   // One that writes code asks for a worktree of its own (#395), which Courtyard makes when
   // Claude Code asks for it (`makeWorktree`).
-  const helper = await start.code.helper({
+  const helper = await start.start({
     id: HelperId.parse(input.tool_use_id),
     // Named by what the model said it's for, or by its type when it said nothing.
     name: asked.description.trim() || type,
@@ -1312,8 +1317,9 @@ const confineTo =
       const report = helper?.report ?? confine.report;
       const code = helper?.code ?? confine.code;
       const connections = helper?.connections ?? confine.connections;
-      if (confine.code !== null && helpers !== null && input.tool_name === "Agent") {
-        return await startHelper({ helpers, code: confine.code, input });
+      const startsHelpers = confine.code?.helper ?? null;
+      if (startsHelpers !== null && helpers !== null && input.tool_name === "Agent") {
+        return await startHelper({ helpers, start: startsHelpers, input });
       }
       if (courtyardTools.includes(input.tool_name)) return decision(true);
       const connected = connectionCall(connections, input.tool_name, input.tool_input);
@@ -1581,7 +1587,7 @@ export const createClaudeProvider = (
           ? undefined
           : await projectSetup(folder, noPlugins.value, code.plugin);
       const helpers: Helpers | null =
-        setup === undefined
+        setup === undefined || code?.helper === null
           ? null
           : { running: new Map(), callOf: new Map(), types: setup.helperTypes, made: new Map() };
       // What the owner added that's gone to Claude Code, read once Claude's next message starts.
@@ -1613,6 +1619,7 @@ export const createClaudeProvider = (
             tools: [
               ...PLANNING_TOOLS,
               ...(code === null ? [] : CODING_TOOLS),
+              ...(helpers === null ? [] : [HELPER_TOOL]),
               ...(web === null ? [] : WEB_TOOLS),
             ],
             // Nothing is pre-approved: the hook allows each call or it's refused.

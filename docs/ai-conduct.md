@@ -381,7 +381,9 @@ only Courtyard's, so every code workspace gets it whatever it's on:
 > numbers.
 
 A Lead's builder (#589, ADR 0031) gets the access line with "(a dev server or a preview)" in place of "(a dev
-server, a slow test run)", since its checks run in its turn, and after the house process:
+server, a slow test run)", since its checks run in its turn; the house process without its two sentences on helpers
+(from "Hand parts of the work to helpers" to "when it finishes."), since a builder starts none and is given no tool
+to (#621); and after the house process:
 
 > You're one of this workspace's Lead's builders, so check only what you changed, in your turn, one check at a time:
 > the repository's lint and type checks, and the unit test files and browser specs for what you changed, naming each
@@ -426,7 +428,8 @@ limit (a planning turn stops after 30 of Claude's round trips). Claude keeps a t
 `TodoWrite` tool, which touches no file; each update shows as "Updated the task list".
 
 Claude hands parts of the work to helpers, Claude Code's own sub-agents, with its `Agent` tool (#117, ADR 0027),
-when a skill calls for them or the owner asks, as the house process says. A helper works in the session's worktree
+when a skill calls for them or the owner asks, as the house process says; a Lead's builder has no `Agent` tool
+(#621, ADR 0031). A helper works in the session's worktree
 under the same rules as the model: every one of its tool calls goes through the same check, its edits and commands
 are decided by the worker the same way, and an approval it needs names it. Each runs on the session's model and
 effort, whatever its type asks for; at most three run at once, and a fourth waits for one to finish; none runs in the
@@ -678,7 +681,7 @@ Windows worker), with the session's environment and without Courtyard's settings
 started when the turn is stopped.
 
 Codex's own sub-agents get none of Courtyard's tools, so its helpers are Courtyard's (#470, ADR 0027), started with
-`start_helper`:
+`start_helper`, which a Lead's builder isn't offered (#621, ADR 0031):
 
 > Hands part of the work to a helper: another model on your model and effort, which works in your working directory
 > with these same tools under the same rules, and gives back its report when it's done. Only when a skill you're

@@ -165,15 +165,14 @@ tablet or phone) when it says a new version is ready (it checks every few hours)
 - **It refuses** if the live copy has changes of its own, isn't on `main`, or `main`'s newest
   commit isn't passing CI. While you're signed in to GitHub from Connections, with the GitHub App
   installed on the live copy's repo, the app shows main's build beside Update, one bar per CI job.
-- **Update waits when it should:** pressed while main's build is still running or a session is
-  mid-turn, it says what it's waiting for and runs by itself once both are clear (Courtyard starts
-  no new work meanwhile). **Update now** runs it at once; **Cancel** drops it; it's dropped if
-  main's build fails.
+- **Update waits when it should:** pressed while main's build is still running, it says so and
+  runs by itself once the build has passed, holding nothing back meanwhile. **Update now** runs it
+  at once; **Cancel** drops it; it's dropped if main's build fails.
 - **Otherwise it updates:** it shuts the worker down, pulls, installs the locked package versions
   and builds, then starts the worker and waits for it to answer. It shuts the worker down first
   because Windows can refuse to replace files a running worker has open. A turn running at that
-  moment is cut off: after Update now it continues by itself once the worker is back, and any
-  messages you'd queued behind it go then too.
+  moment is cut off: it continues by itself once the worker is back, and any messages you'd queued
+  behind it go then too.
 - **After a crash or a restart of the PC,** turns that were running wait for you: one notification
   says how many stopped, and each shows **Continue** in its session and in Needs you.
 - **If any step fails,** it puts the previous version back and starts that instead.

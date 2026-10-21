@@ -20,7 +20,7 @@ import {
   type StartAppServer,
 } from "../src/providers/codex.ts";
 import { createFakeProvider } from "../src/providers/fake.ts";
-import type { HeardMeter, TurnInput } from "../src/providers/index.ts";
+import type { CodeTools, CodeTurn, HeardMeter, TurnInput } from "../src/providers/index.ts";
 import {
   asOwner,
   codeRepo,
@@ -2269,6 +2269,58 @@ describe("Codex's helpers in a code session (#470)", () => {
     });
     // The model reads the helper's report as the tool's answer.
     expect(JSON.stringify(answers[0])).toContain("Seen the files.");
+  });
+
+  it("offers no helper tool on a code turn that starts no helpers, a Lead builder's (#621)", async () => {
+    const tool = (name: string) => ({ name, description: name, input: {} });
+    const codeTools: CodeTools = {
+      run: tool("run_command"),
+      write: tool("write_file"),
+      edit: tool("edit_file"),
+      helper: tool("start_helper"),
+      helperInstructions: "You're a helper.",
+    };
+    const code: CodeTurn = {
+      worktree: repo,
+      env: {},
+      plugin: null,
+      edit: async () => ok(null),
+      run: async () => ok(null),
+      ran: () => {},
+      task: async () => err("No tasks here."),
+      helper: async () => undefined,
+      branchOff: async () => err("No helpers here."),
+    };
+    /** The tools Codex is offered on a code turn given `helper`. */
+    const offered = async (helper: CodeTurn["helper"]) => {
+      const codex = standIn();
+      const provider = createCodexProvider({
+        dataDir: join(root, "data"),
+        startAppServer: codex.startAppServer,
+      });
+      await runTurn(provider, {
+        folder: repo,
+        code: { ...code, helper },
+        framing: {
+          instructions: "The turn's instructions.",
+          message: "Build #22.",
+          newMessage: "Build #22.",
+          attachments: [],
+          tools: [],
+          fileTools: null,
+          codeTools,
+          webSearch: null,
+        },
+      });
+      const Started = z.object({ dynamicTools: z.array(z.object({ name: z.string() })) });
+      const started = Started.parse(codex.requests("thread/start")[0]?.params);
+      return started.dynamicTools.map((each) => each.name);
+    };
+
+    expect(await offered(code.helper)).toContain("start_helper");
+    const builder = await offered(null);
+    expect(builder).toEqual(expect.arrayContaining(["run_command", "write_file", "edit_file"]));
+    expect(builder).not.toContain("start_helper");
   });
 
   it("gives a helper that writes code a branch of its own, and merges it back as it finishes", async () => {

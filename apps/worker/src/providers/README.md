@@ -25,7 +25,8 @@ None of its own: its models show on `sessions/`' `GET /api/providers`.
 - **Helpers** (#117, #470, ADR 0027): Claude starts Claude Code's own sub-agents, each tool call told apart by its
   hook; Codex's own get none of Courtyard's tools, so Codex starts helpers with Courtyard's `start_helper`, each a
   fresh thread the adapter runs with the coding tools. Either way each one works through the `HelperTurn` the worker
-  gives it with `CodeTurn.helper`.
+  gives it with `CodeTurn.helper`. When that's `null` (a Lead's builder, #621, ADR 0031), neither offers the model
+  a way to start one: Claude gets no `Agent` tool, Codex no `start_helper`.
 - **Status** (#282): Claude and Codex keep theirs with `createStatusKeeper`: a good answer for a minute, one saying
   they can't be used for a few seconds, the last good one through a check that gets no answer in time, and a
   finished turn counts as a good check.

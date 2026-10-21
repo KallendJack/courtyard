@@ -740,11 +740,6 @@ export const createSessions = (options: {
   /** Each Lead builder's status (#590), told what happens in its session as it happens. */
   builders?: Builders;
   /**
-   * Whether an Update waits to run (#186): meanwhile nothing new starts on its own (queued
-   * messages hold, and no turn fixes a pull request), while the owner's own messages still start.
-   */
-  holding?: () => boolean;
-  /**
    * Usage at a glance (#66): told what a turn's provider heard of its plan windows as the turn
    * ran, and when each turn has ended, so its provider's usage is read again.
    */
@@ -753,7 +748,6 @@ export const createSessions = (options: {
     readonly turnEnded: (provider: ProviderId) => void;
   };
 }) => {
-  const holding = () => options.holding?.() === true;
   const sessionsDir = join(options.dataDir, "sessions");
   const running = new Map<SessionId, RunningSession>();
   /** Code sessions' tasks (#182), which outlive the turns that start them. */
@@ -1844,7 +1838,8 @@ export const createSessions = (options: {
                 ? null
                 : {
                     ...codeTurn({ ...where, helper: undefined }),
-                    helper: (started) => startHelper(started, where),
+                    // A Lead's builder starts no helpers (ADR 0031): the owner's sessions do.
+                    helper: builder ? null : (started) => startHelper(started, where),
                     branchOff: () => options.code.branchOff(where),
                   },
             connections,
@@ -2235,8 +2230,6 @@ export const createSessions = (options: {
   const sendNextQueued = async (id: SessionId): Promise<boolean> => {
     const since = freshStarts;
     for (;;) {
-      // While an Update waits, they hold (#186); they go once it has run, or is dropped.
-      if (holding()) return false;
       const session = running.get(id);
       if (session === undefined || !session.queues || session.turn.kind !== "idle") return false;
       const [events, file] = await Promise.all([
@@ -2805,8 +2798,6 @@ export const createSessions = (options: {
         }
         return;
       }
-      // While an Update waits, no fixing turn starts (#186): it's looked at again next time.
-      if (holding()) return;
       // A conflict first: its checks may not run again until it's brought up to date (#382).
       if (pullRequest.conflicts === true) {
         await bringUpToDateOnce({ id, workspaceId, repoPath, events: events.value, pullRequest });
@@ -3045,13 +3036,10 @@ export const createSessions = (options: {
 
   /**
    * Tells a session's model of its tasks that ended untold (#182), in a turn of their own on the
-   * model the owner last used, once the session is free and nothing holds it. Says whether one
-   * started.
+   * model the owner last used, once the session is free. Says whether one started.
    */
   const tellTasks = async (id: SessionId): Promise<boolean> => {
     const session = running.get(id);
-    // A Lead's builder is told whatever waits (#610): an Update holds back only the owner's.
-    if (holding() && session?.builder !== true) return false;
     if (session === undefined || session.turn.kind !== "idle") return false;
     const [events, file] = await Promise.all([
       readEvents(id),
@@ -3802,39 +3790,6 @@ export const createSessions = (options: {
       return cutOff.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },
 
-    /**
-     * The sessions with a turn running now, in any workspace (#186), each with whether it waits
-     * on the owner's OK.
-     */
-    midTurn: async (): Promise<
-      { readonly session: SessionSummary; readonly needsYou: boolean }[]
-    > => {
-      const found: { session: SessionSummary; needsYou: boolean }[] = [];
-      for (const [id, session] of running) {
-        if (session.turn.kind === "idle" || session.turn.kind === "deleting") continue;
-        const [file, now] = await Promise.all([
-          readJsonFile(sessionFilePath(id), SessionFile),
-          turnNowOf(id),
-        ]);
-        if (!file.ok || file.value === undefined) continue;
-        found.push({
-          session: summaryOf(file.value),
-          needsYou: now.ok && now.value.kind === "needs-you",
-        });
-      }
-      return found;
-    },
-
-    /**
-     * Once an Update no longer waits (#186), what held meanwhile goes: each session's next queued
-     * message. Pull requests are looked at again on their own.
-     */
-    releaseHeld: async () => {
-      for (const [id, session] of running) {
-        if (session.queues) await sendNextQueued(id);
-      }
-    },
-
     /** Stops the session's running turn. Whatever it wrote so far stays. */
     stop: async (rawId: string, request: StopRequest): Promise<Result<null, SessionError>> => {
       const session = await findSession(rawId);
@@ -4102,8 +4057,6 @@ export const createSessions = (options: {
       id: SessionId,
       merged: { pullRequest: number; text: string },
     ): Promise<Result<null, SessionError>> => {
-      // While an Update waits, the Lead is told later (#186): it asks again next time round.
-      if (holding()) return err({ kind: "busy" });
       const found = await findSession(id);
       if (!found.ok) return found;
       const events = await readEvents(id);

@@ -5,7 +5,6 @@ import type {
   MainBuild,
   UpdateWaiting,
 } from "@courtyard/contract";
-import { Link } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/buttons/button";
 import { WebButton } from "@/components/buttons/web-link";
@@ -122,13 +121,10 @@ const STANDING_LOOKS: Readonly<Record<MainBuild["kind"], string>> = {
   failed: "text-destructive",
 };
 
-/** "1 session", "2 sessions". */
-const sessionsSaid = (count: number) => `${count} ${count === 1 ? "session" : "sessions"}`;
-
 /**
  * What a waiting Update waits for (#186; Paper, "Component · Update when ready"), in place of
- * where the build stands: main's build; the sessions mid-turn, opening the first that needs the
- * owner's OK; or that it was dropped as main failed.
+ * where the build stands: main's build, never sessions mid-turn (#621); or that it was dropped as
+ * main failed.
  */
 export function Waiting(props: { waiting: UpdateWaiting }) {
   const { waiting } = props;
@@ -137,25 +133,6 @@ export function Waiting(props: { waiting: UpdateWaiting }) {
       return <span className="text-primary-text">Waiting for CI · updates when it passes</span>;
     case "dropped":
       return <span className="text-destructive">Main failed · Update dropped</span>;
-    case "sessions": {
-      const { open } = waiting;
-      if (waiting.needYou === 0 || open === null) {
-        return (
-          <span className="text-primary-text">
-            Waiting for {sessionsSaid(waiting.count)} to finish
-          </span>
-        );
-      }
-      return (
-        <Link
-          to="/workspaces/$workspaceId/sessions/$sessionId"
-          params={open}
-          className="text-warning hover:underline"
-        >
-          Waiting for {sessionsSaid(waiting.count)} · {waiting.needYou} needs your OK ›
-        </Link>
-      );
-    }
   }
 }
 

@@ -5,6 +5,9 @@ to day, and the house process needs helpers there: `code-review` runs two side b
 `implement-spec` hands each ticket to one. ADR 0025 kept Claude Code's sub-agents off, and #89 accepted "no
 Claude-only extras, such as a skill running in a sub-agent".
 
+Amended by ADR 0031 (#621): the Lead's builders start no helpers. Their code turns get no `Agent` tool (Claude) or
+`start_helper` (Codex), and their prompt doesn't mention helpers; the owner's own code sessions keep them, as below.
+
 So **a code session's model can hand parts of a job to helpers, its provider's own sub-agents, and every helper works
 inside the session's boundary.** For Claude that's Claude Code's `Agent` tool:
 
