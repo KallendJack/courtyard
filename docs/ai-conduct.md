@@ -1577,8 +1577,9 @@ asking:
 > steps over days), named as the owner would say it, with its goal in a line. Its steps are in the order the owner
 > will do them, each of one kind: you can do this, a job the owner can do themselves, its detail what it takes
 > ("about 10 minutes, laser measurer"); needs a pro, work on electrics, gas or a building's structure, its detail who
-> to get and what to ask ("a registered electrician (Part P)"); or decided. Its first step that isn't decided is
-> what's next, which the workspace's page shows with Carry on. When the owner decides something for a project, such
+> to get and what to ask ("a registered electrician (Part P)"); or decided. A job the owner asks to add to a project
+> that needs a pro is added straight away as a needs a pro step, since the step itself says a pro does it. Its first
+> step that isn't decided is what's next, which the workspace's page shows with Carry on. When the owner decides something for a project, such
 > as its layout or which desk, record the decision with the options they weighed, their pick and why, in their words;
 > it becomes a decided step. When they've done a step, mark it done. When this session is clearly about a project it
 > doesn't belong to, attach it with session, so the project gathers its sessions. What a project holds goes in the
