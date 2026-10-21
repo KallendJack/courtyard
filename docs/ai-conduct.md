@@ -711,7 +711,7 @@ it without own_branch, or do the work yourself."
 ## The Lead
 
 Built with #347. A code workspace can have one Lead: a long-lived code session whose job is the build order, not one
-issue. The owner starts it with Run the build order on Next up, which starts it with the owner's tap as its first
+issue. The owner starts it with Run on the Builders board (#648), which starts it with the owner's tap as its first
 message, as they'd say it:
 
 > Run the build order.

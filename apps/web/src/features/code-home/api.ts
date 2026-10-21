@@ -52,7 +52,7 @@ export const startOnIssue = (start: {
 export const loadLead = (workspaceId: WorkspaceId) =>
   fromWorker(`${workspacePath(workspaceId)}/lead`, LeadStatus);
 
-/** Run the build order (#347): the Lead starts on this model, or wakes. */
+/** Run (#347, #648): the Lead starts on this model, or wakes. */
 export const runLead = (workspaceId: WorkspaceId, model: LeadRun) =>
   sendJson({ path: `${workspacePath(workspaceId)}/lead/run`, body: model, schema: LeadStatus });
 

@@ -28,17 +28,22 @@ test.afterAll(async ({ request }) => {
   await request.post("/api/github/sign-out", { data: {} });
 });
 
-test("Run the build order starts the Lead, which starts two builders and keeps the third next", async ({
+test("Run on the Builders board starts the Lead, which starts two builders and keeps the third next", async ({
   page,
 }) => {
   await page.goto(HOME);
   const nextUp = page.getByRole("region", { name: "Next up" });
   const first = nextUp.getByRole("region", { name: "Build #31" });
   await expect(first).toContainText("Hooks on the pegboard");
+  // One Run, on the board (#648): Next up has none of its own.
+  await expect(nextUp.getByRole("button", { name: /Run/ })).toHaveCount(0);
+  const builders = page.getByRole("region", { name: "Builders" });
+  await expect(builders).toContainText("Not running · Run starts the next issue");
   await shot(page, "lead-not-started");
 
-  await first.getByRole("button", { name: "Run the build order" }).click();
-  const dialog = page.getByRole("dialog", { name: "Run the build order" });
+  // Never run, Run shows what the Lead does first.
+  await builders.getByRole("button", { name: "Run" }).click();
+  const dialog = page.getByRole("dialog", { name: "Run", exact: true });
   await expect(dialog).toContainText("The Lead runs the build order");
   await expect(dialog).toContainText("beginning with #31 Hooks on the pegboard");
   // Every builder allows all until its PR opens, and it keeps going through the night (#591).
@@ -46,7 +51,7 @@ test("Run the build order starts the Lead, which starts two builders and keeps t
   await expect(dialog).toContainText("pauses itself while 4 PRs wait for your review");
   await expect(dialog.getByRole("switch")).toHaveCount(0);
   await shot(page, "lead-confirm");
-  await dialog.getByRole("button", { name: "Run the build order" }).click();
+  await dialog.getByRole("button", { name: "Run", exact: true }).click();
   await expect(dialog).toBeHidden();
 
   // The Builders board (#592): two building of two, each a row; the e2e builders ask a question,

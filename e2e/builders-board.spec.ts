@@ -430,6 +430,70 @@ for (const [screen, viewport, lead, roomy, name] of [
   });
 }
 
+// One Run, in one place (#648): a Lead that has never run and one paused with no builders show
+// the same board, Run and one quiet line. Run on the first shows what the Lead does before it
+// starts; on the second it starts straight away. Next up has no Run of its own.
+for (const [never, lead] of [
+  [true, { state: "not-started" }],
+  [false, { state: "paused" }],
+] as const) {
+  test(`with nothing running, the board has Run and one quiet line, ${never ? "never run" : "run before"}`, async ({
+    page,
+  }) => {
+    await given(page, { lead, sessions: [], issues: [issue(45, "Tidy, one shared piece")] });
+    // Once run, the Lead runs, with no builders yet.
+    const runs: unknown[] = [];
+    const running = LeadStatus.parse({
+      state: "running",
+      session: LEAD,
+      builders: 2,
+      building: [],
+      statuses: [],
+      next: [],
+      ready: [],
+      toTidy: 0,
+    });
+    await page.route(`**${API}/lead/run`, async (route) => {
+      runs.push(route.request().postDataJSON());
+      await route.fulfill({ json: running });
+    });
+    await page.route(`**${API}/lead`, (route) =>
+      runs.length === 0 ? route.fallback() : route.fulfill({ json: running }),
+    );
+    await page.goto(HOME);
+
+    const header = board(page).getByText("Not running · Run starts the next issue", {
+      exact: true,
+    });
+    await expect(header).toBeVisible();
+    await expect(board(page)).not.toContainText("building");
+    await expect(board(page)).not.toContainText("No builders");
+    await expect(board(page)).not.toContainText("Paused");
+    const nextUp = page.getByRole("region", { name: "Next up" });
+    await expect(nextUp.getByRole("button", { name: "Build" })).toBeVisible();
+    await expect(nextUp.getByRole("button", { name: /Run/ })).toHaveCount(0);
+    await shot(
+      page,
+      never ? "tablet-builders-board-never-run" : "tablet-builders-board-run-before",
+    );
+
+    await board(page).getByRole("button", { name: "Run" }).click();
+    const dialog = page.getByRole("dialog", { name: "Run", exact: true });
+    if (never) {
+      await expect(dialog).toContainText("The Lead runs the build order");
+      await expect(dialog).toContainText("beginning with #45 Tidy, one shared piece");
+      expect(runs).toHaveLength(0);
+      await shot(page, "tablet-builders-board-run-explained");
+      await dialog.getByRole("button", { name: "Run" }).click();
+      await expect(dialog).toBeHidden();
+    } else {
+      await expect(dialog).toHaveCount(0);
+    }
+    await expect.poll(() => runs.length).toBe(1);
+    await expect(board(page).getByRole("button", { name: "Pause" })).toBeVisible();
+  });
+}
+
 test("on the cover screen, the board comes first, then Needs you, then Next up", async ({
   page,
 }) => {

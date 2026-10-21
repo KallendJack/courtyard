@@ -333,7 +333,6 @@ export default function CodeHome(props: {
                   {...(nextUp?.unread === undefined ? {} : { unread: nextUp.unread })}
                   providers={providers.data.providers}
                   lead={lead}
-                  onLead={leadChanged}
                 />
               )}
             </div>

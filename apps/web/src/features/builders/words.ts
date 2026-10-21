@@ -133,7 +133,7 @@ export type HeaderWords = {
   /** "1 of 2 building · 0 of 4 for review"; none with nothing building or for review (#646). */
   title: string | undefined;
   reasons: string;
-  /** Paused with no builders: nothing is running, so the reasons line is all the board says. */
+  /** Never run, or paused with no builders: nothing runs, so the reasons line is all it says. */
   stopped: boolean;
 };
 
@@ -141,7 +141,8 @@ export type HeaderWords = {
  * The board's header (#592; Paper, "Tablet · Builders board"): how many build of how many may, and
  * how many pull requests wait for review of the 4 that pause it, then, under it, every reason it
  * starts no more, never only the first, or what it starts next. With nothing building and nothing
- * for review it has no counts, and paused with no builders it says only that nothing runs (#646).
+ * for review it has no counts, and never run or paused with no builders it says only that nothing
+ * runs (#646, #648).
  */
 export const headerWords = (
   lead: LeadStatus,
@@ -167,16 +168,18 @@ export const headerWords = (
         ];
   const tidy =
     lead.toTidy === 0 ? [] : [`${lead.toTidy} ${lead.toTidy === 1 ? "merge" : "merges"} to tidy`];
+  const notRunning: HeaderWords = {
+    title,
+    reasons: ["Not running · Run starts the next issue", ...tidy, ...merging].join(" · "),
+    stopped: true,
+  };
   switch (lead.state) {
+    // Never run: the same as paused with none, in every workspace (#648).
+    case "not-started":
+      return notRunning;
     case "paused": {
       // With no builders on the board, nothing carries on: nothing is running at all.
-      if (!lead.statuses.some(({ status }) => shownToday(status))) {
-        return {
-          title,
-          reasons: ["Not running · Run starts the next issue", ...tidy, ...merging].join(" · "),
-          stopped: true,
-        };
-      }
+      if (!lead.statuses.some(({ status }) => shownToday(status))) return notRunning;
       return {
         title,
         reasons: [
@@ -190,7 +193,6 @@ export const headerWords = (
       };
     }
     case "resting":
-    case "not-started":
       return {
         title,
         reasons: [lead.why ?? "Nothing ready to build", ...merging].join(" · "),
