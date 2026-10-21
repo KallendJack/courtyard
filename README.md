@@ -165,8 +165,9 @@ tablet or phone) when it says a new version is ready (it checks every few hours)
 - **It refuses** if the live copy has changes of its own, isn't on `main`, or `main`'s newest
   commit isn't passing CI. While you're signed in to GitHub from Connections, with the GitHub App
   installed on the live copy's repo, the app shows main's build beside Update, one bar per CI job.
-- **Update waits when it should:** pressed while main's build is still running, it says so and
-  runs by itself once the build has passed, holding nothing back meanwhile. **Update now** runs it
+- **Update waits when it should:** pressed while main's build is still running, or while a check
+  holds the machine's builds lock, it says so and runs by itself once the build has passed and
+  the check has finished, holding nothing back meanwhile. **Update now** runs it
   at once; **Cancel** drops it; it's dropped if main's build fails.
 - **Otherwise it updates:** it shuts the worker down, pulls, installs the locked package versions
   and builds, then starts the worker and waits for it to answer. It shuts the worker down first

@@ -200,6 +200,19 @@ const tryTake = async (
 };
 
 /**
+ * Who holds a place in the lock now, taking none and clearing none: a place whose holder has gone
+ * counts as free. A waiting Update waits while anyone does (#629).
+ */
+export const holdersOf = (lock: BuildsLock): Holder[] => {
+  const holders: Holder[] = [];
+  for (let number = 1; number <= lock.atOnce; number += 1) {
+    const seen = look(join(lock.dir, `place-${number}.json`));
+    if (seen.kind === "held" && !isLeftBehind(seen)) holders.push(holderOf(seen));
+  }
+  return holders;
+};
+
+/**
  * Waits for a place in the lock and takes it, labelled for anyone waiting behind it (a session's
  * id, or `helper <folder>`). Tells `waiting` who holds the places each time that changes while it
  * waits. `null` when `signal` stops it first.

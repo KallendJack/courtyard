@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { holdersOf } from "@courtyard/builds";
 import {
   type AllowedCommand,
   AllowedCommandRemoval,
@@ -502,6 +503,8 @@ export const createWorker = (options: {
       const build = await github.mainBuild({ repo: repo.value, ...find });
       return build.ok ? (build.value ?? null) : null;
     },
+    // A check holding the machine's builds lock (#629), a session's or a script's.
+    checkRunning: () => holdersOf(buildsLock).length > 0,
   });
   // Every session is checked as the worker starts (#186): queued messages a stopped worker left
   // waiting go now (#177), and turns it left running are cut off. After an Update the worker

@@ -67,9 +67,9 @@ export type Live = {
   /** What the live copy runs, whether main is newer, how the last update went, and what waits. */
   status(): Promise<LiveStatus>;
   /**
-   * Update (#186): at once unless main's build still runs, or with `now`; otherwise it waits, and
-   * `watch` runs it once the build has passed, never waiting for turns mid-way (#621). Says
-   * whether it waits.
+   * Update (#186): at once unless main's build or a check still runs (#629), or with `now`;
+   * otherwise it waits, and `watch` runs it once both are done, never waiting for turns mid-way
+   * (#621). Says whether it waits.
    */
   update(request?: LiveUpdateRequest): Promise<Result<{ waits: boolean }, LiveError>>;
   /** Drops the Update waiting (#186), if one is. */
@@ -110,6 +110,11 @@ export const createLive = (options: {
    * long each job takes (#337); `null` when GitHub can't be asked.
    */
   buildOf?: (find: { commit: string; earlier: readonly string[] }) => Promise<MainBuild | null>;
+  /**
+   * Whether a check holds the machine's builds lock now (#629): a waiting Update waits for it,
+   * so a restart never cuts one off.
+   */
+  checkRunning?: () => boolean;
 }): Live => {
   const { liveCopy, updateTask, dataDir, now } = options;
   if (liveCopy === null) {
@@ -244,9 +249,16 @@ export const createLive = (options: {
     return { running, newest, newerOnMain, build };
   };
 
+  /** What an Update waits for now, main's build first, then a check (#629); `null` for nothing. */
+  const waitsFor = (build: MainBuild | null): UpdateWaiting | null => {
+    if (build?.kind === "running") return { kind: "ci" };
+    return options.checkRunning?.() === true ? { kind: "check" } : null;
+  };
+
   /**
-   * What the Update waiting waits for now (#186): main's build while it runs, and nothing else, as
-   * it holds nothing back (#621, ADR 0031); `null` when it can run, or none waits.
+   * What the Update waiting waits for now (#186): main's build while it runs, then a check that's
+   * running (#629), and nothing else, as it holds nothing back (#621, ADR 0031); `null` when it
+   * can run, or none waits.
    */
   const waitingNow = async (main: {
     newest: LiveVersion | null;
@@ -259,7 +271,7 @@ export const createLive = (options: {
         : null;
     }
     if (waiting === undefined) return null;
-    return main.build?.kind === "running" ? { kind: "ci" } : null;
+    return waitsFor(main.build);
   };
 
   /**
@@ -307,9 +319,10 @@ export const createLive = (options: {
       if (last.value?.outcome === "running") return err({ kind: "running" });
       if (request.now !== true) {
         const main = await mainNow();
-        // Main's build still runs: it waits, and runs itself once it passes (#186). Turns mid-way
-        // don't hold it: those it cuts off carry on after the restart (#621).
-        if (main.build?.kind === "running") {
+        // Main's build or a check still runs: it waits, and runs itself once both are done
+        // (#186, #629). Turns mid-way don't hold it: those it cuts off carry on after the
+        // restart (#621).
+        if (waitsFor(main.build) !== null) {
           await keepWaiting({ kind: "waiting", since: new Date(now()).toISOString() });
           return ok({ waits: true });
         }

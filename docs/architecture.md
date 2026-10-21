@@ -370,8 +370,10 @@ for ever; a run that cleared one checks the place it took is still its own once 
 it at once. The worker's builds queue takes it (`code/builds.ts`) and so does `scripts/builds/run.ts`, which the
 root `verify`, `test`, `e2e` and `build` scripts run through: it waits for a place, saying who holds it and since
 when, runs the command with `COURTYARD_BUILD_HELD=1` (a run that sees it goes straight through, so `verify` doesn't
-wait on itself when it runs `e2e`), and frees the place however the command ends. It's a package of its own, rather
-than the worker's, because the repo's scripts need it with no worker running, and nothing else of the worker's.
+wait on itself when it runs `e2e`), and frees the place however the command ends. The worker's `live/` only looks
+(`holdersOf`, taking and clearing nothing): a waiting Update waits while anyone holds a place (#629). It's a package
+of its own, rather than the worker's, because the repo's scripts need it with no worker running, and nothing else of
+the worker's.
 
 ### The contract: `packages/contract`
 

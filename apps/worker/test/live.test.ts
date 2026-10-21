@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { takePlace } from "@courtyard/builds";
 import {
   ApiError,
   GitHubConnection,
@@ -31,6 +32,7 @@ import {
   sendJson,
   setUpOwner,
   startSession,
+  testBuildsLock,
   testWorker,
 } from "./testing.ts";
 
@@ -742,6 +744,41 @@ describe("Update when ready (#186)", () => {
     await watchUpdate();
     expect(started).toEqual([{ task: "Courtyard update" }]);
     expect(await waitingOf(request)).toBeNull();
+  });
+
+  it("waits for main's build, then for a check that's running, and updates once the check ends (#629)", async () => {
+    ciIs("running");
+    // A builder's check, holding the machine's builds lock as it runs (#596).
+    const check = await takePlace(testBuildsLock(root), { label: "helper /path/to/repo" });
+    const request = await start();
+
+    await startUpdate(request);
+    expect(await waitingOf(request)).toEqual({ kind: "ci" });
+    ciIs("passed");
+    later();
+    await watchUpdate();
+
+    expect(started).toEqual([]);
+    expect(await waitingOf(request)).toEqual({ kind: "check" });
+    check?.free();
+    await watchUpdate();
+    expect(started).toEqual([{ task: "Courtyard update" }]);
+    expect(await waitingOf(request)).toBeNull();
+  });
+
+  it("tapped while a check runs, waits for it, and Update now still runs at once (#629)", async () => {
+    ciIs("passed");
+    const check = await takePlace(testBuildsLock(root), { label: "helper /path/to/repo" });
+    const request = await start();
+
+    const tapped = await startUpdate(request);
+    expect(tapped.status).toBe(202);
+    expect(started).toEqual([]);
+    expect(await waitingOf(request)).toEqual({ kind: "check" });
+
+    expect((await postJson(request, "/api/live/update", { now: true })).status).toBe(202);
+    expect(started).toEqual([{ task: "Courtyard update" }]);
+    check?.free();
   });
 
   it("waits only for main's build, never for a turn mid-way, which carries on by itself after the restart (#621)", async () => {

@@ -88,7 +88,7 @@ const buildOf = (state: "running" | "late" | "passed" | "failed" | "waits") => {
 type State = Parameters<typeof buildOf>[0];
 
 /** What a waiting Update waits for (#186), as the worker gives it. */
-type Waiting = { kind: "ci" } | { kind: "dropped"; details: string } | null;
+type Waiting = { kind: "ci" } | { kind: "check" } | { kind: "dropped"; details: string } | null;
 
 /**
  * The live copy's status, a version behind main, with main's build in `state` and the Update
@@ -302,6 +302,24 @@ test.describe("Update when ready (#186)", () => {
     await cancelled;
     waiting = null;
     await expect(row.getByRole("button", { name: "Update" })).toBeVisible();
+  });
+
+  test("waiting for a check that's running, it says so, with Cancel and Update now (#629)", async ({
+    page,
+  }) => {
+    for (const viewport of [
+      { name: "tablet", width: 950, height: 712 },
+      { name: "cover", width: 400, height: 900 },
+      { name: "desktop", width: 1440, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const row = await homeRow(page, "passed", () => ({ kind: "check" }));
+      await expect(row.getByRole("status")).toHaveText("Waiting for a check to finish");
+      await expect(row.getByRole("button", { name: "Cancel" })).toBeVisible();
+      await expect(row.getByRole("button", { name: "Update now" })).toBeVisible();
+      await shot(page, `${viewport.name}-home-update-waiting-check`);
+      await page.unrouteAll();
+    }
   });
 
   test("dropped when main failed, it says so, with Details", async ({ page }) => {
