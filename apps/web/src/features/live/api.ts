@@ -1,4 +1,9 @@
-import { LiveStatus, type LiveUpdateRequest, LiveUpdateStarted } from "@courtyard/contract";
+import {
+  LiveStatus,
+  type LiveUpdateRequest,
+  LiveUpdateStarted,
+  type WhatsNewSeen,
+} from "@courtyard/contract";
 import { z } from "zod";
 import { fromWorker, sendJson } from "../../api/worker.ts";
 
@@ -18,6 +23,14 @@ export const startLiveUpdate = (now = false) =>
     path: "/live/update",
     body: (now ? { now } : {}) satisfies LiveUpdateRequest,
     schema: LiveUpdateStarted,
+  });
+
+/** A what's-new line tapped (#604): said, and gone. */
+export const markWhatsNewSeen = (pullRequest: number) =>
+  sendJson({
+    path: "/live/whats-new/seen",
+    body: { pullRequest } satisfies WhatsNewSeen,
+    schema: z.unknown(),
   });
 
 /** Cancel (#186): the Update waiting no longer waits. */

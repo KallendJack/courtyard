@@ -8,6 +8,7 @@ import { InfoBox } from "@/components/layout/notice";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { cancelLiveUpdate, loadLive, startLiveUpdate } from "./api.ts";
 import { MainBuildCard, titleOf, type UpdateTaps, useLive, Waiting } from "./main-build.tsx";
+import { WhatsNewRow } from "./whats-new.tsx";
 
 /** How often the page asks how an update is going. The worker is down for part of it. */
 const FOLLOW_EVERY_MS = 3000;
@@ -47,6 +48,7 @@ function Result(props: { result: LiveUpdateResult; offerReload: boolean }) {
  * Nothing at all on a worker that isn't a live copy. Asked for once the page is showing, since the
  * worker may be asking GitHub whether main has moved on: the page never waits for that. On Home
  * (#102), main's build is a row, labelled `label` ("New version"), `short` on a narrow screen;
+ * after an Update, that row first says once what's new (#604), a line at a time till each is tapped;
  * `keepsPlace` keeps its row there while there's nothing to update, as a quiet Up to date line,
  * and its place while it's still to come (#283).
  */
@@ -132,6 +134,10 @@ export function LiveUpdate(props: { label?: string; short?: boolean; keepsPlace?
     content = <span>No word from the update yet. Check back in a few minutes.</span>;
   } else if (following.kind === "problem") {
     content = <FormError message={following.message} />;
+  } else if (props.keepsPlace && live.whatsNew !== null) {
+    // After an Update, on Home, what it brought comes first, once (#604): a newer version waits
+    // in its row till it's tapped.
+    return <WhatsNewRow line={live.whatsNew} onSeen={() => void reload()} />;
   } else if (live.newerOnMain && live.newest && live.build) {
     return (
       <MainBuildCard

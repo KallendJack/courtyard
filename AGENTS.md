@@ -124,6 +124,9 @@ when a change needs a board): `docs/agents/process.md`.
   "Building this: <session or helper> (<branch>), <why>"; stopping without a PR, comment "Stopped: <why>".
 - **Design in Paper first.** What the owner sees is built from a board the owner agreed, linked from its issue. A PR
   that changes what the owner sees lists its boards ("Boards: Tablet · Home → Live, replaces …").
+- **Say what's new.** A PR that changes what the owner sees gives one line in its description, `What's new: <what,
+  in a few words> · <where to try it>`, the where a workspace's name or Settings, or left out for Home: "What's new:
+  Draw the garage · Garage". After the Update that brings it, Home says it once (#604).
 - **A screen shows only what the owner needs right now; the rest is one tap away.** A planning workspace stays
   calm: a thing shows what it is (its name and kind), never a warning or a "needs doing" nudge. A code workspace
   shows what waits on the owner: an approval, a failing check, a new reply, a PR ready to merge.

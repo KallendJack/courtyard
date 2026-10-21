@@ -8,7 +8,8 @@ import { workspaceIn } from "../planning-files/routes.ts";
 import { readProjects } from "../projects/index.ts";
 import { readThings } from "../things/index.ts";
 import { thingError } from "../things/routes.ts";
-import { subjectOf } from "./index.ts";
+import { getWorkspace } from "../workspaces/index.ts";
+import { spaceOf, subjectOf } from "./index.ts";
 
 /**
  * A planning workspace's Home (#603): its main subject and its projects, or, once, its move review,
@@ -31,10 +32,19 @@ export const planningHomeRoutes = (target: {
     const plans = await planSubjects({ contextDir, workspaceId });
     // Its projects; ones that can't be read leave Home without them, never without the rest.
     const projects = await readProjects({ contextDir, workspaceId });
+    // A space to draw, from its facts (#604); a context file that can't be read gives none.
+    const workspaceNow = await getWorkspace(contextDir, workspaceId);
+    const space = workspaceNow.ok
+      ? spaceOf({
+          name: workspaceNow.value.summary.name,
+          facts: workspaceNow.value.contextFile?.facts ?? [],
+        })
+      : null;
     return c.json({
       subject: subjectOf(
         read.value.things.map(({ summary }) => summary),
         plans.ok ? plans.value : [],
+        space,
       ),
       projects: projects.ok ? projects.value.projects.map(({ project }) => project) : [],
       review: await reviews.shown(workspaceId),

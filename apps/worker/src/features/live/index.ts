@@ -14,6 +14,7 @@ import { z } from "zod";
 import { readJsonFile, readTextFile, removeFile, writeJsonFile } from "../../lib/files.ts";
 import { commitTitle, gitOrNothing } from "../../lib/git.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
+import { createWhatsNew, type WhatsNewLines } from "./whats-new.ts";
 
 /**
  * How long an answer from the live copy's remote is reused. The worker only asks when a page asks
@@ -83,6 +84,8 @@ export type Live = {
   restartedByUpdate(): Promise<boolean>;
   /** Drops the answers reused from the remote and GitHub, once main has moved on (#387). */
   forget(): void;
+  /** A what's-new line tapped (#604): said, and gone. */
+  seen: WhatsNewLines["seen"];
 };
 
 const run = promisify(execFile);
@@ -115,6 +118,11 @@ export const createLive = (options: {
    * so a restart never cuts one off.
    */
   checkRunning?: () => boolean;
+  /**
+   * What's new after an Update (#604): a merged pull request's description, and where a line's
+   * words say to try it. Without them, an Update says nothing new.
+   */
+  whatsNew?: Pick<Parameters<typeof createWhatsNew>[0], "descriptionOf" | "placeNamed">;
 }): Live => {
   const { liveCopy, updateTask, dataDir, now } = options;
   if (liveCopy === null) {
@@ -125,10 +133,15 @@ export const createLive = (options: {
       watch: async () => {},
       restartedByUpdate: async () => false,
       forget: () => {},
+      seen: async () => err("not-found"),
     };
   }
 
   const git = (...args: string[]) => gitOrNothing(liveCopy, args);
+  const whatsNew =
+    options.whatsNew === undefined
+      ? undefined
+      : createWhatsNew({ liveCopy, dataDir, ...options.whatsNew });
   const resultFile = join(dataDir, "live-update.json");
   const waitingFile = join(dataDir, "live-update-waiting.json");
   const restartFile = join(dataDir, "live-update-restart.json");
@@ -303,6 +316,12 @@ export const createLive = (options: {
       const [main, last] = await Promise.all([mainNow(), lastUpdate()]);
       const { running, newest, newerOnMain, build } = main;
       if (running === null) return { kind: "off" };
+      const update = last.ok ? last.value : null;
+      // What's new, after an Update that brought the version running (#604).
+      const updated =
+        update?.outcome === "updated" && update.to.commit === running.commit
+          ? { from: update.from.commit, to: update.to.commit }
+          : null;
       return {
         kind: "live",
         running,
@@ -311,6 +330,7 @@ export const createLive = (options: {
         lastUpdate: last.ok ? last.value : null,
         build,
         waiting: await waitingNow(main),
+        whatsNew: (await whatsNew?.next(updated)) ?? null,
       };
     },
     update: async (request = {}) => {
@@ -394,5 +414,6 @@ export const createLive = (options: {
       check = undefined;
       build = undefined;
     },
+    seen: async (pullRequest) => whatsNew?.seen(pullRequest) ?? err("not-found"),
   };
 };

@@ -132,6 +132,9 @@ export {
   LiveVersion,
   MainBuild,
   UpdateWaiting,
+  WhatsNew,
+  WhatsNewPlace,
+  WhatsNewSeen,
 } from "./lib/live.ts";
 export {
   MattSetup,
@@ -174,6 +177,7 @@ export {
   BIKE_PLACES,
   BikePlace,
   DrawnPart,
+  drawSpaceMessage,
   HomeSubject,
   PlanningHome,
 } from "./lib/planning-home.ts";

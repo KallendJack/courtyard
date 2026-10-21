@@ -77,14 +77,42 @@ const onTheBike = (top: ThingSummary, parts: readonly ThingSummary[]) => {
   } satisfies HomeSubject;
 };
 
+/** A length as saved: a number, then its unit, or none when the next one's says it ("5.14 × 2.74 m"). */
+const LENGTH = String.raw`(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?`;
+/** A floor's two sides, "5.14 × 2.74 m", "240cm x 180cm": the second with its unit. */
+const FLOOR = new RegExp(String.raw`${LENGTH}\s*[×xX]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b`);
+/** Any length with its unit, "2.45 m high": what makes a fact a measurement. */
+const MEASURED = /\d\s*(?:mm|cm|m)\b/;
+
+/**
+ * A space to draw (#604): a workspace whose facts give a floor's two sides, named from the
+ * workspace ("Draw the garage"), with its size as first saved and every fact that holds a
+ * measurement, which its plan is drawn from; `null` for a workspace whose facts give no floor.
+ */
+export const spaceOf = (workspace: {
+  name: string;
+  facts: readonly string[];
+}): Extract<HomeSubject, { kind: "space" }> | null => {
+  const floor = workspace.facts.map((fact) => FLOOR.exec(fact)).find((found) => found !== null);
+  if (floor === undefined || floor === null) return null;
+  const [, across = "", acrossUnit, along = "", unit = "m"] = floor;
+  return {
+    kind: "space",
+    name: workspace.name.toLowerCase(),
+    size: `${across} ${acrossUnit ?? unit} × ${along} ${unit}`,
+    measurements: workspace.facts.filter((fact) => MEASURED.test(fact)),
+  };
+};
+
 /**
  * The workspace's main subject: the Thing with the most parts on the mountain bike's drawing, once
  * enough of them fit it; else its newest floor plan (#257), whose views come newest first; else
- * none.
+ * the space to draw (#604); else none.
  */
 export const subjectOf = (
   things: readonly ThingSummary[],
   plans: readonly Extract<HomeSubject, { kind: "plan" }>[] = [],
+  space: Extract<HomeSubject, { kind: "space" }> | null = null,
 ): HomeSubject | null => {
   const slugs = new Set(things.map(({ slug }) => slug));
   const drawn = things
@@ -100,5 +128,5 @@ export const subjectOf = (
       (most, one) => (most === undefined || one.placed.length > most.placed.length ? one : most),
       undefined,
     );
-  return drawn ?? plans[0] ?? null;
+  return drawn ?? plans[0] ?? space;
 };
