@@ -72,19 +72,21 @@ export type MainBuild = z.infer<typeof MainBuild>;
 
 /**
  * An Update tapped before it could run (#186), which the worker runs itself once main's build has
- * passed: one at a time, kept across a restart. It waits for main's build (`ci`) and nothing else,
+ * passed and no check runs: one at a time, kept across a restart. It waits for main's build
+ * (`ci`), then for a check holding the machine's builds lock (`check`, #629), and nothing else,
  * holding nothing back (#621, ADR 0031); or it was dropped, as main's build failed while it
  * waited, with that build's log (`dropped`), until main moves on.
  */
 export const UpdateWaiting = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("ci") }),
+  z.object({ kind: z.literal("check") }),
   z.object({ kind: z.literal("dropped"), details: z.url({ protocol: /^https$/ }) }),
 ]);
 export type UpdateWaiting = z.infer<typeof UpdateWaiting>;
 
 /**
- * Update (#186): when ready, the worker runs it once main's build has passed, waiting till then;
- * `now` runs it at once. Either way it cuts off the turns running, which carry on by themselves
+ * Update (#186): when ready, the worker runs it once main's build has passed and no check runs
+ * (#629), waiting till then; `now` runs it at once. Either way it cuts off the turns running, which carry on by themselves
  * after the restart.
  */
 export const LiveUpdateRequest = z.object({ now: z.boolean().optional() });

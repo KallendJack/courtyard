@@ -6,7 +6,8 @@ For the live copy only: whether `main` has moved on, updating, and how the last 
 **Example:** a PR merges while a session is mid-turn. You tap Update; it waits for main's build, then updates and
 restarts, and the cut-off turn carries on.
 
-- **Uses:** the update command, passed in; `github/` and `code/` for main's build, through `worker.ts`.
+- **Uses:** the update command, passed in; `github/` and `code/` for main's build, and the machine's builds lock
+  for a check that's running, through `worker.ts`.
 - **Used by:** `worker.ts`; in the web app, `features/live/`.
 
 ## API
@@ -20,8 +21,11 @@ All in `worker.ts`:
 
 - **Update when ready** (#186): tapped while main's build runs, it waits, kept in the data folder
   (`live-update-waiting.json`) so a crash keeps it. A repeating job runs it once the build has passed, or drops it
-  when main's build fails meanwhile. Update now runs it at once; Cancel drops it, even while the job is reading
-  main's build (that look then does nothing, #586).
+  when main's build fails meanwhile. Update now runs it at once, whatever it waits for; Cancel drops it, even while
+  the job is reading main's build (that look then does nothing, #586).
+- **Waits for a check** (#629): once main's build has passed, it also waits while a check holds the machine's builds
+  lock (`checkRunning`, from `@courtyard/builds`' `holdersOf`, through `worker.ts`), so a restart never cuts a
+  25–50 minute check off; it runs once the lock is free.
 - **Holds nothing back** (#621, ADR 0031): it never waits for a turn mid-way, and while it waits everything starts
   as usual (queued messages, fixing turns, task reports, the Lead's builders and its merge notes).
 - **After a restart:** an update the worker starts itself leaves a note (`live-update-restart.json`), so the next

@@ -122,15 +122,17 @@ const STANDING_LOOKS: Readonly<Record<MainBuild["kind"], string>> = {
 };
 
 /**
- * What a waiting Update waits for (#186; Paper, "Component · Update when ready"), in place of
- * where the build stands: main's build, never sessions mid-turn (#621); or that it was dropped as
- * main failed.
+ * What a waiting Update waits for (#186; Paper, "Component · Update when ready: waits for a
+ * check"), in place of where the build stands: main's build, then a check that's running (#629),
+ * never sessions mid-turn (#621); or that it was dropped as main failed.
  */
 export function Waiting(props: { waiting: UpdateWaiting }) {
   const { waiting } = props;
   switch (waiting.kind) {
     case "ci":
       return <span className="text-primary-text">Waiting for CI · updates when it passes</span>;
+    case "check":
+      return <span className="text-primary-text">Waiting for a check to finish</span>;
     case "dropped":
       return <span className="text-destructive">Main failed · Update dropped</span>;
   }
