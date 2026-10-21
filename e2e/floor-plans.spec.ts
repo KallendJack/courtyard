@@ -2,8 +2,8 @@ import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { newWorkspace, startSaving } from "./saving.ts";
 
-/** Where the PR's screenshots go, when a run asks for them (COURTYARD_E2E_SHOTS). */
-const shot = async (part: Locator, name: string) => {
+/** Where the screenshots go, a whole page or one part of it, when a run asks (COURTYARD_E2E_SHOTS). */
+const shot = async (part: Page | Locator, name: string) => {
   const folder = process.env.COURTYARD_E2E_SHOTS;
   if (folder !== undefined) await part.screenshot({ path: join(folder, `${name}.png`) });
 };
@@ -183,3 +183,119 @@ test("a plan drawn in an answer is saved straight away, and shows on the workspa
     "",
   );
 });
+
+// A garage shaped like a real one (#662): long and narrow, its garage door on the front wall,
+// three things in it. On Home, under it, its projects.
+const LONG_GARAGE = {
+  room: "Garage",
+  width: 274,
+  depth: 514,
+  front: "Garage door",
+  beyond: { right: "House" },
+  openings: [{ kind: "garage-door", wall: "front", at: 30, width: 213 }],
+  items: [
+    {
+      name: "Projecting wall",
+      why: "Narrows the width; its length is a stand-in",
+      fromLeft: 261,
+      fromBack: 454,
+      width: 13,
+      depth: 60,
+    },
+    { name: "Boiler", why: "Back corner on the outer wall", wall: "left", at: 0, length: 50 },
+    { name: "Fridge freezer", fromLeft: 214, fromBack: 0, width: 60, depth: 61 },
+  ],
+};
+
+const project = (name: string, step: string) =>
+  `project: ${JSON.stringify({ name, add_steps: [{ kind: "you can do this", text: step }] })}`;
+
+type Edges = { left: number; top: number; right: number; bottom: number };
+
+const edgesOf = async (locator: Locator): Promise<Edges> => {
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  const { x, y, width, height } = box ?? { x: 0, y: 0, width: 0, height: 0 };
+  return { left: x, top: y, right: x + width, bottom: y + height };
+};
+
+const expectInside = (inner: Edges, outer: Edges, what: string) => {
+  expect(inner.left, `${what}'s left`).toBeGreaterThanOrEqual(outer.left - 1);
+  expect(inner.top, `${what}'s top`).toBeGreaterThanOrEqual(outer.top - 1);
+  expect(inner.right, `${what}'s right`).toBeLessThanOrEqual(outer.right + 1);
+  expect(inner.bottom, `${what}'s foot`).toBeLessThanOrEqual(outer.bottom + 1);
+};
+
+const apart = (a: Edges, b: Edges) =>
+  a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1;
+
+// The owner's Fold, its browser's bars in (950×662) and not (950×712), and its cover screen: the
+// plan is drawn whole inside its block, as big as the block lets it be, and no block runs over
+// another (#662).
+for (const viewport of [
+  { width: 950, height: 662 },
+  { width: 950, height: 712 },
+  { width: 400, height: 900 },
+]) {
+  test.describe(`on Home at ${viewport.width}×${viewport.height}`, () => {
+    test.use({ hasTouch: true, isMobile: true, viewport });
+
+    test("a long garage's plan is drawn whole inside its block, its garage door in sight", async ({
+      page,
+    }) => {
+      const name = `Long garage ${Date.now()}`;
+      await newWorkspace(page, name);
+      // On the cover screen the box opens with Type.
+      if (viewport.width < 600) await page.getByRole("button", { name: "Type" }).tap();
+      await startSaving(
+        page,
+        [
+          `Here's the garage:\n\n\`\`\`plan\n${JSON.stringify(LONG_GARAGE)}\n\`\`\`\n`,
+          project("Turn the garage into an office", "Measure the projecting wall"),
+          project("Move the fridge freezer", "Find where the socket is"),
+        ].join("\n"),
+      );
+      await expect(page.getByRole("list", { name: "Session" })).toContainText(
+        /Your turn · finished/,
+      );
+      await page.getByRole("link", { name: `Back to ${name}` }).click();
+
+      const plan = page.getByRole("figure", { name: "Garage floor plan" });
+      await expect(plan).toBeVisible();
+      const projects = page.getByRole("region", { name: "Projects" });
+      await expect(projects.getByRole("listitem")).toHaveCount(2);
+
+      // The plan's block: the figure is in its rich block, in Home's block.
+      const block = await edgesOf(plan.locator("xpath=../.."));
+      const drawing = await edgesOf(plan.getByRole("group", { name: /^Garage, / }));
+      expectInside(drawing, block, "The drawing");
+      // Its words too, which the drawing would cut off at its edge.
+      const front = await edgesOf(plan.getByText("▲ Front · Garage door"));
+      expectInside(front, drawing, "The front");
+      expectInside(await edgesOf(plan.getByText("House", { exact: true })), drawing, "House");
+      expectInside(
+        await edgesOf(plan.locator('[data-plan-part="opening"]')),
+        block,
+        "The garage door",
+      );
+      const list = plan.getByRole("list", { name: "What's in the garage" });
+      await expect(list.getByRole("button")).toHaveCount(3);
+      // What's listed scrolls inside the block, so its box is inside the block's.
+      expectInside(await edgesOf(list.locator("xpath=..")), block, "The list");
+      // Drawn to scale still.
+      const room = await boxOf(plan.locator('[data-plan-part="room"]'));
+      expect(room.width / room.height).toBeCloseTo(274 / 514, 2);
+
+      // No block runs over another, nor, from a tablet up, over the message box (on the cover
+      // screen the page scrolls under its pinned Talk and Type).
+      const under = await edgesOf(projects);
+      expect(apart(block, under), "the plan and the projects apart").toBe(true);
+      if (viewport.width >= 600) {
+        const box = await edgesOf(page.getByLabel("Message", { exact: true }));
+        expect(apart(block, box), "the plan and the message box apart").toBe(true);
+        expect(apart(under, box), "the projects and the message box apart").toBe(true);
+      }
+      await shot(page, `planning-home-plan-${viewport.width}x${viewport.height}`);
+    });
+  });
+}

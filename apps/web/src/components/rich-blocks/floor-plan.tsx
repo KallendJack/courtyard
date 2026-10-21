@@ -1,8 +1,9 @@
 import { FloorPlan, type PlanItem, type PlanWall, WorkspaceId } from "@courtyard/contract";
 import { Link, useParams } from "@tanstack/react-router";
 import { PanelsTopLeft } from "lucide-react";
-import { type KeyboardEvent, use, useMemo, useState } from "react";
+import { type KeyboardEvent, use, useLayoutEffect, useMemo, useState } from "react";
 import { RowButton } from "@/components/buttons/row-button";
+import { useBlocksFill } from "@/components/frame/handheld";
 import { CapsLabel } from "@/components/layout/caps-label";
 import { useKept } from "@/components/layout/kept";
 import { Scroller } from "@/components/layout/scroller";
@@ -10,10 +11,12 @@ import { classes } from "@/lib/classes";
 import { KEPT_HOME, loadKeptHome } from "../../features/planning-home/api.ts";
 import { type DrawingProps, OnHome } from "./fenced.tsx";
 import {
+  type Box,
   type Edge,
   type Layout,
   layoutOf,
   metres,
+  PAD,
   runsAround,
   SIDES,
   sideName,
@@ -33,9 +36,48 @@ const planFrom = (source: string) => {
   }
 };
 
-/** The most room a plan takes, in pixels: in an answer, and in Home's block, whose size is set. */
+/**
+ * The most room a plan takes, in pixels: in an answer, and in Home's block on the cover screen,
+ * where the block grows with it. From a tablet up, Home's block has the height the layout gives
+ * it, and the plan is drawn as big as fits in it (#662).
+ */
 const FIT = { width: 300, height: 400 };
 const FIT_ON_HOME = { width: 280, height: 340 };
+
+/** What's kept beside the drawing on Home for its list: the list's least width and the gap. */
+const LIST_ROOM = 224 + 24;
+
+/** The least room a plan is drawn in, so it's never drawn inside out: its room 40 px across. */
+const LEAST = 2 * PAD + 40;
+
+type Size = { width: number; height: number };
+
+/**
+ * The size of `element` while `on`, measured before it's painted and again whenever it changes
+ * size, so the plan is drawn at its final size from the first frame (#283) and redrawn to fit as
+ * the window changes.
+ */
+const useSizeOf = (element: HTMLElement | null, on: boolean) => {
+  const [size, setSize] = useState<Size>();
+  useLayoutEffect(() => {
+    if (!on || element === null) return;
+    const measure = () => {
+      const { width, height } = element.getBoundingClientRect();
+      setSize((was) => (was?.width === width && was.height === height ? was : { width, height }));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [element, on]);
+  return on ? size : undefined;
+};
+
+/** The room the drawing has beside the list in a row of `size`. */
+const fitIn = (size: Size): Size => ({
+  width: Math.max(LEAST, size.width - LIST_ROOM),
+  height: Math.max(LEAST, size.height),
+});
 
 /** How thick the walls are drawn, the inner walls, and a strip for a thing on a wall, in pixels. */
 const WALL = 4;
@@ -56,13 +98,17 @@ export default function FloorPlanBlock(props: DrawingProps) {
   const plan = useMemo(() => planFrom(props.source), [props.source]);
   const onHome = use(OnHome);
   const [chosen, setChosen] = useState<number>();
+  // From a tablet up, on Home, the plan fills its block: drawn whole to fit the row it's in.
+  const fills = useBlocksFill() && onHome;
+  const [row, setRow] = useState<HTMLDivElement | null>(null);
+  const room = useSizeOf(row, fills);
   if (plan === undefined) return props.fallback;
   const choose = (index: number) => setChosen((was) => (was === index ? undefined : index));
   const name = `${plan.room} floor plan`;
 
   const list = <ThingsList plan={plan} chosen={chosen} choose={choose} />;
   return (
-    <RichBlock>
+    <RichBlock fill={fills}>
       <figure
         aria-label={name}
         className={classes(
@@ -89,6 +135,7 @@ export default function FloorPlanBlock(props: DrawingProps) {
           </p>
         )}
         <div
+          ref={setRow}
           className={classes(
             "flex flex-wrap items-start gap-x-6 gap-y-4",
             onHome && "min-h-0 grow md:flex-nowrap",
@@ -96,7 +143,7 @@ export default function FloorPlanBlock(props: DrawingProps) {
         >
           <Drawing
             plan={plan}
-            layout={layoutOf(plan, onHome ? FIT_ON_HOME : FIT)}
+            layout={layoutOf(plan, room !== undefined ? fitIn(room) : onHome ? FIT_ON_HOME : FIT)}
             chosen={chosen}
             choose={choose}
           />
@@ -175,19 +222,22 @@ type Drawn = {
 function Drawing(props: Drawn) {
   const { plan, layout } = props;
   const { room } = layout;
+  const [svg, setSvg] = useState<SVGSVGElement | null>(null);
+  const whole = useWhole(svg, layout);
   return (
     // A group rather than an image, so the things on it stay buttons a screen reader can tap.
     // biome-ignore lint/a11y/useSemanticElements: a drawing can't be a <fieldset>
     <svg
+      ref={setSvg}
       role="group"
       aria-label={
         plan.measured === true
           ? `${plan.room}, ${metres(plan.width)} wide and ${metres(plan.depth)} deep, seen from the front`
           : `${plan.room}, seen from the front`
       }
-      width={layout.width}
-      height={layout.height}
-      viewBox={`0 0 ${layout.width} ${layout.height}`}
+      width={whole.width}
+      height={whole.height}
+      viewBox={`${whole.x} ${whole.y} ${whole.width} ${whole.height}`}
       className="block h-auto max-w-full shrink-0 font-sans text-caption select-none"
     >
       <rect data-plan-part="room" {...room} className="fill-surface" />
@@ -224,6 +274,33 @@ function Drawing(props: Drawn) {
     </svg>
   );
 }
+
+/** Room left round words that reach past the layout's edge, in pixels. */
+const MARGIN = 2;
+
+/**
+ * The box a drawing is shown in: its layout's, widened to take in whatever is drawn past it, as
+ * the front's words are under a narrow room, so nothing is cut off at its edge (#662). Measured
+ * before it's painted, so nothing moves.
+ */
+const useWhole = (svg: SVGSVGElement | null, layout: Layout): Box => {
+  const [drawn, setDrawn] = useState<Box>();
+  useLayoutEffect(() => {
+    if (svg === null) return;
+    const { x, y, width, height } = svg.getBBox();
+    setDrawn((was) =>
+      was?.x === x && was.y === y && was.width === width && was.height === height
+        ? was
+        : { x, y, width, height },
+    );
+  });
+  if (drawn === undefined) return { x: 0, y: 0, width: layout.width, height: layout.height };
+  const left = Math.min(0, drawn.x - MARGIN);
+  const top = Math.min(0, drawn.y - MARGIN);
+  const right = Math.max(layout.width, drawn.x + drawn.width + MARGIN);
+  const bottom = Math.max(layout.height, drawn.y + drawn.height + MARGIN);
+  return { x: left, y: top, width: right - left, height: bottom - top };
+};
 
 /** Each zone's name and where it's drawn. */
 const zonesOf = (plan: FloorPlan, layout: Layout) =>

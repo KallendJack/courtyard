@@ -32,7 +32,8 @@ its card opens.
   listed under it. The bike's photo is on its card.
 - **A room's floor plan** (#257; Paper, "Tablet · Floor plan in an answer (#257)"): drawn by the same rich block as in
   an answer (`components/rich-blocks/floor-plan.tsx`, told it's `OnHome`), its list of things scrolling inside the
-  block, which keeps its size.
+  block, which keeps its size. From a tablet up the plan is drawn whole, as big as the block's height lets it be,
+  measured before it's painted (#662); on the cover screen the block grows with it.
 - **Draw the garage** (`draw-space.tsx`, #604; Paper, "Tablet · Garage Home: Draw the garage, then projects
   (#604)"): a space with no plan yet, as tall as it needs: a dashed box with its size where the plan will be, "No plan
   of the garage yet", the facts it's drawn from as saved, and Draw the garage, which starts a session with them
