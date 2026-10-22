@@ -9,9 +9,10 @@ key", so the code half is now part of the house standard, generic enough for any
 
 So:
 
-- **The base, for every repo:** the house rules block in `AGENTS.md` (between `house:start` and `house:end`): where
+- **The base, for every repo:** the `## House rules` section of `AGENTS.md`, up to the next `##` heading: where
   work lives, words and decisions, branches and merging, docs, secrets, dependencies, dead code. Every change needs
-  it, so it sits in the always-loaded file rather than behind a pointer.
+  it, so it sits in the always-loaded file rather than behind a pointer. It has no HTML comment markers: Hermes, the
+  agent in stacks, refuses an `AGENTS.md` that holds any (2026-10-22, #685).
 - **Two extras, for the kinds of work a repo has:** `docs/agents/code.md` (app code: choosing a stack, vertical
   slices, small files, one language per file, types, errors and security, tests) and `docs/agents/screens.md`
   (anything a person sees: Paper first, Tailwind tokens, shared pieces, calm screens, zero layout shift, WCAG 2.2 AA).

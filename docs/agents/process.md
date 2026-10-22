@@ -5,7 +5,7 @@ reach for it when choosing the next task, claiming, or deciding whether a change
 
 ## The house standard
 
-The house rules block in `AGENTS.md`, `docs/agents/code.md`, `docs/agents/screens.md` and `packages/house/` are the
+The House rules section of `AGENTS.md`, `docs/agents/code.md`, `docs/agents/screens.md` and `packages/house/` are the
 standard every repo Courtyard sets up follows (ADR 0035), and this repo holds the only copies. A change to them is a
 change for every repo: make it here, in its own issue, and the house check offers it to the rest. A rule that holds
 only for Courtyard goes in the sections of `AGENTS.md` after the block.

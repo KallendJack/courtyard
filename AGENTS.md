@@ -7,9 +7,13 @@ frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before decidi
 `docs/overview.md` (the parts and their folders, short), then `docs/architecture.md`: which part does what, and
 how the parts connect.
 
+The house rules below, `docs/agents/code.md`, `docs/agents/screens.md` and the configs in `packages/house/` are the
+house standard every repo Courtyard sets up follows (ADR 0035). This repo holds the only copies, so a change to them
+is a change for every repo.
+
 ## House rules
 
-<!-- house:start · from Courtyard's AGENTS.md, kept in step by its house check: change them there -->
+From Courtyard's `AGENTS.md`, kept in step by its house check: change them there.
 
 - **Work** starts from an item where `docs/agents/issue-tracker.md` says work lives. One thing at a time in an
   area: the next starts once the owner has tried the last.
@@ -25,13 +29,7 @@ how the parts connect.
 - **Dead code** and config are deleted, not commented out or left behind.
 - **App code:** before writing or changing code, read `docs/agents/code.md`.
 - **Screens:** before building or changing anything a person sees, read `docs/agents/screens.md`.
-- **This repo's own rules** follow this block; they add to it and win where they say more.
-
-<!-- house:end -->
-
-The house rules, `docs/agents/code.md`, `docs/agents/screens.md` and the configs in `packages/house/` are the house
-standard every repo Courtyard sets up follows (ADR 0035). This repo holds the only copies, so a change to them is a
-change for every repo.
+- **This repo's own rules** follow this section; they add to it and win where they say more.
 
 ## Where code goes
 
