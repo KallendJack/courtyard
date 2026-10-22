@@ -25,12 +25,13 @@ how the parts connect.
 - **Dead code** and config are deleted, not commented out or left behind.
 - **App code:** before writing or changing code, read `docs/agents/code.md`.
 - **Screens:** before building or changing anything a person sees, read `docs/agents/screens.md`.
+- **This repo's own rules** follow this block; they add to it and win where they say more.
 
 <!-- house:end -->
 
 The house rules, `docs/agents/code.md`, `docs/agents/screens.md` and the configs in `packages/house/` are the house
 standard every repo Courtyard sets up follows (ADR 0035). This repo holds the only copies, so a change to them is a
-change for every repo. Everything below is Courtyard's own, on top of them.
+change for every repo.
 
 ## Where code goes
 
