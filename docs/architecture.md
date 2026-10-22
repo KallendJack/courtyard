@@ -394,7 +394,7 @@ copies and Courtyard itself follows: `tsconfig.house.json` (the strict flags, wh
 `biome.json` extends) and `check-size.ts`, the size check: a source file over 400 lines or a folder of more than 15
 source files fails, leaving out tests, fixtures, generated and vendored files. What's over today is listed in a
 ratchet, here `scripts/size/allowed.json`, whose entries may shrink and never grow (`--update` lowers them,
-`--baseline` records a repo taking the check on). `pnpm check` runs it. The texts of the standard are the house block
+`--baseline` records a repo taking the check on). `pnpm check` runs it. The texts of the standard are the House rules section
 in `AGENTS.md` and `docs/agents/code.md` and `screens.md`.
 
 ### The contract: `packages/contract`
