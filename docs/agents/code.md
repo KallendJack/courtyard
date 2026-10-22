@@ -1,19 +1,17 @@
 # App code
 
-Read before writing or changing code. The house configs enforce what a check can (`tsconfig.house.json`,
-`biome.house.json`, the size check); this file holds the rest.
+Read before writing or changing code. Each rule is a concept any stack can follow; the "In TypeScript" lines say
+how a TypeScript project does it, and a project on another stack does the same with its own tools. The house
+configs enforce what a check can (`tsconfig.house.json`, `biome.house.json`, the size check).
 
 ## Stack
 
-The project picks its stack with the owner when it starts, and records it in an ADR; from then on that ADR is the
-stack, and changing it takes another. Where nothing about the project points elsewhere, start from what the house
-already knows and has configs for:
-
-- TypeScript, pnpm, Biome, Vitest, Playwright and Zod.
-- Hono for servers and APIs; React with Vite and TanStack Router for web apps; Astro for static sites.
-
-The rest of this file is written for TypeScript; a project on another language follows its intent with that
-language's own tools.
+- **The project decides its stack,** tailored to what it is, with the owner when it starts, and records the choice
+  and why in an ADR. From then on that ADR is the stack; changing it takes another.
+- **Well-known tools, one per job:** one formatter and linter, one test runner, one way to validate data. The
+  formatter decides formatting.
+- **The house has configs for** TypeScript with pnpm, Biome, Vitest, Playwright and Zod. A project that picks them
+  gets those configs; one that picks otherwise sets up the same checks with its own tools.
 
 ## Structure
 
@@ -21,26 +19,32 @@ language's own tools.
   `README.md` (what it does, one example, what it uses and what uses it, its routes or screens). A feature has one
   name everywhere: folder, routes, tests, glossary. Folders a framework fixes (`pages/`, `routes/`) stay thin and
   call into the feature's folder.
-- **Shared code** sits in `components/` (UI) and `lib/` (helpers); look there before writing a helper. Share
-  knowledge, not look-alikes: code that must change together becomes one; code that merely looks alike stays apart
-  until a third copy appears. UI pieces are shared at their second use, so the look stays consistent.
+- **Shared code** sits in one place for UI pieces and one for helpers (`components/`, `lib/`); look there before
+  writing one. Share knowledge, not look-alikes: code that must change together becomes one; code that merely looks
+  alike stays apart until a third copy appears. UI pieces are shared at their second use, so the look stays
+  consistent.
 - **The entry file is the composition root:** it wires the features together and holds no logic.
 - **Small files.** Source files stay under 400 lines and folders under 15 files (tests, fixtures and generated
   files aside); split by kind as they grow. The size check is a ratchet: files already over are listed at their
   size, which may shrink and never grow.
 - **One language per file.** Styles in stylesheets or classes, browser code in typed modules the build bundles,
-  markup in components, SQL in parameterised queries and migration files. Browser code imports the modules it
-  shares with the server.
+  markup in components or templates, SQL in parameterised queries and migration files. Browser code imports the
+  modules it shares with the server.
 - **Single source of truth.** What's shown, counted or due is decided in one module, and everything that needs it
   imports it.
 
-## Types
+## Type safety
 
-- Fix the type or parse the value. `as const` and `satisfies` are the only casts; Biome rejects `any` and `!`.
-- **Parse at every edge** with Zod and infer the type from the schema: request bodies and forms, database rows,
-  files, environment, and every third-party or model response.
-- Variants are discriminated unions. `type` over `interface`. Expected failures are `Result` values at module
-  boundaries; `throw` is for bugs. A function takes an options object past two parameters.
+- **The compiler checks everything it can, at its strictest,** and nothing silences it: a wrong type is fixed, or
+  the value is parsed.
+- **Parse at every edge.** Data from outside (request bodies and forms, database rows, files, environment, every
+  third-party or model response) is parsed into a typed value before anything uses it, and the type comes from the
+  schema.
+- **Make wrong states unrepresentable.** Each variant is its own case the compiler checks; expected failures are
+  values the caller has to handle, and exceptions are for bugs.
+- **In TypeScript:** `tsconfig.house.json`'s flags; `as const` and `satisfies` are the only casts, and Biome rejects
+  `any` and `!`; Zod at the edges; discriminated unions, no enums; `type` over `interface`; `Result` at module
+  boundaries; an options object past two parameters.
 
 ## Errors and security
 

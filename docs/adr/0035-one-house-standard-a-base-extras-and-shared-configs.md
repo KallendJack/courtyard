@@ -12,7 +12,7 @@ So:
 - **The base, for every repo:** the house rules block in `AGENTS.md` (between `house:start` and `house:end`): where
   work lives, words and decisions, branches and merging, docs, secrets, dependencies, dead code. Every change needs
   it, so it sits in the always-loaded file rather than behind a pointer.
-- **Two extras, for the kinds of work a repo has:** `docs/agents/code.md` (app code: where a stack starts, vertical
+- **Two extras, for the kinds of work a repo has:** `docs/agents/code.md` (app code: choosing a stack, vertical
   slices, small files, one language per file, types, errors and security, tests) and `docs/agents/screens.md`
   (anything a person sees: Paper first, Tailwind tokens, shared pieces, calm screens, zero layout shift, WCAG 2.2 AA).
   The base points at each one a repo has. A config repo such as stacks takes the base only.
@@ -24,9 +24,9 @@ So:
   daily house check (#644) offers a pull request when a repo's copy differs from Courtyard's.
 - **A repo's own rules add and win.** Its `AGENTS.md` says what its project needs and wins where it says more (stacks
   keeps its NAS rules, its `backlog.md` and Hermes's commits to main).
-- **The project picks its stack** with the owner when it starts and records it in its own ADR. The house stack
-  (TypeScript, Hono, React, Astro and the rest) is only where it starts when nothing about the project points
-  elsewhere: what the house already knows and has configs for.
+- **Concepts, not a stack.** Each rule states a concept any stack can follow (type safety, parsing at the edges,
+  errors handled, behaviour tested), with how TypeScript does it. The project decides its stack, tailored to what
+  it is, with the owner, and records it in its own ADR; the house configs serve the projects that pick TypeScript.
 
 ## Considered options
 

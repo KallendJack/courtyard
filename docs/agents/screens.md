@@ -9,10 +9,13 @@ Read before building or changing anything a person sees.
 
 ## Look
 
-- Tailwind classes, with the theme as tokens in `@theme` and one global stylesheet for base styles. Tokens are
-  named by meaning (brand, danger, muted) and used by name.
-- Buttons, inputs, fields and error lines come from `components/`; when one doesn't fit, give it an option. Shared
-  components may start from shadcn/ui, copied in and themed with the tokens. Icons are lucide.
+- **One theme of tokens.** Colours, type sizes, spacing and radii are tokens named by meaning (brand, danger, muted),
+  and every style uses them by name. One global stylesheet holds the base styles; the rest is styled through the
+  project's styling system, picked with its stack.
+- **Shared pieces.** Buttons, inputs, fields and error lines come from `components/`; when one doesn't fit, give it
+  an option.
+- **With Tailwind:** the tokens live in `@theme`; shared components may start from shadcn/ui, copied in and themed
+  with the tokens.
 
 ## Behaviour
 
