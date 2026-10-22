@@ -7,6 +7,31 @@ frozen on 2026-10-08); why it is built that way is in `docs/adr/`. Before decidi
 `docs/overview.md` (the parts and their folders, short), then `docs/architecture.md`: which part does what, and
 how the parts connect.
 
+## House rules
+
+<!-- house:start · from Courtyard's AGENTS.md, kept in step by its house check: change them there -->
+
+- **Work** starts from an item where `docs/agents/issue-tracker.md` says work lives. One thing at a time in an
+  area: the next starts once the owner has tried the last.
+- **Words** live in `GLOSSARY.md`; decisions that are hard to reverse or surprising are short ADRs in `docs/adr/`.
+- **Branches** start from the default branch and rebase on it. A pull request that needs another waits for it to
+  merge rather than carrying its branch.
+- **Merging** waits for green checks. A pull request the owner will see says how to try it.
+- **Docs** move with the change, in the same pull request. `README.md` says what the repo is, how to run, check and
+  deploy it, and what's in it.
+- **Secrets** come from the environment, each listed in `.env.example`. Examples and fixtures are made up; real
+  people's data stays out of the repo.
+- **Dependencies** stay few and locked, the platform's own pieces first. Vendored files say where they came from.
+- **Dead code** and config are deleted, not commented out or left behind.
+- **App code:** before writing or changing code, read `docs/agents/code.md`.
+- **Screens:** before building or changing anything a person sees, read `docs/agents/screens.md`.
+
+<!-- house:end -->
+
+The house rules, `docs/agents/code.md`, `docs/agents/screens.md` and the configs in `packages/house/` are the house
+standard every repo Courtyard sets up follows (ADR 0035). This repo holds the only copies, so a change to them is a
+change for every repo. Everything below is Courtyard's own, on top of them.
+
 ## Where code goes
 
 - **The worker owns everything** (ADR 0001): the context folder, sessions, providers, the owner's login. The web app
@@ -22,29 +47,22 @@ how the parts connect.
 - **Everything a model is told follows `docs/ai-conduct.md`.** Read it before changing any model-facing text.
 - **The web app's look comes from one theme**, in `apps/web/src/styles.css`: Handheld (the Paper boards
   "Handheld ·"), dark whatever the device's setting (#210). There is no light theme, so nothing uses `dark:`.
-  Colours, type sizes, radii and effects are used by name, never by value; `scripts/theme/check.ts` fails
-  `pnpm verify` on one by value (one-offs, with a reason, in its `allowed.json`). Each colour means one thing:
-  violet is open, live or chosen; gold is something that needs the owner; moss is passed or connected; red is
-  failed. Components join classes with `lib/classes.ts`, which merges nothing, so no class-merging code reaches the
-  first load.
+  `scripts/theme/check.ts` fails `pnpm verify` on a colour, type size, radius or effect used by value (one-offs, with
+  a reason, in its `allowed.json`). The colours: violet is open, live or chosen; gold is something that needs the
+  owner; moss is passed or connected; red is failed. Components join classes with `lib/classes.ts`, which merges
+  nothing, so no class-merging code reaches the first load.
 - **Every screen is a pinned header, one scrolling middle and a pinned footer** (the shared page layout,
   `components/layout/page.tsx`, #339); nothing scrolls the title or the main action away. Everything that scrolls is the
   shared `Scroller` (`components/layout/scroller.tsx`, #420): a thin thumb and a fade at its top, never a hard cut;
   `scripts/theme/check.ts` fails an `overflow-*-auto` anywhere else.
-- **Nothing jumps in: a block that loads after its page uses the shared loading piece** (`components/layout/kept.tsx`,
-  #269): the last answer at once on a revisit, faint rows in its place the first time, never a spinner.
-- **Nothing moves once drawn** (#283, #398): what loads later holds its space from the first frame, at its final size.
-  A dashboard block's size is set by the layout, never by its rows: its rows scroll inside, and empty it keeps its
-  size with one quiet line. `e2e/layout-shift.spec.ts` fails a main page that shifts while it loads.
+- **A block that loads after its page uses the shared loading piece** (`components/layout/kept.tsx`, #269).
+- **A dashboard block's size is set by the layout, never by its rows** (#283, #398): its rows scroll inside, and empty
+  it keeps its size with one quiet line. `e2e/layout-shift.spec.ts` fails a main page that shifts while it loads.
 - **Every block stays fresh the shared way** (`useKept` / `useFresh` in `components/layout/kept.tsx`, #387): every 30 s
   while calm, faster while busy, paused while the tab is hidden and asked at once when it's shown. Never a timer of
   its own.
-- **Shared pieces, never hand-styled copies** (ADR 0012). `components/` holds Courtyard's shared pieces: buttons, icon
-  buttons, text fields and error lines come from there, on every page, and are safe on the first load. Pages and
-  feature folders (`sessions/`) never style a raw `<button>`, `<input>` or error line themselves: when a shared piece
-  doesn't fit, give it an option or add a shared piece. Anything used twice becomes a shared piece; until then a
-  control that is the only one of its kind lives inside the one shared piece that uses it (the composer's message
-  box).
+- **Shared pieces** (ADR 0012) in `components/` are safe on the first load. Until a control is used twice, the only
+  one of its kind lives inside the one shared piece that uses it (the composer's message box).
 - **Workspaces differ by their data, never by their code.** A workspace's page is built from general blocks (Things,
   documents, plans, rich blocks) that fill themselves from that workspace's own context; no screen, card or branch of
   code is made for one workspace (its name, its kind of hobby). A new kind of view is a new general block any
@@ -59,29 +77,19 @@ how the parts connect.
 - **Familiar folders, the same in both apps** (#453). The worker's `src` has `features/`, `providers/`, `prompts/`,
   `auth/`, `integrations/`, `config/` and `lib/`; the web app's has `features/`, `components/`, `hooks/`, `api/`,
   `routes/` and `lib/`. A feature has one name in both apps (`features/things/`). A new feature is listed in
-  `docs/overview.md` and has a `README.md` (#459: what it does, one example, what it uses, what uses it, and its API
-  or screens) that `docs/architecture.md` links; so do each of the worker's `auth/` and `integrations/` folders, and
-  its `providers/` and `prompts/`. A folder holds at most 15 files: a bigger one is split into parts by kind
-  (`components/layout/`, `features/sessions/answer/`). `scripts/folders/check.ts` fails `pnpm check` otherwise. A new
-  top-level folder is the owner's call.
+  `docs/overview.md` and has a `README.md` (#459) that `docs/architecture.md` links; so do each of the worker's
+  `auth/` and `integrations/` folders, and its `providers/` and `prompts/`. `scripts/folders/check.ts` fails
+  `pnpm check` otherwise. The size check's ratchet is `scripts/size/allowed.json`. A new top-level folder is the
+  owner's call.
 - **Reuse before writing, in the worker too.** Request bodies go through `readBody` (`lib/http.ts`), files
-  through `lib/files.ts`, workspace errors through one handler, and tests through `test/testing.ts`. Check there before writing a
-  helper; if one is missing, add it there.
-
-## TypeScript
-
-- Strict, with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. No `any`, and no `as` or `!` to quiet the
-  compiler: fix the type or parse the value.
-- Zod at every edge: HTTP, disk, environment, and every model or SDK response.
-- Branded ids. Anything with variants is a discriminated union. No enums.
-- Errors are values at module interfaces (`Result`); throw only for bugs.
-- `type` over `interface`. Options object once a function takes more than two parameters.
+  through `lib/files.ts`, workspace errors through one handler, and tests through `test/testing.ts`. Check there before
+  writing a helper; if one is missing, add it there.
+- **Ids are branded.**
 
 ## Tests
 
 Three places only (see the spec's testing decisions): the worker's API in-process, the provider seam, and Playwright
-against a real worker running the fake provider. Test behaviour through those; never import a module's internals.
-Real temporary folders and real git, not mocks of them. Write the failing test first when fixing a bug.
+against a real worker running the fake provider.
 
 Before pushing, run `pnpm check`, `pnpm typecheck` and the unit test files and e2e specs for what you changed, naming
 each (`pnpm -C apps/worker exec vitest run test/<file>.test.ts`, `pnpm exec playwright test e2e/<spec>.spec.ts`).
@@ -111,9 +119,8 @@ when a change needs a board): `docs/agents/process.md`.
 - **One `ready-for-agent` issue per PR**, taken in milestone order (`docs/agents/roadmap.md`). Work without an issue
   gets one first, in a milestone (`Later` when unsure) with a category and a triage label; docs or CI only needs none.
   Bundle issues only when the owner says so, and keep an open PR to the work it was opened for.
-- **One feature at a time in an area.** The next feature in an area (a workspace kind, the Lead) starts once the owner
-  has used the last one there, or said to skip it; a PR the owner will see says how to try it. Foundations the owner
-  agreed as one spec (what makes an area usable at all) go back to back, the owner using each as it lands.
+- **An area's next feature** may also start once the owner says to skip trying the last. Foundations the owner agreed
+  as one spec (what makes an area usable at all) go back to back, the owner using each as it lands.
 - **How sessions, builders and the Lead run is decided in an ADR first** (ADR 0031): no rule is added to that machinery
   for one incident without writing down how it fits the rest.
 - **Removal is the default.** A feature unused after its trial, or one models keep misusing, is removed unless the
@@ -122,21 +129,19 @@ when a change needs a board): `docs/agents/process.md`.
   message for what needs them (`docs/agents/process.md`).
 - **Claim before building.** With no claim in the issue's comments or open PRs, comment
   "Building this: <session or helper> (<branch>), <why>"; stopping without a PR, comment "Stopped: <why>".
-- **Design in Paper first.** What the owner sees is built from a board the owner agreed, linked from its issue. A PR
-  that changes what the owner sees lists its boards ("Boards: Tablet · Home → Live, replaces …").
+- **Boards in a PR** read "Boards: Tablet · Home → Live, replaces …".
 - **Say what's new.** A PR that changes what the owner sees gives one line in its description, `What's new: <what,
   in a few words> · <where to try it>`, the where a workspace's name or Settings, or left out for Home: "What's new:
   Draw the garage · Garage". After the Update that brings it, Home says it once (#604).
-- **A screen shows only what the owner needs right now; the rest is one tap away.** A planning workspace stays
-  calm: a thing shows what it is (its name and kind), never a warning or a "needs doing" nudge. A code workspace
-  shows what waits on the owner: an approval, a failing check, a new reply, a PR ready to merge.
+- **What a screen shows now:** a planning workspace stays calm (a thing shows what it is, its name and kind); a code
+  workspace shows what waits on the owner: an approval, a failing check, a new reply, a PR ready to merge.
 - **Tap or talk; typing is the fallback.** Wherever Courtyard can know or guess a value (a repo's name, a photo's
   contents, what was just said), it fills it in and the owner taps to pick or confirms; any field can also be spoken.
   Before acting, show everything it filled in, so one tap does exactly what the owner sees. A text box is for words
   only the owner has, and opening a page never opens the keyboard on touch.
-- **Docs move with the code.** A new module, or a change to how the parts connect or to what's in a workspace folder,
-  updates `docs/architecture.md` (and `docs/overview.md` for a new feature). A change to installing, setting up,
-  running or recovering Courtyard updates `README.md`.
+- **Which docs move:** a new module, or a change to how the parts connect or to what's in a workspace folder, updates
+  `docs/architecture.md` (and `docs/overview.md` for a new feature). A change to installing, setting up, running or
+  recovering Courtyard updates `README.md`.
 - The owner reviews every PR on GitHub: check a PR's state before pushing more commits to it.
 
 ## Agent skills

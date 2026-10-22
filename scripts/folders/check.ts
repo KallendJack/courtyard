@@ -2,14 +2,15 @@
 // docs/overview.md lists every feature, and each feature has a README that docs/architecture.md
 // links, so the docs and the folders can't drift apart. This fails on a folder or file at the top
 // of an app's src that isn't one of its own (below), a feature folder the overview doesn't list
-// for that app, a listed feature with no folder, a folder that needs a README (every feature, each
-// of the worker's auth and integrations, its providers and prompts) with none or one
-// docs/architecture.md doesn't link, and any folder with more than 15 files.
+// for that app, a listed feature with no folder, and a folder that needs a README (every feature,
+// each of the worker's auth and integrations, its providers and prompts) with none or one
+// docs/architecture.md doesn't link. How many files a folder holds is the house size check's
+// (packages/house/check-size.ts, ADR 0035).
 //
 //   node scripts/folders/check.ts [<worker's src> <web app's src> <overview> <architecture>]
 
 import { readdir, readFile } from "node:fs/promises";
-import { basename, join, relative } from "node:path";
+import { join } from "node:path";
 
 const [
   workerSrc = join(import.meta.dirname, "../../apps/worker/src"),
@@ -52,9 +53,6 @@ const APPS: readonly App[] = [
   },
 ];
 
-/** The most files one folder holds before it's split into parts. */
-const MOST_FILES = 15;
-
 /** What's directly inside a folder: its folders and its files, each sorted. */
 const contentsOf = async (path: string) => {
   const entries = await readdir(path, { withFileTypes: true });
@@ -65,14 +63,6 @@ const contentsOf = async (path: string) => {
       .sort();
   return { folders: names(true), files: names(false) };
 };
-
-/** A folder and every folder inside it. */
-const everyFolder = async (path: string): Promise<string[]> => [
-  path,
-  ...(
-    await Promise.all((await contentsOf(path)).folders.map((name) => everyFolder(join(path, name))))
-  ).flat(),
-];
 
 /** The features the overview lists for an app: the backticked names on its `**<app> features:**` lines. */
 const listedIn = (text: string, app: App["name"]) => {
@@ -145,15 +135,6 @@ for (const app of APPS) {
     if (!architectureText.includes(`(${link})`)) {
       problems.push(
         `${app.name}: docs/architecture.md doesn't link ${folder}/README.md (as ${link}).`,
-      );
-    }
-  }
-  for (const folder of await everyFolder(app.src)) {
-    const { files } = await contentsOf(folder);
-    if (files.length > MOST_FILES) {
-      const path = relative(app.src, folder).split("\\").join("/");
-      problems.push(
-        `${app.name}: ${path === "" ? basename(app.src) : path}/ has ${files.length} files: split it into parts of at most ${MOST_FILES}.`,
       );
     }
   }
