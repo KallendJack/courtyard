@@ -5,10 +5,15 @@ Read before writing or changing code. The house configs enforce what a check can
 
 ## Stack
 
-The house defaults; a different choice gets an ADR saying why.
+The project picks its stack with the owner when it starts, and records it in an ADR; from then on that ADR is the
+stack, and changing it takes another. Where nothing about the project points elsewhere, start from what the house
+already knows and has configs for:
 
-- TypeScript, pnpm, Biome, Vitest, Playwright and Zod everywhere.
+- TypeScript, pnpm, Biome, Vitest, Playwright and Zod.
 - Hono for servers and APIs; React with Vite and TanStack Router for web apps; Astro for static sites.
+
+The rest of this file is written for TypeScript; a project on another language follows its intent with that
+language's own tools.
 
 ## Structure
 
