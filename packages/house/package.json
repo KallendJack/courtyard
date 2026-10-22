@@ -1,0 +1,13 @@
+{
+  "name": "@courtyard/house",
+  "private": true,
+  "type": "module",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "node --test check-size.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2"
+  }
+}

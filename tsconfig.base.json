@@ -1,14 +1,8 @@
 {
+  "extends": "./packages/house/tsconfig.house.json",
   "compilerOptions": {
     "target": "es2024",
     "lib": ["es2024"],
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "verbatimModuleSyntax": true,
-    "isolatedModules": true,
-    "erasableSyntaxOnly": true,
-    "skipLibCheck": true,
     "noEmit": true
   }
 }

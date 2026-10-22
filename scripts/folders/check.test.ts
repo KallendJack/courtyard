@@ -157,19 +157,3 @@ test("fails a README the architecture doesn't link", async () => {
   );
   assert.match(said, /Web: docs\/architecture\.md doesn't link features\/sessions\/README\.md/);
 });
-
-test("fails any folder with more than 15 files, at any depth", async () => {
-  const many = (folder: string, count: number) =>
-    Array.from({ length: count }, (_, at) => `${folder}/part-${at}.tsx`);
-  const { passed, said } = await check({
-    files: [
-      ...WORKER,
-      ...WEB,
-      ...many("web/components", 14),
-      ...many("web/features/sessions/answer", 16),
-    ],
-  });
-  assert.equal(passed, false);
-  assert.match(said, /Web: features\/sessions\/answer\/ has 16 files/);
-  assert.doesNotMatch(said, /components\//);
-});

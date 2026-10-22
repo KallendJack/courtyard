@@ -386,6 +386,17 @@ wait on itself when it runs `e2e`), and frees the place however the command ends
 of its own, rather than the worker's, because the repo's scripts need it with no worker running, and nothing else of
 the worker's.
 
+### The house configs: `packages/house`
+
+`@courtyard/house` holds the configs of the house standard (ADR 0035), which every app repo Courtyard sets up
+copies and Courtyard itself follows: `tsconfig.house.json` (the strict flags, which `tsconfig.base.json` extends),
+`biome.house.json` (the recommended rules plus no `any`, no `!`, type imports and no reassigned parameters, which
+`biome.json` extends) and `check-size.ts`, the size check: a source file over 400 lines or a folder of more than 15
+source files fails, leaving out tests, fixtures, generated and vendored files. What's over today is listed in a
+ratchet, here `scripts/size/allowed.json`, whose entries may shrink and never grow (`--update` lowers them,
+`--baseline` records a repo taking the check on). `pnpm check` runs it. The texts of the standard are the house block
+in `AGENTS.md` and `docs/agents/code.md` and `screens.md`.
+
 ### The contract: `packages/contract`
 
 Every shape that crosses between the web app and the worker, as Zod schemas with their types inferred, one file per

@@ -326,6 +326,12 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
+  packages/house:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
+
   packages/skills:
     dependencies:
       '@courtyard/contract':
