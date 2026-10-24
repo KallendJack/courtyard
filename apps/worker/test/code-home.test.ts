@@ -127,7 +127,7 @@ describe("a code workspace's one line (#301)", () => {
     );
 
     expect(detail).toMatchObject({
-      workspace: { name: "Side project", hasContextFile: false },
+      workspace: { name: "Side project" },
       contextFile: null,
       description: "Plan and code with AI models.",
     });

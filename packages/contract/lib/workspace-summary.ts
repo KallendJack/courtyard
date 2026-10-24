@@ -40,7 +40,6 @@ export const WorkspaceSummary = z.object({
   name: z.string(),
   mode: WorkspaceMode,
   icon: WorkspaceIcon,
-  hasContextFile: z.boolean(),
   /** Why the workspace's config was ignored, when it was. */
   configProblem: z.optional(z.string()),
 });

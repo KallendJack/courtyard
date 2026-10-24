@@ -136,5 +136,3 @@ export const createRedMain = (options: {
     },
   };
 };
-
-export type RedMain = ReturnType<typeof createRedMain>;

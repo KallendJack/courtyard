@@ -7,6 +7,10 @@ worker gives it: each save adds, changes or removes one line, names its section 
 moves from before the save to just after it: each save shows as a note in the chat with Undo and Edit, and the
 workspace page lists recent changes. The model still never writes a file: it asks, and the worker checks and writes.
 
+Amended by ADR 0026: a code workspace has no context file, so its models save only to How to answer me, and its
+Recent changes live with the owner context. Plans left the context file for projects (ADR 0032), so a save names a
+fact or an idea.
+
 ## Considered options
 
 - **Keep ticking (ADR 0005).** Rejected: every change waits on the owner, and slow approvals are what put them off
