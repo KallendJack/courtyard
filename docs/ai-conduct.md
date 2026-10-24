@@ -366,10 +366,12 @@ Changed with #700, after a garage workshop build asked for photos of tools saved
 didn't exist without reading its project, circled back to layout worries when the owner said to get on, gave the
 same caveat in six answers in a row, saved tools from another AI's plan as the owner's, then spent a whole answer
 refusing to check that AI's next plan. The eval's scenarios from it, on an invented workshop: `planning-tools-in-things`
-(no question about tools saved as Things), `planning-sizes-in-project` (the leg length from the project's decided
-size), `planning-go-ahead` (one step, no questions about what the owner said was fine), `planning-caveat-once` (a
-caveat about cables and pipes not said again), `planning-pasted-plan-is-ideas` (nothing saved from a pasted plan) and
-`planning-pasted-plan-checked` (a short check that names the saved size).
+(no question about tools saved as Things), `planning-sizes-in-project` (a cut list from the project's decided size),
+`planning-go-ahead` (one step, no questions about what the owner said was fine), `planning-caveat-once` (a caveat
+about cables not said again once the owner has checked), `planning-pasted-plan-is-ideas` (a pasted plan's steps put
+on the project when the owner takes them, none of its tools saved) and `planning-pasted-plan-checked` (a short check
+that names the saved size). Today's models already passed the first, second and fifth before the change; they're
+kept so it can't come back unseen.
 
 ## Courtyard's file tools
 

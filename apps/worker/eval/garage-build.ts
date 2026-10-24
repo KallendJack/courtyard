@@ -60,12 +60,17 @@ const WORKSHOP: Pick<Scenario, "workspace" | "context" | "files"> = {
   },
 };
 
-/** Another AI's plan for the workshop's bench, pasted in by the owner (#700). */
-const PASTED_PLAN = [
+/** The tools and steps of another AI's plan for the workshop's bench (#700). */
+const PASTED_TOOLS_AND_STEPS = [
   "Tools you'll use: circular saw, router, pocket-hole jig, orbital sander.",
+  "Steps: cut the legs, build two frames, join them with rails, fix the top.",
+];
+
+/** Another AI's whole plan for the bench, pasted in by the owner, its size not the one decided. */
+const PASTED_PLAN = [
+  ...PASTED_TOOLS_AND_STEPS,
   "Materials: four 2.4 m lengths of 3×2 CLS, one sheet of 18 mm OSB, 70 mm screws.",
   "Size: 180 × 60 cm top, 90 cm high.",
-  "Steps: cut the legs, build two frames, join them with rails, fix the top.",
 ].join("\n");
 
 /** Refusing to check a plan, rather than saying what to change (#700). */
@@ -81,8 +86,7 @@ const REFUSES_TO_CHECK: readonly Words[] = [
 
 /** Asking for tools the workshop has saved as Things (#700). */
 const TOOLS_ASKED: readonly Words[] = [
-  ["photo"],
-  ["picture"],
+  [["photo", "picture"], "tool"],
   ["what tools"],
   ["which tools"],
   ["tools do you"],
@@ -99,10 +103,11 @@ export const GARAGE_BUILD: readonly Scenario[] = [
     ...WORKSHOP,
     turns: [
       {
-        say: "Right, what do I need to get to build the bench this weekend?",
+        // As the garage build's owner asked, the tools there already: "you should see it in my things".
+        say: "I want to hang my tools on a pegboard above the bench. What goes where?",
         expect: [],
+        says: [["drill", "makita"], ["mitre"], ["clamp"]],
         avoids: TOOLS_ASKED,
-        things: [],
       },
     ],
   },
@@ -112,10 +117,20 @@ export const GARAGE_BUILD: readonly Scenario[] = [
     ...WORKSHOP,
     turns: [
       {
-        say: "How long do I cut the bench legs?",
+        say: "Can you give me the cut list for the bench?",
         expect: [],
-        says: [["88", "90"]],
-        avoids: [["how tall"], ["how high"], ["what height"], ["what size"], ["dimensions"]],
+        says: [["88", "90"], ["150"]],
+        // The bench's own sizes; its timber's section isn't saved, so asking that is fair.
+        avoids: [
+          ["how tall"],
+          ["how high"],
+          ["how wide"],
+          ["what height"],
+          ["dimensions"],
+          ["how long", "bench"],
+          ["what size", "bench"],
+          ["what size", "top"],
+        ],
       },
     ],
   },
@@ -123,6 +138,13 @@ export const GARAGE_BUILD: readonly Scenario[] = [
     name: "planning-go-ahead",
     rule: "when the owner wants to get on, the answer goes ahead with the next step, without circling back or making a requirement of what they don't need (#700)",
     ...WORKSHOP,
+    // Saved already, so the owner saying it again is only them getting on.
+    context: {
+      facts: [
+        ...(WORKSHOP.context.facts ?? []),
+        "The bench sits close to the side door, leaving no room for the bin, and that's fine",
+      ],
+    },
     turns: [
       {
         say: "I know the side door's close to the bench and there's no room left for the bin. That's fine, fit what we can. Can we just build the bench please?",
@@ -145,8 +167,8 @@ export const GARAGE_BUILD: readonly Scenario[] = [
         says: [["cable", "wire", "detector"]],
       },
       {
-        // A question the caveat doesn't bear on, so saying it again is only a repeat.
-        say: "Got a 7 mm masonry bit and brown plugs. How deep do I drill each hole?",
+        // The owner has dealt with it, and asks what it doesn't bear on, so saying it again is only a repeat.
+        say: "Ran a detector over the wall, nothing there. Got a 7 mm masonry bit and brown plugs. How deep do I drill each hole?",
         expect: [],
         omits: [["cable"], ["wire"], ["detector"]],
       },
@@ -163,10 +185,11 @@ export const GARAGE_BUILD: readonly Scenario[] = [
     ...WORKSHOP,
     turns: [
       {
-        say: `Another AI gave me this plan for the bench:\n\n${PASTED_PLAN}`,
+        // The owner takes its steps, so they go on the project; its tools stay theirs to say.
+        say: `Another AI gave me this plan for the bench. Let's go with its steps, put them on the project.\n\n${PASTED_TOOLS_AND_STEPS.join("\n")}`,
         expect: [],
         things: [],
-        projects: [],
+        projects: [{ action: "change", name: ["workbench"], words: [["frames", "rails"]] }],
       },
     ],
   },
@@ -180,7 +203,8 @@ export const GARAGE_BUILD: readonly Scenario[] = [
         expect: [],
         says: [["150", "160"]],
         omits: REFUSES_TO_CHECK,
-        words: { atMost: 120 },
+        // Five things to change, a short line each.
+        words: { atMost: 150 },
         things: [],
       },
     ],
@@ -238,7 +262,12 @@ export const GARAGE_BUILD: readonly Scenario[] = [
           {
             action: "change",
             name: ["workbench"],
-            words: ["done: cut the legs", "done: fix the frame", ["glu", "worktop"]],
+            // The step they're on is a step, not only a line in its history.
+            words: [
+              "done: cut the legs",
+              "done: fix the frame",
+              ["can do this] glu", "can do this] worktop", "can do this] clamp"],
+            ],
           },
         ],
       },
