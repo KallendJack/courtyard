@@ -355,6 +355,72 @@ describe("a project's steps (#710, ADR 0037)", () => {
     expect(project?.decisions.map(({ about }) => about)).toEqual(["Layout"]);
   });
 
+  it("turns a decided step from before with no decision into one, losing none through a save", async () => {
+    const paintDetail =
+      "two coats of a washable matt over a mist coat, the ceiling left as it is, a weekend with a roller and tray";
+    // Files from before #710 hold decided steps with no decision under Decisions: one written by a
+    // move review, or added by the old tool on its own.
+    await mkdir(projectsDir(), { recursive: true });
+    await writeFile(
+      join(projectsDir(), "turn-the-garage-into-an-office.md"),
+      OFFICE.replace(
+        "- [decided] Layout",
+        [
+          "- [decided] Floor: Grey vinyl planks, click-fit",
+          "- [decided] Keep the old workbench",
+          `- [decided] Paint the walls white · ${paintDetail}`,
+          "- [decided] layout",
+        ].join("\n"),
+      ),
+    );
+    const decisions = [
+      {
+        about: "Layout",
+        pick: "Split, storage at the front, office at the back",
+        why: "The back is warmer",
+        options: ["Office at the front", "Office at the back", "Split"],
+      },
+      { about: "Floor", pick: "Grey vinyl planks, click-fit", options: [] },
+      { about: "Keep the old workbench", pick: "Keep the old workbench", options: [] },
+      // Too long for a subject: its words before the detail are.
+      {
+        about: "Paint the walls white",
+        pick: `Paint the walls white · ${paintDetail}`,
+        options: [],
+      },
+    ];
+    // Read first by a worker of its own (its own data folder, so its own owner), then saved.
+    const reader = testWorker({ root, env: { COURTYARD_DATA_DIR: join(root, "reader") } });
+    const before = (await homeOf(await asOwner(reader))).projects[0];
+
+    expect(before?.decisions).toEqual(decisions);
+    expect(before?.steps.map(({ id, text }) => `${id} ${text}`)).toEqual([
+      "s1 Measure the back wall and the boiler corner",
+      "s2 Pick a desk and chair that fit the back wall",
+    ]);
+
+    // Saved, they're written as decisions, and read back the same.
+    const { request } = await sessionWith([
+      [projectTool({ project: "P1", history: "Cleared the back wall" })],
+    ]);
+    const text = await projectFile("turn-the-garage-into-an-office");
+    expect(text).not.toContain("[decided]");
+    expect(text).toContain(
+      [
+        "### Floor",
+        "",
+        "- Pick: Grey vinyl planks, click-fit",
+        "",
+        "### Keep the old workbench",
+        "",
+        "- Pick: Keep the old workbench",
+      ].join("\n"),
+    );
+    const after = (await homeOf(request)).projects[0];
+    expect(after?.decisions).toEqual(decisions);
+    expect(after?.steps).toEqual(before?.steps);
+  });
+
   it("keeps each step's ID through a reorder and a rename, and gives a new one the next ID", async () => {
     await withOffice();
     const { saver, request } = await sessionWith([

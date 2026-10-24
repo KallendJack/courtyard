@@ -68,20 +68,23 @@ const stepLine = ({ id, text, detail, who, done, doneOn, needs, build }: Project
 /** A step's line, read before it has its ID. */
 type StepRead = Omit<ProjectStep, "id"> & { id: StepId | undefined };
 
+/** A decided step from before #710, by its words (`Floor: grey vinyl`): a decision now. */
+type DecidedRead = { readonly decided: string };
+
 /**
  * One step's line, read: its words, detail and marks. A mark mistyped by hand loses only itself,
- * saying why; `undefined` for a decided step from before #710, whose decision holds it.
+ * saying why. A decided step from before #710 is read as its words alone.
  */
 const readStepLine = (
   said: string,
   problem: (text: string) => void,
-): Result<StepRead | undefined, string> => {
+): Result<StepRead | DecidedRead, string> => {
   const task = TASK_LINE.exec(said);
   const kind = task === null ? KIND_LINE.exec(said) : null;
   if (task === null && kind === null) {
     return err(`A step isn't "- [ ]" or "- [x]" and its words: "${said}".`);
   }
-  if (kind?.[1]?.toLowerCase() === "decided") return ok(undefined);
+  if (kind?.[1]?.toLowerCase() === "decided") return ok({ decided: kind[2]?.trim() ?? "" });
   let rest = task?.[2] ?? kind?.[2] ?? "";
   const marks: [string, string][] = [];
   for (let mark = MARK.exec(rest); mark !== null; mark = MARK.exec(rest)) {
@@ -138,6 +141,43 @@ const readStepLine = (
   return ok(step);
 };
 
+const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** A decided step's subject: its words before their first `:`, or all of them without one. */
+const subjectOf = (decided: string) => {
+  const colon = decided.indexOf(":");
+  return colon === -1 ? decided : decided.slice(0, colon);
+};
+
+/**
+ * Whether a decision holds a decided step: its subject is the decision's, as the step was written
+ * (`Layout: Split`) when the decision was made. A subject with a `:` of its own matches too.
+ */
+const holds = ({ about }: ProjectDecision, decided: string) =>
+  same(subjectOf(decided), about) ||
+  decided.trim().toLowerCase().startsWith(`${about.trim().toLowerCase()}:`);
+
+/**
+ * The decision a decided step with none says: its subject, and the rest as its pick (`Floor: grey
+ * vinyl`), or its whole words as both when there's no `:` or that doesn't fit, or, too long for a
+ * subject, its words before their detail as the subject and all of them as the pick; `undefined`
+ * when none fits.
+ */
+const decisionOf = (decided: string) => {
+  const colon = decided.indexOf(":");
+  const detail = decided.indexOf(DETAIL);
+  const tries = [
+    ...(colon === -1 ? [] : [{ about: decided.slice(0, colon), pick: decided.slice(colon + 1) }]),
+    { about: decided, pick: decided },
+    ...(detail === -1 ? [] : [{ about: decided.slice(0, detail), pick: decided }]),
+  ];
+  for (const { about, pick } of tries) {
+    const read = ProjectDecision.safeParse({ about, pick, options: [] });
+    if (read.success) return read.data;
+  }
+  return undefined;
+};
+
 /** The steps read, each given an ID: those without one (or with one taken) the next free number. */
 const withIds = (steps: readonly StepRead[]) => {
   const taken = new Set<string>();
@@ -182,7 +222,7 @@ export const readProjectText = (
           : `Its ${name} doesn't fit: ${issue?.message ?? "it can't be read"}`,
     );
   }
-  const steps: StepRead[] = [];
+  const stepLines: (StepRead | DecidedRead)[] = [];
   const decisions: ProjectDecision[] = [];
   const history: ProjectHistoryLine[] = [];
   const problems: string[] = [];
@@ -212,7 +252,7 @@ export const readProjectText = (
     if (section === "steps") {
       const step = readStepLine(said, (problem) => problems.push(problem));
       if (!step.ok) return step;
-      if (step.value !== undefined) steps.push(step.value);
+      stepLines.push(step.value);
     } else if (section === "decisions") {
       const about = /^###[ \t]+(.+)$/.exec(said);
       if (about !== null) {
@@ -241,6 +281,30 @@ export const readProjectText = (
   }
   const ended = endDecision();
   if (ended !== undefined) return err(ended);
+  // A decided step from before #710 is left to the decision that holds it, or becomes one; one that
+  // can't be a decision stays a step, done, so nothing in the file is lost.
+  const written = decisions.length;
+  const steps: StepRead[] = [];
+  for (const line of stepLines) {
+    if (!("decided" in line)) {
+      steps.push(line);
+      continue;
+    }
+    const { decided } = line;
+    if (decisions.slice(0, written).some((one) => holds(one, decided))) continue;
+    const decision = decisionOf(decided);
+    if (decision === undefined) {
+      const step = readStepLine(`- [x] ${decided}`, (problem) => problems.push(problem));
+      if (!step.ok) return step;
+      if (!("decided" in step.value)) steps.push(step.value);
+      continue;
+    }
+    // The same decided step twice is one decision.
+    const twice = decisions.some(
+      ({ about, pick }) => same(about, decision.about) && pick === decision.pick,
+    );
+    if (!twice) decisions.push(decision);
+  }
   const checked: ProjectStep[] = [];
   for (const step of withIds(steps)) {
     const read = ProjectStep.safeParse(step);

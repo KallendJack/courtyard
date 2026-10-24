@@ -32,7 +32,9 @@ Recent changes. `routes.ts` holds how those answer a refusal.
   `## Decisions` (a `###` heading each, then its pick, why and options) and `## History` (dated lines). A file that
   isn't a project as written is listed with its problem, never breaking a turn; a mistyped Build link is left off
   its step alone, the turn told why. A file from before #710 still reads: `[you can do this]` and `[needs a pro]`
-  steps get IDs in order, and its `[decided]` steps are left out, since its decisions say the same.
+  steps get IDs in order, and each `[decided]` step is left to the decision about the same thing, or becomes one
+  (the words before its `:` its subject, the rest its pick; with no `:`, its words both, or its words before its
+  detail the subject when they all are too long for one), so none is lost.
 - **Steps** (`steps.ts`) change by their IDs, which a reorder or a rename keeps: marked done (it stays, ticked, its
   history saying "Done: …"), who, needs and what was found, moved, or added before a step. **What's next** is the
   first step not done (`nextStepOf`, in the contract), "not ready yet" while it needs something unknown
