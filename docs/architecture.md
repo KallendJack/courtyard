@@ -741,7 +741,12 @@ things live only in the worker's memory and go when it restarts.
   answer to the setup check (#181).
 - `worktrees/<session>/`: a code session's worktree, its session branch checked out from the workspace's repository
   (ADR 0007). It belongs to that repository's worktree list, so it stays when the session is deleted or set aside by
-  a fresh start; it and its branch are cleared away once the session's pull request is merged or closed (#172).
+  a fresh start; it and its branch are cleared away once the session's pull request is merged or closed (#172),
+  or after 3 quiet days with no pull request (#605: `sessions/`' `quiet-worktrees.ts`, run hourly), once what GitHub
+  lacks is pushed to `wip/<session branch>`. The session records `worktree-cleared` (with its `wip` branch) and its
+  page says so; its next turn checks the branch out again first (`worktree-restored`). A cleared session, a grill and
+  a Lead aren't asked about on GitHub, and a worktree a program holds is tried again later and later, its branch on
+  GitHub deleted once.
 - `repos/<owner>/<name>/`: a GitHub repo New workspace → Code got onto the worker machine for a code
   workspace (#258), a plain clone whose `origin` is the repo on GitHub; the workspace's `repoPath`
   names it. It stays when the workspace is archived, and is used again if the repo is picked again.

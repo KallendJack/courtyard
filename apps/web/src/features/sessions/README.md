@@ -18,7 +18,8 @@ The session page (`routes/_app/workspaces.$workspaceId.sessions.$sessionId.tsx`)
 
 ## Its parts
 
-- **`turns/`:** following the event stream and replaying it into turns (`events.ts`); the turn list
+- **`turns/`:** following the event stream and replaying it into turns (`events.ts`, an answer's parts growing in
+  `parts.ts`); what a turn's notes say (`turn-words.ts`: a failure, or a worktree cleared after quiet days, #605); the turn list
   (`session-turns.tsx`, which follows the end only while the owner is at it, never moving them while they read back,
   and offers Jump to latest, #168); each turn (`turn-view.tsx`); the cut-off card; the usage-limit notice with Carry
   on (`limit-notice.tsx`); what the page has shown (`seen.ts`); and the Lead's strip (`lead-strip.tsx`).

@@ -20,3 +20,9 @@ one repository, or the owner working in it at the same time, would otherwise col
   is never allowlisted.
 - Merging refuses, and says why, when it would conflict or when the owner's checkout has uncommitted changes.
 - Only a provider that can code may be used in a code workspace.
+- A worktree goes once its session's pull request is merged or closed. (Amended 2026-10-24, #605.) One whose session
+  never opens a pull request (a grill, a question, a stopped builder) would otherwise stay, with its package install,
+  for ever: after 3 quiet days with no pull request (no turn, event or commit), it's cleared too, unless the session is
+  mid-turn, waits on the owner, has a task running or works on a branch it didn't make. What GitHub lacks goes first:
+  uncommitted changes are committed and the branch pushed as `wip/<session branch>`, so nothing is lost. The session's
+  next turn checks the branch out again from there, and deletes the `wip/` branch.

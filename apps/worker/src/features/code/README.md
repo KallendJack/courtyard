@@ -26,7 +26,12 @@ Code sessions' git, and what they may do
   checkout is never touched; or says why it can't (the repository missing, not git, or its remote unreachable).
 - Finds a session branch's pull request on GitHub (the repository named by its remote's address).
 - Clears a session's worktree and branch away, and, once its PR is merged or closed, the branch it pushed to GitHub
-  (only a `courtyard/…` one).
+  (only a `courtyard/…` one), saying whether the folder went (a program holding it keeps it on Windows).
+- **A quiet session's** (#605, `wip.ts`): `clearQuiet` first keeps what GitHub lacks (uncommitted changes committed
+  without the repository's hooks, the branch pushed as `wip/<session branch>`), then clears the worktree and branch.
+  `checkOutAgain` brings the branch back for its next turn: from its `wip/` branch, else the branch as GitHub or the
+  repository has it, else afresh from the default branch; then deletes the `wip/` branch on GitHub.
+- `remote.ts`: the repository's remote, its default branch and its name on GitHub.
 - `startOnBranch` starts a session on a branch that isn't a `courtyard/…` one, for `pull-requests/`.
 - Helpers' worktrees and branches (#395): `branchOff`, `mergeBack` and `clearHelpers`, named by `branches.ts`
   ([How a turn flows](../../../../../docs/architecture.md#how-a-turn-flows), Helpers).

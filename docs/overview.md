@@ -36,7 +36,7 @@ Both apps use the folder names most React and Node projects use, and a feature h
 | `auth/` | Who's allowed in and what each may do: `owner`, `sign-ins`, `allow-all`, `workspace-files` |
 | `integrations/` | Other apps: `github` (the only place that talks to GitHub) and `paper` |
 | `config/` | The worker's settings |
-| `lib/` | Small helpers every feature reuses: files, requests, git, commands, `Result` |
+| `lib/` | Small helpers every feature reuses: files, requests, git, commands, repeating jobs, `Result` |
 | `main.ts`, `start.ts`, `worker.ts` | Start the worker and wire everything together |
 
 The API tests are in `apps/worker/test/`, beside `src/`.

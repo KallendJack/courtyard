@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Effort, MAX_MESSAGE_LENGTH, ModelRef, SessionId } from "./session.ts";
+import type { SessionEvent } from "./session-event.ts";
 
 // A code session's pull request (#172): the session opens it with gh, and the worker follows its
 // state and checks on GitHub, recording each change in the session's events. The owner reviews it
@@ -54,6 +55,23 @@ export const pullRequestEnded = (
   pullRequest: PullRequest | undefined,
 ): pullRequest is PullRequest & { state: "merged" | "closed" } =>
   pullRequest !== undefined && pullRequest.state !== "open";
+
+/** A session's pull request as it last stood, from its events, or `undefined` before it has one. */
+export const pullRequestIn = (events: readonly SessionEvent[]) => {
+  const last = events.findLast((event) => event.type === "pull-request");
+  return last?.type === "pull-request" ? last.pullRequest : undefined;
+};
+
+/**
+ * Whether a code session's worktree is cleared now, after 3 quiet days with no pull request
+ * (#605): the event that cleared it, with its `wip` branch, until a turn checks it out again.
+ */
+export const worktreeClearedIn = (events: readonly SessionEvent[]) => {
+  const last = events.findLast(
+    (event) => event.type === "worktree-cleared" || event.type === "worktree-restored",
+  );
+  return last?.type === "worktree-cleared" ? last : undefined;
+};
 
 /** One check on a pull request's latest commit, by name, and how it's going. */
 export const PullRequestCheck = z.object({
