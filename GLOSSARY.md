@@ -174,8 +174,10 @@ _Avoid_: layout diagram, ASCII plan, map, blueprint
 One item the owner has, wants or means to replace in a workspace, such as a bike, its chain or a padel racket: a card
 with a photo, its details and a dated history. A Thing can be part of another. Models keep Things current as they
 save context lines, and the owner undoes or edits (ADR 0020). What's next to do about one is a project's step, never
-something the Thing holds (#603).
-_Avoid_: item, kit (that's the list of them), gear, asset, part (that's a Thing part of another)
+something the Thing holds (#603). Each has a **kind** (ADR 0037): an item (a file that doesn't say), a **space** or a
+**tool**; the first time a size is recorded for one it gets a **subject ID**, which it keeps through a rename and
+which a record of its size points at.
+_Avoid_: item (except as the kind), kit (that's the list of them), gear, asset, part (that's a Thing part of another)
 
 **Upcoming**:
 What a Thing holds as coming next in its place (#602, ADR 0032): one replacement, its name, price, shop, link and why,
@@ -246,6 +248,13 @@ _Avoid_: room (one kind of space), area, zone (that's a part of a space to keep 
 A Thing of kind tool, kept at the owner's level so every project sees it (ADR 0037); a Build's steps use the tools to
 hand.
 _Avoid_: kit, equipment, hardware
+
+**Your tools**:
+The page in Fabrication where the owner ticks the tools they have, once, for every Build (#707): common tools as
+tiles in four groups, their own added by name, or **Or just say it** for a model to tick them. It comes before the
+first Build and from any Build's Tools. A workspace's Thing that looks like a tool comes ticked, saying what it is and
+where from ("F-clamps · from Garage"), and moves to the owner's tools with Save, keeping its name; Save has Undo.
+_Avoid_: toolbox, tool list, inventory
 
 **Fabrication**:
 The app the owner opens a Build in (`apps/fabrication`, ADR 0036): the chat about it, its 3D view and its build list.
