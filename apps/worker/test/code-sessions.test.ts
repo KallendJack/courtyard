@@ -234,6 +234,9 @@ const ROUTINE = [
   `python3 -c "print(open('README.md').read())"`,
   // An import path it writes into a file, from that file's folder, isn't a path it opens.
   `node -e 'require("fs").writeFileSync("apps/worker/src/features/code/moved.ts", "import { ok } from \\"../../lib/result.ts\\";\\n")'`,
+  // A comment marker in its text isn't the root, nor a folder named eval code that runs (#747).
+  `node -e "const fs=require('fs');const p='apps/worker/src/x.ts';const L=fs.readFileSync(p,'utf8').split('\\n');if(!L[3].startsWith('/** How many'))throw new Error('moved');L.splice(4,2);fs.writeFileSync(p,L.join('\\n'))"`,
+  `node -e "const fs=require('fs');const p='apps/worker/eval/context.ts';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace('a','b'))"`,
   // Moving, copying, making and removing files and folders.
   "git mv apps/web/src/block.tsx apps/web/src/components/block.tsx",
   "git rm -q apps/web/src/old-view.tsx",

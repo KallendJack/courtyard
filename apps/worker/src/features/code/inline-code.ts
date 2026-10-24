@@ -129,7 +129,9 @@ export const codeReachesOut = (worktree: string, words: readonly string[]) => {
   const opened = JAVASCRIPT.has(words[0] ?? "")
     ? withoutWrittenImports(code, relativeInside)
     : code;
-  return wordsIn(opened)
+  // A comment marker in its text (`"/** How many"`) is no path: `/` alone would read as the root
+  // (#747). Only a marker standing alone, so `"/*x"` stays the path it is.
+  return wordsIn(opened.replace(/(?<![^\s'"`])(?:\/\*+|\*+\/)(?![^\s'"`])/g, " "))
     .flatMap(pathsIn)
     .some((path) => outside(worktree, path));
 };
@@ -152,6 +154,25 @@ const JAVASCRIPT_RUNS = [
   /\\[ux0-7]/,
 ];
 
+/** The rules above that find a module by its name in a string (`"child_process"`, `"node:net"`). */
+const MODULE_NAMES = new Set([JAVASCRIPT_RUNS[0], JAVASCRIPT_RUNS[3]]);
+
+/**
+ * Code with the text of each string that holds a path blanked (`"apps/worker/eval/x.ts"`), so a
+ * folder named `eval` or `exec` isn't read as code that runs (#747). Any other string stays, so a
+ * name spelled in one (`[]["constructor"]`) still asks; nothing is blanked in code whose strings
+ * can't be told apart (`stringsIn`).
+ */
+const withoutPathText = (code: string) => {
+  const strings = stringsIn(code);
+  if (strings === undefined) return code;
+  let kept = code;
+  for (const { start, end } of strings)
+    if (/^[\w.@-]*\/[\w./@-]*$/.test(code.slice(start, end)))
+      kept = `${kept.slice(0, start)}${" ".repeat(end - start)}${kept.slice(end)}`;
+  return kept;
+};
+
 /** The same for Python: processes, sockets and the web, and code it loads or runs by a name. */
 const PYTHON_RUNS = [
   /\b(?:subprocess|pty|multiprocessing|socket|ssl|urllib|http|requests|ftplib|smtplib|ctypes)\b/,
@@ -168,7 +189,13 @@ export const codeRunsOthers = (words: readonly string[]) => {
   const [program = ""] = words;
   const code = codeOf(words);
   if (code === undefined) return false;
-  if (JAVASCRIPT.has(program)) return JAVASCRIPT_RUNS.some((runs) => runs.test(code));
+  if (JAVASCRIPT.has(program)) {
+    // Modules are named in strings, so those rules read the whole code, path text and all.
+    const named = withoutPathText(code);
+    return JAVASCRIPT_RUNS.some(
+      (runs) => runs.test(named) || (MODULE_NAMES.has(runs) && runs.test(code)),
+    );
+  }
   if (program.startsWith("py")) return PYTHON_RUNS.some((runs) => runs.test(code));
   return true;
 };
