@@ -4,7 +4,7 @@ import { Attachment, PhotoAttachment } from "./attachment.ts";
 import { ChangeId } from "./change-id.ts";
 import { DocumentSlug } from "./documents.ts";
 import { ProjectSave } from "./projects.ts";
-import { PullRequest } from "./pull-request.ts";
+import { PullRequest, WorktreeKeptWhy } from "./pull-request.ts";
 import { Effort, ModelRef, PlacedLine } from "./session.ts";
 import { SkillName, SkillSource } from "./skill-name.ts";
 import { TaskEnding, TaskId } from "./tasks.ts";
@@ -423,11 +423,10 @@ export const SessionEvent = z.discriminatedUnion("type", [
   }),
   /** The owner turned Allow all for this task off (#428) before it ran out. */
   z.object({ ...eventBase, type: z.literal("allow-all-ended") }),
-  /**
-   * Its worktree and branch were cleared after 3 quiet days with no pull request (#605), what
-   * GitHub lacked pushed to `wip` first; its next turn checks the branch out again (`restored`).
-   */
+  // Its worktree after 3 quiet days with no pull request (#605): cleared, what GitHub lacked on
+  // `wip` first, until its next turn checks the branch out again (`restored`); or kept, and why.
   z.object({ ...eventBase, type: z.literal("worktree-cleared"), wip: z.string().optional() }),
+  z.object({ ...eventBase, type: z.literal("worktree-kept"), why: WorktreeKeptWhy }),
   z.object({ ...eventBase, type: z.literal("worktree-restored") }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;

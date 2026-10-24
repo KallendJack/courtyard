@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitHubConnection } from "@courtyard/contract";
@@ -229,5 +229,183 @@ describe("a quiet code session with no pull request", () => {
 
     expect((await gitIn(worktree, "branch", "--show-current")).trim()).toBe(branch);
     expect(await readFile(join(worktree, "README.md"), "utf8")).toBe("# A project\n");
+  });
+});
+
+/** Commits what a session's worktree has, as its model would. */
+const commitAll = async (worktree: string, message: string) => {
+  await gitIn(worktree, "add", "--all");
+  await gitIn(worktree, "commit", "--quiet", "-m", message);
+};
+
+/** Why a session's worktree was kept, as its event says, once it says it. */
+const keptBecause = async (id: string) => {
+  const events = await followSession(request, { sessionId: id, until: "worktree-kept" });
+  const kept = events.at(-1);
+  return kept?.type === "worktree-kept" ? kept.why : undefined;
+};
+
+describe("a quiet code session whose work clearing could lose", () => {
+  it("is kept while a helper's commits are on its own branch only", async () => {
+    const { id, branch, worktree } = await codeSession("Look around");
+    const helper = `${worktree}-helper-1`;
+    await gitIn(worktree, "worktree", "add", "--quiet", "-b", `${branch}-helper-1`, helper, "HEAD");
+    await writeFile(join(helper, "shelf.md"), "Two brackets per shelf\n");
+    // Its merge back clashed, so its work waits on its branch for the session's model.
+    await commitAll(helper, "Shelf brackets");
+
+    clock += 4 * DAY_MS;
+    await runJobs();
+
+    expect(existsSync(worktree)).toBe(true);
+    expect(await gitIn(repo, "branch", "--list", `${branch}-helper-1`)).not.toBe("");
+    expect(await keptBecause(id)).toBe("helper-work");
+  });
+
+  it("is kept while a helper's worktree has changes it hasn't committed", async () => {
+    const { id, branch, worktree } = await codeSession("Look around");
+    const helper = `${worktree}-helper-1`;
+    await gitIn(worktree, "worktree", "add", "--quiet", "-b", `${branch}-helper-1`, helper, "HEAD");
+    await writeFile(join(helper, "shelf.md"), "Two brackets per shelf\n");
+
+    clock += 4 * DAY_MS;
+    await runJobs();
+
+    expect(existsSync(worktree)).toBe(true);
+    expect(await readFile(join(helper, "shelf.md"), "utf8")).toContain("brackets");
+    expect(await keptBecause(id)).toBe("helper-work");
+  });
+
+  it("is kept while it's on another branch than its own, which keeps its commits", async () => {
+    const { id, branch, worktree } = await codeSession(
+      "edit file notes.md: The rack goes on the back wall",
+    );
+    await commitAll(worktree, "Where the rack goes");
+    await gitIn(worktree, "checkout", "--quiet", "-b", "side-work");
+
+    clock += 4 * DAY_MS;
+    await runJobs();
+
+    expect(existsSync(worktree)).toBe(true);
+    expect(await gitIn(repo, "log", "-1", "--format=%s", branch)).toBe("Where the rack goes");
+    expect(await keptBecause(id)).toBe("other-branch");
+  });
+
+  it("is kept, said once, while new files look like secrets, which never reach GitHub", async () => {
+    const { id, branch, worktree } = await codeSession(
+      "edit file notes.md: The rack goes on the back wall",
+    );
+    await writeFile(join(worktree, ".env.local"), "SHED_TOKEN=made-up-token\n");
+
+    clock += 4 * DAY_MS;
+    await runJobs();
+    clock += 4 * DAY_MS;
+    await runJobs();
+
+    expect(existsSync(join(worktree, ".env.local"))).toBe(true);
+    expect(await onGitHub(`wip/${branch}`, "notes.md")).toBeUndefined();
+    expect(await keptBecause(id)).toBe("secret-files");
+    // A message's turn marks where the event log stands after both looks.
+    const kept = await followSession(request, { sessionId: id, until: "worktree-kept" });
+    await postJson(request, `/api/sessions/${id}/messages`, { text: "Go on", model: FAKE_MODEL });
+    const after = await followSession(request, {
+      sessionId: id,
+      until: "turn-completed",
+      after: kept.at(-1)?.seq ?? 0,
+    });
+    expect(after.map((event) => event.type)).not.toContain("worktree-kept");
+  });
+
+  it("pushes to wip/ when its branch is gone from GitHub, whatever the local refs say", async () => {
+    const { id, branch, worktree } = await codeSession(
+      "edit file notes.md: The rack goes on the back wall",
+    );
+    await commitAll(worktree, "Where the rack goes");
+    await gitIn(worktree, "push", "--quiet", "origin", branch);
+    // Deleted on GitHub, while the repository's origin/… ref still has it.
+    await gitIn(origin, "branch", "--quiet", "-D", branch);
+
+    clock += 4 * DAY_MS;
+    await runJobs();
+
+    expect(existsSync(worktree)).toBe(false);
+    expect(await onGitHub(`wip/${branch}`, "notes.md")).toContain("The rack goes on the back wall");
+    const events = await followSession(request, { sessionId: id, until: "worktree-cleared" });
+    expect(events.at(-1)).toMatchObject({ wip: `wip/${branch}` });
+  });
+
+  it("is kept when GitHub can't be asked what it has", async () => {
+    const { branch, worktree } = await codeSession(
+      "edit file notes.md: The rack goes on the back wall",
+    );
+    await commitAll(worktree, "Where the rack goes");
+    await gitIn(worktree, "push", "--quiet", "origin", branch);
+    // Gone from GitHub, which then can't be reached: only the stale origin/… ref says it's there.
+    await gitIn(origin, "branch", "--quiet", "-D", branch);
+    await rename(origin, `${origin}-away`);
+
+    clock += 4 * DAY_MS;
+    await runJobs();
+
+    expect(existsSync(join(worktree, "notes.md"))).toBe(true);
+    expect(await gitIn(repo, "branch", "--list", branch)).not.toBe("");
+  });
+
+  it("is kept when its push to wip/ fails", async () => {
+    const { branch, worktree } = await codeSession(
+      "edit file notes.md: The rack goes on the back wall",
+    );
+    await writeFile(join(origin, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n");
+
+    clock += 4 * DAY_MS;
+    await runJobs();
+
+    expect(existsSync(join(worktree, "notes.md"))).toBe(true);
+    expect(await gitIn(repo, "branch", "--list", branch)).not.toBe("");
+    expect(await onGitHub(`wip/${branch}`, "notes.md")).toBeUndefined();
+  });
+
+  it("is kept when its changes can't be committed", async () => {
+    const { branch, worktree } = await codeSession(
+      "edit file notes.md: The rack goes on the back wall",
+    );
+    // Signing with a program that isn't there fails every commit.
+    await gitIn(repo, "config", "commit.gpgsign", "true");
+    await gitIn(repo, "config", "gpg.program", "no-such-signer");
+
+    clock += 4 * DAY_MS;
+    await runJobs();
+
+    expect(await readFile(join(worktree, "notes.md"), "utf8")).toContain("back wall");
+    expect(await gitIn(repo, "branch", "--list", branch)).not.toBe("");
+  });
+});
+
+describe("a cleared session whose branch is on GitHub", () => {
+  it("is checked out again from it by its next message", async () => {
+    const { id, branch, worktree } = await codeSession(
+      "edit file notes.md: The rack goes on the back wall",
+    );
+    await commitAll(worktree, "Where the rack goes");
+    await gitIn(worktree, "push", "--quiet", "origin", branch);
+
+    clock += 4 * DAY_MS;
+    await runJobs();
+    const cleared = await followSession(request, { sessionId: id, until: "worktree-cleared" });
+    expect(cleared.at(-1)).not.toHaveProperty("wip");
+    expect(existsSync(worktree)).toBe(false);
+
+    await postJson(request, `/api/sessions/${id}/messages`, {
+      text: "Carry on",
+      model: FAKE_MODEL,
+    });
+    await followSession(request, {
+      sessionId: id,
+      until: "turn-completed",
+      after: cleared.at(-1)?.seq ?? 0,
+    });
+
+    expect((await gitIn(worktree, "branch", "--show-current")).trim()).toBe(branch);
+    expect(await readFile(join(worktree, "notes.md"), "utf8")).toContain("back wall");
   });
 });

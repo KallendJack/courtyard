@@ -3,6 +3,7 @@ import {
   type SessionEvent,
   type SessionId,
   type WorkspaceId,
+  type WorktreeKeptWhy,
   worktreeClearedIn,
 } from "@courtyard/contract";
 import { exists } from "../../lib/files.ts";
@@ -14,7 +15,7 @@ import { createClearingRetries } from "./following.ts";
  * A code session's worktree clears itself after 3 quiet days with no pull request (#605): what
  * GitHub lacks is pushed to its `wip/` branch first, and its next turn checks the branch out
  * again. One mid-turn, waiting on the owner, with a task running, or on a branch it didn't make
- * (#326) is kept.
+ * (#326) is kept, and so is one whose work a `wip` branch can't keep, which says why once.
  */
 
 /** How long a code session with no pull request is quiet before its worktree is cleared. */
@@ -44,7 +45,10 @@ export const createQuietWorktrees = (options: {
   busy: (id: SessionId) => Promise<boolean>;
   record: (
     id: SessionId,
-    event: { type: "worktree-cleared"; wip?: string } | { type: "worktree-restored" },
+    event:
+      | { type: "worktree-cleared"; wip?: string }
+      | { type: "worktree-kept"; why: WorktreeKeptWhy }
+      | { type: "worktree-restored" },
   ) => Promise<Result<unknown, unknown>>;
 }) => {
   const { code } = options;
@@ -82,7 +86,16 @@ export const createQuietWorktrees = (options: {
       );
       return;
     }
-    const wip = kept.value;
+    if (kept.value.kind === "stays") {
+      const { why } = kept.value;
+      // Said once, not each time it is looked at again.
+      const last = events.value.at(-1);
+      if (last?.type !== "worktree-kept" || last.why !== why) {
+        await options.record(session.id, { type: "worktree-kept", why });
+      }
+      return;
+    }
+    const { wip } = kept.value;
     await options.record(session.id, {
       type: "worktree-cleared",
       ...(wip === undefined ? {} : { wip }),

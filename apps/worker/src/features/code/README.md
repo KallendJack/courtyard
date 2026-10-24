@@ -29,6 +29,10 @@ Code sessions' git, and what they may do
   (only a `courtyard/…` one), saying whether the folder went (a program holding it keeps it on Windows).
 - **A quiet session's** (#605, `wip.ts`): `clearQuiet` first keeps what GitHub lacks (uncommitted changes committed
   without the repository's hooks, the branch pushed as `wip/<session branch>`), then clears the worktree and branch.
+  What GitHub has is fetched (with prune) first, never read from stale refs; a fetch, commit or push that fails
+  clears nothing. A worktree on another branch than its own, with new files that look like secrets (`.env*`,
+  `*.pem`, `*.key`, `id_rsa*`), or with a helper's work the branch lacks (committed on its own branch, or left in its
+  worktree) stays, and says why.
   `checkOutAgain` brings the branch back for its next turn: from its `wip/` branch, else the branch as GitHub or the
   repository has it, else afresh from the default branch; then deletes the `wip/` branch on GitHub.
 - `remote.ts`: the repository's remote, its default branch and its name on GitHub.

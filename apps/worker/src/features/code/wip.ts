@@ -1,6 +1,9 @@
-import { removeFolder } from "../../lib/files.ts";
+import { basename, dirname, join } from "node:path";
+import type { WorktreeKeptWhy } from "@courtyard/contract";
+import { listFolder, removeFolder } from "../../lib/files.ts";
 import { type CommandEnv, git, gitFailureReason, gitOrNothing } from "../../lib/git.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
+import { helperBranchStem, isHelperBranchOf } from "./branches.ts";
 import { type BranchRefusal, REMOTE, REMOTE_TIMEOUT_MS } from "./remote.ts";
 
 /**
@@ -14,18 +17,77 @@ export const wipBranchOf = (branch: string) => `wip/${branch}`;
 /** The commit that keeps what a cleared worktree had left uncommitted. */
 const WIP_MESSAGE = "Work in progress, kept as its worktree was cleared after 3 quiet days";
 
+/** A new file's name when it may hold a secret, which a `wip` branch would push to GitHub. */
+const SECRET_LOOKING = /^(\.env.*|.*\.pem|.*\.key|id_rsa.*)$/i;
+
+/** The files a worktree's status (`--porcelain -z`) lists as new to git: untracked or just added. */
+const newFilesIn = (status: string) =>
+  status.split("\0").flatMap((entry) => {
+    const path = /^(?:\?\?|A.) (.+)$/s.exec(entry)?.[1];
+    return path === undefined ? [] : [path];
+  });
+
+/**
+ * Why a quiet worktree stays, as no `wip` branch could keep all it has: it's on another branch
+ * than its own, it has new files that look like secrets, or a helper (#395) has work the branch
+ * lacks, committed on its own branch (a merge back that clashed) or left in its worktree.
+ */
+const whyItStays = async (keep: {
+  worktree: string;
+  branch: string;
+}): Promise<WorktreeKeptWhy | undefined> => {
+  const { worktree, branch } = keep;
+  if ((await git(worktree, ["branch", "--show-current"])) !== branch) return "other-branch";
+  const status = await git(worktree, ["status", "--porcelain", "-z", "--untracked-files=all"]);
+  if (newFilesIn(status).some((path) => SECRET_LOOKING.test(basename(path)))) {
+    return "secret-files";
+  }
+  const helpers = await git(worktree, [
+    "branch",
+    "--list",
+    "--format=%(refname:short)",
+    `${helperBranchStem(branch)}*`,
+  ]);
+  for (const helper of helpers.split(/\r?\n/).filter((name) => isHelperBranchOf(branch, name))) {
+    const ahead = await git(worktree, ["rev-list", "--count", helper, "--not", "HEAD"]);
+    if (ahead !== "0") return "helper-work";
+  }
+  const beside = dirname(worktree);
+  const folders = await listFolder(beside);
+  if (!folders.ok) return "helper-work";
+  for (const name of folders.value) {
+    if (!name.startsWith(`${basename(worktree)}-helper-`)) continue;
+    // A folder git can't read may still hold a helper's files, so it counts as work too.
+    const left = await gitOrNothing(join(beside, name), ["status", "--porcelain"]);
+    if (left !== "") return "helper-work";
+  }
+  return undefined;
+};
+
+/** What became of a quiet worktree's work: kept, so the worktree can go, or why it stays. */
+export type Keeping =
+  | { readonly kind: "kept"; readonly wip: string | undefined }
+  | { readonly kind: "stays"; readonly why: WorktreeKeptWhy };
+
 /**
  * Keeps everything a session's worktree has that GitHub lacks: what it left uncommitted is
  * committed on its branch, without the repository's hooks, and the branch is pushed as
- * `wip/<branch>`. Its name, none when GitHub had it all, or git's reason it couldn't be kept.
+ * `wip/<branch>`. Its name, none when GitHub had it all, why the worktree stays (`whyItStays`),
+ * or git's reason it couldn't be kept. What GitHub has is fetched first, never read from refs
+ * that may be stale, so a remote that can't be reached keeps the worktree as well.
  */
 export const keepOnWip = async (keep: {
   worktree: string;
   branch: string;
   env: CommandEnv;
-}): Promise<Result<string | undefined, string>> => {
+}): Promise<Result<Keeping, string>> => {
   const { worktree, env } = keep;
+  const remote = { timeoutMs: REMOTE_TIMEOUT_MS, env };
   try {
+    const why = await whyItStays(keep);
+    if (why !== undefined) return ok({ kind: "stays", why });
+    const refs = `+refs/heads/*:refs/remotes/${REMOTE}/*`;
+    await git(worktree, ["fetch", "--quiet", "--prune", REMOTE, refs], remote);
     if ((await git(worktree, ["status", "--porcelain"])) !== "") {
       await git(worktree, ["add", "--all"], { env });
       await git(worktree, ["commit", "--quiet", "--no-verify", "-m", WIP_MESSAGE], { env });
@@ -37,14 +99,14 @@ export const keepOnWip = async (keep: {
       "--not",
       `--remotes=${REMOTE}`,
     ]);
-    if (ahead.trim() === "0") return ok(undefined);
+    if (ahead === "0") return ok({ kind: "kept", wip: undefined });
     const wip = wipBranchOf(keep.branch);
     await git(
       worktree,
       ["push", "--quiet", "--force", "--no-verify", REMOTE, `HEAD:refs/heads/${wip}`],
-      { timeoutMs: REMOTE_TIMEOUT_MS, env },
+      remote,
     );
-    return ok(wip);
+    return ok({ kind: "kept", wip });
   } catch (error) {
     return err(gitFailureReason(error));
   }

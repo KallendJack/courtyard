@@ -25,4 +25,6 @@ one repository, or the owner working in it at the same time, would otherwise col
   for ever: after 3 quiet days with no pull request (no turn, event or commit), it's cleared too, unless the session is
   mid-turn, waits on the owner, has a task running or works on a branch it didn't make. What GitHub lacks goes first:
   uncommitted changes are committed and the branch pushed as `wip/<session branch>`, so nothing is lost. The session's
-  next turn checks the branch out again from there, and deletes the `wip/` branch.
+  next turn checks the branch out again from there, and deletes the `wip/` branch. What GitHub has is asked of it,
+  and anything the `wip` branch couldn't keep keeps the worktree: GitHub unreachable, a failed commit or push, the
+  worktree on another branch, a helper's work not on the branch, or new files that look like secrets.

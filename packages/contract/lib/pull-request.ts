@@ -73,6 +73,14 @@ export const worktreeClearedIn = (events: readonly SessionEvent[]) => {
   return last?.type === "worktree-cleared" ? last : undefined;
 };
 
+/**
+ * Why a quiet code session's worktree stays (#605), as clearing it could lose work: it's on another
+ * branch than the session's, it has new files that look like secrets (`.env`, a key) a `wip`
+ * branch would push to GitHub, or a helper's work isn't on the session's branch.
+ */
+export const WorktreeKeptWhy = z.enum(["other-branch", "secret-files", "helper-work"]);
+export type WorktreeKeptWhy = z.infer<typeof WorktreeKeptWhy>;
+
 /** One check on a pull request's latest commit, by name, and how it's going. */
 export const PullRequestCheck = z.object({
   name: z.string(),

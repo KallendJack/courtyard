@@ -755,8 +755,8 @@ things live only in the worker's memory and go when it restarts.
   (ADR 0007). It belongs to that repository's worktree list, so it stays when the session is deleted or set aside by
   a fresh start; it and its branch are cleared away once the session's pull request is merged or closed (#172),
   or after 3 quiet days with no pull request (#605: `sessions/`' `quiet-worktrees.ts`, run hourly), once what GitHub
-  lacks is pushed to `wip/<session branch>`. The session records `worktree-cleared` (with its `wip` branch) and its
-  page says so; its next turn checks the branch out again first (`worktree-restored`). A cleared session, a grill and
+  lacks is pushed to `wip/<session branch>`; one whose work that can't keep stays (`worktree-kept`, with why). The
+  session records `worktree-cleared` (with its `wip` branch) and its page says so; its next turn checks the branch out again first (`worktree-restored`). A cleared session, a grill and
   a Lead aren't asked about on GitHub, and a worktree a program holds is tried again later and later, its branch on
   GitHub deleted once.
 - `repos/<owner>/<name>/`: a GitHub repo New workspace → Code got onto the worker machine for a code

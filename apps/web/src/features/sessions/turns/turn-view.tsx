@@ -35,7 +35,7 @@ import { ThingNoteRow } from "../notes/things.tsx";
 import { CutOffCard } from "./cut-off-card.tsx";
 import type { AnswerPart, Helper, MarkedActivity, ShownImage, Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
-import { clearedWords, describeFailure } from "./turn-words.ts";
+import { describeFailure, worktreeWords } from "./turn-words.ts";
 
 /**
  * The value a command gives one of `options` (`-m "…"`, `--title=…`), the first time, or nothing.
@@ -595,8 +595,8 @@ export const TurnView = memo(function TurnView(props: {
         </section>
       )}
       {turn.state.kind === "stopped" && <TurnNote>You stopped this turn.</TurnNote>}
-      {/* Its worktree cleared after quiet days, with nothing lost (#605). */}
-      {turn.cleared !== undefined && <TurnNote>{clearedWords(turn.cleared.wip)}</TurnNote>}
+      {/* Its worktree cleared after quiet days, with nothing lost, or kept, and why (#605). */}
+      {turn.worktree !== undefined && <TurnNote>{worktreeWords(turn.worktree)}</TurnNote>}
       {/* The latest turn's end, so a finished session never looks like one still working (#179). */}
       {latest && (turn.state.kind === "done" || turn.state.kind === "stopped") && (
         <TurnEndMark at={turn.state.at} stopped={turn.state.kind === "stopped"} />

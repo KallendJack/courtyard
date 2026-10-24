@@ -80,7 +80,9 @@ most 10 seconds, timed by the `wait` the worker is given; past that it answers w
   keeps one mid-turn or waiting for a place, with a task running, a Lead's builder that's stuck, or one on a branch it
   didn't make (`keepsBranch`, #326).
 - **Nothing lost.** `code/`'s `clearQuiet` pushes what GitHub lacks to `wip/<session branch>` first, and the session
-  records `worktree-cleared` with it; its page says so under the last turn.
+  records `worktree-cleared` with it; its page says so under the last turn. One whose work a `wip` branch can't keep
+  (on another branch, new files that look like secrets, a helper's work not on its branch) stays, and records
+  `worktree-kept` with why, once; its page says that instead.
 - **Back for its next turn.** Any turn in it, the owner's or the worker's, first checks the branch out again
   (`code/`'s `checkOutAgain`) and records `worktree-restored`; one that can't says why (`branch-refused`).
 - Each `pull-request` event carries the PR's size (lines added and removed, files changed, #160), its title (#240),

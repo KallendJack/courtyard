@@ -771,14 +771,13 @@ export const createCode = (options: {
     },
 
     /**
-     * Clears a quiet session's worktree and branch away (#605), once what GitHub lacks is kept on
-     * its `wip/` branch (`keepOnWip`): that branch, none when GitHub had it all, or git's reason
-     * nothing was cleared.
+     * Clears a quiet session's worktree, branch and helpers away (#605), once what GitHub lacks is
+     * kept on its `wip/` branch (`keepOnWip`): that branch, why it stays, or git's reason it does.
      */
     clearQuiet: async (clear: { repoPath: string; sessionBranch: SessionBranch }) => {
       const { worktree, branch } = clear.sessionBranch;
       const kept = await keepOnWip({ worktree, branch, env: await options.commandEnv() });
-      if (kept.ok) await clearBranch({ ...clear, pushed: false });
+      if (kept.ok && kept.value.kind === "kept") await clearBranch({ ...clear, pushed: false });
       return kept;
     },
 

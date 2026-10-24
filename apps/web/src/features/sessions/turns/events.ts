@@ -25,6 +25,7 @@ import {
 import { useEffect, useReducer, useRef, useState } from "react";
 import type { Queued } from "@/components/chat/queued-message";
 import { changeHelper, withActivity, withHelper, withText } from "./parts.ts";
+import { type WorktreeNote, worktreeNoteOf } from "./turn-words.ts";
 
 /**
  * A save the model made, shown as a note under its answer, and what the owner has done with it
@@ -196,11 +197,8 @@ export type Turn = {
   readonly fromWorker: boolean;
   /** What the worker did for a code workspace's Lead after this turn (#347), each in its words. */
   readonly leadNotes: readonly string[];
-  /**
-   * Its session's worktree was cleared after it, 3 quiet days on with no pull request (#605), and
-   * the `wip/` branch its work went to, if it had any GitHub lacked.
-   */
-  readonly cleared: { readonly wip: string | undefined } | undefined;
+  /** What became of its session's worktree after it, 3 quiet days on with no pull request (#605). */
+  readonly worktree: WorktreeNote | undefined;
   /** When the owner's message was recorded, which the Working line counts from (#179). */
   readonly startedAt: string;
   /**
@@ -334,7 +332,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
               event.carriesOn === true ||
               event.afterLimit === true,
             leadNotes: [],
-            cleared: undefined,
+            worktree: undefined,
             startedAt: event.at,
             doing: { kind: "thinking" },
             state: { kind: "running" },
@@ -648,12 +646,13 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         seq,
         change: (turn) => ({ ...turn, leadNotes: [...turn.leadNotes, event.text] }),
       });
-    // Its worktree cleared after quiet days (#605), said under the turn before; the next turn
-    // checking it out again needs no words.
+    // Its worktree cleared or kept after quiet days (#605), said under the turn before; the next
+    // turn checking it out again needs no words.
     case "worktree-cleared":
+    case "worktree-kept":
       return withLastTurn(log, {
         seq,
-        change: (turn) => ({ ...turn, cleared: { wip: event.wip } }),
+        change: (turn) => ({ ...turn, worktree: worktreeNoteOf(event) }),
       });
     case "worktree-restored":
       return { ...log, lastSeq: seq };
