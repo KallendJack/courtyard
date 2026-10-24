@@ -74,7 +74,8 @@ test("the Lead's chat shows what it builds, what's next and what's ready to merg
 }) => {
   await page.goto(HOME);
   const running = page.getByRole("region", { name: "Running" });
-  await running.getByRole("link", { name: /Lead/ }).first().click();
+  // The Lead's own row: builders' rows say "by Lead" too, and draw before the Lead's is known.
+  await running.getByRole("listitem", { name: "Lead" }).getByRole("link").click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Lead");
   await expect(page.getByText("Started building Hooks on the pegboard")).toBeVisible();
   await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
@@ -92,7 +93,8 @@ test("told to pause, the Lead's builders carry on and nothing new starts; Run wa
 }) => {
   await page.goto(HOME);
   const running = page.getByRole("region", { name: "Running" });
-  await running.getByRole("link", { name: /Lead/ }).first().click();
+  await running.getByRole("listitem", { name: "Lead" }).getByRole("link").click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Lead");
   // The chat drawn first, so the box typed in is the one that stays.
   await expect(page.getByRole("region", { name: "Build order" })).toContainText("Building · 2");
   await expect(page.locator("main [data-placeholder]")).toHaveCount(0);
@@ -103,7 +105,7 @@ test("told to pause, the Lead's builders carry on and nothing new starts; Run wa
   await expect(page.getByText("Paused", { exact: false }).first()).toBeVisible();
 
   await page.goto(HOME);
-  const lead = running.getByRole("listitem").first();
+  const lead = running.getByRole("listitem", { name: "Lead" });
   await expect(lead).toContainText("Paused");
   // Its builders allow all, as the first test turned on: in gold, in place of "Builders carry on"
   // (#551).
