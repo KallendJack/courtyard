@@ -8,7 +8,7 @@ never style a raw `<button>`, `<input>` or error line themselves (AGENTS.md). Wh
 
 | Folder | What's in it |
 |---|---|
-| `layout/` | `caps-label.tsx`, notices, problems, Home's blocks, dialogs, the Courtyard mark |
+| `layout/` | Notices, problems, Home's blocks, dialogs, the Courtyard mark |
 | `buttons/` | Links that look like buttons, copy, thumb and sort buttons, a row as a button, the ⋯ menu |
 | `drawings/` | Kinds of things Courtyard draws itself, never a model: a mountain bike, with the places its parts go (#603), and its labels kept apart (`labels-apart.ts`, #657) |
 | `forms/` | Text fields, file pickers, selects, switches, tick boxes, segmented choices |

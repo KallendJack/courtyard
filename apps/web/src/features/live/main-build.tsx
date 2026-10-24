@@ -11,7 +11,7 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import { type ReactNode, useEffect, useState } from "react";
 import { WebButton } from "@/components/buttons/web-link";
 import { BuildGraph, BuildMiniGraph, OpenRow, useTicking } from "@/components/code/build-stages";
-import { CapsLabel } from "@/components/layout/caps-label";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { Sheet } from "@/components/sheets/sheet";
 import type { FromWorker } from "../../api/worker.ts";
 import { elapsedWords } from "../../lib/when.ts";

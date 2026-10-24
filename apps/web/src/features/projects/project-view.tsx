@@ -3,7 +3,7 @@ import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { BackLink } from "@/components/buttons/back-link";
-import { CapsLabel } from "@/components/layout/caps-label";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { stepDetail } from "./api.ts";
 import { useCarryOn } from "./carry-on.ts";
 

@@ -4,7 +4,7 @@ import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { CARD } from "@courtyard/ui/layout/page.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Switch } from "@/components/forms/switch";
-import { CapsLabel } from "@/components/layout/caps-label";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { dayAndTimeWords } from "@/lib/when";
 import { updateCopy } from "./api.ts";
 import { useCopyAt, wipeCopy } from "./store.ts";

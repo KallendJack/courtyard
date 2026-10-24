@@ -15,7 +15,7 @@ import { PanelsTopLeft } from "lucide-react";
 import { type KeyboardEvent, use, useLayoutEffect, useMemo, useState } from "react";
 import { RowButton } from "@/components/buttons/row-button";
 import { SegmentedChoice } from "@/components/forms/segmented-choice";
-import { CapsLabel } from "@/components/layout/caps-label";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { CardDialog } from "@/components/layout/card-dialog";
 import { KEPT_HOME, loadKeptHome } from "../../features/planning-home/api.ts";
 import { type DrawingProps, OnHome } from "./fenced.tsx";

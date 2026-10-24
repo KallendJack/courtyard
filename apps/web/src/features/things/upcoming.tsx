@@ -7,7 +7,7 @@ import { Check, Search } from "lucide-react";
 import { useState } from "react";
 import { ButtonLink } from "@/components/buttons/button-link";
 import { WebLink } from "@/components/buttons/web-link";
-import { CapsLabel } from "@/components/layout/caps-label";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { JustDeleted } from "../changes/just-deleted.tsx";
 import { fitUpcoming } from "./api.ts";

@@ -4,7 +4,7 @@ import { CARD } from "@courtyard/ui/layout/page.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useEffect, useState } from "react";
 import { Switch } from "@/components/forms/switch";
-import { CapsLabel } from "@/components/layout/caps-label";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { loadNotifications, turnOffHere, turnOnHere } from "./api.ts";
 

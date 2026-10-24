@@ -11,7 +11,7 @@ import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { RowButton } from "@/components/buttons/row-button";
 import { WebLink } from "@/components/buttons/web-link";
-import { CapsLabel } from "@/components/layout/caps-label";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
 import { clockWords } from "@/lib/when";
 import { loadRoadmap } from "./api.ts";

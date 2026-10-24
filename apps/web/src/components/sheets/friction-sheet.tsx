@@ -9,7 +9,7 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useEffect, useRef, useState } from "react";
 import { fileReport, loadPlace } from "../../features/friction/api.ts";
 import { type FilledIn, sizeWords } from "../../features/friction/filled-in.ts";
-import { CapsLabel } from "../layout/caps-label.tsx";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { describeProblem } from "../layout/problems.tsx";
 
 /** Where a report goes, as last known, so the sheet opens with it at once. */

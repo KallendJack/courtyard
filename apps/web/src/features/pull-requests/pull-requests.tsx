@@ -15,7 +15,7 @@ import { RefreshCw } from "lucide-react";
 import { type ComponentProps, lazy, Suspense, useState } from "react";
 import { ButtonLink } from "@/components/buttons/button-link";
 import { SegmentedChoice } from "@/components/forms/segmented-choice";
-import { CapsLabel } from "@/components/layout/caps-label";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { addStylesheet } from "@/lib/stylesheet";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { bringUpToDate } from "./api.ts";
