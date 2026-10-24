@@ -92,10 +92,10 @@ const at = (value: unknown, path: string) =>
 
 /**
  * A turn's Build check: the Build it should start or change, saved and worked out as expected, and
- * every number in its answer one the Build gives or the owner said: a size or price in mm, cm or m,
- * or pounds, and a count under 10 ("6 lengths") as the Build counts it, the review of #732 having
- * found counts went unchecked. Dates, step numbers and a list's own numbering aren't checked.
- * Nothing when the turn doesn't say.
+ * every number in its answer one the Build gives, or gave before the change, or the owner said: a
+ * size or price in mm, cm or m, or pounds, and a count under 10 ("6 lengths") as the Build counts
+ * it, the review of #732 having found counts went unchecked. Dates, step numbers and a list's own
+ * numbering aren't checked. Nothing when the turn doesn't say.
  */
 export const judgeBuilds = async (judge: {
   /** The scenario, and which of its turns this is. */
@@ -138,7 +138,7 @@ export const judgeBuilds = async (judge: {
   const path = buildPath(save.build.slug);
   const read = readBuildText(await readFile(join(folder, path), "utf8").catch(() => ""));
   if (!read.ok) return { checks: [{ miss: `${path} can't be read: ${read.error}` }], notes };
-  const { file, derived } = read.value;
+  const { file } = read.value;
   const checks: Check[] = Object.entries(expected.parameters ?? {}).map(([where, value]) => ({
     miss:
       JSON.stringify(at(file.parameters, where)) === JSON.stringify(value)
@@ -146,8 +146,8 @@ export const judgeBuilds = async (judge: {
         : `expected ${where} to be ${JSON.stringify(value)}, not ${JSON.stringify(at(file.parameters, where))}`,
   }));
   const before = scenario.files?.[path];
-  if (expected.changesOnly !== undefined && before !== undefined) {
-    const was = readBuildText(before);
+  const was = before === undefined ? undefined : readBuildText(before);
+  if (expected.changesOnly !== undefined && was !== undefined) {
     const changed = was.ok
       ? Object.keys(file.parameters).filter(
           (key) =>
@@ -157,11 +157,19 @@ export const judgeBuilds = async (judge: {
     const others = changed.filter((key) => !expected.changesOnly?.includes(key));
     checks.push({ miss: others.length === 0 ? null : `changed ${others.join(", ")} too` });
   }
-  const given = [...numbersIn(derived), ...numbersIn(file.parameters)];
+  // What it gave before the change counts too, as in "an offcut of 247 mm, not 197 mm" (#732).
+  const builds = [read.value, ...(was?.ok ? [was.value] : [])];
+  const given = builds.flatMap((one) => [
+    ...numbersIn(one.derived),
+    ...numbersIn(one.file.parameters),
+  ]);
   const ownerSaid = said.flatMap(numbersWritten).map(({ n }) => n);
   // A size or price may be in other units (900 mm as 0.9 m, 680p as £6.80); a count is as given.
   const sizes = [...given.flatMap((n) => [n, n / 10, n / 100, n / 1000]), ...ownerSaid];
-  const counts = [...countsIn(derived), ...numbersIn(file.parameters), ...ownerSaid];
+  const counts = [
+    ...builds.flatMap((one) => [...countsIn(one.derived), ...numbersIn(one.file.parameters)]),
+    ...ownerSaid,
+  ];
   const stray = numbersWritten(answer)
     .filter(({ n, count }) => !(count ? counts : sizes).some((one) => Math.abs(one - n) < 0.006))
     .map(({ n }) => n);

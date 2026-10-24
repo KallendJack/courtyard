@@ -1480,6 +1480,10 @@ describe("Courtyard's tools on a Codex turn", () => {
     ]);
     const read = offered.find((tool) => tool.name === "read_file");
     expect(read?.inputSchema.properties).toHaveProperty("path");
+    // Codex keeps no description of an object input, so a Build's parameters are described in the
+    // tool's own (#732): said under the input, Codex never saw them and sent `{}`.
+    const build = offered.find((tool) => tool.name === "save_build");
+    expect(build?.description).toContain("framed-bench's parameters, as JSON Schema");
     // Its experimental API is what lets the worker offer them.
     expect(codex.requests("initialize")[0]?.params).toMatchObject({
       capabilities: { experimentalApi: true },

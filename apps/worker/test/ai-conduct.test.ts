@@ -1897,14 +1897,11 @@ describe("Builds (#697, ADR 0036)", () => {
       `${await quotedInGuide("What the owner carries on over days")}\n\n${await quotedInGuide("Anything the owner will make")}`,
     );
     const tool = framing?.tools.find((offered) => offered.name === "save_build");
+    const schema = JSON.stringify(z.toJSONSchema(BenchParameters, { io: "input", reused: "ref" }));
     expect(tool?.description).toBe(
-      await quotedInGuide("Starts or changes one of this workspace's Builds"),
+      await quotedInGuide("Starts or changes one of this workspace's Builds", { schema }),
     );
-    expect(inputsOf(tool)).toBe(
-      await quotedInGuide("- build: To change a Build", {
-        schema: JSON.stringify(z.toJSONSchema(BenchParameters, { io: "input", reused: "ref" })),
-      }),
-    );
+    expect(inputsOf(tool)).toBe(await quotedInGuide("- build: To change a Build"));
   });
 
   it("says when there are none yet, and keeps the numbers to the tool's reply", async () => {

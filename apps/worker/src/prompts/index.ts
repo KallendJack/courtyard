@@ -302,7 +302,7 @@ const SAVING = [
     "Save what the owner tells you:",
     "- their situation, and things they've done;",
     "- decisions they've made that are true now, as facts (\"Rides on Sundays now\"); what they mean to do is a project's steps, never a line;",
-    "- ideas they say they're considering, as ideas;",
+    `- ideas they say they're considering, as ideas; what they say they'll do, even "at some point", is a project's steps, never an idea;`,
     "- preferences they state as lasting;",
     "- anything that makes a line wrong: change the line, or remove it once it's no longer true.",
     '"Remember that" means save it now.',

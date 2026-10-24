@@ -378,7 +378,9 @@ kept so it can't come back unseen.
 
 Changed with #697, from the review of #719: giving a caveat once must not swallow a safety step at the moment it
 applies. `planning-safety-step-not-a-repeat` gives a caveat about cables early, then the owner says they're drilling
-the first hole now: the answer includes the scan. It hasn't been run against the real models yet.
+the first hole now: the answer includes the scan. Run 3 times on each provider on 2026-10-24 (#732): Claude passed 3 of
+3; Codex passed 1 of 3, saving "considering fixing a shelf" as an idea, until the save rule said what the owner says
+they'll do, even "at some point", is never an idea, then 3 of 3.
 
 ## Courtyard's file tools
 
@@ -1783,21 +1785,24 @@ With none yet:
 > screws. The owner sees each change as a note under your answer, so leave saves unmentioned.
 
 **The save_build tool,** offered beside the project tool, as a model reads it, and its inputs (`<schema>` is the
-template's parameters as JSON Schema, from `BenchParameters`):
+template's parameters as JSON Schema, from `BenchParameters`). The parameters' shape is in the tool's own
+description, not the input's: Codex's tool format keeps no description of an input that's an object, so there it
+never reached the model, and Codex sent `{}` (#732):
 
 > Starts or changes one of this workspace's Builds, and replies with everything code works out from it: its parts, cut
 > plan, buy list with its total, steps and findings. Given a Build's label, it renames it or changes the parameters
 > you give; without one, it starts a new Build. Given only a Build's label, or a change that changes nothing, it
 > changes nothing and replies with its numbers as they are, so call it that way whenever you need a Build's numbers.
-> Follow the rule for Builds in your instructions.
+> Follow the rule for Builds in your instructions. Its parameters: a new Build's are all of them; a change gives only
+> what changes, merged into what's there (an object merges, null takes a value out, anything else replaces it). Every
+> size is {"value": 900, "unit": "mm", "source": {"kind": "measured"}}, its source measured, specified (with its
+> reference, the maker's page) or assumed. framed-bench's parameters, as JSON Schema: <schema>
 
 > - build: To change a Build, or read its numbers: its label, such as B1. Leave it out to start one.
 > - name: Its name, as the owner would say it, such as Workbench. A new Build needs one.
 > - template: What it's made from: framed-bench, a bench or table on a timber frame. A new Build needs one.
-> - parameters: A new Build's parameters, all of them; to change one, only what changes, merged into what's there (an
->   object merges, null takes a value out, anything else replaces it). Every size is {"value": 900, "unit": "mm",
->   "source": {"kind": "measured"}}, its source measured, specified (with its reference, the maker's page) or assumed.
->   framed-bench's parameters, as JSON Schema: <schema>
+> - parameters: A new Build's parameters, all of them; to change one, only what changes. Their shape is in this tool's
+>   description.
 > - project: The project whose step makes it, by its label, such as P1, given with step.
 > - step: That project's step that makes it, 1 for the first as its file lists them.
 
@@ -1824,9 +1829,11 @@ asked for a bench, the model uses the tool, and every length, count and total in
 derives (`build-bench-numbers`); asked to make it 50 mm lower, it changes the height parameter and writes no length of
 its own (`build-change-one-size`). A size or price may be in other units (900 mm as 0.9 m); a whole number under 10
 with no unit is a count ("6 lengths") and must be one the Build counts (a part's count, a buy line's packs, how many
-lengths or sheets), while dates, step numbers and a list's own numbering aren't checked. They haven't been run against
-the real models yet (nor has whether Codex takes the tool's ~4 KB schema): until they pass on both, this rule is
-unproven.
+lengths or sheets), while dates, step numbers and a list's own numbering aren't checked. A number the Build gave
+before the change counts too, so "an offcut of 247 mm, not 197 mm" passes. Run 3 times on each provider on 2026-10-24
+(#732): Claude passed both 3 of 3, once the check took the Build's numbers from before the change (it had failed every
+answer that said what a length was); Codex passed the change 3 of 3 and the bench 0 of 3, sending `{}` as parameters,
+until their shape moved into the tool's description, then 3 of 3.
 
 ## The move review
 
@@ -2025,7 +2032,8 @@ Added to the instructions in Every turn:
 
 - **Save** what the owner says about their situation, decisions they've made that are true now (as facts), things
   they've done, ideas they say they're considering, and preferences they state as lasting ("always", "stop doing
-  that"). What they mean to do is a project's steps (Projects, above), never a line.
+  that"). What they mean to do, even "at some point", is a project's steps (Projects, above), never a line, nor an
+  idea (from #732, where Codex saved "I'll be fixing a shelf at some point" as one).
 - **Don't save** the model's own suggestions unless the owner agrees to them, one-off requests ("shorter this time"),
   passing chat, or anything the context already says.
 - **From files, only when asked.** What a model reads in the workspace's files is saved only when the owner asks about
