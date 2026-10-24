@@ -229,6 +229,21 @@ describe("Next up (#301)", () => {
     ]);
   });
 
+  it("reads a Build order line with a note in brackets before its colon (#687)", async () => {
+    const { request } = await signedInWith(
+      [
+        { number: 1, title: "One", milestone: "4 · Code workspaces" },
+        { number: 3, title: "Three", milestone: "4 · Code workspaces" },
+      ],
+      { milestones: { "4 · Code workspaces": "Build order (owner, 2026-10-21): #3 → #1." } },
+    );
+
+    expect(await nextUpOf(request)).toEqual([
+      [3, "4 · Code workspaces"],
+      [1, "4 · Code workspaces"],
+    ]);
+  });
+
   it("lists every issue that needs grilling first, those on a Build order line in their place and the rest after them by number (#363, #463)", async () => {
     const { request } = await signedInWith(
       [

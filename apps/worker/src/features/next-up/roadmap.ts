@@ -3,7 +3,8 @@ import type {
   FoundMilestoneIssue,
   FoundRoadmapMilestone,
 } from "../../integrations/github/index.ts";
-import { buildOrderOf, claimedIn, closes, GRILL_LABELS, milestoneRank } from "./index.ts";
+import { buildOrderOf } from "./build-order-line.ts";
+import { claimedIn, closes, GRILL_LABELS, milestoneRank } from "./index.ts";
 
 /**
  * A code workspace's Roadmap (#532): every open milestone in the roadmap's order, each issue in
