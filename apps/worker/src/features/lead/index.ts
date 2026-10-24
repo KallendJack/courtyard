@@ -43,6 +43,8 @@ import { getWorkspace, listCodeWorkspaces, type WorkspaceError } from "../worksp
  * request is ready to merge, sends the Lead a turn when one merges (to move its boards and keep the
  * plan current), holds itself back while main is red, the machine is busy with the owner's own
  * sessions, or a builder waits on the owner's decision, and rests when nothing is ready to build.
+ * For as long as the owner's Run said (#457), a resting Lead wakes for new work, within brakes: no
+ * new builder while its pull requests wait on the owner's review, and only so many a run.
  * The Lead's model talks with the owner and changes how the order runs with its build order tool.
  * Merging, Update, reordering and filing issues stay the owner's.
  */
@@ -467,6 +469,9 @@ export const createLead = (options: {
     const kept = await mergeStep(await watchBuilders(was, listed), listed);
     if (kept.state === "running") return (await carryOn(workspaceId, kept, listed, false)).kept;
     if (kept.state !== "resting" || wakesUntilOf(kept) === undefined) return kept;
+    // Only an issue ready to build is worth a closer look (main's checks, the builders' files).
+    const issues = await nextUp.fresh(workspaceId);
+    if (!issues.ok || nextOf(kept, issues.value).length === 0) return kept;
     // It wakes only once a builder starts (or it has built enough this run); until then it rests
     // quietly, remembering only what it has said.
     const { why: _, ...rest } = kept;

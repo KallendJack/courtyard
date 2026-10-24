@@ -14,6 +14,7 @@ import { ByLead, LeadMark } from "@/components/code/lead-mark";
 import { FormError } from "@/components/forms/form-error";
 import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
 import { useAction } from "@/hooks/use-action";
+import { clockWords } from "@/lib/when";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { codingModelIn } from "../pull-requests/api.ts";
 import { pauseLead, runLead } from "./api.ts";
@@ -135,7 +136,8 @@ const leadTitle = (lead: LeadStatus) => {
 
 /**
  * The line under it: what it's doing, or why it holds back, rests or is paused. While it runs with
- * Allow all for builders (#428), how long that has left.
+ * Allow all for builders (#428), how long that has left; resting within the window its Run gave
+ * (#457), until when it wakes for new work.
  */
 const leadLine = (lead: LeadStatus) => {
   switch (lead.state) {
@@ -147,6 +149,10 @@ const leadLine = (lead: LeadStatus) => {
     case "paused":
       return "Builders carry on · nothing new starts";
     default:
+      if (lead.wakesUntil !== undefined) {
+        // The time first, so a narrow row still shows it.
+        return `Until ${clockWords(lead.wakesUntil)} · wakes for new work`;
+      }
       return lead.why ?? "Nothing ready to build";
   }
 };

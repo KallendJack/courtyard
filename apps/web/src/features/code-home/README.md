@@ -43,3 +43,6 @@ and Next up offers Build on the next issue.
   one place, `needs.ts`, with no React or styles, so the home page's tiles read it the same way; nothing in the web
   app works it out.
 - Merge in order (`merge-in-order.ts`) hands the Lead the pull requests the screen showed.
+- **Run the build order's sheet** (`next-up.tsx`) asks how long the Lead keeps going (#457): just what's ready now,
+  4 hours (chosen at first) or until tonight; the Lead's row in Running then says, while it rests, until when it
+  wakes for new work. Its row's Run keeps going 4 hours.

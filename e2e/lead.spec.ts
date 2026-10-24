@@ -47,6 +47,11 @@ test("Run the build order starts the Lead, which starts two builders and keeps t
   await shot(page, "lead-confirm");
   await allowAll.click();
   await expect(allowAll).toHaveAttribute("aria-checked", "true");
+  // How long it keeps going (#457): 4 hours unless the owner says.
+  const keepGoing = dialog.getByRole("group", { name: "Keep going" });
+  await expect(keepGoing.getByRole("radio", { name: "4 hours" })).toBeChecked();
+  await expect(keepGoing.getByRole("radio", { name: "Just what's ready now" })).toBeVisible();
+  await expect(keepGoing.getByRole("radio", { name: "Until tonight" })).toBeVisible();
   await shot(page, "lead-confirm-allow-all");
   await dialog.getByRole("button", { name: "Run the build order" }).click();
   await expect(dialog).toBeHidden();
@@ -105,6 +110,40 @@ test("told to pause, the Lead's builders carry on and nothing new starts; Run wa
   // Woken, its builders still allow all, as the first test turned on (#428): that's its line.
   await expect(lead).toContainText(/Builders allowed all · 1[12] h left/);
   await expect(lead.getByRole("button", { name: "Pause" })).toBeVisible();
+});
+
+test("resting within its window, the Lead's row says until when it wakes for new work (#457)", async ({
+  page,
+  request,
+}) => {
+  const real = LeadStatus.parse(await (await request.get(`/api${HOME}/lead`)).json());
+  const tonight = new Date();
+  tonight.setHours(22, 0, 0, 0);
+  await page.route(`**/api${HOME}/lead`, (route) =>
+    route.fulfill({
+      json: {
+        ...real,
+        state: "resting",
+        why: "Nothing ready to build.",
+        building: [],
+        wakesUntil: tonight.toISOString(),
+      },
+    }),
+  );
+
+  await page.goto(HOME);
+
+  const lead = page
+    .getByRole("region", { name: "Running" })
+    .getByRole("listitem", { name: "Lead" });
+  // 22:00 as the browser's clock shows it.
+  const clock = await page.evaluate(
+    (iso) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    tonight.toISOString(),
+  );
+  await expect(lead).toContainText(`RestingUntil ${clock} · wakes for new work`);
+  await shot(page, "lead-resting-wakes");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
 // Merge in order and holding back (#423; Paper, "Code Home, Merge in order", "Lead chat, merging

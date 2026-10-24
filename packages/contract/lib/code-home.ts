@@ -132,7 +132,7 @@ export const LEAD_BUILDERS = { atLeast: 1, byDefault: 2, atMost: 3 } as const;
  * The Lead's brakes (#457), on top of the code sessions' slots: no new builder while this many of
  * its pull requests wait on the owner's review, and at most this many builders a run.
  */
-export const LEAD_BRAKES = { reviewsWaiting: 99, buildsPerRun: 4 } as const;
+export const LEAD_BRAKES = { reviewsWaiting: 2, buildsPerRun: 4 } as const;
 
 /** A builder the Lead started (#347): its session, its title, and the issue it builds. */
 export const LeadBuilder = z.object({

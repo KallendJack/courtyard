@@ -871,13 +871,19 @@ describe("Merge in order (#423)", () => {
   const mergeInOrder = (request: Requester, pullRequests: readonly (number | undefined)[]) =>
     postJson(request, "/api/workspaces/side-project/lead/merge-in-order", { pullRequests });
 
-  /** Runs the worker's jobs until `done` holds, as time passing would. */
+  /**
+   * Runs the worker's jobs until `done` holds, as time passing would. Each round of a resting Lead
+   * also asks Next up for new work (#457), so a round takes longer than a poll's usual second.
+   */
   const until = async (done: () => boolean | Promise<boolean>) =>
     expect
-      .poll(async () => {
-        await runJobs();
-        return done();
-      })
+      .poll(
+        async () => {
+          await runJobs();
+          return done();
+        },
+        { timeout: 10_000 },
+      )
       .toBe(true);
 
   it("merges the ready pull requests one at a time, in the build order's order, then says so", async () => {

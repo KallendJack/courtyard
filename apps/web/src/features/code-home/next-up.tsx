@@ -1,5 +1,7 @@
 import {
   buildable,
+  LEAD_BRAKES,
+  type LeadKeepGoing,
   type LeadStatus,
   type NextUpIssue,
   type ProviderList,
@@ -10,6 +12,7 @@ import { Flame, Play, Zap } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/buttons/button";
 import { FormError } from "@/components/forms/form-error";
+import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { Switch } from "@/components/forms/switch";
 import { useBlocksFill } from "@/components/frame/handheld";
 import { DialogCard } from "@/components/layout/dialog-card";
@@ -23,6 +26,13 @@ import { runLead, startOnIssue } from "./api.ts";
 
 /** On a phone and the cover screen, how many issues show before More. */
 const SHOWN = 3;
+
+/** How long Run the build order keeps going (#457), as its sheet offers it. */
+const KEEP_GOING: readonly { value: LeadKeepGoing; label: string }[] = [
+  { value: "ready-now", label: "Just what's ready now" },
+  { value: "4h", label: "4 hours" },
+  { value: "tonight", label: "Until tonight" },
+];
 
 /** From a tablet up, a narrow column beside Needs you and Running, as tall as theirs. */
 const COLUMN = "flex min-w-0 flex-col md:min-h-0 md:w-62.5 md:shrink-0 xl:w-80";
@@ -278,6 +288,8 @@ function StartOnIssue(props: {
   /** Allow all for builders (#428), off unless the owner turns it on. */
   const [allowAll, setAllowAll] = useState(false);
   const allowAllName = useId();
+  /** How long the Lead keeps going (#457): a resting Lead wakes for new work until then. */
+  const [keepGoing, setKeepGoing] = useState<LeadKeepGoing>("4h");
   const leading = props.lead?.status.state === "running";
   /** Start and Cancel, brought into view when they open in a column too short for them (#335). */
   const choices = useRef<HTMLDivElement>(null);
@@ -302,7 +314,7 @@ function StartOnIssue(props: {
   });
   const runOrder = useAction(async () => {
     if (model === undefined) return "No model that codes is available right now.";
-    const started = await runLead(props.workspaceId, { model: model.ref, allowAll });
+    const started = await runLead(props.workspaceId, { model: model.ref, allowAll, keepGoing });
     if (started.kind !== "loaded") return describeProblem(started).body;
     setRunning(false);
     props.lead?.onLead(started.data);
@@ -463,6 +475,23 @@ function StartOnIssue(props: {
               onChange={setAllowAll}
               labelledBy={`${allowAllName}-name`}
               describedBy={`${allowAllName}-more`}
+            />
+          </div>
+          {/* How long it keeps going (#457), in the same style: within it, a resting Lead wakes
+              for new work. */}
+          <div className="flex flex-col gap-2 rounded-row bg-secondary px-4 py-3">
+            <div className="flex flex-col gap-0.5">
+              <p className="text-interface font-bold text-foreground">Keep going</p>
+              <p className="text-meta text-muted-foreground">
+                Within it, a resting Lead wakes for new work. At most {LEAD_BRAKES.buildsPerRun}{" "}
+                builds, none while {LEAD_BRAKES.reviewsWaiting} PRs wait on your review.
+              </p>
+            </div>
+            <SegmentedChoice
+              label="Keep going"
+              options={KEEP_GOING}
+              value={keepGoing}
+              onChange={setKeepGoing}
             />
           </div>
           <FormError message={runOrder.error} />
