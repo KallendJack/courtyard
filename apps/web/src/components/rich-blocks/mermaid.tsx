@@ -1,7 +1,7 @@
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import mermaid from "mermaid";
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import { Scroller } from "@/components/layout/scroller";
-import { classes } from "@/lib/classes";
 import { cleanDiagram } from "./diagram-svg.ts";
 import { DrawingPlace, type DrawingProps } from "./fenced.tsx";
 import { RichBlock } from "./rich-block.tsx";

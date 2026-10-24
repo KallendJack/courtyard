@@ -1,6 +1,6 @@
 import { StatusLine, type WorkspaceId } from "@courtyard/contract";
+import { createKept } from "@courtyard/ui/layout/kept.tsx";
 import { fromWorker } from "../../api/worker.ts";
-import { createKept } from "../../components/layout/kept.tsx";
 
 // The status line's calls (#256), beside it so their schemas stay off the first load.
 

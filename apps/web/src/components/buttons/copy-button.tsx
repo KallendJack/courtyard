@@ -1,6 +1,6 @@
+import { Button, IconButton } from "@courtyard/ui/buttons/button.tsx";
 import { Check, Copy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button, IconButton } from "./button.tsx";
 
 /** How long a copy button says Copied before it's a copy button again. */
 const COPIED_FOR_MS = 2000;

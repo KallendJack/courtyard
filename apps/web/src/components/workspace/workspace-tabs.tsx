@@ -1,7 +1,7 @@
 import type { WorkspaceId } from "@courtyard/contract";
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Link } from "@tanstack/react-router";
-import { classes } from "@/lib/classes";
-import { Scroller } from "../layout/scroller.tsx";
 
 /** One of a workspace's tabs: its place in the address's hash (none for Home), name and count. */
 export type WorkspaceTab = {

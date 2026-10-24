@@ -1,6 +1,6 @@
+import { type Busy, useBusy } from "@courtyard/ui/buttons/button.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import type { ComponentProps } from "react";
-import { classes } from "@/lib/classes";
-import { type Busy, useBusy } from "./button.tsx";
 
 /**
  * The Paper boards' thumb-sized buttons (Handheld · 16, 17, 18), side by side at the bottom of a

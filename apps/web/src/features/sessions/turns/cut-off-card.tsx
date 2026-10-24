@@ -1,9 +1,9 @@
 import type { Doing } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { RotateCcw } from "lucide-react";
-import { Button } from "@/components/buttons/button";
 import { OptionsMenu } from "@/components/buttons/options-menu";
-import { FormError } from "@/components/forms/form-error";
-import { useAction } from "@/hooks/use-action";
 import { clockWords } from "../../../lib/when.ts";
 import type { Turn } from "./events.ts";
 

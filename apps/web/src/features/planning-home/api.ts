@@ -1,6 +1,6 @@
 import { PlanningHome, type WorkspaceId } from "@courtyard/contract";
+import { createKept } from "@courtyard/ui/layout/kept.tsx";
 import { fromWorker } from "../../api/worker.ts";
-import { createKept } from "../../components/layout/kept.tsx";
 
 // A planning workspace's Home's call (#208, #603), beside it so its schema stays off the first
 // load.

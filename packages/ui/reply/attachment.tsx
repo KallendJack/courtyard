@@ -1,7 +1,7 @@
 import { sizeInWords } from "@courtyard/contract";
 import { FileText, Image as ImageIcon, X } from "lucide-react";
-import { classes } from "@/lib/classes";
 import { IconButton } from "../buttons/button.tsx";
+import { classes } from "../lib/classes.ts";
 
 /**
  * Where an attachment shows (#78): in the message box's tray before sending, with a button to take

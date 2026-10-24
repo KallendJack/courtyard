@@ -11,23 +11,23 @@ import type {
   WorkspaceSummary,
 } from "@courtyard/contract";
 import { hasLines } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { useDock } from "@courtyard/ui/frame/handheld.ts";
+import { useKept } from "@courtyard/ui/layout/kept.tsx";
+import { Page, type TitleBeside } from "@courtyard/ui/layout/page.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight, FileText, Image, Tag } from "lucide-react";
 import { type ReactNode, useEffect, useLayoutEffect, useState } from "react";
 import { flushSync } from "react-dom";
-import { Button } from "@/components/buttons/button";
 import { useFilePicker } from "@/components/forms/file-picker";
 import { CardDialog } from "@/components/layout/card-dialog";
-import { useKept } from "@/components/layout/kept";
 import { Notice } from "@/components/layout/notice";
 import { NotKept, OfflineLine } from "@/components/layout/offline";
-import { Page, type TitleBeside } from "@/components/layout/page";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace/workspace-tabs";
-import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
 import type { FromWorker } from "../../api/worker.ts";
 import type { OfflinePage } from "../../api/workspace-page.ts";
-import { useDock } from "../../components/frame/handheld.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { DocumentsSection } from "../documents/documents-section.tsx";
 import { MoveReview } from "../move-review/move-review.tsx";

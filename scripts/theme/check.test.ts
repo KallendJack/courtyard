@@ -1,4 +1,5 @@
-// The theme guard (#232), run as `pnpm verify` runs it, against a web app's source made up here.
+// The theme guard (#232), run as `pnpm verify` runs it, against a repo's source made up here: a
+// web app's and the shared pieces' (packages/ui, #703).
 //
 //   node --test scripts/theme/
 
@@ -19,18 +20,23 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-/** A web app's source: each file's path in `src` and what's in it. */
-const source = async (files: Readonly<Record<string, string>>) => {
+/** The web app's source and the shared pieces', from the repo's root. */
+const WEB = "apps/web/src";
+const UI = "packages/ui";
+
+/** Source in one of those folders: each file's path in it and what's in it. */
+const sourceIn = async (folder: string, files: Readonly<Record<string, string>>) => {
   for (const [path, text] of Object.entries(files)) {
-    await mkdir(dirname(join(root, "src", path)), { recursive: true });
-    await writeFile(join(root, "src", path), text);
+    await mkdir(dirname(join(root, folder, path)), { recursive: true });
+    await writeFile(join(root, folder, path), text);
   }
 };
+const source = (files: Readonly<Record<string, string>>) => sourceIn(WEB, files);
 
-/** Runs the guard on that source with an allowlist; what it says, and whether it passed. */
+/** Runs the guard on that repo with an allowlist; what it says, and whether it passed. */
 const check = async (allowed: readonly object[] = []) => {
   await writeFile(join(root, "allowed.json"), JSON.stringify(allowed));
-  const run = spawnSync(process.execPath, [CHECK, join(root, "src"), join(root, "allowed.json")], {
+  const run = spawnSync(process.execPath, [CHECK, root, join(root, "allowed.json")], {
     encoding: "utf8",
   });
   return { passed: run.status === 0, said: `${run.stdout}${run.stderr}` };
@@ -66,6 +72,19 @@ test("fails a size, colour, radius, shadow or ring written by value, naming each
     "sessions/turn.tsx:1: text-sm/[18px]",
   ])
     assert.match(said, new RegExp(value.replace(/[[\]()]/g, "\\$&")));
+});
+
+test("checks the shared pieces as the web app, but not the theme itself or what's installed", async () => {
+  await source({ "styles.css": THEME });
+  await sourceIn(UI, {
+    "theme.css": ":root { --primary: #9d6bff; }",
+    "buttons/button.tsx": `export const Button = () => <button className="text-[13px]" />;`,
+    "node_modules/library/index.ts": `export const ink = "#123456";`,
+  });
+  const { passed, said } = await check();
+  assert.equal(passed, false);
+  assert.match(said, /packages\/ui\/buttons\/button\.tsx:1: text-\[13px\]/);
+  assert.doesNotMatch(said, /theme\.css:|node_modules/);
 });
 
 test("fails a colour by its hex outside styles.css, but not an issue named in a comment", async () => {
@@ -107,9 +126,11 @@ export const Save = () => (
 });
 
 test("fails anything that scrolls by itself, outside the shared scroller (#420)", async () => {
+  await sourceIn(UI, {
+    "layout/scroller.tsx": `const AXES = { y: "overflow-y-auto", tablet: "md:overflow-auto" };`,
+  });
   await source({
     "styles.css": THEME,
-    "components/layout/scroller.tsx": `const AXES = { y: "overflow-y-auto", tablet: "md:overflow-auto" };`,
     "review/diff.tsx": `// Scrolls with overflow-y-auto (#278).
 export const Lines = () => (
   <>
@@ -138,9 +159,13 @@ export const Lines = () => (
   );
 
   // What can't be the shared scroller, an element a library makes, is allowed with its reason.
-  await rm(join(root, "src", "review"), { recursive: true });
+  await rm(join(root, WEB, "review"), { recursive: true });
   const allowed = await check([
-    { file: "sessions/maths.css", value: "overflow-x: auto", reason: "KaTeX makes the element." },
+    {
+      file: `${WEB}/sessions/maths.css`,
+      value: "overflow-x: auto",
+      reason: "KaTeX makes the element.",
+    },
   ]);
   assert.deepEqual(allowed, { passed: true, said: "" });
 });
@@ -172,17 +197,17 @@ export const Above = () => (
   assert.doesNotMatch(said, /caps-label\.tsx:|workspace\.tsx:[167]|notes\.css:1/);
 
   // What isn't a section's label, a mark in a pill, is allowed with its reason.
-  await rm(join(root, "src", "sessions"), { recursive: true });
+  await rm(join(root, WEB, "sessions"), { recursive: true });
   const allowed = await check([
-    { file: "routes/workspace.tsx", value: "uppercase", reason: "A pill's mark." },
-    { file: "routes/workspace.tsx", value: "md:uppercase", reason: "A pill's mark." },
+    { file: `${WEB}/routes/workspace.tsx`, value: "uppercase", reason: "A pill's mark." },
+    { file: `${WEB}/routes/workspace.tsx`, value: "md:uppercase", reason: "A pill's mark." },
   ]);
   assert.deepEqual(allowed, { passed: true, said: "" });
 });
 
 test("passes a one-off on the allowlist, which has to say why", async () => {
   await source({ "styles.css": THEME, "photo.ts": `context.fillStyle = "#ffffff";` });
-  const entry = { file: "photo.ts", value: "#ffffff" };
+  const entry = { file: `${WEB}/photo.ts`, value: "#ffffff" };
 
   assert.equal(
     (await check([{ ...entry, reason: "A canvas can't read the theme." }])).passed,
@@ -196,7 +221,7 @@ test("passes a one-off on the allowlist, which has to say why", async () => {
 test("fails an allowlist entry nothing needs any more, so the list stays short", async () => {
   await source({ "styles.css": THEME });
   const { passed, said } = await check([
-    { file: "photo.ts", value: "#ffffff", reason: "A canvas can't read the theme." },
+    { file: `${WEB}/photo.ts`, value: "#ffffff", reason: "A canvas can't read the theme." },
   ]);
   assert.equal(passed, false);
   assert.match(said, /photo\.ts.*#ffffff/);

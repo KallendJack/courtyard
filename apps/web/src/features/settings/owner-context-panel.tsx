@@ -3,14 +3,14 @@ import {
   OWNER_CONTEXT_LONG_CHARACTERS,
   type OwnerContextDetail,
 } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { SectionTitle } from "@courtyard/ui/layout/page.tsx";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
 import { CapsLabel } from "@/components/layout/caps-label";
 import { StatusPill } from "@/components/layout/notice";
-import { SectionTitle } from "@/components/layout/page";
 import { ContextLines, FactsAndIdeas } from "@/components/workspace/context-lines";
-import { useAction } from "@/hooks/use-action";
 import type { FromWorker } from "../../api/worker.ts";
 import { startOwnerContext } from "../../api/worker-calls.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";

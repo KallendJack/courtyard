@@ -1,3 +1,4 @@
+import { PlaceholderRows } from "@courtyard/ui/layout/kept.tsx";
 import {
   Component,
   type ComponentType,
@@ -7,7 +8,6 @@ import {
   useEffect,
   useState,
 } from "react";
-import { PlaceholderRows } from "@/components/layout/kept";
 import { CodeBlock } from "../../features/sessions/answer/code-block.tsx";
 
 /** What a fenced block's drawing is given. */

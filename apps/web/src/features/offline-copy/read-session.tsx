@@ -1,8 +1,8 @@
 import type { SessionDetail } from "@courtyard/contract";
+import { Page, PageTitle } from "@courtyard/ui/layout/page.tsx";
 import { useMemo } from "react";
 import { BackLink } from "@/components/buttons/back-link";
 import { NotKept, OfflineLine } from "@/components/layout/offline";
-import { Page, PageTitle } from "@/components/layout/page";
 import type { OfflineSession } from "../../api/session-page.ts";
 import { turnsIn } from "../sessions/turns/events.ts";
 import { SessionTurns } from "../sessions/turns/session-turns.tsx";

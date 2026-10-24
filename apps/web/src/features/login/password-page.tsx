@@ -1,10 +1,10 @@
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { useRouter } from "@tanstack/react-router";
 import { type FormEvent, type ReactNode, useState } from "react";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
 import { TextField } from "@/components/forms/text-field";
 import { CourtyardMark } from "@/components/layout/courtyard-mark";
-import { useAction } from "@/hooks/use-action";
 import { sendPassword } from "../../api/worker.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
 

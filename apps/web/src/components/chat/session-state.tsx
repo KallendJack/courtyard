@@ -5,8 +5,8 @@ import {
   skillTitle,
   type TurnNow,
 } from "@courtyard/contract";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useEffect, useState } from "react";
-import { classes } from "@/lib/classes";
 import { elapsedWords } from "../../lib/when.ts";
 import { ChatFlowScope } from "./chat-flow-scope.tsx";
 

@@ -1,4 +1,5 @@
-// The folders guard (#445, #453, #459), run as `pnpm check` runs it, against two apps and docs made up here.
+// The folders guard (#445, #453, #459), run as `pnpm check` runs it, against two apps, the shared
+// pieces (#703) and docs made up here.
 //
 //   node --test scripts/folders/check.test.ts
 
@@ -62,10 +63,19 @@ const WEB = [
   "web/components/button.tsx",
   "web/main.tsx",
 ];
+/** The shared pieces both apps use (packages/ui, #703), and what's installed beside them. */
+const UI = [
+  "ui/buttons/button.tsx",
+  "ui/reply/reply-box.tsx",
+  "ui/theme.css",
+  "ui/package.json",
+  "ui/README.md",
+  "ui/node_modules/react/index.js",
+];
 
 /** Runs the guard on apps made of these files and on these docs; what it says, and whether it passed. */
 const check = async ({
-  files = [...WORKER, ...WEB],
+  files = [...WORKER, ...WEB, ...UI],
   overview = OVERVIEW,
   architecture = ARCHITECTURE,
 }: {
@@ -73,7 +83,7 @@ const check = async ({
   overview?: string;
   architecture?: string;
 } = {}) => {
-  for (const app of ["worker", "web"]) await mkdir(join(root, app), { recursive: true });
+  for (const app of ["worker", "web", "ui"]) await mkdir(join(root, app), { recursive: true });
   for (const file of files) {
     await mkdir(dirname(join(root, file)), { recursive: true });
     await writeFile(join(root, file), "");
@@ -88,6 +98,7 @@ const check = async ({
       join(root, "web"),
       join(root, "overview.md"),
       join(root, "architecture.md"),
+      join(root, "ui"),
     ],
     { encoding: "utf8" },
   );
@@ -105,6 +116,16 @@ test("fails a folder or a loose file at the top that isn't one of the app's own"
   assert.equal(passed, false);
   assert.match(said, /Worker: agent\/ isn't one of its folders/);
   assert.match(said, /Web: when\.ts belongs in one of its folders/);
+});
+
+test("fails a folder or a loose file in the shared pieces that isn't one of theirs", async () => {
+  const { passed, said } = await check({
+    files: [...WORKER, ...WEB, ...UI, "ui/features/build/view.tsx", "ui/when.ts"],
+  });
+  assert.equal(passed, false);
+  assert.match(said, /UI: features\/ isn't one of its folders/);
+  assert.match(said, /UI: when\.ts belongs in one of its folders/);
+  assert.doesNotMatch(said, /node_modules/);
 });
 
 test("fails a feature the overview doesn't list for its app", async () => {

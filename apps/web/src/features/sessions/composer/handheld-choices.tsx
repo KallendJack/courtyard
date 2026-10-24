@@ -1,14 +1,12 @@
-import {
-  Effort,
-  type SkillName,
-  type SkillSummary,
-  USAGE_WARNS_AT,
-  type UsageList,
-} from "@courtyard/contract";
+import { Effort, USAGE_WARNS_AT, type UsageList } from "@courtyard/contract";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { type ModelChoice, modelKey } from "@courtyard/ui/reply/model-pickers.tsx";
+import { isDefault, type OfferedModel, type ProviderDefault } from "@courtyard/ui/reply/models.ts";
+import type { ReplyChoices } from "@courtyard/ui/reply/reply-choices.ts";
 import { useRouter } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import { saveModelDefault } from "@/api/worker-calls";
-import { FormError } from "@/components/forms/form-error";
 import { describeProblem } from "@/components/layout/problems";
 import { HandheldSheet } from "@/components/sheets/handheld-sheet";
 import {
@@ -21,12 +19,9 @@ import {
   SheetQuickSwitch,
   SheetSkills,
 } from "@/components/sheets/sheet-choices";
-import { useAction } from "@/hooks/use-action";
 import { useUsage } from "../../limits/api.ts";
 import { ModelMeter, PlanMeters } from "../../limits/plan-meters.tsx";
 import { limitLabel } from "./limits.ts";
-import { type ModelChoice, modelKey } from "./model-pickers.tsx";
-import { isDefault, type OfferedModel, type ProviderDefault } from "./models.ts";
 
 /** The effort row's value for a model's default: never a level's name, which can't be empty. */
 const DEFAULT = "";
@@ -132,19 +127,7 @@ const detail = ({ model, effort }: ModelChoice) => {
  * opens Model; Model, the models by provider, with the effort at its foot. Loaded only in the
  * frame.
  */
-export default function HandheldChoices(props: {
-  choosing: "model" | "skill" | undefined;
-  close: () => void;
-  /** Opens the Model sheet in place of the Skills sheet. */
-  changeModel: () => void;
-  models: readonly OfferedModel[];
-  choice: ModelChoice;
-  /** The workspace's name and the skills its picker lists, when it has any. */
-  skills: { readonly workspaceName: string; readonly list: readonly SkillSummary[] } | undefined;
-  /** The skill the message starts, if one is picked. */
-  skill: SkillName | undefined;
-  pick: (name: SkillName) => void;
-}) {
+export default function HandheldChoices(props: ReplyChoices) {
   const { choice } = props;
   const { model, defaults } = choice;
   // Read afresh while the Model sheet is open (#66), at most once a minute.

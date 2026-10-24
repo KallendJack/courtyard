@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { classes } from "@/lib/classes";
+import { classes } from "../lib/classes.ts";
 
 /** Which way it scrolls. */
 const AXES = {

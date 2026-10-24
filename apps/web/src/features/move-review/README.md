@@ -7,7 +7,7 @@ worker's side is [`move-review/`](../../../../worker/src/features/move-review/RE
 rows ("MTB journey guide → a project", "Day one guide → archive", …). The owner unticks one and taps Move 4: four
 changes, each with Undo in Recent changes, and Home is the bike and its projects again.
 
-- **Uses:** `components/forms/tick-box.tsx` (each row's tick, big), `components/buttons/button.tsx`,
+- **Uses:** `components/forms/tick-box.tsx` (each row's tick, big), `packages/ui/buttons/button.tsx`,
   `features/planning-home/` (Home again once it's done).
 - **Used by:** `features/planning-home/` (Home, while the review waits on the owner).
 

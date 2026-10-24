@@ -1,5 +1,5 @@
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import type { ComponentProps } from "react";
-import { classes } from "@/lib/classes";
 
 type RowButtonProps = Omit<
   ComponentProps<"button">,

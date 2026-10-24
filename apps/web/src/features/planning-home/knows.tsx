@@ -6,16 +6,16 @@ import {
   type SkillSummary,
   type WorkspaceId,
 } from "@courtyard/contract";
+import { Button, IconButton } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { CARD, SectionTitle } from "@courtyard/ui/layout/page.tsx";
+import { SkillList } from "@courtyard/ui/reply/skill-list.tsx";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Pencil } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { Button, IconButton } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
 import { EmptyState, StatusPill } from "@/components/layout/notice";
-import { CARD, SectionTitle } from "@/components/layout/page";
 import { FactsAndIdeas } from "@/components/workspace/context-lines";
-import { SkillList } from "@/components/workspace/skill-list";
-import { useAction } from "@/hooks/use-action";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { startSession } from "../sessions/composer/messages.ts";
 import { GetToKnow } from "../sessions/notes/get-to-know.tsx";

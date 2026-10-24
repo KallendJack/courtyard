@@ -1,6 +1,6 @@
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { ChevronDown } from "lucide-react";
 import { useId } from "react";
-import { classes } from "@/lib/classes";
 
 /** A small pill's shape in a row of controls, without its colours or side padding. */
 export const PILL_SHAPE =

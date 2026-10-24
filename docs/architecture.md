@@ -58,7 +58,8 @@ Both apps use familiar folder names, listed in the [overview](overview.md). The 
 `index.ts` is what the module does and `routes.ts`, when it has one, is its part of the API. `worker.ts` builds every
 module from the settings and wires them together. The web app is pages (`routes/`) built from its features
 (`features/<name>/`, a feature named as the worker's where both have it) and shared pieces (`components/`, `hooks/`,
-`api/`, `lib/`). The contract package sits between them. Each feature (and each of the worker's `auth/` and
+`api/`, `lib/`); the theme and the pieces both apps use are in `packages/ui`
+([its README](../packages/ui/README.md), #703). The contract package sits between them. Each feature (and each of the worker's `auth/` and
 `integrations/` folders, and its `providers/` and `prompts/`) has a README with its detail, linked below. `pnpm check`
 fails a folder that isn't one of these, a feature missing from the overview, a README missing or not linked here,
 and any folder with more than 15 files: a bigger one is split into parts (#459).
@@ -193,13 +194,13 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   devices), behind the frame's Settings sheet. Behind the login
   each page sits in a panel that never scrolls, nor does the window (#266), so the Handheld
   frame stays put; from a tablet up the panel is flat on the frame, with no border or margin, for room on the
-  Fold (#503). Every page is `components/layout/page.tsx`'s `Page` (#339): a pinned header (its title, tabs), one
+  Fold (#503). Every page is `packages/ui/layout/page.tsx`'s `Page` (#339): a pinned header (its title, tabs), one
   scrolling middle and a pinned footer (its main action: the message box, Save, Create), so nothing scrolls the
   title or the main action away; on the cover screen the header scrolls with the middle as one column. Only the
-  PR page (`features/pull-requests/`) lays itself out, fitting the screen. `components/layout/page-scroll.ts` hands the scrolling middle
+  PR page (`features/pull-requests/`) lays itself out, fitting the screen. `packages/ui/layout/page-scroll.ts` hands the scrolling middle
   to whatever follows the scroll (a session's turns), and names it to the router, which keeps its scroll per page.
   That middle, and everything else that scrolls (a sheet, the frame's rails, a diff, a wide table), is
-  `components/layout/scroller.tsx`'s `Scroller` (#420): a thin thumb, and a fade at its top once scrolled, never a line
+  `packages/ui/layout/scroller.tsx`'s `Scroller` (#420): a thin thumb, and a fade at its top once scrolled, never a line
   cut in half under what's pinned; the theme check fails anything that scrolls without it. A workspace's page loads its Home's code (code or planning) with its data (`api/workspace-page.ts`), so the page
   shows whole.
 - **`api/`** talks to the worker. **`worker.ts`** is how the web app asks the worker: every answer is parsed with the contract's schemas, and an
@@ -266,7 +267,7 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   recent sessions sheet's, which ask again every few seconds while one is working), the Working line and the Your turn
   mark (`chat/working-line.tsx`), queued messages (`chat/queued-message.tsx`) and Jump to latest (`chat/jump-to-latest.tsx`).
   Nothing jumps in (#269; Paper, "Component · A block that loads late keeps its place"): everything that loads
-  after its page uses one shared piece, `layout/kept.tsx`. What it loads is kept in memory for the tab's lifetime, by
+  after its page uses one shared piece, `packages/ui/layout/kept.tsx`. What it loads is kept in memory for the tab's lifetime, by
   whose it is (`createKept`, `useKept`), so coming back shows the last answer at once and asks again quietly; a
   first visit shows faint rows the size of real ones in the block's place (`PlaceholderRows`, no spinner and no
   words), filled in place, and a block that turns out empty closes up, so only what's below it moves. Its classes
@@ -278,29 +279,30 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   load keeps a faint place rather than showing its code (`components/rich-blocks/fenced.tsx`), and maths keeps its room
   unseen until its formulas can be drawn (`sessions/answer/answer.tsx`).
   The frame round every page is the Handheld frame (`frame/handheld-frame.tsx`, #193; on a computer too since #197),
-  loaded after the page with its own stylesheet (`frame/handheld-frame.css`). `frame/handheld.ts` picks its shape by the
+  loaded after the page with its own stylesheet (`frame/handheld-frame.css`). `packages/ui/frame/handheld.ts` picks its shape by the
   window's width alone, whatever the device: rails from 600 px, the cover-screen layout below. With rails (a
   tablet, the unfolded Fold, a computer, #206): workspace tiles down the left, and down the right labelled buttons (Model, Skills, Add,
   Settings) with the Talk key in the bottom corner; on the folded one, tiles across the top and a bottom bar with
-  Type and the talk strip. The page's message box (`sessions/composer/composer.tsx`) offers itself to the frame through
-  `frame/handheld.ts`'s dock and moves into it: always there between the rails on a tablet, above the bar once opened on
+  Type and the talk strip. The page's message box (`packages/ui/reply/reply-box.tsx`, which
+  `sessions/composer/composer.tsx` gives this app's sheets) offers itself to the frame through
+  `handheld.ts`'s dock and moves into it: always there between the rails on a tablet, above the bar once opened on
   the folded Fold. It is the Reply box (#251), the same on every screen: + for a photo or file, a mic that talks as the Talk key does
   (the dock's `talk`) and becomes Send, and the model and effort as quiet text; it opens its Skills and Model sheets
   from the frame's buttons, or Skills from a `/` in the empty box. Something's off (#554) sits in the right rail's
   free space above Talk, or left of Skills on the cover screen; its sheet (`sheets/friction-sheet.tsx`, loaded when
   first opened) isn't modal, so the Talk key, the talk strip, Space and Type go into its You said box while it's
   open, ahead of the page's box, and on the cover screen it floats above the talk row (`--frame-talk`). The talk strip and
-  the Talk key (`frame/talk-strip.tsx`, #79, #206, loaded with the frame) share one way of talking: they listen through the
-  browser's own speech recognition (`frame/speech.ts`, which also vibrates for it) and put the words in the box as they are
+  the Talk key (`packages/ui/frame/talk-strip.tsx`, #79, #206, loaded with the frame) share one way of talking: they listen through the
+  browser's own speech recognition (`packages/ui/frame/speech.ts`, which also vibrates for it) and put the words in the box as they are
   heard (#198), for the owner to send, or to queue while a turn runs. Holding Space (outside a field) or the
   mouse's side button talks too, and letting go sends (#197), and a letter typed outside a field goes into the box; on a page without a message box,
 into the field the page offers instead (`offerField`, New workspace's What's it for?, #264). While it listens, the box shows ✕, ■ and ↑
   in place of + and the mic, keeping its shape. While the owner talks or an answer
-  comes, the screen is kept awake (`frame/wake-lock.ts`) where the browser can;
+  comes, the screen is kept awake (`packages/ui/frame/wake-lock.ts`) where the browser can;
   nothing said reaches the worker except the words. The page stays mounted in the same place whichever frame is
   round it, so folding keeps its scroll and a half-written message. The frame's menus and the box's pickers open as Handheld sheets (`sheets/handheld-sheet.tsx`, #194): from the right edge
   beside the right rail on a tablet, from the bottom on a phone. The box's Skills and Model sheets
-  (`sessions/composer/handheld-choices.tsx`, built from `sheets/sheet-choices.tsx`) load only once it's docked; their classes are in
+  (`sessions/composer/handheld-choices.tsx`, built from `sheets/sheet-choices.tsx`, given to the box as its `choices`) load only once it's docked; their classes are in
   `frame/handheld-frame.css`. A workspace's icon (#210, `workspace/workspace-icon.tsx`) shows on its tile, the
   home page's tiles and the way back, white or violet while it's open; the icons themselves (`workspace/workspace-marks.tsx`,
   lucide's) load once a page first shows one, off the first load. Change icon in a workspace's ⋯
@@ -312,8 +314,15 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   (`frame/arranging.ts`). The held one stays in its list as the dashed slot, so a finger keeps its touch on it. A card over
   the page for one task (`layout/card-dialog.tsx`: its title, a line under it and Close) holds Connections, under the line
   that opens it, and the setup card (#323), in the middle of the screen.
-  **`hooks/`:** shared `use…` functions, such as `useAction` (`use-action.ts`: an action's busy state and its error,
-  #330); a component's own stays beside it. **`lib/`:** small helpers shared by pages. **`styles.css`:** the theme: Handheld, dark whatever the device's setting (#210).
+  **`hooks/`:** shared `use…` functions only this app uses; `useAction` (`packages/ui/hooks/use-action.ts`: an
+  action's busy state and its error, #330) is the package's; a component's own stays beside it. **`lib/`:** small
+  helpers shared by pages. **`styles.css`:** Tailwind with the theme, `packages/ui/theme.css` (Handheld, dark
+  whatever the device's setting, #210), and which files' classes load later.
+- **`packages/ui`** ([its README](../packages/ui/README.md), #703): the theme and the pieces both apps use, so
+  Fabrication (ADR 0036) looks and behaves as the web app does: the page layout, the `Scroller`, the loading piece,
+  the buttons and the busy button, the error line, `useAction`, `classes`, what the frame offers a page and Talk, and
+  the Reply box with its chips. The app imports each by its path (`@courtyard/ui/layout/page.tsx`) and adds the package
+  to its stylesheet's sources, leaving out what loads later (the talk strip, the frame's buttons).
 - **`components/rich-blocks/`:** the blocks Courtyard draws in answers and documents
   ([ADR 0021](adr/0021-rich-answers-are-blocks-courtyard-draws-itself.md)), through the answer renderer, so a
   document's page gets them too. Every table sorts by its columns (`table.tsx`, with `sorting.ts` saying how dates,

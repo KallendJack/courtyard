@@ -1,7 +1,7 @@
 import type { ModelRef, ProviderId } from "@courtyard/contract";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
-import { useAction } from "@/hooks/use-action";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { keepUsage, putOffWarning, useUsage } from "./api.ts";
 import { resetsWords, switchWords, warningWords } from "./words.ts";

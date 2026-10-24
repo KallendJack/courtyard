@@ -14,9 +14,9 @@ import {
   Undone,
   WorkspaceId,
 } from "@courtyard/contract";
+import { createKept } from "@courtyard/ui/layout/kept.tsx";
 import { sendForm } from "../../api/send-form.ts";
 import { fromWorker, NOT_FOUND, sendJson } from "../../api/worker.ts";
-import { createKept } from "../../components/layout/kept.tsx";
 
 // Things' calls live with Things rather than in worker.ts, so their schemas stay off the first
 // load.

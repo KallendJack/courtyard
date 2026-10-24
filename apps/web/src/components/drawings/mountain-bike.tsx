@@ -1,5 +1,5 @@
 import type { BikePlace } from "@courtyard/contract";
-import { classes } from "@/lib/classes";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import type { Point } from "./labels-apart.ts";
 
 // Courtyard's drawing of a mountain bike (#603; Paper, "Tablet · Mountain biking Home: the bike,

@@ -1,8 +1,8 @@
 import type { PullRequest, SessionId, WorkspaceId } from "@courtyard/contract";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Link } from "@tanstack/react-router";
 import { GitBranch } from "lucide-react";
 import type { ReactNode } from "react";
-import { classes } from "@/lib/classes";
 
 /** A chip in the strip: the session branch, or its pull request. */
 const CHIP = "inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md bg-surface px-3";

@@ -1,8 +1,8 @@
 import type { AllowingAll } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { useEffect, useState } from "react";
-import { useAction } from "@/hooks/use-action";
-import { Button } from "../buttons/button.tsx";
-import { FormError } from "../forms/form-error.tsx";
 
 // Allow all for this task (#428; Paper, "Session allowing all, strip and marked steps" and "Code
 // Home: Running rows marked Allowing all"): gold, since it's something the owner chose to stop

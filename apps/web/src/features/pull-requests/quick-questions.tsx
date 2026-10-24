@@ -1,9 +1,9 @@
 import type { QuickAnswer, QuickLine } from "@courtyard/contract";
+import { Button, IconButton } from "@courtyard/ui/buttons/button.tsx";
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { X } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
-import { Button, IconButton } from "@/components/buttons/button";
-import { Scroller } from "@/components/layout/scroller";
-import { classes } from "@/lib/classes";
 import { Answer } from "../sessions/answer/answer.tsx";
 
 /** A file's name without its folders: "slot-row.tsx". */

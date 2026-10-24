@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { classes } from "@/lib/classes";
+import { classes } from "../lib/classes.ts";
 import { FrameButton } from "./frame-button.tsx";
 import { type Dictation, type TalkTarget, typingIn, useFinePointer } from "./handheld.ts";
 import { canListen, feel, type Listening, listen } from "./speech.ts";
