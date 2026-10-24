@@ -7,15 +7,15 @@ import {
   type ProviderList,
   type WorkspaceId,
 } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { PlaceholderRows } from "@courtyard/ui/layout/kept.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight, Clock, Flame, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
 import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
-import { PlaceholderRows } from "@/components/layout/kept";
-import { useAction } from "@/hooks/use-action";
-import { classes } from "@/lib/classes";
 import { clockWords } from "@/lib/when";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { behindName } from "../builders/words.ts";

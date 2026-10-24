@@ -1,7 +1,7 @@
 import type { CodeSessionList } from "@courtyard/contract";
+import { CARD, Page, SectionTitle } from "@courtyard/ui/layout/page.tsx";
 import type { ReactNode } from "react";
 import { NotKept, OfflineLine } from "@/components/layout/offline";
-import { CARD, Page, SectionTitle } from "@/components/layout/page";
 import type { OfflinePage } from "../../api/workspace-page.ts";
 import { SessionLinks } from "../sessions/session-links.tsx";
 

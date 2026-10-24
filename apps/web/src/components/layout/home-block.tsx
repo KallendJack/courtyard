@@ -1,7 +1,7 @@
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import type { ReactNode } from "react";
-import { classes } from "@/lib/classes";
 import { CapsLabel } from "./caps-label.tsx";
-import { Scroller } from "./scroller.tsx";
 
 // The blocks a workspace's Home is built from (#301, #300; Paper, "Tablet · Code workspace Home",
 // style guide "Workspace Home blocks"): a card with its label in capitals, and rows inside it.

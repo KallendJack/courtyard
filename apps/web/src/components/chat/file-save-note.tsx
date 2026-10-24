@@ -1,8 +1,8 @@
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { Undo2 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useAction } from "@/hooks/use-action";
 import type { FromWorker } from "../../api/worker.ts";
-import { Button } from "../buttons/button";
 import { ButtonLink } from "../buttons/button-link";
 import { describeProblem } from "../layout/problems.tsx";
 import { NoteRow, NoteWords } from "./note-row";

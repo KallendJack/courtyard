@@ -1,6 +1,6 @@
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import type { ReactNode } from "react";
-import { Button } from "../buttons/button.tsx";
-import { Scroller } from "../layout/scroller.tsx";
 import { useDialog } from "../layout/use-dialog.ts";
 
 /**

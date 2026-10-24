@@ -1,4 +1,4 @@
-import { useFresh } from "@/components/layout/kept";
+import { useFresh } from "@courtyard/ui/layout/kept.tsx";
 import { updateCopy } from "./api.ts";
 
 /** How often an open app updates its copy, besides when it opens and comes back into view. */

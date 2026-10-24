@@ -6,16 +6,16 @@ import {
   type ThingUpcoming,
   WorkspaceId,
 } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { createKept, useKept } from "@courtyard/ui/layout/kept.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useParams } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
 import { fromWorker } from "@/api/worker";
-import { Button } from "@/components/buttons/button";
 import { WebLink } from "@/components/buttons/web-link";
-import { FormError } from "@/components/forms/form-error";
-import { createKept, useKept } from "@/components/layout/kept";
-import { useAction } from "@/hooks/use-action";
-import { classes } from "@/lib/classes";
 import { KEPT_HOME, loadKeptHome } from "../../features/planning-home/api.ts";
 import { pickDecision } from "../../features/projects/api.ts";
 import {

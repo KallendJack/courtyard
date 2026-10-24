@@ -1,7 +1,7 @@
+import { IconButton } from "@courtyard/ui/buttons/button.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { X } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
-import { classes } from "@/lib/classes";
-import { IconButton } from "../buttons/button.tsx";
 import { useDialog } from "./use-dialog.ts";
 
 /**

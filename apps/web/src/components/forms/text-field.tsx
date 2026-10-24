@@ -1,6 +1,6 @@
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { type ComponentProps, type KeyboardEvent, type ReactNode, useId } from "react";
-import { classes } from "@/lib/classes";
-import { FormError } from "./form-error.tsx";
 
 const SIZES = {
   /** In a list row (the sidebar). */

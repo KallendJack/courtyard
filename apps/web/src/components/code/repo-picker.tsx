@@ -1,7 +1,7 @@
 import type { GitHubRepo } from "@courtyard/contract";
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { type ReactNode, useId } from "react";
-import { classes } from "@/lib/classes";
-import { Scroller } from "../layout/scroller.tsx";
 
 /**
  * Code's mark, as the board draws it: a pair of angle brackets. Drawn here rather than taken from

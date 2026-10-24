@@ -1,16 +1,16 @@
 import type { FrictionPlace } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { type Layout, type TalkTarget, useFinePointer } from "@courtyard/ui/frame/handheld.ts";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { createKept, useKept } from "@courtyard/ui/layout/kept.tsx";
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useEffect, useRef, useState } from "react";
-import { useAction } from "@/hooks/use-action";
-import { classes } from "@/lib/classes";
 import { fileReport, loadPlace } from "../../features/friction/api.ts";
 import { type FilledIn, sizeWords } from "../../features/friction/filled-in.ts";
-import { Button } from "../buttons/button.tsx";
-import { FormError } from "../forms/form-error.tsx";
-import { type Layout, type TalkTarget, useFinePointer } from "../frame/handheld.ts";
 import { CapsLabel } from "../layout/caps-label.tsx";
-import { createKept, useKept } from "../layout/kept.tsx";
 import { describeProblem } from "../layout/problems.tsx";
-import { Scroller } from "../layout/scroller.tsx";
 
 /** Where a report goes, as last known, so the sheet opens with it at once. */
 const KEPT = createKept<FrictionPlace>();

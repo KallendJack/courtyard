@@ -1,4 +1,15 @@
 import type { WorkspaceSummary } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FrameButton, modelMark } from "@courtyard/ui/frame/frame-button.tsx";
+import {
+  type Layout,
+  type MessageBox,
+  type TalkTarget,
+  typingIn,
+} from "@courtyard/ui/frame/handheld.ts";
+import { TalkBar, TalkKey } from "@courtyard/ui/frame/talk-strip.tsx";
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Link, useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { Flag, LogOut, Plus, Settings, Sparkle } from "lucide-react";
 import {
@@ -15,24 +26,18 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
-import { classes } from "@/lib/classes";
 import { addStylesheet } from "@/lib/stylesheet";
 import { type FilledIn, fillIn } from "../../features/friction/filled-in.ts";
 import { LiveUpdate } from "../../features/live/live-update.tsx";
 import { useKeptSessions } from "../../features/sessions/kept-sessions.ts";
 import { useNeedsYou } from "../../features/waiting/api.ts";
-import { Button } from "../buttons/button.tsx";
 import { ButtonLink } from "../buttons/button-link.tsx";
 import { CourtyardMark } from "../layout/courtyard-mark.tsx";
-import { Scroller } from "../layout/scroller.tsx";
 import { HandheldSheet } from "../sheets/handheld-sheet.tsx";
 import { RecentSessions } from "../sheets/recent-sessions.tsx";
 import { WorkspaceIcon } from "../workspace/workspace-icon.tsx";
 import { ARRANGE_HELD, ARRANGE_SLOT, type Held, useArrange } from "./arrange.ts";
-import { FrameButton, modelMark } from "./frame-button.tsx";
-import { type Layout, type MessageBox, type TalkTarget, typingIn } from "./handheld.ts";
 import css from "./handheld-frame.css?inline";
-import { TalkBar, TalkKey } from "./talk-strip.tsx";
 
 // The frame's own stylesheet (handheld-frame.css), added once, when a touch screen first shows it.
 addStylesheet("handheld-frame", css);

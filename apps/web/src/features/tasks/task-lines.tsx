@@ -1,8 +1,8 @@
 import type { RunningTasks, SessionId, TaskEnding, TaskTold } from "@courtyard/contract";
+import { createKept, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { lazy, Suspense, useState } from "react";
 import { useElapsed } from "@/components/chat/session-state";
 import { TaskLine, type TaskStanding } from "@/components/chat/task-line";
-import { createKept, useKept } from "@/components/layout/kept";
 import { elapsedWords } from "../../lib/when.ts";
 import { runningTasksOf } from "./api.ts";
 

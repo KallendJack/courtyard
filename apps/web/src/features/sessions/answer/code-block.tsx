@@ -1,7 +1,7 @@
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CopyButton } from "@/components/buttons/copy-button";
-import { Scroller } from "@/components/layout/scroller";
 import { type CodeLanguage, codeLanguage } from "./code-languages.ts";
 
 type Highlighter = typeof import("./highlight.tsx");

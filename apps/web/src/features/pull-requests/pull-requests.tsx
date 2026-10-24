@@ -5,17 +5,17 @@ import type {
   PullRequestFrom,
   WorkspaceId,
 } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useWide } from "@courtyard/ui/frame/handheld.ts";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { PlaceholderRows } from "@courtyard/ui/layout/kept.tsx";
 import { useNavigate } from "@tanstack/react-router";
 import { RefreshCw } from "lucide-react";
 import { type ComponentProps, lazy, Suspense, useState } from "react";
-import { Button } from "@/components/buttons/button";
 import { ButtonLink } from "@/components/buttons/button-link";
-import { FormError } from "@/components/forms/form-error";
 import { SegmentedChoice } from "@/components/forms/segmented-choice";
-import { useWide } from "@/components/frame/handheld";
 import { CapsLabel } from "@/components/layout/caps-label";
-import { PlaceholderRows } from "@/components/layout/kept";
-import { useAction } from "@/hooks/use-action";
 import { addStylesheet } from "@/lib/stylesheet";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { bringUpToDate } from "./api.ts";

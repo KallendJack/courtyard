@@ -1,4 +1,6 @@
 import type { BikePlace, DrawnPart, HomeSubject, WorkspaceId } from "@courtyard/contract";
+import { useLayout } from "@courtyard/ui/frame/handheld.ts";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Link } from "@tanstack/react-router";
 import { lazy, Suspense, useRef, useState } from "react";
 import { useLabelsApart } from "@/components/drawings/labels-apart";
@@ -8,8 +10,6 @@ import {
   BIKE_WIDTH,
   MountainBike,
 } from "@/components/drawings/mountain-bike";
-import { classes } from "@/lib/classes";
-import { useLayout } from "../../components/frame/handheld.ts";
 import {
   DrawingPlace,
   FencedBlock,

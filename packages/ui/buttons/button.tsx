@@ -1,6 +1,6 @@
 import { LoaderCircle } from "lucide-react";
 import { type ComponentProps, type MouseEvent, type ReactNode, useEffect, useState } from "react";
-import { classes } from "@/lib/classes";
+import { classes } from "../lib/classes.ts";
 
 /**
  * A button shows it's working (#330; Paper, "Component · A button shows it's working"): while

@@ -8,15 +8,15 @@ import {
   type SetupChoices,
   type WorkspaceId,
 } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { type ReactNode, useState } from "react";
-import { Button } from "@/components/buttons/button";
 import { WebLink } from "@/components/buttons/web-link";
-import { FormError } from "@/components/forms/form-error";
 import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { CardDialog } from "@/components/layout/card-dialog";
 import { InfoBox } from "@/components/layout/notice";
-import { Scroller } from "@/components/layout/scroller";
-import { useAction } from "@/hooks/use-action";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { answerMattSetup } from "./api.ts";
 

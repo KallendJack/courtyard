@@ -1,6 +1,6 @@
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
-import { classes } from "@/lib/classes";
 
 /**
  * Where a helper stands (#117), as its line shows it: finished (or stopped with its turn),

@@ -1,10 +1,10 @@
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { CARD } from "@courtyard/ui/layout/page.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useEffect, useState } from "react";
-import { FormError } from "@/components/forms/form-error";
 import { Switch } from "@/components/forms/switch";
 import { CapsLabel } from "@/components/layout/caps-label";
-import { CARD } from "@/components/layout/page";
-import { useAction } from "@/hooks/use-action";
-import { classes } from "@/lib/classes";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { loadNotifications, turnOffHere, turnOnHere } from "./api.ts";
 

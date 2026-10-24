@@ -7,7 +7,7 @@ Settings' sign-in box and Connections. The worker's side is
 **Example:** Connections shows Claude ready, Codex not signed in, and GitHub with its account and repos, Switch and
 Sign out.
 
-- **Uses:** `components/code/connection-card.tsx`, `components/layout/kept.tsx`.
+- **Uses:** `components/code/connection-card.tsx`, `packages/ui/layout/kept.tsx`.
 - **Used by:** Settings (`routes/_app/settings.tsx`).
 
 ## Screens

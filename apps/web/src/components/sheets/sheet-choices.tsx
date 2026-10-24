@@ -1,10 +1,10 @@
 import type { SkillIcon, SkillName, SkillSummary } from "@courtyard/contract";
+import { FrameButton, modelMark } from "@courtyard/ui/frame/frame-button.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
+import { nameOf, usable, whyUnusable } from "@courtyard/ui/reply/skill-list.tsx";
 import { Book, ChevronDown, ChevronRight, ChevronUp, Flame, Star, UserRound } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
-import { classes } from "@/lib/classes";
-import { FrameButton, modelMark } from "../frame/frame-button.tsx";
 import { CapsLabel } from "../layout/caps-label.tsx";
-import { nameOf, usable, whyUnusable } from "../workspace/skill-list.tsx";
 
 /**
  * What a Handheld sheet (handheld-sheet.tsx, #194, #201) offers to pick from: a workspace's skills

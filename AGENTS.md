@@ -44,24 +44,26 @@ From Courtyard's `AGENTS.md`, kept in step by its house check: change them there
   passed in as dependencies.
 - **Only the Claude adapter knows how Claude is billed or signed in** (ADR 0003). The same holds for Codex.
 - **Everything a model is told follows `docs/ai-conduct.md`.** Read it before changing any model-facing text.
-- **The web app's look comes from one theme**, in `apps/web/src/styles.css`: Handheld (the Paper boards
+- **The apps' look comes from one theme**, in `packages/ui/theme.css`: Handheld (the Paper boards
   "Handheld ·"), dark whatever the device's setting (#210). There is no light theme, so nothing uses `dark:`.
-  `scripts/theme/check.ts` fails `pnpm verify` on a colour, type size, radius or effect used by value (one-offs, with
+  `scripts/theme/check.ts` fails `pnpm check` on a colour, type size, radius or effect used by value (one-offs, with
   a reason, in its `allowed.json`). The colours: violet is open, live or chosen; gold is something that needs the
-  owner; moss is passed or connected; red is failed. Components join classes with `lib/classes.ts`, which merges
-  nothing, so no class-merging code reaches the first load.
+  owner; moss is passed or connected; red is failed. Components join classes with `packages/ui/lib/classes.ts`,
+  which merges nothing, so no class-merging code reaches the first load.
 - **Every screen is a pinned header, one scrolling middle and a pinned footer** (the shared page layout,
-  `components/layout/page.tsx`, #339); nothing scrolls the title or the main action away. Everything that scrolls is the
-  shared `Scroller` (`components/layout/scroller.tsx`, #420): a thin thumb and a fade at its top, never a hard cut;
-  `scripts/theme/check.ts` fails an `overflow-*-auto` anywhere else.
-- **A block that loads after its page uses the shared loading piece** (`components/layout/kept.tsx`, #269).
+  `packages/ui/layout/page.tsx`, #339); nothing scrolls the title or the main action away. Everything that scrolls is
+  the shared `Scroller` (`packages/ui/layout/scroller.tsx`, #420): a thin thumb and a fade at its top, never a hard
+  cut; `scripts/theme/check.ts` fails an `overflow-*-auto` anywhere else.
+- **A block that loads after its page uses the shared loading piece** (`packages/ui/layout/kept.tsx`, #269).
 - **A dashboard block's size is set by the layout, never by its rows** (#283, #398): its rows scroll inside, and empty
   it keeps its size with one quiet line. `e2e/layout-shift.spec.ts` fails a main page that shifts while it loads.
-- **Every block stays fresh the shared way** (`useKept` / `useFresh` in `components/layout/kept.tsx`, #387): every 30 s
+- **Every block stays fresh the shared way** (`useKept` / `useFresh` in `packages/ui/layout/kept.tsx`, #387): every 30 s
   while calm, faster while busy, paused while the tab is hidden and asked at once when it's shown. Never a timer of
   its own.
-- **Shared pieces** (ADR 0012) in `components/` are safe on the first load. Until a control is used twice, the only
-  one of its kind lives inside the one shared piece that uses it (the composer's message box).
+- **Shared pieces** (ADR 0012) are safe on the first load. What both apps use (the theme, the page layout, the
+  `Scroller`, the loading piece, buttons and chips, the Reply box with Talk) lives in `packages/ui` (#703); what only
+  one app uses stays in that app's `components/`. Until a control is used twice, the only one of its kind lives
+  inside the one shared piece that uses it (the Reply box's message box).
 - **Workspaces differ by their data, never by their code.** A workspace's page is built from general blocks (Things,
   documents, plans, rich blocks) that fill themselves from that workspace's own context; no screen, card or branch of
   code is made for one workspace (its name, its kind of hobby). A new kind of view is a new general block any
@@ -77,8 +79,8 @@ From Courtyard's `AGENTS.md`, kept in step by its house check: change them there
   `auth/`, `integrations/`, `config/` and `lib/`; the web app's has `features/`, `components/`, `hooks/`, `api/`,
   `routes/` and `lib/`. A feature has one name in both apps (`features/things/`). A new feature is listed in
   `docs/overview.md` and has a `README.md` (#459) that `docs/architecture.md` links; so do each of the worker's
-  `auth/` and `integrations/` folders, and its `providers/` and `prompts/`. `scripts/folders/check.ts` fails
-  `pnpm check` otherwise. The size check's ratchet is `scripts/size/allowed.json`. A new top-level folder is the
+  `auth/` and `integrations/` folders, and its `providers/` and `prompts/`. `packages/ui` keeps to its own folders
+  (its `README.md`). `scripts/folders/check.ts` fails `pnpm check` otherwise. The size check's ratchet is `scripts/size/allowed.json`. A new top-level folder is the
   owner's call.
 - **Reuse before writing, in the worker too.** Request bodies go through `readBody` (`lib/http.ts`), files
   through `lib/files.ts`, workspace errors through one handler, and tests through `test/testing.ts`. Check there before

@@ -1,9 +1,9 @@
 import { nextStepOf, type Project, type StepKind, type WorkspaceId } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { BackLink } from "@/components/buttons/back-link";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
 import { CapsLabel } from "@/components/layout/caps-label";
-import { classes } from "@/lib/classes";
 import { stepDetail } from "./api.ts";
 import { useCarryOn } from "./carry-on.ts";
 

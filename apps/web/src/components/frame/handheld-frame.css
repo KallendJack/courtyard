@@ -7,10 +7,10 @@
  */
 @reference "../../styles.css";
 @source "./handheld-frame.tsx";
-@source "./talk-strip.tsx";
+@source "../../../../../packages/ui/frame/talk-strip.tsx";
 @source "../sheets/handheld-sheet.tsx";
 @source "../sheets/sheet-choices.tsx";
-@source "./frame-button.tsx";
+@source "../../../../../packages/ui/frame/frame-button.tsx";
 
 :where([data-handheld]) {
   /* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind's own directive, nested so its classes are scoped */
@@ -67,7 +67,7 @@
 }
 /*
  * On a tablet, the Reply box (#206): always there at the foot of the page, between the rails,
- * which stay in reach. Its shape is its own (composer.tsx), the same on every screen (#251).
+ * which stay in reach. Its shape is its own (packages/ui/reply/reply-box.tsx), the same on every screen (#251).
  */
 [data-dock="tablet"] {
   margin-inline: var(--frame-left, 0px) var(--frame-right, 0px);

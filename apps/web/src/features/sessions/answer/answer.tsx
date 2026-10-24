@@ -1,8 +1,8 @@
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { memo, useEffect, useState } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { WebLink } from "@/components/buttons/web-link";
-import { classes } from "@/lib/classes";
 import { Arriving, FencedBlock, fencedKind } from "../../../components/rich-blocks/fenced.tsx";
 import { textOf } from "../../../components/rich-blocks/hast.ts";
 import {

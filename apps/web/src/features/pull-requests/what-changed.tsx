@@ -1,8 +1,8 @@
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { Button } from "@/components/buttons/button";
 import { CapsLabel } from "@/components/layout/caps-label";
-import { Scroller } from "@/components/layout/scroller";
-import { classes } from "@/lib/classes";
 import { Answer } from "../sessions/answer/answer.tsx";
 import { readDescription } from "./description.ts";
 

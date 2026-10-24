@@ -1,8 +1,8 @@
 import { type WorkspaceIcon as Icon, WorkspaceIcon as Icons } from "@courtyard/contract";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useId } from "react";
-import { useAction } from "@/hooks/use-action";
-import { classes } from "@/lib/classes";
-import { FormError } from "../forms/form-error.tsx";
 import { WorkspaceIcon } from "../workspace/workspace-icon.tsx";
 import { ICONS } from "../workspace/workspace-marks.tsx";
 import { HandheldSheet } from "./handheld-sheet.tsx";

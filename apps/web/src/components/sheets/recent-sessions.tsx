@@ -5,10 +5,12 @@ import {
   type TurnNow,
   type WorkspaceSummary,
 } from "@courtyard/contract";
+import { IconButton } from "@courtyard/ui/buttons/button.tsx";
+import { PlaceholderRows, useKept } from "@courtyard/ui/layout/kept.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Link, useLocation, useParams, useRouter, useRouterState } from "@tanstack/react-router";
 import { Pencil } from "lucide-react";
 import { useState } from "react";
-import { classes } from "@/lib/classes";
 import { renameSession } from "../../api/worker-calls.ts";
 import {
   KEPT_SESSIONS,
@@ -16,10 +18,8 @@ import {
   sessionsBusyEveryMs,
 } from "../../features/sessions/kept-sessions.ts";
 import { describeWhen } from "../../lib/when.ts";
-import { IconButton } from "../buttons/button.tsx";
 import { SessionWaitingDot, waitingMark } from "../chat/session-state.tsx";
 import { RenameForm } from "../forms/rename-form.tsx";
-import { PlaceholderRows, useKept } from "../layout/kept.tsx";
 import { describeProblem } from "../layout/problems.tsx";
 
 /** The list's heading: "Recent in Garage gym". */

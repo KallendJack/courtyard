@@ -1,5 +1,5 @@
 import type { StatusItem, StatusLine } from "@courtyard/contract";
-import { classes } from "@/lib/classes";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 
 type StatusPlace = keyof StatusLine;
 

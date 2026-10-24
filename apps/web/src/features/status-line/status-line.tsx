@@ -1,5 +1,5 @@
 import type { WorkspaceId } from "@courtyard/contract";
-import { useKept } from "@/components/layout/kept";
+import { useKept } from "@courtyard/ui/layout/kept.tsx";
 import { StatusLineView } from "@/components/workspace/status-line";
 import { KEPT_STATUS_LINE, loadStatusLine } from "./api.ts";
 

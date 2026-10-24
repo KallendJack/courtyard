@@ -8,12 +8,15 @@ import {
   type WorkspaceId,
   wordsOf,
 } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
+import { AttachmentNotKept, PdfChip, PhotoThumb } from "@courtyard/ui/reply/attachment.tsx";
+import { answeringWith, availableModels } from "@courtyard/ui/reply/models.ts";
+import { SkillTag } from "@courtyard/ui/reply/skill-tag.tsx";
 import { ArrowRightLeft, X } from "lucide-react";
 import { memo, type ReactNode, useState } from "react";
-import { Button } from "@/components/buttons/button";
 import { CopyButton } from "@/components/buttons/copy-button";
 import { ApprovalCard, approvalWords } from "@/components/chat/approval-card";
-import { AttachmentNotKept, PdfChip, PhotoThumb } from "@/components/chat/attachment";
 import { HelperLine, type HelperStanding } from "@/components/chat/helper-line";
 import { PhotoViewer } from "@/components/chat/photo-viewer";
 import { type Queued, QueuedMessages } from "@/components/chat/queued-message";
@@ -21,14 +24,11 @@ import { SuggestedReplies } from "@/components/chat/suggested-replies";
 import { TurnEndMark, WorkingLine } from "@/components/chat/working-line";
 import { AllowAllMark } from "@/components/code/allowing-all";
 import { Notice } from "@/components/layout/notice";
-import { SkillTag } from "@/components/workspace/skill-tag";
-import { classes } from "@/lib/classes";
 import { describeProblem } from "../../../components/layout/problems.tsx";
 import { TaskEndedLine } from "../../tasks/task-lines.tsx";
 import { Answer } from "../answer/answer.tsx";
 import { SourceList, sourcesAsMarkdown } from "../answer/sources.tsx";
 import { answerApproval, attachmentUrl } from "../composer/messages.ts";
-import { answeringWith, availableModels } from "../composer/models.ts";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "../notes/documents.tsx";
 import { ProjectNoteRow } from "../notes/projects.tsx";
 import { SaveNote } from "../notes/save-note.tsx";
