@@ -34,6 +34,7 @@ import { firstSavingModel, type Provider } from "../../providers/index.ts";
 import { type PreparedAttachment, prepareAttachments } from "../attachments/index.ts";
 import type { BranchRefusal } from "../code/index.ts";
 import { documentError } from "../documents/routes.ts";
+import { buildUndoError } from "../fabrication/routes.ts";
 import { projectError } from "../projects/routes.ts";
 import type { NoteRefusal } from "../saves/index.ts";
 import { thingError } from "../things/routes.ts";
@@ -186,6 +187,8 @@ export const sessionError = (c: Context, error: SessionError) => {
       return thingError(c, error.refusal);
     case "project-refused":
       return projectError(c, error.refusal);
+    case "build-refused":
+      return buildUndoError(c, error.refusal);
     case "cannot-code":
       return apiError(c, {
         status: 409,
@@ -588,25 +591,20 @@ export const sessionRoutes = (options: {
     return c.body(null, 204);
   });
 
-  // Undo from a Thing save's note (ADR 0020).
-  routes.post("/sessions/:id/things/:save/undo", async (c) => {
-    const undone = await sessions.undoThing({
-      rawId: c.req.param("id"),
-      save: SaveNumber.parse(c.req.param("save")),
+  // Undo from a Thing's (ADR 0020), a project's (#603) or a Build's (#697) save note.
+  const fileUndos = {
+    things: sessions.undoThing,
+    projects: sessions.undoProject,
+    builds: sessions.undoBuild,
+  };
+  for (const [files, undo] of Object.entries(fileUndos)) {
+    routes.post(`/sessions/:id/${files}/:save/undo`, async (c) => {
+      const save = SaveNumber.parse(c.req.param("save"));
+      const undone = await undo({ rawId: c.req.param("id") ?? "", save });
+      if (!undone.ok) return sessionError(c, undone.error);
+      return c.body(null, 204);
     });
-    if (!undone.ok) return sessionError(c, undone.error);
-    return c.body(null, 204);
-  });
-
-  // Undo from a project save's note (#603).
-  routes.post("/sessions/:id/projects/:save/undo", async (c) => {
-    const undone = await sessions.undoProject({
-      rawId: c.req.param("id"),
-      save: SaveNumber.parse(c.req.param("save")),
-    });
-    if (!undone.ok) return sessionError(c, undone.error);
-    return c.body(null, 204);
-  });
+  }
 
   routes.post("/sessions/:id/saves/:save/undo", async (c) => {
     const undone = await sessions.undoSave({

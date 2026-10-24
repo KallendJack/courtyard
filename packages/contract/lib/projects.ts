@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChangeId } from "./change-id.ts";
+import { BuildSlug } from "./fabrication/builds.ts";
 
 // A planning workspace's projects (#603, ADR 0032): what the owner carries over days and sessions,
 // such as turning the garage into an office, a Markdown file each in its `projects` folder: its
@@ -55,6 +56,8 @@ export const ProjectStep = z.object({
     "Keep the step's detail out of its words: give it as its detail.",
   ),
   detail: oneLine(PROJECT_FIELD_MAX_CHARACTERS, "step's detail").optional(),
+  /** The Build the step makes (#697, ADR 0037), by its file's name: "Build the workbench". */
+  build: BuildSlug.optional(),
 });
 export type ProjectStep = z.infer<typeof ProjectStep>;
 

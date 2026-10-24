@@ -57,7 +57,8 @@ export const BenchParameters = z.object({
   shelf: z.object({ on: z.boolean(), height: SourcedSize, sheet: Sheet }),
   /** Panels that stop the frame racking: one across the back, one on each end. */
   braces: z.object({ rear: z.boolean(), ends: z.boolean(), sheet: Sheet }),
-  castors: Castors.nullable(),
+  /** None when left out, so a change that takes them out (a merge patch's `null`) leaves none. */
+  castors: Castors.nullable().default(null),
   fixings: z.object({ frameScrews: Fixing, sheetScrews: Fixing, brackets: Fixing }),
   /** The tools and kit the owner has to hand. */
   tools: z.array(Tool),

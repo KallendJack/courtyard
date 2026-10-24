@@ -10,7 +10,16 @@ import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { createKept, PlaceholderRows, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { BookmarkCheck, FileText, ListChecks, Pencil, Route, Tag, Undo2 } from "lucide-react";
+import {
+  BookmarkCheck,
+  FileText,
+  Hammer,
+  ListChecks,
+  Pencil,
+  Route,
+  Tag,
+  Undo2,
+} from "lucide-react";
 import { useState } from "react";
 import { NoteRow, NoteWords } from "@/components/chat/note-row";
 import { EmptyState } from "@/components/layout/notice";
@@ -201,19 +210,31 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
     );
   }
 
-  if (change.thing !== undefined) {
-    const { did, name, slug } = change.thing;
-    const label = `${did.charAt(0).toUpperCase()}${did.slice(1)} Thing`;
+  // A Thing (ADR 0020), a project (#603) or a Build (#697), by what the change did to it: a Thing
+  // is added, the others started. A Build has no page here yet (Fabrication opens it, #698).
+  const file =
+    change.thing !== undefined
+      ? { ...change.thing, of: "Thing", icon: <Tag /> }
+      : change.project !== undefined
+        ? { ...change.project, of: "project", icon: <Route /> }
+        : change.build !== undefined
+          ? { ...change.build, of: "Build", icon: <Hammer /> }
+          : undefined;
+  if (file !== undefined) {
+    const { did, name, slug, of } = file;
+    const thing = of === "Thing";
+    const words = { added: thing ? "Added" : "Started", changed: thing ? "Changed" : "Updated" };
+    const open = slug !== null && workspace !== undefined && !muted;
     return (
       <NoteRow
-        icon={muted ? <Undo2 /> : <Tag />}
+        icon={muted ? <Undo2 /> : file.icon}
         muted={muted}
         tall
         actions={actions}
         error={undo.error}
       >
         <NoteWords
-          label={muted ? "Undone" : label}
+          label={muted ? "Undone" : `${did === "removed" ? "Removed" : words[did]} ${of}`}
           line={name}
           muted={muted}
           struck={did === "removed"}
@@ -223,37 +244,8 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
           change={change}
           note={muted ? `${did}, then undone` : undefined}
         />
-        {slug !== null && workspace !== undefined && !muted && (
-          <OpenLink workspaceId={workspace} kind="thing" slug={slug} />
-        )}
-      </NoteRow>
-    );
-  }
-
-  if (change.project !== undefined) {
-    const { did, name, slug } = change.project;
-    const label =
-      did === "added" ? "Started project" : `${did === "removed" ? "Removed" : "Updated"} project`;
-    return (
-      <NoteRow
-        icon={muted ? <Undo2 /> : <Route />}
-        muted={muted}
-        tall
-        actions={actions}
-        error={undo.error}
-      >
-        <NoteWords
-          label={muted ? "Undone" : label}
-          line={name}
-          muted={muted}
-          struck={did === "removed"}
-        />
-        <Meta
-          workspace={workspace}
-          change={change}
-          note={muted ? `${did}, then undone` : undefined}
-        />
-        {slug !== null && workspace !== undefined && !muted && (
+        {open && thing && <OpenLink workspaceId={workspace} kind="thing" slug={slug} />}
+        {open && of === "project" && (
           <Link
             to="/workspaces/$workspaceId"
             params={{ workspaceId: workspace }}

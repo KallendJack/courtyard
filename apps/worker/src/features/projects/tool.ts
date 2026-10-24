@@ -1,4 +1,5 @@
 import {
+  BuildSlug,
   type Project,
   type ProjectDecision,
   type ProjectSlug,
@@ -51,6 +52,11 @@ const ProjectRequest = z.strictObject({
   step_kind: StepKind.optional(),
   step_text: z.string().optional(),
   step_detail: z.string().optional(),
+  /**
+   * The Build the numbered step makes, by its file's name: given by the Build tool (#697), or an
+   * empty text to clear it, as for a Build since removed.
+   */
+  step_build: z.union([BuildSlug, z.literal("")]).optional(),
   done: z.boolean().optional(),
   remove_step: z.boolean().optional(),
   decision_about: z.string().optional(),
@@ -133,6 +139,7 @@ export const createTurnProjects = (
       sent.step_kind !== undefined ||
       sent.step_text !== undefined ||
       sent.step_detail !== undefined ||
+      sent.step_build !== undefined ||
       sent.done === true ||
       sent.remove_step === true;
     if (stepChange && sent.step === undefined) return err({ kind: "no-step" });
@@ -182,6 +189,9 @@ export const createTurnProjects = (
               ...(sent.step_detail === undefined
                 ? {}
                 : { detail: sent.step_detail.trim() === "" ? null : sent.step_detail }),
+              ...(sent.step_build === undefined
+                ? {}
+                : { build: sent.step_build === "" ? null : sent.step_build }),
               ...(sent.done ? { done: true } : {}),
               ...(sent.remove_step ? { remove: true } : {}),
             },
