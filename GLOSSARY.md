@@ -220,6 +220,11 @@ _Avoid_: cutting list, cut sheet
 What a Build needs bought: each item, how many, its price and where it's sold, from the Build's parts and fixings.
 _Avoid_: shopping list, BOM, wanted list (that's Things the owner wants)
 
+**Sourced size**:
+A size as a Build takes it (#696): a number, its unit and its source, `measured`, `specified` (with the maker's page
+or spec it came from) or `assumed`. Never free text. The sourced Facts of #701 will use the same shape.
+_Avoid_: measurement (that's what the owner does), dimension
+
 **Making rules**:
 What holds for every Build, as the house rules hold for every repo (ADR 0036): every size says where it came from,
 cuts allow for the saw, fixings are checked against what they pass through, the tools needed are checked against the

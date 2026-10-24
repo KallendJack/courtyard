@@ -386,6 +386,17 @@ wait on itself when it runs `e2e`), and frees the place however the command ends
 of its own, rather than the worker's, because the repo's scripts need it with no worker running, and nothing else of
 the worker's.
 
+### Fabrication's engine: `packages/fabrication`
+
+`@courtyard/fabrication` works out a Build from its template and parameters (ADR 0036): the parts, each with a box
+for the 3D view; the cut plan, timber packed into lengths and sheets cut up with the saw's kerf between every two
+pieces; the buy list in whole lengths, sheets and packs; the steps, each action said for a beginner and in just the
+numbers, with its tools, kit, fixings, close-up and check; and the making-rule findings (a bolt too short for what it
+passes through, tools needed and not to hand, sizes assumed). A size without a source is refused. It's plain
+functions with no worker, web app, file system or model in it, so it could ship on its own; its one Courtyard import
+is the contract's `SourcedSize`. The first template is the framed bench (`bench/`). [Its README](../packages/fabrication/README.md)
+has the files.
+
 ### The house configs: `packages/house`
 
 `@courtyard/house` holds the configs of the house standard (ADR 0035), which every app repo Courtyard sets up
@@ -407,7 +418,8 @@ owner, which only the pages listing sessions parse), attachments (an event's in 
 a photo or a PDF by its media type, the limits and checks in `attachment-file.ts`), skills, saves and changes,
 usage limits and overflow, plan usage and its warnings (`usage.ts`, #66), sign-ins, the owner's GitHub repos New workspace offers (`github-repos.ts`,
 which only that page parses), backup, live updates with main's build, fresh start, the offline copy
-(`offline-copy.ts`, #106), health and errors, and a `chart`
+(`offline-copy.ts`, #106), health and errors, a sourced size (`sourced/size.ts`: a number, its unit and where it came from, which a Build's
+sizes take now and sourced Facts will, #701), and a `chart`
 block's JSON (`chart.ts`, which a model writes and the web app and the eval check). One piece is no shape:
 `command-words.ts` reads a shell command's words as a POSIX shell does, which the worker matches against the
 allowlist and the web app summarises a command's activity line from (#285). The worker's

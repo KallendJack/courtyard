@@ -1,0 +1,192 @@
+import type { Tool } from "./tools.ts";
+
+// What any template derives from its parameters (ADR 0036): everything a Build shows. Code works
+// every number out; a model only reads them.
+
+export type Result<T, E> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: E };
+export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
+export const err = <E>(error: E): Result<never, E> => ({ ok: false, error });
+
+/**
+ * A piece's place in the 3D view, in mm: `x` along the length from the left end, `y` back from the
+ * front, `z` up from the floor, and its size each way (`w` along x, `d` along y, `h` along z).
+ */
+export type Box = {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly w: number;
+  readonly d: number;
+  readonly h: number;
+};
+
+/**
+ * What a part is made of. A Build can mix them (printed brackets joining timber), so the kind
+ * stays open even where a template makes only some.
+ */
+export type Material =
+  | { readonly kind: "timber"; readonly stock: string }
+  | { readonly kind: "sheet"; readonly stock: string }
+  | { readonly kind: "printed"; readonly stock: string };
+
+/** A part, once for all its pieces: its label (A, B…), its cut size and a box for each piece. */
+export type Part = {
+  readonly label: string;
+  readonly name: string;
+  readonly count: number;
+  readonly material: Material;
+  readonly length: number;
+  readonly width: number;
+  readonly thickness: number;
+  readonly boxes: readonly Box[];
+};
+
+/** Something bought and fitted whole (a castor), drawn in the 3D view but never cut. */
+export type Fitted = { readonly name: string; readonly boxes: readonly Box[] };
+
+export type Cut = { readonly label: string; readonly length: number };
+
+export type CutPlan = {
+  readonly kerf: number;
+  /** For each timber the parts come from, the lengths to buy and what's cut from each. */
+  readonly timber: readonly {
+    readonly stock: string;
+    readonly stockLength: number;
+    readonly lengths: readonly {
+      readonly cuts: readonly Cut[];
+      readonly used: number;
+      readonly offcut: number;
+    }[];
+  }[];
+  /** For each sheet the parts come from, the sheets to buy and where each piece sits on them. */
+  readonly sheets: readonly {
+    readonly stock: string;
+    readonly sheetLength: number;
+    readonly sheetWidth: number;
+    readonly sheets: readonly {
+      readonly pieces: readonly {
+        readonly label: string;
+        readonly x: number;
+        readonly y: number;
+        readonly along: number;
+        readonly across: number;
+        readonly turned: boolean;
+      }[];
+    }[];
+  }[];
+};
+
+export type BuyLine = {
+  readonly item: string;
+  readonly kind: "timber" | "sheet" | "fitted" | "fixing";
+  /** What it's for, in a few words. */
+  readonly for: string;
+  /** How many pieces the Build uses. */
+  readonly needed: number;
+  /** How many come in one pack (a set of 4 castors, a box of 100 screws); 1 when sold singly. */
+  readonly packOf: number;
+  readonly packs: number;
+  /** A pack's price in pence, and where from, when known. */
+  readonly price?: { readonly pence: number; readonly shop?: string; readonly link?: string };
+  /** The packs' total in pence, when the price is known. */
+  readonly total?: number;
+};
+
+export type BuyList = {
+  readonly lines: readonly BuyLine[];
+  /** The priced lines' total, in pence. */
+  readonly total: number;
+  /** How many lines have no price yet, so the total leaves them out. */
+  readonly unpriced: number;
+};
+
+export type StepTool = { readonly tool: Tool; readonly name: string; readonly toHand: boolean };
+
+/** One action of a step, said for a beginner ("show me how") and for someone who knows how. */
+export type Action = { readonly howTo: string; readonly numbers: string };
+
+/**
+ * A step's close-up: a flat view of what it makes, in mm from the view's top left corner (`y`
+ * down), with its key sizes as dimension lines and where each fixing goes.
+ */
+export type CloseUp = {
+  readonly title: string;
+  readonly width: number;
+  readonly height: number;
+  readonly pieces: readonly {
+    readonly label: string;
+    readonly x: number;
+    readonly y: number;
+    readonly w: number;
+    readonly h: number;
+  }[];
+  readonly dimensions: readonly {
+    readonly from: { readonly x: number; readonly y: number };
+    readonly to: { readonly x: number; readonly y: number };
+    readonly mm: number;
+  }[];
+  readonly fixings: readonly { readonly x: number; readonly y: number }[];
+  readonly notes: readonly string[];
+};
+
+export type Step = {
+  readonly number: number;
+  readonly title: string;
+  readonly minutes: number;
+  /** Whether it needs a second pair of hands (standing the bench up). */
+  readonly helper: boolean;
+  readonly parts: readonly string[];
+  readonly tools: readonly StepTool[];
+  readonly safety: readonly StepTool[];
+  readonly fixings: readonly { readonly name: string; readonly count: number }[];
+  readonly actions: readonly Action[];
+  readonly closeUp: CloseUp | null;
+  /** How to know it's right before moving on, and the photo to send to have it checked. */
+  readonly check: { readonly says: string; readonly photo: string };
+  /** Words in it a beginner may not know, each in the Build's glossary. */
+  readonly words: readonly string[];
+};
+
+export type GlossaryWord = { readonly word: string; readonly means: string };
+
+/** What the making rules found (ADR 0036). */
+export type Finding =
+  | {
+      readonly kind: "fixing-too-short";
+      readonly fixing: string;
+      readonly length: number;
+      readonly needed: number;
+      /** What it passes through, each with its thickness, then the two threads past the nut. */
+      readonly through: readonly { readonly what: string; readonly mm: number }[];
+      /** The shortest usual length that's long enough. */
+      readonly use: number;
+    }
+  | {
+      readonly kind: "tools-missing";
+      readonly tools: readonly {
+        readonly tool: Tool;
+        readonly name: string;
+        readonly steps: readonly number[];
+      }[];
+    }
+  | { readonly kind: "too-big-for-stock"; readonly label: string; readonly stock: string }
+  | {
+      readonly kind: "assumed";
+      /** The sizes nobody measured or read from a maker: check these before cutting. */
+      readonly sizes: readonly string[];
+    };
+
+export type Build = {
+  readonly template: "framed-bench";
+  /** The finished size, mm. */
+  readonly size: { readonly length: number; readonly depth: number; readonly height: number };
+  readonly parts: readonly Part[];
+  readonly fitted: readonly Fitted[];
+  readonly cutPlan: CutPlan;
+  readonly buyList: BuyList;
+  readonly steps: readonly Step[];
+  readonly glossary: readonly GlossaryWord[];
+  readonly findings: readonly Finding[];
+};
