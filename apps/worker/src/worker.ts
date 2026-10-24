@@ -121,6 +121,7 @@ import { createGitHub, KEEP_FRESH_EVERY_MS } from "./integrations/github/index.t
 import { gitHubProblem, gitHubRoutes } from "./integrations/github/routes.ts";
 import { createPaperFiles, type PaperFiles } from "./integrations/paper/files.ts";
 import { apiError, contextError, readBody } from "./lib/http.ts";
+import { type Repeat, repeatForever } from "./lib/repeat.ts";
 import { err, ok, type Result } from "./lib/result.ts";
 import { sharedOwnerContext } from "./prompts/index.ts";
 import {
@@ -229,26 +230,8 @@ const WRITE_NOTES_EVERY_MS = 5 * 60 * 1000;
 /** How often the workspaces with no move review yet are asked again for one (#603). */
 const WRITE_REVIEWS_EVERY_MS = 30 * 60 * 1000;
 
-/** Runs a job now and every `everyMs`, never overlapping itself. */
-export type Repeat = (everyMs: number, job: () => Promise<void>) => void;
-
-const repeatForever: Repeat = (everyMs, job) => {
-  let busy = false;
-  const once = async () => {
-    if (busy) return;
-    busy = true;
-    try {
-      await job();
-    } catch (error) {
-      console.error(error);
-    } finally {
-      busy = false;
-    }
-  };
-  void once();
-  // Never keeps the process alive on its own.
-  setInterval(() => void once(), everyMs).unref();
-};
+/** How often code sessions are looked at for one quiet for 3 days with no pull request (#605). */
+const CLEAR_QUIET_WORKTREES_EVERY_MS = 60 * 60 * 1000;
 
 /**
  * Builds the worker from its settings, or returns a message naming what's wrong with them.
@@ -580,6 +563,8 @@ export const createWorker = (options: {
   repeat(READ_USAGE_EVERY_MS, () => usage.read());
   // Each planning session quiet for half an hour leaves its note for the next ones (#601).
   repeat(WRITE_NOTES_EVERY_MS, sessions.writeQuietNotes);
+  // Each code session quiet for 3 days with no pull request has its worktree cleared (#605).
+  repeat(CLEAR_QUIET_WORKTREES_EVERY_MS, sessions.clearQuietWorktrees);
   // Each planning workspace's move review, once (#603): as it starts, then now and then.
   const reviews = createMoveReviews({
     contextDir,

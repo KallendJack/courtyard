@@ -25,6 +25,8 @@ import {
 } from "@courtyard/contract";
 import { useEffect, useReducer, useRef, useState } from "react";
 import type { Queued } from "@/components/chat/queued-message";
+import { changeHelper, withActivity, withHelper, withText } from "./parts.ts";
+import { type WorktreeNote, worktreeNoteOf } from "./turn-words.ts";
 
 /**
  * A save the model made, shown as a note under its answer, and what the owner has done with it
@@ -123,58 +125,6 @@ export type Helper = {
 /** Where a helper's work goes (#395), as its line shows it. */
 export type HelperBranch = "shared" | "own" | "merged" | "clashed";
 
-/** A helper started after a turn's parts so far: with the ones just before it, or after the rest. */
-const withHelper = (parts: readonly AnswerPart[], helper: HelperId): readonly AnswerPart[] => {
-  const last = parts.at(-1);
-  if (last?.kind !== "helpers") return [...parts, { kind: "helpers", helpers: [helper] }];
-  return [...parts.slice(0, -1), { kind: "helpers", helpers: [...last.helpers, helper] }];
-};
-
-/** A turn's helpers with the one numbered `helper` changed, leaving the rest as they were. */
-const changeHelper = (
-  helpers: readonly Helper[],
-  helper: HelperId,
-  change: (helper: Helper) => Helper,
-) => helpers.map((each) => (each.id === helper ? change(each) : each));
-
-/** Text after a turn's parts so far: added to the text it's writing, or a new piece. */
-const withText = (
-  parts: readonly AnswerPart[],
-  text: string,
-  replayed: boolean,
-): readonly AnswerPart[] => {
-  const last = parts.at(-1);
-  if (last?.kind === "text") {
-    const whole = last.text + text;
-    return [
-      ...parts.slice(0, -1),
-      { kind: "text", text: whole, replayed: replayed ? whole.length : last.replayed },
-    ];
-  }
-  // A new piece starts at its first words, not at the break before them.
-  const start = text.trimStart();
-  if (start === "") return parts;
-  return [...parts, { kind: "text", text: start, replayed: replayed ? start.length : 0 }];
-};
-
-/**
- * An activity after a turn's parts so far: with the ones just before it, or after the text. A
- * build's newer place in the queue takes the older one's line (#281).
- */
-const withActivity = (
-  parts: readonly AnswerPart[],
-  activity: MarkedActivity,
-): readonly AnswerPart[] => {
-  const last = parts.at(-1);
-  if (last?.kind !== "activities") {
-    return [...parts, { kind: "activities", activities: [activity] }];
-  }
-  const moved =
-    activity.kind === "waiting-for-build" && last.activities.at(-1)?.kind === "waiting-for-build";
-  const before = moved ? last.activities.slice(0, -1) : last.activities;
-  return [...parts.slice(0, -1), { kind: "activities", activities: [...before, activity] }];
-};
-
 /** One message from the owner and everything the model did in response to it. */
 export type Turn = {
   readonly seq: number;
@@ -241,6 +191,8 @@ export type Turn = {
   readonly fromWorker: boolean;
   /** What the worker did for a code workspace's Lead after this turn (#347), each in its words. */
   readonly leadNotes: readonly string[];
+  /** What became of its session's worktree after it, 3 quiet days on with no pull request (#605). */
+  readonly worktree: WorktreeNote | undefined;
   /** When the owner's message was recorded, which the Working line counts from (#179). */
   readonly startedAt: string;
   /**
@@ -375,6 +327,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
               event.carriesOn === true ||
               event.afterLimit === true,
             leadNotes: [],
+            worktree: undefined,
             startedAt: event.at,
             doing: { kind: "thinking" },
             state: { kind: "running" },
@@ -683,6 +636,16 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         seq,
         change: (turn) => ({ ...turn, leadNotes: [...turn.leadNotes, event.text] }),
       });
+    // Its worktree cleared or kept after quiet days (#605), said under the turn before; the next
+    // turn checking it out again needs no words.
+    case "worktree-cleared":
+    case "worktree-kept":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({ ...turn, worktree: worktreeNoteOf(event) }),
+      });
+    case "worktree-restored":
+      return { ...log, lastSeq: seq };
     case "thing-undone":
       return withTurn(log, {
         seq,

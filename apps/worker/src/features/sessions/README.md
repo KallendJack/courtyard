@@ -58,8 +58,8 @@ most 10 seconds, timed by the `wait` the worker is given; past that it answers w
 
 ### A session's pull request
 
-- **Following it** (#172): it looks at each code session's PR through `code/` and `github/` every 30 seconds (a
-  repeating job) and as soon as a turn in one ends, one session at a time, and records each change as a
+- **Following it** (#172, `following.ts`): it looks at each code session's PR through `code/` and `github/` every 30
+  seconds (a repeating job) and as soon as a turn in one ends, one session at a time, and records each change as a
   `pull-request` event (its number, state, latest commit and checks), which the session page's branch and PR strip
   shows.
 - **Checks failing** on a commit not yet asked about start a turn on the model the owner last used, once the session
@@ -70,7 +70,22 @@ most 10 seconds, timed by the `wait` the worker is given; past that it answers w
 - **A conflict** with its base is brought up to date the same way first (#382): Bring up to date's message,
   `conflicted` on it, once per commit, so one the model can't resolve waits for the owner's Bring up to date.
 - **Merged or closed**, anywhere, ends the session: it takes no more messages, and once no turn runs its worktree and
-  branch are cleared away.
+  branch are cleared away. A worktree a program holds is tried again after a minute, then twice as long each time up
+  to 6 hours, and only the first try deletes its branch on GitHub (`following.ts`, #605).
+- **Not followed:** a grill or a Lead (placeless, they open none), nor a session whose worktree is cleared (#605).
+
+### A quiet session's worktree (#605, `quiet-worktrees.ts`)
+
+- **Cleared after 3 quiet days.** The worker's repeating job (`clearQuietWorktrees`, hourly) clears the worktree and
+  local branch of each code session with no pull request quiet for 3 days: no turn, event or commit on its branch. It
+  keeps one mid-turn or waiting for a place, with a task running, a Lead's builder that's stuck, or one on a branch it
+  didn't make (`keepsBranch`, #326).
+- **Nothing lost.** `code/`'s `clearQuiet` pushes what GitHub lacks to `wip/<session branch>` first, and the session
+  records `worktree-cleared` with it; its page says so under the last turn. One whose work a `wip` branch can't keep
+  (on another branch, new files that look like secrets, a helper's work not on its branch) stays, and records
+  `worktree-kept` with why, once; its page says that instead.
+- **Back for its next turn.** Any turn in it, the owner's or the worker's, first checks the branch out again
+  (`code/`'s `checkOutAgain`) and records `worktree-restored`; one that can't says why (`branch-refused`).
 - Each `pull-request` event carries the PR's size (lines added and removed, files changed, #160), its title (#240),
   and whether it conflicts with its base (#278). A code workspace's list of sessions gives each one's branch and its
   PR as last recorded (kept in memory once read, so the list doesn't read every event log), which the workspace

@@ -34,7 +34,6 @@ import {
   pullRequestIn,
   queuedIn,
   type RunningTasks,
-  SESSION_TITLE_MAX_LENGTH,
   SessionEvent,
   SessionId,
   SessionSeen,
@@ -53,6 +52,7 @@ import {
   tasksIn,
   type WorkspaceConnections,
   WorkspaceId,
+  worktreeClearedIn,
 } from "@courtyard/contract";
 import { z } from "zod";
 import {
@@ -214,8 +214,11 @@ import {
   withoutStarterHint,
 } from "../workspaces/index.ts";
 import { type AddedInbox, createAddedInbox } from "./added.ts";
+import { createClearingRetries, failedAgain, samePullRequest } from "./following.ts";
 import { createSessionNotes } from "./notes.ts";
+import { createQuietWorktrees } from "./quiet-worktrees.ts";
 import { savingTool } from "./saving-tools.ts";
+import { modelTitle, titleFrom } from "./titles.ts";
 
 /** A skill's name typed at the start of a message, as Claude Code takes one: `/implement 157`. */
 const SLASH_SKILL = /^\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/;
@@ -359,66 +362,6 @@ const claimToRelease = (file: SessionFile, events: readonly SessionEvent[]) =>
 /** An event before it's numbered and timed. */
 type WithoutNumbering<E> = E extends unknown ? Omit<E, "seq" | "at"> : never;
 type NewEvent = WithoutNumbering<SessionEvent>;
-
-/** Whether a pull request is as it was last recorded, so nothing about it changed. */
-const samePullRequest = (now: PullRequest, was: PullRequest | undefined) =>
-  was !== undefined &&
-  now.number === was.number &&
-  now.title === was.title &&
-  now.url === was.url &&
-  now.state === was.state &&
-  now.head === was.head &&
-  // One recorded before conflicts were (#278) didn't conflict.
-  (now.conflicts ?? false) === (was.conflicts ?? false) &&
-  // One recorded before drafts were (#653) wasn't one.
-  (now.draft ?? false) === (was.draft ?? false) &&
-  JSON.stringify(now.changes) === JSON.stringify(was.changes) &&
-  JSON.stringify(now.checks) === JSON.stringify(was.checks);
-
-/**
- * Whether an open pull request's checks failed again on a commit its session already had a fixing
- * turn for, having run again since (a re-run, #356): no second fixing turn starts for it.
- */
-const failedAgain = (seen: {
-  events: readonly SessionEvent[];
-  was: PullRequest | undefined;
-  now: PullRequest;
-}) => {
-  const { was, now } = seen;
-  return (
-    now.state === "open" &&
-    now.checks.kind === "failed" &&
-    was?.head === now.head &&
-    was.checks.kind !== "failed" &&
-    seen.events.some(
-      (event) => event.type === "owner-message" && event.checksFailed?.head === now.head,
-    )
-  );
-};
-
-/** Text as a title: its first line, cut short with an ellipsis when it's too long for one. */
-const titleFrom = (text: string) => {
-  const firstLine = text.split("\n")[0]?.trim() ?? "";
-  return firstLine.length > SESSION_TITLE_MAX_LENGTH
-    ? `${firstLine.slice(0, SESSION_TITLE_MAX_LENGTH - 1)}…`
-    : firstLine;
-};
-
-/**
- * A model's title as the session gets it: on one line, without the quotes or full stop it was
- * told to leave off, and no longer than a title can be. `undefined` when nothing is left.
- */
-const modelTitle = (answer: unknown) => {
-  const parsed = TitleAnswer.safeParse(answer);
-  if (!parsed.success) return undefined;
-  const tidied = parsed.data.title
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^["'“‘]+|["'”’]+$/g, "")
-    .replace(/\.$/, "")
-    .trim();
-  return tidied === "" ? undefined : titleFrom(tidied);
-};
 
 /** How long titling a session can take before it's given up on: a few words shouldn't take long. */
 const TITLING_TIMEOUT_MS = 2 * 60 * 1000;
@@ -859,6 +802,21 @@ export const createSessions = (options: {
     background: options.background,
     wait: options.wait,
   });
+  const quietWorktrees = createQuietWorktrees({
+    now: options.now,
+    code: options.code,
+    sessions: allSessionFiles,
+    events: (id) => readEvents(id),
+    repoOf: (workspaceId) => repoPathOf(workspaceId),
+    busy: async (id) =>
+      (running.get(id)?.turn.kind ?? "idle") !== "idle" ||
+      options.code.slots.waits(id) ||
+      tasks.running(id).length > 0 ||
+      (await options.builders?.statusOf(id))?.kind === "stuck",
+    record: (id, event) => append(id, event),
+  });
+  /** Worktrees of sessions whose pull request ended, which wouldn't go, tried again (#605). */
+  const clearing = createClearingRetries(options.now);
 
   /** The event number the owner has seen a session up to (#334), read from its folder once. */
   const seenOf = async (
@@ -2172,10 +2130,10 @@ export const createSessions = (options: {
     session.turn = starting;
 
     if (start.coding) {
-      const ended = await pullRequestEndedIn(start.id);
-      if (ended !== undefined) {
+      const refused = (await pullRequestEndedIn(start.id)) ?? (await restoreWorktree(start.id));
+      if (refused !== undefined) {
         session.turn = { kind: "idle" };
-        return err(ended);
+        return err(refused);
       }
     }
 
@@ -2765,12 +2723,29 @@ export const createSessions = (options: {
       : { kind: "pull-request-ended", state: pullRequest.state };
   };
 
+  /** A code workspace's repository, or `undefined` for any other. */
+  const repoPathOf = async (workspaceId: WorkspaceId) => {
+    const workspace = await getWorkspace(options.contextDir, workspaceId);
+    return workspace.ok && typeof workspace.value.repoPath === "string"
+      ? workspace.value.repoPath
+      : undefined;
+  };
+
   /** A code session's branch and its workspace's repository, or `undefined` for any other. */
   const codeBranchOf = async (file: SessionFile) => {
-    if (file.branch === undefined) return undefined;
-    const workspace = await getWorkspace(options.contextDir, file.workspaceId);
-    if (!workspace.ok || typeof workspace.value.repoPath !== "string") return undefined;
-    return { branch: file.branch, repoPath: workspace.value.repoPath };
+    const repoPath = file.branch === undefined ? undefined : await repoPathOf(file.workspaceId);
+    return repoPath === undefined || file.branch === undefined
+      ? undefined
+      : { branch: file.branch, repoPath };
+  };
+
+  /** Checks a code session's cleared worktree out again (#605): why it couldn't, if it couldn't. */
+  const restoreWorktree = async (id: SessionId): Promise<SessionError | undefined> => {
+    const found = await findSession(id);
+    const branch = found.ok ? found.value.branch : undefined;
+    if (!found.ok || branch === undefined) return undefined;
+    const back = await quietWorktrees.restore({ ...found.value, branch });
+    return back.ok ? undefined : { kind: "branch-refused", refusal: back.error };
   };
 
   /** A code session's branch and worktree, as clearing it away needs them. */
@@ -2810,14 +2785,15 @@ export const createSessions = (options: {
   const followPullRequest = (id: SessionId) => {
     const look = following.then(async () => {
       const file = await readJsonFile(sessionFilePath(id), SessionFile);
-      if (!file.ok || file.value === undefined) return;
+      // A grill or a Lead opens no pull request (#605).
+      if (!file.ok || file.value === undefined || file.value.placeless === true) return;
       const { workspaceId } = file.value;
       const code = await codeBranchOf(file.value);
       if (code === undefined) return;
       const { branch, repoPath } = code;
       await settled(id);
       const events = await readEvents(id);
-      if (!events.ok) return;
+      if (!events.ok || worktreeClearedIn(events.value) !== undefined) return;
       let pullRequest = pullRequestIn(events.value);
       if (!pullRequestEnded(pullRequest)) {
         const found = await options.code.pullRequestOf({ repoPath, branch });
@@ -2840,8 +2816,10 @@ export const createSessions = (options: {
         await tasks.stopAll(id, "session-ended");
         const sessionBranch = sessionBranchOf({ ...file.value, branch });
         const there = await exists(sessionBranch.worktree);
-        if (there.ok && there.value) {
-          await options.code.clearBranch({ repoPath, sessionBranch, pushed: true });
+        // One a program holds is tried again later and later, its GitHub branch deleted once.
+        if (there.ok && there.value && clearing.due(id)) {
+          const pushed = clearing.first(id);
+          clearing.tried(id, await options.code.clearBranch({ repoPath, sessionBranch, pushed }));
         }
         return;
       }
@@ -3205,6 +3183,8 @@ export const createSessions = (options: {
 
     /** For the worker's repeating jobs (#601): writes the note of each planning session gone quiet. */
     writeQuietNotes: notes.writeQuiet,
+    /** For the worker's repeating jobs: clears quiet code sessions' worktrees (#605). */
+    clearQuietWorktrees: quietWorktrees.clearQuiet,
 
     /** A code session's tasks still running (#182), oldest first, each with its last line. */
     runningTasks: async (rawId: string): Promise<Result<RunningTasks, SessionError>> => {
