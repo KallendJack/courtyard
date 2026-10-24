@@ -343,8 +343,8 @@ describe("a project step's Build", () => {
 });
 
 describe("Undo", () => {
-  it("from a Build's note puts its file back, and Recent changes lists the change and its undo", async () => {
-    const { session, events, request } = await sessionWith([
+  it("from a Build's note puts its file back, tells the next turn, and Recent changes lists the change and its undo", async () => {
+    const { session, events, request, saver } = await sessionWith([
       [START_BENCH],
       [buildTool({ build: "B1", parameters: { height: { value: 850 } } })],
     ]);
@@ -378,6 +378,24 @@ describe("Undo", () => {
         undo: "available",
       },
     ]);
+
+    // The next turn is told its Build saves, and that the owner undid the height, so it doesn't
+    // carry on as if the bench were lower.
+    await postJson(request, `/api/sessions/${session.id}/messages`, {
+      text: "How high is it now?",
+      model: SAVING_MODEL,
+    });
+    await followSession(request, {
+      sessionId: session.id,
+      until: "turn-completed",
+      after: events.at(-1)?.seq ?? 0,
+    });
+    expect(saver.framings[2]?.message).toContain(
+      "You: Done.\n\nYour saves in this answer:\n- Changed the Build Workbench: height: 900 mm → 850 mm (the owner undid this)",
+    );
+    expect(saver.framings[2]?.message).toContain(
+      "Your saves in this answer:\n- Started the Build Workbench (kept)",
+    );
 
     // Undoing its start from Recent changes, through its session, takes the Build away.
     const started = changes[2]?.id;

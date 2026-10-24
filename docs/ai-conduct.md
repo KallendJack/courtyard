@@ -1802,7 +1802,9 @@ parameter; parameters code can't work out, each problem on its own line (`- heig
 without a step or a step without a project; a label no Build has; a Build changed since it was shown, with the Builds
 as they are now; a name another Build's file has; and a change that changes nothing. As with saves, a refused Build
 can be put right once. The chat shows "Started Build" or "Updated Build" with its name and, in grey, each parameter
-changed ("height: 900 mm → 850 mm"). The fake saves one for each line "build: " followed by the tool's input as JSON.
+changed ("height: 900 mm → 850 mm"). Later turns are told each earlier answer's Build saves, what each changed and
+whether the owner undid it ("- Changed the Build Workbench: height: 900 mm → 850 mm (the owner undid this)"). The fake
+saves one for each line "build: " followed by the tool's input as JSON.
 
 The eval's `build-*` scenarios check the saved Build, not the answer's wording, on both providers: asked for a bench,
 the model uses the tool, and every length, count and total in its answer is one the saved Build derives

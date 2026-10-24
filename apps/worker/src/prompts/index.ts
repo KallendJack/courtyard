@@ -82,7 +82,7 @@ import type {
   TurnTool,
   TurnToolName,
 } from "../providers/index.ts";
-import { BUILD_TOOL, buildsPart, KEEPING_BUILDS } from "./builds.ts";
+import { BUILD_TOOL, buildSaveLine, buildsPart, KEEPING_BUILDS, type SaidBuild } from "./builds.ts";
 import { contained, quoted, textReply } from "./text.ts";
 
 /**
@@ -1388,6 +1388,7 @@ type Said =
       readonly documents: readonly SaidDocument[];
       readonly things: readonly SaidThing[];
       readonly projects: readonly SaidProject[];
+      readonly builds: readonly SaidBuild[];
     }
   /** What Courtyard did between what was said: a task starting or ending (#182). */
   | { readonly speaker: "courtyard"; readonly text: string };
@@ -1403,13 +1404,15 @@ type SaidProject = { readonly save: ProjectSave; undone: boolean };
 
 type ModelSaid = Extract<Said, { speaker: "model" }>;
 
+/** An answer's saves before it has made any. */
+const NO_SAVES = { saves: [], documents: [], things: [], projects: [], builds: [] } as const;
+
 /** The session so far, from its events: each owner message and the answer to it. */
 const conversationOf = (events: readonly SessionEvent[]) => {
   const said: Said[] = [];
   const saves = new Map<number, SaidSave>();
-  const documents = new Map<number, SaidDocument>();
-  const things = new Map<number, SaidThing>();
-  const projects = new Map<number, SaidProject>();
+  /** Its document, Thing, project and Build saves, by their events' seq, which their Undo names. */
+  const fileSaves = new Map<number, { undone: boolean }>();
   // What the owner added while it answered and the model never read (#252).
   const unread = new Set(
     events.flatMap((event) => (event.type === "added-not-read" ? [event.added] : [])),
@@ -1436,10 +1439,7 @@ const conversationOf = (events: readonly SessionEvent[]) => {
         ...changed,
         text: changed.text.slice(answering.text.length).trimStart(),
         did: [],
-        saves: [],
-        documents: [],
-        things: [],
-        projects: [],
+        ...NO_SAVES,
       });
       return;
     }
@@ -1448,10 +1448,7 @@ const conversationOf = (events: readonly SessionEvent[]) => {
       text: "",
       ended: "running",
       did: didFirst,
-      saves: [],
-      documents: [],
-      things: [],
-      projects: [],
+      ...NO_SAVES,
     };
     said.push({ ...current, ...change(current) });
   };
@@ -1534,34 +1531,34 @@ const conversationOf = (events: readonly SessionEvent[]) => {
         // The owner's Save as document isn't the model's doing; the documents list shows it.
         if (event.answer !== undefined) break;
         const saved: SaidDocument = { save: event.save, undone: false };
-        documents.set(event.seq, saved);
+        fileSaves.set(event.seq, saved);
         answer((current) => ({ documents: [...current.documents, saved] }));
-        break;
-      }
-      case "document-undone": {
-        const saved = documents.get(event.save);
-        if (saved) saved.undone = true;
         break;
       }
       case "thing-saved": {
         const saved: SaidThing = { save: event.save, undone: false };
-        things.set(event.seq, saved);
+        fileSaves.set(event.seq, saved);
         answer((current) => ({ things: [...current.things, saved] }));
-        break;
-      }
-      case "thing-undone": {
-        const saved = things.get(event.save);
-        if (saved) saved.undone = true;
         break;
       }
       case "project-saved": {
         const saved: SaidProject = { save: event.save, undone: false };
-        projects.set(event.seq, saved);
+        fileSaves.set(event.seq, saved);
         answer((current) => ({ projects: [...current.projects, saved] }));
         break;
       }
-      case "project-undone": {
-        const saved = projects.get(event.save);
+      // So the next turn knows a Build's size the owner undid isn't the Build's any more.
+      case "build-saved": {
+        const saved: SaidBuild = { save: event.save, undone: false };
+        fileSaves.set(event.seq, saved);
+        answer((current) => ({ builds: [...current.builds, saved] }));
+        break;
+      }
+      case "document-undone":
+      case "thing-undone":
+      case "project-undone":
+      case "build-undone": {
+        const saved = fileSaves.get(event.save);
         if (saved) saved.undone = true;
         break;
       }
@@ -1696,6 +1693,7 @@ const lineFor = (said: Said) => {
     ...said.documents.map(documentLine),
     ...said.things.map(thingSaveLine),
     ...said.projects.map(projectSaveLine),
+    ...said.builds.map(buildSaveLine),
   ];
   const did = said.ended === "cut-off" && said.did.length > 0 ? didLines(said.did) : [];
   return [

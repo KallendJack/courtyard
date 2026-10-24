@@ -1,4 +1,4 @@
-import { BuildTemplate } from "@courtyard/contract";
+import { type BuildSave, BuildTemplate } from "@courtyard/contract";
 import { BenchParameters, type Build, type Finding } from "@courtyard/fabrication";
 import { z } from "zod";
 import { buildPath, type ReadBuilds } from "../features/fabrication/index.ts";
@@ -136,6 +136,13 @@ const numbersOf = (build: Build) => {
     "Give these numbers as they are; to change one, change a parameter.",
   ].join("\n");
 };
+
+/** A Build the model saved in the conversation, and whether the owner has undone it since. */
+export type SaidBuild = { readonly save: BuildSave; undone: boolean };
+
+/** A Build save as the model reads it in the conversation, with what the owner did with it. */
+export const buildSaveLine = ({ save, undone }: SaidBuild) =>
+  `- ${save.action === "add" ? "Started" : "Changed"} the Build ${save.build.name}${save.changes.length === 0 ? "" : `: ${save.changes.join("; ")}`} (${undone ? "the owner undid this" : "kept"})`;
 
 /** Why a Build was refused, in the model's terms. */
 const buildRefusalReason = (refusal: BuildToolRefusal) => {
