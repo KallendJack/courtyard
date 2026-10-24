@@ -246,7 +246,8 @@ export const Composer = memo(function Composer(props: {
       send.setError("No model is available. Check the providers' settings.");
       return false;
     }
-    if (message.trim() === "") return false;
+    // A photo or PDF can go on its own, with no words (#164).
+    if (message.trim() === "" && attaching.length === 0) return false;
     const sent = await send.run(
       {
         text: message,

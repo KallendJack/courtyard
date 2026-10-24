@@ -23,6 +23,16 @@ const ordinal = (place: number) => {
 };
 
 /**
+ * What a queued message's bubble says: its words, then how many files go with it; or, sent with no
+ * words (#164), only that.
+ */
+const queuedWords = ({ text, attachments }: Queued) => {
+  if (attachments === 0) return text;
+  const files = `${attachments} attachment${attachments === 1 ? "" : "s"}`;
+  return text === "" ? files : `${text} (with ${files})`;
+};
+
+/**
  * The owner's queued messages, under the Working line, in order (#177, Paper board Handheld · 23):
  * each an outlined bubble with × to remove it, saying when it goes. Every device shows them, and
  * removing one removes it everywhere.
@@ -43,9 +53,7 @@ export function QueuedMessages(props: {
           <li key={message.seq} className="flex max-w-[85%] flex-col items-end gap-1.5">
             <div className="flex items-start gap-1.5 rounded-bubble rounded-br-sm py-1.5 pr-1.5 pl-4 ring-[1.5px] ring-muted-foreground/40 ring-inset">
               <p className="py-1.5 text-[15px]/[22px] whitespace-pre-wrap wrap-anywhere text-foreground/85 md:text-base/[22px]">
-                {message.text}
-                {message.attachments > 0 &&
-                  ` (with ${message.attachments} attachment${message.attachments === 1 ? "" : "s"})`}
+                {queuedWords(message)}
               </p>
               <IconButton
                 label="Remove queued message"

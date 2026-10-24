@@ -203,14 +203,19 @@ export const sessionError = (c: Context, error: SessionError) => {
 
 /**
  * A message the owner sent and its attachments, checked (#78); or the response refusing it, with
- * the reason one of them can't go.
+ * the reason one of them can't go. It needs words, a file, or both (#164).
  */
-const readMessageWithAttachments = async <T>(
+const readMessageWithAttachments = async <T extends { text: string }>(
   c: Context,
   schema: z.ZodType<T>,
 ): Promise<Result<{ message: T; attachments: PreparedAttachment[] }, Response>> => {
   const sent = await readMessage(c, schema);
   if (!sent.ok) return err(apiError(c, { status: 400, error: sent.error }));
+  if (sent.value.message.text === "" && sent.value.files.length === 0) {
+    return err(
+      apiError(c, { status: 400, error: "Write something, or attach a photo or PDF, first." }),
+    );
+  }
   const attachments = await prepareAttachments(sent.value.files);
   if (!attachments.ok) return err(apiError(c, { status: 400, error: attachments.error }));
   return ok({ message: sent.value.message, attachments: attachments.value });

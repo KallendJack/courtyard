@@ -119,12 +119,16 @@ function OwnerMessage(props: { sessionId: SessionId; turn: Turn }) {
       : [],
   );
   const pdfs = turn.attachments.filter((attachment) => attachment.kind === "pdf");
+  // A photo or PDF can go with no words at all (#164), when the bubble holds only what it attached.
+  const wordless = turn.text === "" && turn.skill === undefined;
   const words = (
     <>
       {turn.skill !== undefined && <SkillTag name={turn.skill} look="message" />}
-      <p className="text-[15px]/[23px] whitespace-pre-wrap wrap-anywhere md:text-base/[25px]">
-        {turn.text}
-      </p>
+      {turn.text !== "" && (
+        <p className="text-[15px]/[23px] whitespace-pre-wrap wrap-anywhere md:text-base/[25px]">
+          {turn.text}
+        </p>
+      )}
     </>
   );
   if (turn.attachments.length === 0) {
@@ -135,7 +139,12 @@ function OwnerMessage(props: { sessionId: SessionId; turn: Turn }) {
     );
   }
   return (
-    <div className="ml-auto flex w-fit max-w-[85%] flex-col gap-2 rounded-bubble rounded-br-sm bg-accent px-1.5 pt-1.5 pb-2.5 text-accent-foreground">
+    <div
+      className={classes(
+        "ml-auto flex w-fit max-w-[85%] flex-col gap-2 rounded-bubble rounded-br-sm bg-accent px-1.5 pt-1.5 text-accent-foreground",
+        wordless ? "pb-1.5" : "pb-2.5",
+      )}
+    >
       {photos.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {photos.map((photo, index) => (
@@ -158,7 +167,7 @@ function OwnerMessage(props: { sessionId: SessionId; turn: Turn }) {
           href={attachmentUrl(sessionId, pdf.id)}
         />
       ))}
-      <div className="flex flex-col gap-1.5 px-2.5">{words}</div>
+      {!wordless && <div className="flex flex-col gap-1.5 px-2.5">{words}</div>}
       <PhotoViewer
         photos={photos}
         showing={viewing}
