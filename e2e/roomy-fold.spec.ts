@@ -51,6 +51,9 @@ test.describe("on the unfolded Fold", () => {
     // about 385 px.
     const first = page.getByRole("region", { name: "Builders" });
     const main = page.getByRole("region", { name: "Main" });
+    // Until its Lead is known the board is a placeholder of its own, swapped out when it comes: its
+    // Run or Pause says it's the board that stays (#666).
+    await expect(first.getByRole("button", { name: /^(Run|Pause)$/ })).toBeVisible();
     await expect(main).toBeVisible();
     const [top, foot] = [await boxOf(first), await boxOf(main)];
     expect(foot.y - top.y).toBeGreaterThanOrEqual(370);
