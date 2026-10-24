@@ -14,6 +14,7 @@ import {
   type Requester,
   removeTestFolder,
   startSession,
+  stopTurn,
   testWorker,
 } from "./testing.ts";
 
@@ -25,7 +26,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await removeTestFolder(root, { leftRunning: true });
+  await removeTestFolder(root);
 });
 
 const start = async (providers: Provider[]) => {
@@ -163,5 +164,7 @@ describe("stopping safely", () => {
 
     expect(events.map((e) => e.type)).toEqual(["owner-message", "turn-stopped"]);
     expect(next.status).toBe(202);
+    // The next turn goes to the same stubborn provider, so it's stopped too.
+    await stopTurn(request, session.id, events.length + 1);
   });
 });

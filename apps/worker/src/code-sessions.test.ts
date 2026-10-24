@@ -40,7 +40,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await removeTestFolder(root, { leftRunning: true });
+  await removeTestFolder(root);
 });
 
 const start = async (providers: Provider[] = [createFakeProvider({ delayMs: 0 })]) =>

@@ -15,6 +15,7 @@ import {
   postJson,
   type Requester,
   removeTestFolder,
+  stopTurn,
   testWorker,
 } from "./testing.ts";
 
@@ -30,7 +31,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await removeTestFolder(root, { leftRunning: true });
+  await removeTestFolder(root);
 });
 
 const start = async (providers: Provider[]) => asOwner(testWorker({ root, providers }));
@@ -95,7 +96,8 @@ describe("a command off the command allowlist", () => {
     ]);
     const request = await start([provider]);
 
-    const { asked } = await untilApproval(request);
+    const { id, asked } = await untilApproval(request);
+    await stopTurn(request, id);
 
     expect(asked.ask).toEqual({
       kind: "command",
@@ -283,5 +285,12 @@ describe("stopping a turn that waits on an approval", () => {
       model: CODING_MODEL,
     });
     expect(next.status).toBe(202);
+    const again = await followSession(request, {
+      sessionId: id,
+      after: events.length,
+      until: "approval-requested",
+    });
+    await stopTurn(request, id, events.length + 1);
+    expect(again[0]).toMatchObject({ type: "owner-message", text: "Carry on" });
   });
 });

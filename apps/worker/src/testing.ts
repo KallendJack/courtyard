@@ -43,18 +43,30 @@ const keepHold: Background = (work) => {
 };
 
 /**
- * For tests: removes a test's folder once the work its workers started in the background has
- * settled, since that work writes into it (#226). `leftRunning` is for a file whose tests can end
- * with a turn still running (one waiting on an approval, say, in a code session's repository):
- * removing it is then tried again a few times, until that file's tests stop what they start.
+ * How long a test's leftover work may take to settle before the test fails for leaving it: long,
+ * as git is slow on a busy Windows machine, but inside the hooks' limit (vitest.config.ts).
  */
-export const removeTestFolder = async (root: string, options: { leftRunning?: boolean } = {}) => {
-  while (background.size > 0) await Promise.all(background);
-  await rm(root, {
-    recursive: true,
-    force: true,
-    ...(options.leftRunning ? { maxRetries: 5 } : {}),
-  });
+const SETTLING_MS = 30_000;
+
+/**
+ * For tests: removes a test's folder once the work its workers started in the background (its
+ * turns, titling, notifying) has settled, since that work writes into it (#226). A test stops or
+ * awaits each turn it starts (#230), so one still running after a few seconds fails it.
+ */
+export const removeTestFolder = async (root: string) => {
+  const deadline = Date.now() + SETTLING_MS;
+  while (background.size > 0) {
+    const left = deadline - Date.now();
+    const settled = await Promise.race([
+      Promise.all(background).then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), Math.max(left, 0))),
+    ]);
+    if (!settled) {
+      background.clear();
+      throw new Error("The test left a turn running: stop it, or await its end, before it ends.");
+    }
+  }
+  await rm(root, { recursive: true, force: true });
 };
 
 /**
@@ -173,6 +185,16 @@ export const followSession = async (
       }
     }
   }
+};
+
+/**
+ * For tests: stops a session's turn, named by its owner message's event number (the first turn's
+ * is 1), and waits for it to end as stopped, so a test leaves nothing running (#230).
+ */
+export const stopTurn = async (request: Requester, sessionId: string, turn = 1) => {
+  const response = await postJson(request, `/api/sessions/${sessionId}/stop`, { turn });
+  if (response.status !== 202) throw new Error(`stopping turn ${turn} failed with ${response.status}`);
+  return followSession(request, { sessionId, after: turn, until: "turn-stopped" });
 };
 
 /** For tests: the scripted fake provider's model. */

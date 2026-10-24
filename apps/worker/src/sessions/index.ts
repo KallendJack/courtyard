@@ -422,7 +422,7 @@ type RunningSession = {
 };
 
 /**
- * Given work nobody waits for once it has started (titling a session, notifying the owner), which
+ * Given work nobody waits for once it has started (a turn, titling it, notifying the owner), which
  * settles without throwing. The worker lets it run; tests keep hold of it, to wait for it before
  * removing the folders it writes into.
  */
@@ -1273,6 +1273,7 @@ export const createSessions = (options: {
       coding: start.coding,
       firstTurn: start.firstTurn ?? false,
     }).catch((error: unknown) => console.error(`Session ${start.id}: a turn crashed`, error));
+    options.background(session.ended);
     return ok(null);
   };
 
