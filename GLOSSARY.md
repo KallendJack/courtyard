@@ -226,6 +226,22 @@ cuts allow for the saw, fixings are checked against what they pass through, the 
 owner's, and work that needs a pro is said plainly.
 _Avoid_: safety rules, build rules
 
+**Size**:
+A measurement Courtyard keeps as a record with its source (ADR 0037): what it's of, the value and unit, and whether
+it was **measured** (tied to the owner's message), **specified** (a maker's page), **reported** ("about") or
+**estimated** (from a photo or a model). Two different values for the same thing are both kept.
+_Avoid_: fact (that's a context file line), dimension, measurement (as a record's name)
+
+**Space**:
+A Thing of kind space, such as the garage or a van's interior (ADR 0037): its sizes, its openings and what's kept in
+it, which the room in Fabrication is drawn from.
+_Avoid_: room (one kind of space), area, zone (that's a part of a space to keep clear)
+
+**Tool**:
+A Thing of kind tool, kept at the owner's level so every project sees it (ADR 0037); a Build's steps use the tools to
+hand.
+_Avoid_: kit, equipment, hardware
+
 **Fabrication**:
 The app the owner opens a Build in (`apps/fabrication`, ADR 0036): the chat about it, its 3D view and its build list.
 The engine behind it is `packages/fabrication`.
