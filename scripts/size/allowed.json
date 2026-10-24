@@ -33,7 +33,7 @@
     "apps/worker/src/integrations/github/api.ts": 1430,
     "apps/worker/src/integrations/github/fake.ts": 785,
     "apps/worker/src/integrations/github/index.ts": 803,
-    "apps/worker/src/prompts/index.ts": 2935,
+    "apps/worker/src/prompts/index.ts": 2932,
     "apps/worker/src/providers/claude.ts": 1793,
     "apps/worker/src/providers/codex.ts": 1537,
     "apps/worker/src/providers/fake.ts": 974,

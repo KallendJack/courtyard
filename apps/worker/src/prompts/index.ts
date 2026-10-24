@@ -1388,20 +1388,16 @@ type Said =
       /** What it did (#186), told only once a restart cut it off. */
       readonly did: readonly Activity[];
       readonly saves: readonly SaidSave[];
-      readonly documents: readonly SaidDocument[];
-      readonly things: readonly SaidThing[];
-      readonly projects: readonly SaidProject[];
-      readonly builds: readonly SaidBuild[];
+      readonly documents: readonly SaidFile<DocumentSave>[];
+      readonly things: readonly SaidFile<ThingSave>[];
+      readonly projects: readonly SaidFile<ProjectSave>[];
+      readonly builds: readonly SaidFile<BuildSave>[];
     }
   /** What Courtyard did between what was said: a task starting or ending (#182). */
   | { readonly speaker: "courtyard"; readonly text: string };
 
 /** A document, Thing, project or Build the model saved, and whether the owner has undone it since. */
 type SaidFile<Save> = { readonly save: Save; undone: boolean };
-type SaidDocument = SaidFile<DocumentSave>;
-type SaidThing = SaidFile<ThingSave>;
-type SaidProject = SaidFile<ProjectSave>;
-type SaidBuild = SaidFile<BuildSave>;
 
 type ModelSaid = Extract<Said, { speaker: "model" }>;
 
@@ -1531,26 +1527,26 @@ const conversationOf = (events: readonly SessionEvent[]) => {
       case "document-saved": {
         // The owner's Save as document isn't the model's doing; the documents list shows it.
         if (event.answer !== undefined) break;
-        const saved: SaidDocument = { save: event.save, undone: false };
+        const saved: SaidFile<DocumentSave> = { save: event.save, undone: false };
         fileSaves.set(event.seq, saved);
         answer((current) => ({ documents: [...current.documents, saved] }));
         break;
       }
       case "thing-saved": {
-        const saved: SaidThing = { save: event.save, undone: false };
+        const saved: SaidFile<ThingSave> = { save: event.save, undone: false };
         fileSaves.set(event.seq, saved);
         answer((current) => ({ things: [...current.things, saved] }));
         break;
       }
       case "project-saved": {
-        const saved: SaidProject = { save: event.save, undone: false };
+        const saved: SaidFile<ProjectSave> = { save: event.save, undone: false };
         fileSaves.set(event.seq, saved);
         answer((current) => ({ projects: [...current.projects, saved] }));
         break;
       }
       // So the next turn knows a Build's size the owner undid isn't the Build's any more.
       case "build-saved": {
-        const saved: SaidBuild = { save: event.save, undone: false };
+        const saved: SaidFile<BuildSave> = { save: event.save, undone: false };
         fileSaves.set(event.seq, saved);
         answer((current) => ({ builds: [...current.builds, saved] }));
         break;
@@ -1596,15 +1592,15 @@ const saveLine = ({ save, outcome }: SaidSave) => {
 };
 
 /** A document save as the model reads it in the conversation, with what the owner did with it. */
-const documentLine = ({ save, undone }: SaidDocument) =>
+const documentLine = ({ save, undone }: SaidFile<DocumentSave>) =>
   `- ${save.action === "save" ? "Saved" : "Updated"} the document ${documentPath(save.document.slug)} (${undone ? "the owner undid this" : "kept"})`;
 
 /** A Thing save as the model reads it in the conversation, with what the owner did with it. */
-const thingSaveLine = ({ save, undone }: SaidThing) =>
+const thingSaveLine = ({ save, undone }: SaidFile<ThingSave>) =>
   `- ${{ add: "Added", change: "Changed", remove: "Removed" }[save.action]} the Thing ${save.thing.name} (${undone ? "the owner undid this" : "kept"})`;
 
 /** A project save as the model reads it in the conversation, with what the owner did with it. */
-const projectSaveLine = ({ save, undone }: SaidProject) =>
+const projectSaveLine = ({ save, undone }: SaidFile<ProjectSave>) =>
   `- ${save.action === "add" ? "Started" : "Changed"} the project ${save.project.name}${save.changes.length === 0 ? "" : `: ${save.changes.join("; ")}`} (${undone ? "the owner undid this" : "kept"})`;
 
 /** How an earlier answer reads to the model, so a stopped or failed one isn't taken as whole. */
