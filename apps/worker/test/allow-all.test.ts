@@ -187,6 +187,10 @@ const STILL_ASKS: readonly (readonly [{ run: string } | { edit: string }, unknow
     `python -c "import os; print(os.environ['GH_TOKEN'])"`,
     `node -e "console.log(require('os').homedir() + '/.ssh/config')"`,
     "node --require ./hook.js -e 1",
+    // A comment marker beside it doesn't hide a path outside, nor a name spelled in strings (#747).
+    `node -e "/** note */ require('fs').readFileSync('/etc/hosts')"`,
+    `node -e "[]['constructor']['constructor']('return 1')()"`,
+    `node -e "require('node:child_process/x')"`,
     // Or one of the setup files Allow all never edits (#730).
     `node -e "require('fs').rmSync('.github', { recursive: true })"`,
     // Removing them asks however it's done.
