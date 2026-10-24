@@ -28,7 +28,8 @@ const workspaceWithBuild = async (page: Page) => {
   await startSaving(
     page,
     `build: ${JSON.stringify({
-      name: "Workbench",
+      // Not "Workbench": its tile on Home would then match home.spec's seeded Workbench tile.
+      name: "Split bench",
       template: "framed-bench",
       parameters: goldenBench,
       project: "P1",
@@ -50,8 +51,8 @@ const openInFabrication = async (page: Page) => {
     .getByRole("region", { name: "Next" })
     .getByRole("link", { name: "Open in Fabrication" })
     .click();
-  await expect(page).toHaveURL(/\/fabrication\/workspaces\/[^/]+\/builds\/workbench$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Workbench" })).toBeVisible();
+  await expect(page).toHaveURL(/\/fabrication\/workspaces\/[^/]+\/builds\/split-bench$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Split bench" })).toBeVisible();
 };
 
 test.describe("on the unfolded Fold", () => {
