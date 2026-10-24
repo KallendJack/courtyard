@@ -1,0 +1,46 @@
+# Fabrication's engine
+
+`@courtyard/fabrication` turns a Build's template and parameters into everything the Build shows (ADR 0036): its
+parts, cut plan, buy list, steps and making-rule findings. Plain functions, importing nothing from the worker, the
+web app, the file system or a model, so it could ship on its own. Its only Courtyard import is the contract's
+`SourcedSize`, the value-with-source shape every size takes.
+
+## Example
+
+```ts
+import { deriveBench } from "@courtyard/fabrication";
+
+const derived = deriveBench(parameters); // a framed bench's parameters, as JSON
+if (derived.ok) derived.value.cutPlan; // 4 lengths of B 1450 + A 750, 1 of 5 × 460…
+else derived.error; // ["height.source: Invalid input…"]
+```
+
+## What's in it
+
+| File | What it does |
+|---|---|
+| `index.ts` | What callers import |
+| `build.ts` | What a template derives: parts with a box each for the 3D view, the cut plan, the buy list, steps, findings |
+| `stock.ts` | What parts are cut from and fixed with: timber, sheets, fixings and their prices. A template takes each slot's stock as a parameter, so a slot can be swapped (#704) |
+| `cut-plan.ts` | Packing: timber pieces into lengths and sheet pieces into sheets, the kerf between every two |
+| `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed |
+| `findings.ts` | The making rules code checks: a bolt long enough for what it passes through plus two threads, tools needed and not to hand, sizes assumed |
+| `tools.ts`, `glossary.ts` | The tools and kit a step can need, and the words a beginner may not know |
+| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `close-ups.ts` |
+
+## The rules it keeps
+
+- **Every size has a source** (`measured`, `specified` with its reference, or `assumed`); one without is refused.
+- **A cut plan never overruns** a length or a sheet, with the kerf counted between pieces; a part bigger than its
+  stock is found and left out.
+- **The steps depend on the tools to hand;** the parts and the cut plan don't.
+- **Parts are cut to the whole mm below.**
+
+## Tests
+
+`cut-plan.test.ts` (packing, whatever the pieces) and `bench/bench.test.ts` (the golden bench, the garage
+workbench's hand-checked numbers with invented names, in `bench/fixtures/golden.ts`).
+
+## Used by
+
+Nothing yet: Builds in a planning workspace (#697) and Fabrication (`apps/fabrication`, #698) come next.
