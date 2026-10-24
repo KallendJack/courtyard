@@ -129,8 +129,9 @@ export const codeReachesOut = (worktree: string, words: readonly string[]) => {
   const opened = JAVASCRIPT.has(words[0] ?? "")
     ? withoutWrittenImports(code, relativeInside)
     : code;
-  // A comment marker in its text (`"/** How many"`) is no path: `/` alone would read as the root (#747).
-  return wordsIn(opened.replace(/\/\*+|\*+\//g, " "))
+  // A comment marker in its text (`"/** How many"`) is no path: `/` alone would read as the root
+  // (#747). Only a marker standing alone, so `"/*x"` stays the path it is.
+  return wordsIn(opened.replace(/(?<![^\s'"`])(?:\/\*+|\*+\/)(?![^\s'"`])/g, " "))
     .flatMap(pathsIn)
     .some((path) => outside(worktree, path));
 };
