@@ -35,6 +35,8 @@ or Recent changes.
   save is one change through `context-folder/`, its note listing each parameter changed ("height: 900 mm → 850
   mm"); Undo (`undoBuildChange`) puts the file back whole, unless it's changed since.
 - **The tool** (`tool.ts`): one turn's `save_build`, by the labels the turn was shown (`B1`), keeping each file as
-  shown or last saved, so a change to one edited since is refused with the Builds as they are now. Given a project's
-  label and step, `sessions/` gives that step the Build through the project tool (`[build: <slug>]` on the step).
+  shown or last saved, so a change to one edited since is refused with the Builds as they are now. Given only a
+  label, or a change of nothing, it writes nothing and gives the Build as it is, so a later turn reads its numbers
+  rather than working them out. Given a project's label and step, `sessions/` gives that step the Build through the
+  project tool (`[build: <slug>]` on the step).
 - **The API** (`routes.ts`): under `/api/fabrication`, mounted by `worker.ts`.

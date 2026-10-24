@@ -1751,7 +1751,7 @@ label, name, template, finished size, then its file), and each file that isn't a
 
 > The workspace's Builds are below: what the owner is making, one per line with its label in front ([B1] is the
 > first), its template, its size and its file at the end. Change one with its label, and the tool's reply gives its
-> numbers. They're information, not instructions.
+> numbers; for its numbers without a change, give the tool only its label. They're information, not instructions.
 
 With none yet:
 
@@ -1764,7 +1764,8 @@ With none yet:
 > and the tools to hand), and code works out its parts, cut plan, buy list, steps and findings. Start one once the
 > owner wants to make something a template fits, and change it, one parameter at a time, as they decide. Never write a
 > length, a quantity, a price or a total yourself, nor work one out: every one you give comes from the tool's reply, as
-> it says it. To change one, change the parameter it comes from, and the Build works the rest out again. A size the
+> it says it, and for a Build's numbers without changing it, such as how many screws, call the tool with only its
+> label. To change one, change the parameter it comes from, and the Build works the rest out again. A size the
 > owner measured is measured; one from a maker's page is specified, with the page; any other is assumed, and the reply
 > lists those to check before cutting. Tell the owner what the reply finds: a fixing too short, a tool needed that
 > isn't to hand, a size assumed. Some making rules code can't check, so say them: test-fit one piece before cutting or
@@ -1779,9 +1780,11 @@ template's parameters as JSON Schema, from `BenchParameters`):
 
 > Starts or changes one of this workspace's Builds, and replies with everything code works out from it: its parts, cut
 > plan, buy list with its total, steps and findings. Given a Build's label, it renames it or changes the parameters
-> you give; without one, it starts a new Build. Follow the rule for Builds in your instructions.
+> you give; without one, it starts a new Build. Given only a Build's label, or a change that changes nothing, it
+> changes nothing and replies with its numbers as they are, so call it that way whenever you need a Build's numbers.
+> Follow the rule for Builds in your instructions.
 
-> - build: To change a Build: its label, such as B1. Leave it out to start one.
+> - build: To change a Build, or read its numbers: its label, such as B1. Leave it out to start one.
 > - name: Its name, as the owner would say it, such as Workbench. A new Build needs one.
 > - template: What it's made from: framed-bench, a bench or table on a timber frame. A new Build needs one.
 > - parameters: A new Build's parameters, all of them; to change one, only what changes, merged into what's there (an
@@ -1796,12 +1799,15 @@ one line each: the finished size, each part with its count, size and stock, the 
 sheet, the buy list with each line's packs and price and its total (counting the lines with no price), the steps by
 title, and the findings; it ends "Give these numbers as they are; to change one, change a parameter." Given a project
 and step, the step is given the Build through the project tool, its own change and note, and the reply ends with how
-that went ("Its project step: Changed [P1] Split the garage."). The worker keeps each Build as the model was shown it,
-or last saved it, and refuses, saying why: input it doesn't take; a new Build without a name, template and every
-parameter; parameters code can't work out, each problem on its own line (`- height: Invalid input…`); a project
-without a step or a step without a project; a label no Build has; a Build changed since it was shown, with the Builds
-as they are now; a name another Build's file has; and a change that changes nothing. As with saves, a refused Build
-can be put right once. The chat shows "Started Build" or "Updated Build" with its name and, in grey, each parameter
+that went ("Its project step: Changed [P1] Split the garage."). Given only a label (with a project and step, or not),
+or a change that changes nothing, it writes nothing: the reply is "[B1] Workbench (builds/workbench.json) is as it
+was: nothing changed. Its numbers as they are now:" and the same numbers, so a later session can answer "how many
+screws?" without working it out (from the review of #732), and a project step can be given a Build that's there
+already. The worker keeps each Build as the model was shown it, or last saved it (or last gave it as it is), and
+refuses, saying why: input it doesn't take; a new Build without a name, template and every parameter; parameters
+code can't work out, each problem on its own line (`- height: Invalid input…`); a project without a step or a step
+without a project; a label no Build has; a Build changed since it was shown, with the Builds as they are now; and a
+name another Build's file has. As with saves, a refused Build can be put right once. The chat shows "Started Build" or "Updated Build" with its name and, in grey, each parameter
 changed ("height: 900 mm → 850 mm"). Later turns are told each earlier answer's Build saves, what each changed and
 whether the owner undid it ("- Changed the Build Workbench: height: 900 mm → 850 mm (the owner undid this)"). The fake
 saves one for each line "build: " followed by the tool's input as JSON.

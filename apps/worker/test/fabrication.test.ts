@@ -168,6 +168,30 @@ describe("the Build tool", () => {
     expect(reply?.reply).toContain("1500 × 600 × 849.6 mm");
   });
 
+  it("gives a Build's numbers as they are for only its label, or a change of nothing, writing nothing", async () => {
+    const { saver, events } = await sessionWith([
+      [START_BENCH],
+      [
+        buildTool({ build: "B1" }),
+        buildTool({ build: "B1", parameters: { height: goldenBench.height } }),
+      ],
+    ]);
+
+    // A later session asked "how many screws?" reads them rather than working them out.
+    const replies = saver.replies[1] ?? [];
+    expect(replies.map(({ ok }) => ok)).toEqual([true, true]);
+    for (const { reply } of replies) {
+      expect(reply).toMatch(
+        /^\[B1\] Workbench \(builds\/workbench\.json\) is as it was: nothing changed\. Its numbers as they are now:\n\nA framed bench, 1500 × 600 × 899\.6 mm\./,
+      );
+      expect(reply).toContain("Total: £172.06");
+    }
+    expect(buildSaves(events)).toHaveLength(1);
+    expect((await changesIn(contextDir)).map(({ title }) => title)).not.toContain(
+      "Change Build: Workbench",
+    );
+  });
+
   it("refuses parameters code can't work out, saving nothing, and a Build that isn't there", async () => {
     const { height: _height, ...noHeight } = goldenBench;
     const { saver, request } = await sessionWith([
@@ -282,10 +306,12 @@ describe("Fabrication's API", () => {
 });
 
 describe("a project step's Build", () => {
-  it("is given with the Build, so the step owns it, and stays through a change to the step", async () => {
+  const projectFile = () => join(contextDir, "garage", "projects", "split-the-garage.md");
+  /** The garage's project, its second step for making the bench, then any more steps' lines. */
+  const withProject = async (...steps: string[]) => {
     await mkdir(join(contextDir, "garage", "projects"), { recursive: true });
     await writeFile(
-      join(contextDir, "garage", "projects", "split-the-garage.md"),
+      projectFile(),
       [
         "---",
         "name: Split the garage",
@@ -296,9 +322,14 @@ describe("a project step's Build", () => {
         "",
         "- [you can do this] Measure the back wall",
         "- [you can do this] Build the workbench · a weekend",
+        ...steps,
         "",
       ].join("\n"),
     );
+  };
+
+  it("is given with the Build, so the step owns it, and stays through a change to the step", async () => {
+    await withProject();
     const { saver, events, request } = await sessionWith([
       [
         buildTool({
@@ -329,9 +360,9 @@ describe("a project step's Build", () => {
         },
       ],
     );
-    expect(
-      await readFile(join(contextDir, "garage", "projects", "split-the-garage.md"), "utf8"),
-    ).toContain("- [you can do this] Build the bench · a weekend [build: workbench]\n");
+    expect(await readFile(projectFile(), "utf8")).toContain(
+      "- [you can do this] Build the bench · a weekend [build: workbench]\n",
+    );
     const home = PlanningHome.parse(await (await request("/api/workspaces/garage/home")).json());
     expect(home.projects[0]?.steps[1]).toEqual({
       kind: "you can do this",
@@ -339,6 +370,22 @@ describe("a project step's Build", () => {
       detail: "a weekend",
       build: "workbench",
     });
+  });
+
+  it("is given to a step by the Build's label alone, when the Build is there already", async () => {
+    await withProject();
+    const { saver, events } = await sessionWith([
+      [START_BENCH],
+      [buildTool({ build: "B1", project: "P1", step: 2 })],
+    ]);
+
+    const [reply] = saver.replies[1] ?? [];
+    expect(reply?.reply).toMatch(/^\[B1\] Workbench \(builds\/workbench\.json\) is as it was/);
+    expect(reply?.reply).toContain("Its project step: Changed [P1] Split the garage.");
+    expect(buildSaves(events)).toHaveLength(1);
+    expect(await readFile(projectFile(), "utf8")).toContain(
+      "- [you can do this] Build the workbench · a weekend [build: workbench]\n",
+    );
   });
 });
 

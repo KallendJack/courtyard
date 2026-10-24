@@ -524,8 +524,9 @@ Where the rest fits:
 - **Builds** (#697, ADRs 0036, 0037). The model calls the Build tool by the labels its turn listed; `fabrication/`
   merges the parameters it sends into the Build's, has `packages/fabrication` work them out, and only then writes the
   file as a change through `context-folder/`. The tool's reply is the numbers worked out, which the model reports; the
-  session records a `build-saved` event and the browser shows a note with Undo. Given a project's step, the step is
-  given the Build through the project tool. The Fabrication app (#698) reads and changes Builds through
+  session records a `build-saved` event and the browser shows a note with Undo. Given only a label, the tool writes
+  nothing and replies with the numbers as they are. Given a project's step, the step is given the Build through the
+  project tool. The Fabrication app (#698) reads and changes Builds through
   `/api/fabrication` only.
 - **The status line** (#256). A code workspace's line is built from `sessions/`' list and `next-up/` when asked, with
   no model. A planning workspace has none (#600).

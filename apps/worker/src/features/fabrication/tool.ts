@@ -8,6 +8,7 @@ import {
   type BuildRefusal,
   type BuildSaved,
   type ReadBuild,
+  readBuild,
   readBuilds,
   saveBuild,
 } from "./index.ts";
@@ -44,7 +45,7 @@ const withoutNulls = (raw: unknown) =>
 
 /** Why the Build tool didn't save. */
 export type BuildToolRefusal =
-  | Exclude<BuildRefusal, { kind: "stale" }>
+  | Exclude<BuildRefusal, { kind: "stale" } | { kind: "unchanged" }>
   | { readonly kind: "malformed" }
   /** A project named with no step, or a step with no project. */
   | { readonly kind: "no-step" }
@@ -55,17 +56,25 @@ export type BuildToolRefusal =
   /** The owner stopped the turn, so nothing more is saved. */
   | { readonly kind: "stopped" };
 
-/** What the Build tool did, and the project step it's to belong to, if the model named one. */
-export type BuildToolDone = {
-  readonly saved: BuildSaved;
+/**
+ * What the Build tool did: saved the Build, or changed nothing, so the model reads its numbers as
+ * they are (#697); the Build as it is now; and the project step it's to belong to, if the model
+ * named one.
+ */
+export type BuildToolDone = (
+  | { readonly kind: "saved"; readonly saved: BuildSaved }
+  | { readonly kind: "unchanged" }
+) & {
+  readonly build: ReadBuild;
   readonly label: string;
   readonly step?: { readonly project: string; readonly number: number };
 };
 
 /**
  * One turn's Build tool (docs/ai-conduct.md, Builds): starts or changes a Build by the label the
- * model was shown. It keeps each Build's file as the model was shown it, or last saved it, so a
- * change to one that's changed since is refused, with the Builds as they are now.
+ * model was shown, or, given only its label or a change of nothing, gives it as it is. It keeps
+ * each Build's file as the model was shown it, or last saved it, so a change to one that's
+ * changed since is refused, with the Builds as they are now.
  */
 export const createTurnBuilds = (
   target: PlanningFilesTarget & {
@@ -92,6 +101,30 @@ export const createTurnBuilds = (
     const slug = label === undefined ? undefined : labels.get(label);
     if (label !== undefined && slug === undefined) return err({ kind: "unknown-label", label });
     if ((sent.project === undefined) !== (sent.step === undefined)) return err({ kind: "no-step" });
+    const step =
+      sent.project === undefined || sent.step === undefined
+        ? {}
+        : { step: { project: sent.project, number: sent.step } };
+    /**
+     * The Build as it is now, for a call that changes nothing, so the model can give its numbers
+     * without working any out (#697): it's been shown it afresh.
+     */
+    const asItIs = async (): Promise<Result<BuildToolDone, BuildToolRefusal>> => {
+      if (label === undefined || slug === undefined) return err({ kind: "storage" });
+      const read = await readBuild(target, slug);
+      if (!read.ok) {
+        const { error } = read;
+        return err(
+          error.kind === "stale" || error.kind === "unchanged" ? { kind: "storage" } : error,
+        );
+      }
+      seen.set(slug, read.value.text);
+      return ok({ kind: "unchanged", build: read.value, label, ...step });
+    };
+    // Only its label (and a step to give it to) reads it, with nothing to write.
+    if (slug !== undefined && sent.name === undefined && sent.parameters === undefined) {
+      return asItIs();
+    }
 
     const edit: BuildEdit =
       slug === undefined
@@ -111,6 +144,7 @@ export const createTurnBuilds = (
         sameFileText(now.text, seen.get(now.summary.slug) ?? null) ? undefined : { kind: "stale" },
     });
     if (!saved.ok) {
+      if (saved.error.kind === "unchanged") return asItIs();
       if (saved.error.kind !== "stale") return err(saved.error);
       const now = await readBuilds(target);
       if (!now.ok || label === undefined) return err({ kind: "storage" });
@@ -121,11 +155,11 @@ export const createTurnBuilds = (
     seen.set(savedSlug, saved.value.build.text);
     if (labelOf(savedSlug) === undefined) labels.set(`B${labels.size + 1}`, savedSlug);
     return ok({
+      kind: "saved",
       saved: saved.value,
+      build: saved.value.build,
       label: labelOf(savedSlug) ?? "",
-      ...(sent.project === undefined || sent.step === undefined
-        ? {}
-        : { step: { project: sent.project, number: sent.step } }),
+      ...step,
     });
   };
 };

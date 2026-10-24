@@ -1136,8 +1136,7 @@ export const createSessions = (options: {
     if (!things.ok) return err("This session's workspace's Things can't be read.");
     if (!projects.ok) return err("This session's workspace's projects can't be read.");
     if (!builds.ok) return err("This session's workspace's Builds can't be read.");
-    const sessionNotes =
-      summary.mode === "planning" ? await notes.forTurn(workspaceId, session) : [];
+    const sessionNotes = planning ? await notes.forTurn(workspaceId, session) : [];
     return ok({
       name: summary.name,
       mode: summary.mode,
@@ -1354,27 +1353,27 @@ export const createSessions = (options: {
           reply: projectReply,
           stoppedReply: () => projectReply(err({ kind: "stopped" }), true),
         });
-        const turnBuilds = createTurnBuilds({
-          ...targetOf(turn),
-          shown: workspace.value.builds.builds,
-          now: options.now(),
-        });
-        /** How giving a new Build to its project's step went, for the Build tool's reply. */
+        /** How giving a Build to its project's step went, for the Build tool's reply. */
         let stepReply: ToolReply | undefined;
         const saveBuildTool = savingTool({
           stopped,
-          run: turnBuilds,
-          record: async ({ saved: { save, change }, step }) => {
-            await recordSave({ type: "build-saved", save, ...withChange(change) });
+          run: createTurnBuilds({
+            ...targetOf(turn),
+            shown: workspace.value.builds.builds,
+            now: options.now(),
+          }),
+          // One that changed nothing (its numbers read) has no save, and may still give its step.
+          record: async ({ step, build, ...done }) => {
+            if (done.kind === "saved") {
+              const { save, change } = done.saved;
+              await recordSave({ type: "build-saved", save, ...withChange(change) });
+            }
+            stepReply = undefined;
             if (step === undefined) return;
-            const given = { step: step.number, step_build: save.build.slug };
+            const given = { step: step.number, step_build: build.summary.slug };
             stepReply = projectReply(await projectSaved({ project: step.project, ...given }), true);
           },
-          reply: (done, retrying) => {
-            const reply = buildReply(done, { retrying, ...(stepReply ? { step: stepReply } : {}) });
-            stepReply = undefined;
-            return reply;
-          },
+          reply: (done, retrying) => buildReply(done, { retrying, step: stepReply }),
           stoppedReply: () => buildReply(err({ kind: "stopped" }), { retrying: true }),
         });
         /** Records a piece of the answer. Anything after the owner stopped the turn is dropped. */

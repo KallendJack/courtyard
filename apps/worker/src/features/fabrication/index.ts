@@ -248,7 +248,8 @@ export const saveBuild = async (
         }
       }
       const text = buildText(file.data);
-      if (current !== undefined && text === current.text.replace(/\r\n/g, "\n")) {
+      // By what it holds, so a file only laid out by hand isn't rewritten for a change of nothing.
+      if (current !== undefined && text === buildText(current.file)) {
         return err({ kind: "unchanged", name: file.data.name });
       }
       if (!(await writeTextFileIn(fileOf(folder.value, slug), text))) {
