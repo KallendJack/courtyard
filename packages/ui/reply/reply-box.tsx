@@ -458,7 +458,7 @@ export const ReplyBox = memo(function ReplyBox(props: {
             )}
           </div>
         )}
-        {/* One row in every state: what's at either end changes, the box doesn't (#251). */}
+        {/* One row in every state: its ends change, the box doesn't (#251) nor loses its room. */}
         <div className="flex items-end gap-3">
           {listening ? (
             <IconButton
@@ -479,7 +479,7 @@ export const ReplyBox = memo(function ReplyBox(props: {
               onClick={() => picker.current?.click()}
             />
           )}
-          <div className="relative flex min-w-0 flex-1 py-2.5">
+          <div className="relative flex min-w-24 flex-1 py-2.5">
             <textarea
               ref={box}
               aria-label="Message"
