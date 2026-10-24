@@ -294,6 +294,8 @@ export const createCode = (options: {
   >;
   /** The machine's builds lock (#306), which code sessions' heavy checks take turns in (#281). */
   buildsLock: BuildsLock;
+  /** Told after a pull request is merged from the app, so what's kept of main is asked afresh (#387). */
+  onMerged?: () => void;
 }) => {
   const { pullRequests } = options;
   /** The repository a code workspace's remote is on GitHub, or why there's none to ask. */
@@ -497,7 +499,13 @@ export const createCode = (options: {
     }): Promise<Result<null, PullRequestProblem>> => {
       const repo = await onGitHub(pull.repoPath);
       if (!repo.ok) return repo;
-      return pullRequests.merge({ repo: repo.value, number: pull.number, head: pull.head });
+      const merged = await pullRequests.merge({
+        repo: repo.value,
+        number: pull.number,
+        head: pull.head,
+      });
+      if (merged.ok) options.onMerged?.();
+      return merged;
     },
 
     /** Closes the session's pull request on GitHub without merging it. */

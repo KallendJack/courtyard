@@ -2,6 +2,7 @@ import type { BuildJob, LiveStatus, LiveVersion, MainBuild } from "@courtyard/co
 import { useEffect, useState } from "react";
 import { BuildGraph, BuildMiniGraph, OpenRow, useTicking } from "@/components/build-stages";
 import { Button } from "@/components/button";
+import { useFresh } from "@/components/kept";
 import { Sheet } from "@/components/sheet";
 import { WebButton } from "@/components/web-link";
 import { classes } from "@/lib/classes";
@@ -13,20 +14,22 @@ import { loadLive } from "./api.ts";
  * How often a page showing main's build asks again while it runs (the worker asks GitHub), so
  * Update lights up moments after its last job passes (#337).
  */
-const ASK_EVERY_MS = 10 * 1000;
+export const MAIN_RUNNING_EVERY_MS = 10 * 1000;
 
 /**
- * The live status, asked for once the page is showing, then again every 10 seconds while main's
- * build runs and the page is in front of the owner: hidden, it waits, and asks as soon as it's
- * looked at again. `when` false asks nothing.
+ * The live status, asked for once the page is showing and again when `again` changes (after a
+ * merge), then kept fresh the shared way (#387): every 10 seconds while main's build runs, every
+ * 30 while it's calm, nothing while the page is hidden, and at once when it's looked at again.
+ * `when` false asks nothing.
  */
-export const useLive = (when = true) => {
+export const useLive = (when = true, again?: unknown) => {
   const [status, setStatus] = useState<FromWorker<LiveStatus>>();
   const running =
     status?.kind === "loaded" &&
     status.data.kind === "live" &&
     status.data.build?.kind === "running";
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: asked again as `again` changes
   useEffect(() => {
     if (!when) return;
     let current = true;
@@ -36,38 +39,17 @@ export const useLive = (when = true) => {
     return () => {
       current = false;
     };
-  }, [when]);
+  }, [when, again]);
 
-  useEffect(() => {
-    if (!running) return;
-    let current = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    /** Hidden when it was time to ask: it asks once the page is looked at. */
-    let waiting = false;
-    const ask = async () => {
-      if (document.visibilityState === "hidden") {
-        waiting = true;
-        return;
-      }
+  useFresh({
+    ask: async () => {
       const next = await loadLive();
-      if (!current) return;
       // A worker that didn't answer keeps what was shown, and is asked again.
       if (next.kind === "loaded") setStatus(next);
-      timer = setTimeout(ask, ASK_EVERY_MS);
-    };
-    const shown = () => {
-      if (!waiting || document.visibilityState === "hidden") return;
-      waiting = false;
-      void ask();
-    };
-    timer = setTimeout(ask, ASK_EVERY_MS);
-    document.addEventListener("visibilitychange", shown);
-    return () => {
-      current = false;
-      clearTimeout(timer);
-      document.removeEventListener("visibilitychange", shown);
-    };
-  }, [running]);
+    },
+    asking: when,
+    busyEveryMs: running ? MAIN_RUNNING_EVERY_MS : undefined,
+  });
 
   return [status, setStatus] as const;
 };

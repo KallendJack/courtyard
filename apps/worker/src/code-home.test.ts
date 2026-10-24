@@ -5,6 +5,7 @@ import {
   CODE_SESSIONS_AT_ONCE,
   CodeSessionList,
   GitHubConnection,
+  LiveStatus,
   NextUp,
   PaperFileList,
   SessionSummary,
@@ -42,12 +43,14 @@ import {
 
 let root: string;
 let repo: string;
+/** The bare repository standing in for the one on GitHub. */
+let origin: string;
 /** The repository on GitHub, as `owner/name`: what the code workspace's remote names. */
 let onGitHub: string;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "courtyard-"));
-  ({ repo, github: onGitHub } = await codeRepo(root));
+  ({ repo, origin, github: onGitHub } = await codeRepo(root));
 });
 
 afterEach(async () => {
@@ -502,6 +505,59 @@ describe("main (#301's Main row)", () => {
       commit: head,
       title: `${head.slice(0, 7)} Code workspace Home`,
     });
+  });
+
+  it("is asked afresh once the app merges a pull request, as the live copy's status is (#387)", async () => {
+    await codeWorkspace(root, "side-project", repo);
+    const github = createFakeGitHub();
+    const request = await asOwner(
+      testWorker({ root, github: github.api, env: { COURTYARD_LIVE_COPY: repo } }),
+    );
+    await postJson(request, "/api/github/sign-in", {});
+    github.approve();
+    await expect
+      .poll(async () => GitHubConnection.parse(await (await request("/api/github")).json()).kind)
+      .toBe("signed-in");
+    const newestOnMain = async () =>
+      WorkspaceMain.parse(await (await request("/api/workspaces/side-project/main")).json()).newest
+        .commit;
+    const live = async () => LiveStatus.parse(await (await request("/api/live")).json());
+    const start = await gitIn(repo, "rev-parse", "HEAD");
+    expect(await newestOnMain()).toBe(start);
+    expect(await live()).toMatchObject({ newerOnMain: false });
+    // A pull request's branch, and main moved on to it as GitHub's merge moves it.
+    const elsewhere = join(root, "elsewhere");
+    await gitIn(root, "clone", "--quiet", origin, elsewhere);
+    await gitIn(elsewhere, "switch", "--quiet", "-c", "306-machine-lock");
+    await writeFile(join(elsewhere, "builds.md"), "Builds take turns\n");
+    await gitIn(elsewhere, "add", ".");
+    await gitIn(elsewhere, "commit", "--quiet", "-m", "Builds take turns");
+    await gitIn(
+      elsewhere,
+      "push",
+      "--quiet",
+      "origin",
+      "306-machine-lock",
+      "306-machine-lock:main",
+    );
+    const head = (await gitIn(elsewhere, "rev-parse", "HEAD")).trim();
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: "306-machine-lock",
+      head,
+      title: "Builds queue",
+      body: "## Summary\n\nBuilds take turns.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+    });
+
+    const merging = await postJson(
+      request,
+      `/api/workspaces/side-project/pull-requests/${number}/merge`,
+      { head },
+    );
+
+    expect(merging.status).toBe(204);
+    expect(await newestOnMain()).toBe(head);
+    expect(await live()).toMatchObject({ newerOnMain: true, newest: { commit: head } });
   });
 });
 
