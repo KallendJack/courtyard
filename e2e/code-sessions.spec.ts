@@ -437,7 +437,7 @@ test.describe("several code sessions at once (#174)", () => {
   const listed = async (request: APIRequestContext) => {
     const response = await request.get("/api/workspaces/side-project/sessions");
     return (await response.json()) as {
-      sessions: { id: string; busy: boolean }[];
+      sessions: { id: string; busy: boolean; queued: boolean }[];
       running: number;
     };
   };
@@ -462,13 +462,18 @@ test.describe("several code sessions at once (#174)", () => {
   });
 
   /**
-   * Starts busy sessions until every place is taken. Counted from the worker, not assumed: a
-   * session another test on the worker left waiting for the owner holds a place too (#717).
+   * Starts busy sessions until every place is taken and one of ours is waiting for a place, so a
+   * session started next waits behind it. The other tests on the worker take and free places
+   * while these run (#717, #722, #726), so the counts on screen aren't exact: a place one of them
+   * frees goes to the session at the front of the line, ours.
    */
   const takeEveryPlace = async (request: APIRequestContext) => {
-    for (let now = await running(request); now < AT_ONCE; now = await running(request)) {
-      busy.push(await startCoding(request, LONG_TASK));
-      await expect.poll(() => running(request)).toBeGreaterThan(now);
+    for (;;) {
+      const id = await startCoding(request, LONG_TASK);
+      busy.push(id);
+      const queued = async () =>
+        (await listed(request)).sessions.find((session) => session.id === id)?.queued === true;
+      if ((await running(request)) >= AT_ONCE && (await queued())) return;
     }
   };
 
@@ -488,11 +493,11 @@ test.describe("several code sessions at once (#174)", () => {
     if (started !== undefined) busy.push(started);
 
     const session = page.getByRole("list", { name: "Session" });
-    await expect(session).toContainText("waiting for a place · 0 ahead");
+    await expect(session).toContainText(/waiting for a place · \d+ ahead/);
     await expect(session).not.toContainText("You said:");
 
-    const [first] = busy.splice(0, 1);
-    if (first !== undefined) await stopFirstTurn(request, first);
+    // Ours end, so the line moves up to it.
+    for (const id of busy.splice(0, busy.length - 1)) await stopFirstTurn(request, id);
 
     await expect(session).toContainText("You said: Fix the build");
     await expect(session).not.toContainText("waiting for a place");
@@ -507,11 +512,11 @@ test.describe("several code sessions at once (#174)", () => {
 
     await page.goto("/workspaces/side-project#sessions");
     const sessions = page.getByRole("region", { name: "Sessions" });
-    await expect(sessions).toContainText(`${AT_ONCE} of ${AT_ONCE} code sessions running`);
+    await expect(sessions).toContainText(new RegExp(`\\d+ of ${AT_ONCE} code sessions running`));
     const waiting = sessions
       .getByRole("listitem")
       .filter({ hasText: "From session to pull request" });
-    await expect(waiting).toContainText("waiting for a place · 0 ahead");
+    await expect(waiting).toContainText(/waiting for a place · \d+ ahead/);
 
     await waiting.getByRole("button", { name: "Remove" }).click();
 
