@@ -433,15 +433,33 @@ test.describe("several code sessions at once (#174)", () => {
   const stopFirstTurn = (request: APIRequestContext, id: string) =>
     request.post(`/api/sessions/${id}/stop`, { data: { turn: 1 } });
 
-  test.afterEach(async ({ request }) => {
-    for (const id of busy.splice(0)) await stopFirstTurn(request, id);
-  });
+  /** The side project's code sessions, and how many are running across the worker. */
+  const listed = async (request: APIRequestContext) => {
+    const response = await request.get("/api/workspaces/side-project/sessions");
+    return (await response.json()) as {
+      sessions: { id: string; busy: boolean }[];
+      running: number;
+    };
+  };
 
   /** How many code sessions are running across the worker. */
-  const running = async (request: APIRequestContext) => {
-    const response = await request.get("/api/workspaces/side-project/sessions");
-    return ((await response.json()) as { running: number }).running;
-  };
+  const running = async (request: APIRequestContext) => (await listed(request)).running;
+
+  /**
+   * Stops them and waits until none is still running: a Stop ends the turn a moment later, so a
+   * place the next test counts as taken could free up in the middle of it (#722).
+   */
+  test.afterEach(async ({ request }) => {
+    const stopped = busy.splice(0);
+    for (const id of stopped) await stopFirstTurn(request, id);
+    await expect
+      .poll(async () =>
+        (await listed(request)).sessions.filter(
+          (session) => session.busy && stopped.includes(session.id),
+        ),
+      )
+      .toHaveLength(0);
+  });
 
   /**
    * Starts busy sessions until every place is taken. Counted from the worker, not assumed: a
