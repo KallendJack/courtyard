@@ -429,6 +429,10 @@ goes to Courtyard's login. It holds no state and does no model work, and calls o
   the unfolded Fold and tabs on the cover screen: its chat, the Build in 3D and its cut plan, buy list, tools and
   steps, under the making-rule findings. A part tapped anywhere lights everywhere and opens its card. The 3D view is
   `three` in a file of its own, loaded only by this page, so nothing of it reaches the web app's first load.
+- [`features/tools/`](../apps/fabrication/src/features/tools/README.md): Your tools (#707), the owner's tools as
+  tiles to tick, saved at the owner's level through `/api/fabrication/tools` with Undo. A Build's route sends the owner
+  there first until some are saved or it's skipped on this visit (kept in the tab's session storage, so nothing is kept
+  on the device beyond it), and a Build's Tools panel links back to it.
 - **The chat** is a session in Courtyard: the Build's project's latest, or else the latest that saved the Build;
   sending with none starts one that belongs to the project. The worker's `features/fabrication/chat.ts` reads its
   events into the chat's lines (what was said, each change saved, struck through once undone) and sends through
