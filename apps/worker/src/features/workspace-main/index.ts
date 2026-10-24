@@ -103,5 +103,3 @@ export const createWorkspaceMain = (options: {
     forget: () => kept.clear(),
   };
 };
-
-export type WorkspaceMainOf = ReturnType<typeof createWorkspaceMain>;

@@ -8,6 +8,9 @@ Claude Code the **project** settings source in the session branch's worktree: th
 `AGENTS.md` it points to) and its `.claude/settings.json`, with only the repository's own skills (`.claude/skills/`)
 enabled by name. The house skills come as they do on every turn, through Courtyard's use skill tool (ADR 0016).
 
+Amended by ADR 0025: a code turn runs on Claude Code's own system prompt with Courtyard's framing appended, with no
+turn limit, and with `TodoWrite` and `Skill`, each call still through the same hook.
+
 Everything else stays off as ADR 0003 says: the machine's user and local settings, user `CLAUDE.md`, auto memory, the
 claude.ai connectors and any MCP server Courtyard doesn't pass in (the repository's `.mcp.json` included). The working directory is the session
 branch's worktree (ADR 0007), so the project source is read from the session's own copy of the repository, never the

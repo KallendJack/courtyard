@@ -16,8 +16,6 @@ const PAGES: {
   name: string;
   path: string;
   ready: (page: Page) => Promise<void>;
-  /** Still moves, and why, until it's fixed. */
-  moves?: string;
 }[] = [
   {
     name: "Home",
@@ -52,7 +50,6 @@ for (const [screen, viewport, touch] of [
     test.use({ viewport, hasTouch: touch, isMobile: touch });
     for (const each of PAGES) {
       test(`${each.name} loads without moving`, async ({ page, request }) => {
-        test.fixme(each.moves !== undefined, each.moves);
         await signIn(request);
         const shifts = await shiftsOn(page, each.path, each.ready);
         const total = shifts.reduce((sum, shift) => sum + shift.value, 0);

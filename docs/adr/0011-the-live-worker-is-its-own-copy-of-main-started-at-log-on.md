@@ -6,6 +6,9 @@ own plain clone of `main`, separate from any development checkout and only ever 
 when the owner logs on to the worker machine, running as the owner, with no window, and restarts it if it stops. It
 is updated only when the owner runs one update command, which puts back the running version if any step fails.
 
+Amended by ADR 0031: Update when ready waits only for a check that's running, then restarts, and a Lead builder's turn
+any restart cuts off carries on by itself once rather than waiting as interrupted.
+
 ## Considered options
 
 - **Run from the development checkout.** Rejected: development and the live app keep breaking each other.

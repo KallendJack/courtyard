@@ -206,7 +206,9 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
 - **`api/`** talks to the worker. **`worker.ts`** is how the web app asks the worker: every answer is parsed with the contract's schemas, and an
   offline worker or a refusal comes back as a value to show. A page load waits for a slow worker (`untilAnswered`):
   it's tried again quietly for 30 seconds, and only a refused connection, a network that's down or that long without
-  an answer counts as unreachable (#204, #228). **`send-form.ts`**, beside it so it's not on the first load, sends a
+  an answer counts as unreachable (#204, #228). **`worker-calls.ts`** holds the calls that read with the contract's
+  full schemas, and **`session-page.ts`** and **`workspace-page.ts`** what a session's or a workspace's page asks for,
+  each loaded only by the pages that need it, never the first load (#393). **`send-form.ts`**, beside it so it's not on the first load, sends a
   multipart form (a message's files, a Thing's photo) the same way. **`lib/patience.ts`**, also off the first load, sends
   what's harmless to send twice (an approval's answer) and keeps it, tried every few seconds, even once the worker
   counts as unreachable, until it answers (#204). **`worker-watch.ts`** checks the worker's health while a page needs
@@ -259,7 +261,8 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
 - **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices, Connections' cards and so on), used
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)), in groups by kind
   (#459; [its README](../apps/web/src/components/README.md) lists them): `layout/`, `buttons/`, `forms/`, `sheets/`,
-  `frame/`, `chat/`, `code/`, `workspace/`, `photo/` (a photo with its parts pinned, #481) and `rich-blocks/`. One, a table
+  `frame/`, `chat/`, `code/`, `workspace/`, `drawings/` (what Courtyard draws itself, the mountain bike, #603) and
+  `rich-blocks/`. One, a table
   heading's sort button (`buttons/sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
   the folder's, and it's styled only inside a `RichBlock`. The pieces that keep a session's flow (#179, #177,
   #168) have a stylesheet of their own too (`chat/chat-flow.css`), added when one first shows and applying only inside a
@@ -757,8 +760,12 @@ things live only in the worker's memory and go when it restarts.
 - `red-main.json`: what was done about each repository's red main (#355): the commit, its re-run and the issue filed.
 - `version-bumps.json`: what was done about each open Dependabot bump (#496): its commit, its re-run, what that
   showed, its "Bump fails" issue and whether Dependabot was asked to rebase.
+- `leads.json`: each code workspace's Lead (#347): its session, whether it runs, pauses or rests and why, how many
+  builders it may run, the builders it started, and Merge in order while it merges.
+  `builders.json`, beside it: each Lead builder's status and since when (#590, ADR 0031).
 - `usage-not-now.json`: the warnings before a limit the owner put off with Not now (#66), each until its window
   resets.
+- `model-defaults.json`: the owner's default model and effort for each provider (#247).
 - `fresh-starts/<date>/`: sessions set aside by a fresh start.
 - `owner.json`, `device-logins.json`, `failed-logins.json`: the owner's password, each device's login (only the hash
   of its secret), and recent wrong guesses.
@@ -770,6 +777,8 @@ things live only in the worker's memory and go when it restarts.
   ([ADR 0015](adr/0015-codex-runs-through-its-app-server-in-its-own-codex-home-without-a-shell.md)).
   `sign-ins.json`: the providers the owner said Not now to.
 - `live-update.json`, `live-update.log`, `worker.log`: the live copy's last update and the worker's output.
+  `live-update-waiting.json`: an Update waiting for main's build, or dropped because it failed (#186), so it outlives
+  a crash. `live-update-restart.json`: that the worker started an update itself, so the turns it cut off carry on.
 - `whats-new.json`: the last Update's what's-new lines and those tapped (#604).
 
 **Only in the worker's memory:** usage limits and each plan's usage as last read, and which turns are running.
@@ -808,14 +817,14 @@ Each one is written down once, where the link goes.
   Matt's skills, the repeating jobs and the work nobody waits for (titling a session, notifying the owner) are options
   to `createWorker`, so tests control them (AGENTS.md, Where code goes). Tests wait for that work before removing their
   folders (`removeTestFolder` in `testing.ts`).
-- **Three places tests go:** the worker's API in-process and the provider seam (`apps/worker/src/*.test.ts`), and
+- **Three places tests go:** the worker's API in-process and the provider seam (`apps/worker/test/*.test.ts`), and
   the browser (`e2e/`) (AGENTS.md, Tests; spec, Testing Decisions).
 - **The first-load budget:** the build fails if what the home page needs first grows past its budget
   (`apps/web/scripts/finish-build.mjs`; [ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)).
   What the first load checks (health, login, the workspace list, errors, a change id) is written in Zod's small
   edition (`zod/mini`, `packages/contract/lib/{health,auth,api-error,workspace-summary,change-id}.ts`); the rest of
-  the contract is full Zod, which loads with the pages that use it: `web/src/worker-calls.ts`, and loaders that import
-  their page's module when they run (`workspace-page.ts`, `session-page.ts`) (#393).
+  the contract is full Zod, which loads with the pages that use it: `apps/web/src/api/worker-calls.ts`, and loaders
+  that import their page's module when they run (`api/workspace-page.ts`, `api/session-page.ts`) (#393).
 
 ## The AI setup
 

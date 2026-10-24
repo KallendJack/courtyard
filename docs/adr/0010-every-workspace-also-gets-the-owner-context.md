@@ -2,6 +2,9 @@
 
 Changed by ADR 0013: the owner context also changes through models' saves, not only by hand.
 
+Amended by ADR 0026: a code workspace has no context file, so "a fact a code workspace needs goes in its own context
+file" no longer holds; it goes in its repository.
+
 Each workspace knows only its own context file, so anything true about the owner across their whole life (where they
 live, units and currency, how they like answers) had to be repeated in every workspace, and the copies drifted. So the
 context folder gets one more file, `OWNER.md` at its top: the owner context. It has two sections, About me (facts,

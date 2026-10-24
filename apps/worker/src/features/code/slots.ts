@@ -83,5 +83,3 @@ export const createCodeSlots = (atOnce: number) => {
     running: () => held.size,
   };
 };
-
-export type CodeSlots = ReturnType<typeof createCodeSlots>;
