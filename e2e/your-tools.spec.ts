@@ -133,7 +133,10 @@ test.describe("on a desktop", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Tools bench" })).toBeVisible();
 
     await page.getByRole("tab", { name: "Tools" }).click();
-    await page.getByRole("region", { name: "Tools" }).getByRole("link", { name: "Your tools" }).click();
+    await page
+      .getByRole("region", { name: "Tools" })
+      .getByRole("link", { name: "Your tools" })
+      .click();
     await expect(page.getByRole("heading", { name: "What's in your garage?" })).toBeVisible();
 
     await tile(page, "Jigsaw").click();
