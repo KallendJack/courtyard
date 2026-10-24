@@ -151,14 +151,14 @@ describe("a Build's chat", () => {
     ]);
     const chat = await chatOf(request);
     expect(chat).toMatchObject({ session, answering: false, model: FAKE_MODEL });
-    expect(chat.entries.map(({ from, ...rest }) => [from, "text" in rest ? rest.text : ""])).toEqual(
-      [
-        ["owner", "Do the washers come with them?"],
-        ["model", "You said: Do the washers come with them?"],
-        ["owner", "And the nuts?"],
-        ["model", "You said: And the nuts?"],
-      ],
-    );
+    expect(
+      chat.entries.map(({ from, ...rest }) => [from, "text" in rest ? rest.text : ""]),
+    ).toEqual([
+      ["owner", "Do the washers come with them?"],
+      ["model", "You said: Do the washers come with them?"],
+      ["owner", "And the nuts?"],
+      ["model", "You said: And the nuts?"],
+    ]);
   });
 
   it("is the project's latest session, one started from the project in Courtyard too", async () => {
@@ -201,7 +201,13 @@ describe("a Build's chat", () => {
       { seq: expect.any(Number), from: "owner", text: "A bench for the garage." },
       { seq: expect.any(Number), from: "build", did: "started", changed: [], undone: false },
       { seq: expect.any(Number), from: "owner", text: "Make it 850 high." },
-      { seq: expect.any(Number), from: "build", did: "changed", changed: ["height"], undone: false },
+      {
+        seq: expect.any(Number),
+        from: "build",
+        did: "changed",
+        changed: ["height"],
+        undone: false,
+      },
     ]);
   });
 

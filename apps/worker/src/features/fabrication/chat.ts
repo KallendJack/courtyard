@@ -78,7 +78,8 @@ export const chatOf = (
         }
         break;
       case "text-delta":
-        if (last?.from === "model") entries[entries.length - 1] = { ...last, text: last.text + event.text };
+        if (last?.from === "model")
+          entries[entries.length - 1] = { ...last, text: last.text + event.text };
         else entries.push({ seq: event.seq, from: "model", text: event.text });
         break;
       case "build-saved":

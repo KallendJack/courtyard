@@ -1,5 +1,3 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { holdersOf } from "@courtyard/builds";
 import {
@@ -32,7 +30,6 @@ import {
   workspaceNameFrom,
 } from "@courtyard/contract";
 import { HOUSE_SKILLS_FOLDER } from "@courtyard/skills";
-import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createOwner } from "./auth/owner/index.ts";
@@ -120,6 +117,7 @@ import { createGitHubApi, type GitHubApi } from "./integrations/github/api.ts";
 import { createGitHub, KEEP_FRESH_EVERY_MS } from "./integrations/github/index.ts";
 import { gitHubProblem, gitHubRoutes } from "./integrations/github/routes.ts";
 import { createPaperFiles, type PaperFiles } from "./integrations/paper/files.ts";
+import { serveApps } from "./lib/apps.ts";
 import { apiError, contextError, readBody } from "./lib/http.ts";
 import { type Repeat, repeatForever } from "./lib/repeat.ts";
 import { err, ok, type Result } from "./lib/result.ts";
@@ -907,31 +905,7 @@ export const createWorker = (options: {
 
   const app = new Hono();
   app.route("/api", api);
-
-  // Fabrication's own app (#698), on the same origin so it shares the owner's login.
-  if (existsSync(fabricationDir)) {
-    const fabrication = new Hono();
-    fabrication.use(
-      "*",
-      serveStatic({
-        root: fabricationDir,
-        rewriteRequestPath: (path) => path.replace(/^\/fabrication/, ""),
-      }),
-    );
-    fabrication.get("*", serveStatic({ path: join(fabricationDir, "index.html") }));
-    app.route("/fabrication", fabrication);
-  }
-
-  // Without a build (while developing with `pnpm dev`), Vite serves the page instead.
-  if (existsSync(webDir)) {
-    app.use("*", serveStatic({ root: webDir }));
-    // Any other path is one of the web app's own routes, so a reload lands on the app.
-    app.get("*", serveStatic({ path: join(webDir, "index.html") }));
-  } else {
-    app.get("*", (c) =>
-      c.text("The web app isn't built. Run `pnpm build`, or use `pnpm dev` while developing.", 404),
-    );
-  }
+  serveApps(app, { webDir, fabricationDir });
 
   return ok({ app, port });
 };

@@ -201,7 +201,11 @@ describe("Fabrication (#698)", () => {
   it("serves its page under /fabrication, for each of its own routes, and the web app's elsewhere", async () => {
     const app = startWithFabrication();
 
-    for (const path of ["/fabrication", "/fabrication/", "/fabrication/workspaces/garage/builds/workbench"]) {
+    for (const path of [
+      "/fabrication",
+      "/fabrication/",
+      "/fabrication/workspaces/garage/builds/workbench",
+    ]) {
       expect(await (await app.request(path)).text()).toContain("Fabrication page");
     }
     expect(await (await app.request("/fabrications")).text()).toContain("Courtyard page");

@@ -92,7 +92,8 @@ const check = async ({
   overview?: string;
   architecture?: string;
 } = {}) => {
-  for (const app of ["worker", "web", "ui", "fabrication"]) await mkdir(join(root, app), { recursive: true });
+  for (const app of ["worker", "web", "ui", "fabrication"])
+    await mkdir(join(root, app), { recursive: true });
   for (const file of files) {
     await mkdir(dirname(join(root, file)), { recursive: true });
     await writeFile(join(root, file), "");

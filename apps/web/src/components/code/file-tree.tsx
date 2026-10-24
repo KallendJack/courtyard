@@ -1,6 +1,6 @@
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
-import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 
 /** A file in the tree: where it is, and the lines it adds and removes. */
 export type TreeFile = { path: string; additions: number; deletions: number };

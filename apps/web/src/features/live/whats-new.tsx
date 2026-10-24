@@ -1,8 +1,8 @@
 import type { WhatsNew } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
-import { useNavigate } from "@tanstack/react-router";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
+import { useNavigate } from "@tanstack/react-router";
 import { markWhatsNewSeen } from "./api.ts";
 
 /** What's new, where it is: "New in Garage: Draw the garage". */

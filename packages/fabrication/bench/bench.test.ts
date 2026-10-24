@@ -36,7 +36,9 @@ describe("the golden bench's parts", () => {
   });
 
   it("each say what it does, in a line, for the part's card (#698)", () => {
-    const does = Object.fromEntries(built(goldenBench).parts.map((part) => [part.label, part.does]));
+    const does = Object.fromEntries(
+      built(goldenBench).parts.map((part) => [part.label, part.does]),
+    );
 
     expect(does.B).toBe(
       "Front and back, top and bottom. The top pair holds the top, the bottom pair the shelf.",

@@ -104,7 +104,12 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
   const frameTimber = { width: s.wide, thickness: s.thick, material: timber };
   const wideCut = { width: s.wideWidth, thickness: s.wideThick, material: wideTimber };
   const { ends, rear } = parameters.braces;
-  const braced = ends && rear ? "the outside of the ends and the back" : ends ? "the outside of the ends" : "the back";
+  const braced =
+    ends && rear
+      ? "the outside of the ends and the back"
+      : ends
+        ? "the outside of the ends"
+        : "the back";
 
   const parts: (Omit<Part, "count"> & { on: boolean })[] = [
     {

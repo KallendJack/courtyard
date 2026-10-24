@@ -87,6 +87,13 @@ export {
   SaveAsDocument,
 } from "./lib/documents.ts";
 export {
+  BuildChat,
+  BuildChatEntry,
+  BuildChatSent,
+  BuildOpened,
+  BuildPlace,
+} from "./lib/fabrication/app.ts";
+export {
   BUILD_NAME_MAX_CHARACTERS,
   BuildChange,
   BuildChanged,
@@ -110,13 +117,6 @@ export {
   BuildStep,
   DerivedBuild,
 } from "./lib/fabrication/derived.ts";
-export {
-  BuildChat,
-  BuildChatEntry,
-  BuildChatSent,
-  BuildOpened,
-  BuildPlace,
-} from "./lib/fabrication/app.ts";
 export { FloorPlan, PlanItem, PlanOpening, PlanWall, wallLength } from "./lib/floor-plan.ts";
 export {
   FRESH_START_WORDS,
