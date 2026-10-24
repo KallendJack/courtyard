@@ -51,6 +51,7 @@ import {
   workspaceChange,
 } from "./features/context-folder/index.ts";
 import { documentRoutes } from "./features/documents/routes.ts";
+import { fabricationRoutes } from "./features/fabrication/routes.ts";
 import { createFreshStart } from "./features/fresh-start/index.ts";
 import { freshStartRoutes } from "./features/fresh-start/routes.ts";
 import { createFriction } from "./features/friction/index.ts";
@@ -638,12 +639,11 @@ export const createWorker = (options: {
   api.route("/", thingRoutes({ contextDir, contextFolder, now }));
   api.route("/", planningHomeRoutes({ contextDir, reviews }));
   api.route("/", projectRoutes({ contextDir, contextFolder, now }));
+  api.route("/fabrication", fabricationRoutes({ contextDir, contextFolder, now }));
   api.route("/", moveReviewRoutes(reviews));
   api.route("/", statusLineRoutes(statusLines));
-  api.route(
-    "/",
-    freshStartRoutes(createFreshStart({ contextDir, dataDir, contextFolder, sessions, now })),
-  );
+  const freshStart = createFreshStart({ contextDir, dataDir, contextFolder, sessions, now });
+  api.route("/", freshStartRoutes(freshStart));
   api.route("/", signInRoutes(createSignIns({ providers, dataDir })));
   api.route("/", gitHubRoutes(github));
   const repos = createRepos({ dataDir, contextDir, github, code });

@@ -91,6 +91,21 @@ export {
   SaveAsDocument,
 } from "./lib/documents.ts";
 export {
+  BUILD_NAME_MAX_CHARACTERS,
+  BuildChange,
+  BuildChanged,
+  BuildFile,
+  BuildName,
+  BuildParameters,
+  BuildParametersChange,
+  BuildSave,
+  BuildSlug,
+  BuildSummary,
+  Builds,
+  BuildTemplate,
+  BuildView,
+} from "./lib/fabrication/builds.ts";
+export {
   FLOOR_PLAN_MAX_ITEMS,
   FloorPlan,
   PlanFloorItem,

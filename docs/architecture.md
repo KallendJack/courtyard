@@ -106,6 +106,9 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`things/`](../apps/worker/src/features/things/README.md): a planning workspace's Things.
 - [`projects/`](../apps/worker/src/features/projects/README.md): a planning workspace's projects (#603): steps,
   decisions and history, a file each, kept by the model's project tool; a session started from one belongs to it.
+- [`fabrication/`](../apps/worker/src/features/fabrication/README.md): Fabrication's Builds, hosted by a planning
+  workspace (#697, ADRs 0036, 0037), a file each, worked out by `packages/fabrication` on read, kept by the model's
+  Build tool; and Fabrication's API (`/api/fabrication`).
 - [`move-review/`](../apps/worker/src/features/move-review/README.md): once, a planning workspace's moves into
   what it keeps now (#603), written by a model, kept in the data folder, each ticked move one change with Undo.
 - [`status-line/`](../apps/worker/src/features/status-line/README.md): the status line under a code workspace's
@@ -226,6 +229,7 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`things/`](../apps/web/src/features/things/README.md): the Things section, a Thing's card and its form.
   - [`projects/`](../apps/web/src/features/projects/README.md): Home's Projects, a project's page and Carry on
     (#603).
+  - [`fabrication/`](../apps/web/src/features/fabrication/README.md): Undo from a Build save's note (#697).
   - [`move-review/`](../apps/web/src/features/move-review/README.md): the move review on Home, its moves ticked
     (#603).
   - [`status-line/`](../apps/web/src/features/status-line/README.md): the status line under a code workspace's
@@ -395,7 +399,7 @@ numbers, with its tools, kit, fixings, close-up and check; and the making-rule f
 passes through, tools needed and not to hand, sizes assumed). A size without a source is refused. It's plain
 functions with no worker, web app, file system or model in it, so it could ship on its own; its one Courtyard import
 is the contract's `SourcedSize`. The first template is the framed bench (`bench/`). [Its README](../packages/fabrication/README.md)
-has the files.
+has the files. The worker's `features/fabrication/` keeps Builds and works them out with it (#697).
 
 ### The house configs: `packages/house`
 
@@ -505,6 +509,12 @@ Where the rest fits:
   `#project/<slug>`) and Undo. Home's answer (`planning-home/`) carries the projects. Carry on, or the box on a
   project's place, starts a session with `project` in its first message: `sessions/` keeps it in the session's file
   (as the tool's `session` does), and each of its turns is given the project's file whole.
+- **Builds** (#697, ADRs 0036, 0037). The model calls the Build tool by the labels its turn listed; `fabrication/`
+  merges the parameters it sends into the Build's, has `packages/fabrication` work them out, and only then writes the
+  file as a change through `context-folder/`. The tool's reply is the numbers worked out, which the model reports; the
+  session records a `build-saved` event and the browser shows a note with Undo. Given a project's step, the step is
+  given the Build through the project tool. The Fabrication app (#698) reads and changes Builds through
+  `/api/fabrication` only.
 - **The status line** (#256). A code workspace's line is built from `sessions/`' list and `next-up/` when asked, with
   no model. A planning workspace has none (#600).
 - **Session notes** (#601, ADR 0032). `sessions/notes.ts` asks the errand model for a planning session's note
@@ -722,6 +732,10 @@ things live only in the worker's memory and go when it restarts.
   photo, resized to fit 1600 px and 300 KB, in plain git.
 - `<workspace>/projects/<slug>.md`: a planning workspace's projects (#603, ADR 0032): name, goal and status in front
   matter, then its steps, decisions and a dated history, each file named by the project's name when it was started.
+  A step that makes a Build ends `[build: <slug>]`.
+- `<workspace>/builds/<slug>.json`: a planning workspace's Builds (#697, ADRs 0036, 0037): name, template and
+  parameters only, every size with its source; the parts, cut plan, buy list, steps and findings are worked out on
+  read, never stored. Each file is named by the Build's name when it was started.
 - `.agents/skills/<skill>/` at the top: the owner's skills for every workspace; `<workspace>/.agents/skills/<skill>/`:
   their skills for one workspace (ADR 0016). Added by hand, so they're kept and backed up like everything else.
 - `archived/<workspace>/`: archived workspaces.

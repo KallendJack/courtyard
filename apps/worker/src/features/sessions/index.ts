@@ -74,6 +74,7 @@ import {
 } from "../../lib/files.ts";
 import type { CommandEnv } from "../../lib/git.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
+import { BUILD_TOOL_NAME, buildReply } from "../../prompts/builds.ts";
 import {
   BUILDER_CARRY_ON_MESSAGE,
   BUILDER_LIMIT_RESET_MESSAGE,
@@ -171,6 +172,8 @@ import {
   saveNewDocument,
   undoDocumentChange,
 } from "../documents/index.ts";
+import { readBuilds, undoBuildChange } from "../fabrication/index.ts";
+import { createTurnBuilds } from "../fabrication/tool.ts";
 import { savePlansFrom } from "../floor-plans/index.ts";
 import type { MattSkills } from "../matt-skills/index.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
@@ -212,6 +215,7 @@ import {
 } from "../workspaces/index.ts";
 import { type AddedInbox, createAddedInbox } from "./added.ts";
 import { createSessionNotes } from "./notes.ts";
+import { savingTool } from "./saving-tools.ts";
 
 /** A skill's name typed at the start of a message, as Claude Code takes one: `/implement 157`. */
 const SLASH_SKILL = /^\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\s|$)/;
@@ -261,10 +265,9 @@ export type SessionError =
   /** Undoing a Thing save couldn't be done. */
   | { readonly kind: "thing-refused"; readonly refusal: ThingRefusal | ThingUndoRefusal }
   /** Starting a session from a project, or undoing a project save, couldn't be done (#603). */
-  | {
-      readonly kind: "project-refused";
-      readonly refusal: ProjectRefusal | WholeFilesUndoRefusal;
-    }
+  | { readonly kind: "project-refused"; readonly refusal: ProjectRefusal | WholeFilesUndoRefusal }
+  /** Undoing a Build save couldn't be done (#697). */
+  | { readonly kind: "build-refused"; readonly refusal: WholeFilesUndoRefusal }
   /** The model's provider can't code, so it can't work in a code workspace (ADR 0007). */
   | { readonly kind: "cannot-code"; readonly provider: string }
   /** A code session couldn't start its session branch (ADR 0007), and why. */
@@ -1121,21 +1124,18 @@ export const createSessions = (options: {
     if (!workspace.ok) return err("This session's workspace can't be read.");
     if (!ownerContext.ok) return err(ownerContext.error.message);
     const { summary, folder, contextMarkdown } = workspace.value;
-    const documents =
-      summary.mode === "planning"
-        ? await listDocuments({ contextDir: options.contextDir, workspaceId })
-        : ok([]);
+    const where = { contextDir: options.contextDir, workspaceId };
+    const planning = summary.mode === "planning";
+    const [documents, things, projects, builds] = await Promise.all([
+      planning ? listDocuments(where) : ok([]),
+      planning ? readThings(where) : ok({ things: [], problems: [] }),
+      planning ? readProjects(where) : ok({ projects: [], problems: [] }),
+      planning ? readBuilds(where) : ok({ builds: [], problems: [] }),
+    ]);
     if (!documents.ok) return err("This session's workspace's documents can't be read.");
-    const things =
-      summary.mode === "planning"
-        ? await readThings({ contextDir: options.contextDir, workspaceId })
-        : ok({ things: [], problems: [] });
     if (!things.ok) return err("This session's workspace's Things can't be read.");
-    const projects =
-      summary.mode === "planning"
-        ? await readProjects({ contextDir: options.contextDir, workspaceId })
-        : ok({ projects: [], problems: [] });
     if (!projects.ok) return err("This session's workspace's projects can't be read.");
+    if (!builds.ok) return err("This session's workspace's Builds can't be read.");
     const sessionNotes =
       summary.mode === "planning" ? await notes.forTurn(workspaceId, session) : [];
     return ok({
@@ -1147,6 +1147,7 @@ export const createSessions = (options: {
       documents: documents.value,
       things: things.value,
       projects: projects.value,
+      builds: builds.value,
       notes: sessionNotes,
       skills: await skillsOf(workspace.value),
       allowlist: allowlistFor(workspace.value.allowlist),
@@ -1294,73 +1295,43 @@ export const createSessions = (options: {
           },
           mode: workspace.value.mode,
         });
-        /** Whether the last save was refused, so this one is its retry. */
-        let retrying = false;
-        const save = async (input: unknown): Promise<ToolReply> => {
-          // A provider winding down after a stop saves nothing more; one already saving finishes.
-          if (stopper.signal.aborted || recordingLost) {
-            return saveReply(err({ kind: "stopped" }), true);
-          }
-          const saved = await turnSaves(input);
-          if (saved.ok) {
-            const { value: save, change } = saved.value;
-            const recorded = await append(turn.id, {
-              type: "context-saved",
-              save,
-              ...(change === undefined ? {} : { change }),
-            });
-            if (!recorded.ok) recordingLost = true;
-          }
-          const reply = saveReply(saved, retrying);
-          retrying = !saved.ok && !retrying;
-          return reply;
+        // A provider winding down after a stop saves nothing more; one already saving finishes.
+        const stopped = () => stopper.signal.aborted || recordingLost;
+        const recordSave = async (event: NewEvent) => {
+          if (!(await append(turn.id, event)).ok) recordingLost = true;
         };
-        /** Whether the last document save was refused, so this one is its retry. */
-        let retryingDocument = false;
-        const saveDocument = async (input: unknown): Promise<ToolReply> => {
-          if (stopper.signal.aborted || recordingLost) {
-            return documentReply(err({ kind: "stopped" }), true);
-          }
-          const saved = await turnDocuments.save(input);
-          if (saved.ok) {
-            const { save, change } = saved.value;
-            const recorded = await append(turn.id, {
-              type: "document-saved",
-              save,
-              ...(change === undefined ? {} : { change }),
-            });
-            if (!recorded.ok) recordingLost = true;
-          }
-          const reply = documentReply(saved, retryingDocument);
-          retryingDocument = !saved.ok && !retryingDocument;
-          return reply;
-        };
+        const withChange = (change: ChangeId | undefined) =>
+          change === undefined ? {} : { change };
+        const save = savingTool({
+          stopped,
+          run: turnSaves,
+          record: ({ value, change }) =>
+            recordSave({ type: "context-saved", save: value, ...withChange(change) }),
+          reply: saveReply,
+          stoppedReply: () => saveReply(err({ kind: "stopped" }), true),
+        });
+        const saveDocument = savingTool({
+          stopped,
+          run: turnDocuments.save,
+          record: ({ save, change }) =>
+            recordSave({ type: "document-saved", save, ...withChange(change) }),
+          reply: documentReply,
+          stoppedReply: () => documentReply(err({ kind: "stopped" }), true),
+        });
         const turnThings = createTurnThings({
           ...targetOf(turn),
           shown: workspace.value.things.things,
           photos: photosOf(framing.attachments),
           now: options.now(),
         });
-        /** Whether the last Thing save was refused, so this one is its retry. */
-        let retryingThing = false;
-        const saveThingTool = async (input: unknown): Promise<ToolReply> => {
-          if (stopper.signal.aborted || recordingLost) {
-            return thingReply(err({ kind: "stopped" }), true);
-          }
-          const saved = await turnThings(input);
-          if (saved.ok) {
-            const { save, change } = saved.value;
-            const recorded = await append(turn.id, {
-              type: "thing-saved",
-              save,
-              ...(change === undefined ? {} : { change }),
-            });
-            if (!recorded.ok) recordingLost = true;
-          }
-          const reply = thingReply(saved, retryingThing);
-          retryingThing = !saved.ok && !retryingThing;
-          return reply;
-        };
+        const saveThingTool = savingTool({
+          stopped,
+          run: turnThings,
+          record: ({ save, change }) =>
+            recordSave({ type: "thing-saved", save, ...withChange(change) }),
+          reply: thingReply,
+          stoppedReply: () => thingReply(err({ kind: "stopped" }), true),
+        });
         const turnProjects = createTurnProjects({
           ...targetOf(turn),
           shown: workspace.value.projects.projects,
@@ -1368,26 +1339,44 @@ export const createSessions = (options: {
           // The session belongs to it from now on (#603).
           attach: async (project) => (await updateFile(turn.id, { project })).ok,
         });
-        /** Whether the last project save was refused, so this one is its retry. */
-        let retryingProject = false;
-        const saveProjectTool = async (input: unknown): Promise<ToolReply> => {
-          if (stopper.signal.aborted || recordingLost) {
-            return projectReply(err({ kind: "stopped" }), true);
-          }
+        const projectSaved = async (input: unknown) => {
           const done = await turnProjects(input);
           if (done.ok && done.value.kind === "saved") {
             const { save, change } = done.value.saved;
-            const recorded = await append(turn.id, {
-              type: "project-saved",
-              save,
-              ...(change === undefined ? {} : { change }),
-            });
-            if (!recorded.ok) recordingLost = true;
+            await recordSave({ type: "project-saved", save, ...withChange(change) });
           }
-          const reply = projectReply(done, retryingProject);
-          retryingProject = !done.ok && !retryingProject;
-          return reply;
+          return done;
         };
+        const saveProjectTool = savingTool({
+          stopped,
+          run: projectSaved,
+          record: async () => undefined,
+          reply: projectReply,
+          stoppedReply: () => projectReply(err({ kind: "stopped" }), true),
+        });
+        const turnBuilds = createTurnBuilds({
+          ...targetOf(turn),
+          shown: workspace.value.builds.builds,
+          now: options.now(),
+        });
+        /** How giving a new Build to its project's step went, for the Build tool's reply. */
+        let stepReply: ToolReply | undefined;
+        const saveBuildTool = savingTool({
+          stopped,
+          run: turnBuilds,
+          record: async ({ saved: { save, change }, step }) => {
+            await recordSave({ type: "build-saved", save, ...withChange(change) });
+            if (step === undefined) return;
+            const given = { step: step.number, step_build: save.build.slug };
+            stepReply = projectReply(await projectSaved({ project: step.project, ...given }), true);
+          },
+          reply: (done, retrying) => {
+            const reply = buildReply(done, { retrying, ...(stepReply ? { step: stepReply } : {}) });
+            stepReply = undefined;
+            return reply;
+          },
+          stoppedReply: () => buildReply(err({ kind: "stopped" }), { retrying: true }),
+        });
         /** Records a piece of the answer. Anything after the owner stopped the turn is dropped. */
         const write = async (text: string) => {
           if (text === "" || recordingLost || stopper.signal.aborted) return;
@@ -1410,6 +1399,7 @@ export const createSessions = (options: {
           [DOCUMENT_TOOL_NAME]: saveDocument,
           [THING_TOOL_NAME]: saveThingTool,
           [PROJECT_TOOL_NAME]: saveProjectTool,
+          [BUILD_TOOL_NAME]: saveBuildTool,
           [READ_SESSION_TOOL_NAME]: async (input) =>
             readSessionReply(
               await notes.read({ workspaceId: turn.workspaceId, session: turn.id, input }),
@@ -2717,12 +2707,12 @@ export const createSessions = (options: {
   };
 
   /**
-   * Undoes one of the session's document, Thing or project saves, by its event number or the
-   * change it was committed as, and records that in the session.
+   * Undoes one of the session's document, Thing, project or Build saves, by its event number or
+   * the change it was committed as, and records that in the session.
    */
   const undoFileSave = async (
     undo: { rawId: string; save: number | ChangeId },
-    of: "document" | "thing" | "project",
+    of: "document" | "thing" | "project" | "build",
   ): Promise<Result<null, SessionError>> => {
     const found = await findSession(undo.rawId);
     if (!found.ok) return found;
@@ -2730,12 +2720,10 @@ export const createSessions = (options: {
     if (await isArchived(options.contextDir, file.workspaceId)) {
       return err({ kind: "workspace-archived" });
     }
-    const refused = (refusal: DocumentUndoRefusal): SessionError =>
-      of === "document"
-        ? { kind: "document-refused", refusal }
-        : of === "thing"
-          ? { kind: "thing-refused", refusal }
-          : { kind: "project-refused", refusal };
+    const refused = (refusal: DocumentUndoRefusal): SessionError => ({
+      kind: `${of}-refused`,
+      refusal,
+    });
     const session = runningSession(file.id);
     return inOrder(session, async (): Promise<Result<null, SessionError>> => {
       const events = await readEvents(file.id);
@@ -2752,12 +2740,13 @@ export const createSessions = (options: {
       );
       if (undone) return err(refused({ kind: "already-undone" }));
       if (saved.change === undefined) return err(refused({ kind: "not-undoable" }));
-      const reversed =
-        of === "document"
-          ? await undoDocumentChange(targetOf(file), saved.change)
-          : of === "thing"
-            ? await undoThingChange(targetOf(file), saved.change)
-            : await undoProjectChange(targetOf(file), saved.change);
+      const undoes = {
+        document: undoDocumentChange,
+        thing: undoThingChange,
+        project: undoProjectChange,
+        build: undoBuildChange,
+      };
+      const reversed = await undoes[of](targetOf(file), saved.change);
       if (!reversed.ok) return err(refused(reversed.error));
       const recorded = await writeEvent({
         id: file.id,
@@ -3502,12 +3491,13 @@ export const createSessions = (options: {
     undoThing: (undo: { rawId: string; save: number | ChangeId }) => undoFileSave(undo, "thing"),
 
     /**
-     * Undoes one of the session's project saves (#603), by its event number, or by the change it
-     * was committed as (from Recent changes): the project goes back as it was, unless it's changed
-     * since. Recorded in the session, so its note shows it from any device.
+     * Undoes one of the session's project (#603) or Build (#697) saves, by its event number, or by
+     * the change it was committed as (from Recent changes): its file goes back as it was, unless
+     * it's changed since. Recorded in the session, so its note shows it from any device.
      */
     undoProject: (undo: { rawId: string; save: number | ChangeId }) =>
       undoFileSave(undo, "project"),
+    undoBuild: (undo: { rawId: string; save: number | ChangeId }) => undoFileSave(undo, "build"),
 
     /** Undoes one of the session's saves, from wherever the owner is (ADR 0013). */
     undoSave: ({ rawId, save }: { rawId: string; save: number }) =>

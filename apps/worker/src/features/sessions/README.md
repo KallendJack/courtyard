@@ -29,14 +29,15 @@ Claude, and every page that has the session open gets the answer as it's written
 - `POST /api/sessions/:id/approvals/:approval`: Allow or Deny; `…/allow-all` and `…/allow-all/off`.
 - `GET /api/sessions/:id/pull-request` and its `merge`, `close` and `bring-up-to-date`.
 - `POST /api/sessions/:id/documents` (Save as document), `…/documents/:save/undo`, `…/things/:save/undo`,
-  `…/projects/:save/undo` (#603), `…/saves/:save/undo` and `…/saves/:save/edit`.
+  `…/projects/:save/undo` (#603), `…/builds/:save/undo` (#697), `…/saves/:save/undo` and `…/saves/:save/edit`.
 
 ## How it works
 
 - **Tools by name.** It answers each call to Courtyard's tools by name: one `callTool` on the provider seam, so a
   new tool needs no adapter change. A new tool is a name in `TurnToolName` (`providers/`), its definition beside its
   replies in `prompts/`, its answer in the turn's `answers` (which the compiler asks for), and a scripted line for
-  the fake.
+  the fake. A tool that saves (context, documents, Things, projects, Builds) is a `savingTool` (`saving-tools.ts`):
+  nothing saved once the turn's stopped, each save recorded as its event, and a refused one put right once.
 - **Following a turn.** It follows each one live from any position, and handles Stop, Carry on, titles, and Undo and
   Edit of saves.
 - **Sent while a turn runs.** A message goes into that answer on a provider that steers (#252, `added.ts`), or is

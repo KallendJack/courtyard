@@ -4,6 +4,7 @@ import {
   ApiError,
   type ApprovalAsk,
   type Attachment,
+  type BuildSave,
   type DocumentSave,
   type Doing,
   type Effort,
@@ -40,31 +41,23 @@ export type Note = {
 };
 
 /**
- * A document saved from an answer (ADR 0020), by the model or with Save as document, shown as a
- * note under it, and whether the owner has undone it since.
+ * A file saved from an answer, shown as a note under it, and whether the owner has undone it
+ * since: by its event number, which Undo names it by.
  */
-export type DocumentNote = {
-  /** The save's event number, which Undo names it by. */
-  readonly seq: number;
-  readonly save: DocumentSave;
-  readonly undone: boolean;
-};
+type FileNote<Save> = { readonly seq: number; readonly save: Save; readonly undone: boolean };
 
-/** A Thing the model saved in its answer (ADR 0020), shown as a note under it, and whether the owner has undone it since. */
-export type ThingNote = {
-  /** The save's event number, which Undo names it by. */
-  readonly seq: number;
-  readonly save: ThingSave;
-  readonly undone: boolean;
-};
+/** The notes with the one for the save numbered `save` undone. */
+const undoneIn = <N extends FileNote<unknown>>(notes: readonly N[], save: number) =>
+  notes.map((note) => (note.seq === save ? { ...note, undone: true } : note));
 
-/** A project the model started or changed in its answer (#603), shown as a note under it, and whether the owner has undone it since. */
-export type ProjectNote = {
-  /** The save's event number, which Undo names it by. */
-  readonly seq: number;
-  readonly save: ProjectSave;
-  readonly undone: boolean;
-};
+/** A document saved from an answer (ADR 0020), by the model or with Save as document. */
+export type DocumentNote = FileNote<DocumentSave>;
+/** A Thing the model saved in its answer (ADR 0020). */
+export type ThingNote = FileNote<ThingSave>;
+/** A project the model started or changed in its answer (#603). */
+export type ProjectNote = FileNote<ProjectSave>;
+/** A Build the model started or changed in its answer (#697). */
+export type BuildNote = FileNote<BuildSave>;
 
 /** An image a tool connection showed (ADR 0023), by what it shows. */
 export type ShownImage = {
@@ -207,8 +200,9 @@ export type Turn = {
   readonly documents: readonly DocumentNote[];
   /** The Things its model saved, in order. */
   readonly things: readonly ThingNote[];
-  /** The projects its model started or changed, in order (#603). */
+  /** The projects (#603) and Builds (#697) its model started or changed, in order. */
   readonly projects: readonly ProjectNote[];
+  readonly builds: readonly BuildNote[];
   /** Replies the model suggested the owner tap (ADR 0017); none when it suggested none. */
   readonly replies: readonly string[];
   /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
@@ -367,6 +361,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             documents: [],
             things: [],
             projects: [],
+            builds: [],
             replies: [],
             sources: [],
             images: [],
@@ -672,12 +667,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return withTurn(log, {
         seq,
         holds: (turn) => turn.documents.some((note) => note.seq === event.save),
-        change: (turn) => ({
-          ...turn,
-          documents: turn.documents.map((note) =>
-            note.seq === event.save ? { ...note, undone: true } : note,
-          ),
-        }),
+        change: (turn) => ({ ...turn, documents: undoneIn(turn.documents, event.save) }),
       });
     case "thing-saved": {
       const note: ThingNote = { seq, save: event.save, undone: false };
@@ -697,12 +687,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return withTurn(log, {
         seq,
         holds: (turn) => turn.things.some((note) => note.seq === event.save),
-        change: (turn) => ({
-          ...turn,
-          things: turn.things.map((note) =>
-            note.seq === event.save ? { ...note, undone: true } : note,
-          ),
-        }),
+        change: (turn) => ({ ...turn, things: undoneIn(turn.things, event.save) }),
       });
     case "project-saved": {
       const note: ProjectNote = { seq, save: event.save, undone: false };
@@ -716,12 +701,21 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return withTurn(log, {
         seq,
         holds: (turn) => turn.projects.some((note) => note.seq === event.save),
-        change: (turn) => ({
-          ...turn,
-          projects: turn.projects.map((note) =>
-            note.seq === event.save ? { ...note, undone: true } : note,
-          ),
-        }),
+        change: (turn) => ({ ...turn, projects: undoneIn(turn.projects, event.save) }),
+      });
+    case "build-saved": {
+      const note: BuildNote = { seq, save: event.save, undone: false };
+      return withTurn(log, {
+        seq,
+        holds: (_, last) => last,
+        change: (turn) => ({ ...turn, builds: [...turn.builds, note] }),
+      });
+    }
+    case "build-undone":
+      return withTurn(log, {
+        seq,
+        holds: (turn) => turn.builds.some((note) => note.seq === event.save),
+        change: (turn) => ({ ...turn, builds: undoneIn(turn.builds, event.save) }),
       });
   }
 };
