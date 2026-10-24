@@ -17,7 +17,14 @@ import { shiftsOn } from "./shifts.ts";
 // question, so the Lead's status, the sessions and Next up are given here as the worker would give
 // them; the worker's side is in lead.test.ts and builder-status.test.ts.
 
-test.use({ viewport: { width: 950, height: 712 }, hasTouch: true, isMobile: true });
+// Text measured as the Fold draws it (#690): Chromium on Linux, as in CI, hints its glyphs a pixel
+// or two wider unless told not to, and the boards leave about that much.
+test.use({
+  viewport: { width: 950, height: 712 },
+  hasTouch: true,
+  isMobile: true,
+  launchOptions: { args: ["--font-render-hinting=none"] },
+});
 
 /** Where the boards' screenshots go, when a run asks for them (COURTYARD_E2E_SHOTS). */
 const shot = async (page: Page, name: string) => {
@@ -639,7 +646,8 @@ test("the header lists every reason the Lead starts no more; Allow and Retry act
 // The build at the board's sizes (#690; Paper, "Tablet · Builders board, running", 950 × 712, and
 // "Tablet · Code Home: approvals in Needs you, one bottom bar", 933 × 645): on the Fold open the
 // board's three rows fit whole inside it, and on both the line under the name and the tabs beside
-// it show the board's words whole.
+// it show the board's words whole. The boards leave a pixel or so, so the text is measured as the
+// Fold draws it (the file's `test.use`).
 for (const viewport of [
   { width: 950, height: 712 },
   { width: 933, height: 645 },
@@ -661,6 +669,7 @@ for (const viewport of [
     await expect(row(page, "Notify me")).toContainText("Ready for review");
     // The frame's rails in, as the owner sees it, so the page has its own width.
     await expect(page.getByRole("button", { name: /^Model: / })).toBeEnabled();
+    await page.evaluate(() => document.fonts.ready);
     await shot(page, `tablet-home-at-board-size-${viewport.height}`);
 
     const line = page.getByRole("button", { name: /owner\/courtyard.*Paper · a file/ });
@@ -671,8 +680,10 @@ for (const viewport of [
           .filter((each) => each.scrollWidth > each.clientWidth)
           .map((each) => each.textContent),
       );
-    expect(await cut(line)).toEqual([]);
-    expect(await cut(page.getByRole("navigation", { name: "Workspace tabs" }))).toEqual([]);
+    await expect.poll(() => cut(line)).toEqual([]);
+    await expect
+      .poll(() => cut(page.getByRole("navigation", { name: "Workspace tabs" })))
+      .toEqual([]);
 
     if (viewport.height === 712) {
       // Whole: none scrolled out of sight inside the board.
