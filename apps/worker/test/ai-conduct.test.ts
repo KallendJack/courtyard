@@ -456,6 +456,20 @@ describe("what every turn tells a model", () => {
       "wait for them to say it's done or send a photo",
       "Never assume the owner has a tool",
       "check what's saved here",
+      // A Garage session asked for photos of tools saved as Things, and said a design's sizes
+      // didn't exist without reading the project (#700).
+      "Before you ask the owner for something or say it's missing",
+      "its Things, its projects",
+      // It circled back to layout worries when the owner said to get on with it (#700).
+      "When the owner wants to go ahead",
+      "say what you're assuming in a line",
+      "such as cutting, drilling or buying",
+      "Never make a requirement of something the owner hasn't asked for",
+      // It said the same caveat in six answers in a row (#700).
+      "Give a caveat once",
+      // It saved tools from another AI's plan as the owner's, then refused to check its next one (#700).
+      "A plan pasted from another AI is ideas",
+      "say only what to change",
       "each linked",
       "say so rather than",
       "needs a pro",
@@ -1795,6 +1809,8 @@ describe("projects (#603, ADR 0032)", () => {
     expect(framing?.instructions).toContain(
       "needs a pro, work on electrics, gas or a building's structure",
     );
+    // Two Garage sessions opened on a next step the real work had overtaken (#700).
+    expect(framing?.instructions).toContain("Keep its steps current");
   });
 
   it("refuses a project with the guide's reasons", async () => {
@@ -1913,6 +1929,13 @@ describe("the wanted list, without picks or blocked shops (#600)", () => {
     expect(framing?.instructions).toContain(
       `${await quotedInGuide("The owner's kit for this workspace")}\n\n${await quotedInGuide("The Things the owner wants or means to replace")}`,
     );
+    // A Garage session saved wanted materials by name only, and ones ordered for collection as have (#700).
+    for (const rule of [
+      "keeps the details the owner or your answer gave",
+      "stays want, with the order in its history",
+    ]) {
+      expect(framing?.instructions).toContain(rule);
+    }
     expect(framing?.instructions).not.toMatch(/block_shop|price check|★/i);
     expect(saver.replies[0]?.map(({ reply }) => reply)).toEqual([
       await quotedInGuide("This turn has no tool called <name>.", { name: "block_shop" }),
