@@ -3,7 +3,7 @@ import { type AlwaysAllow, type ApprovalAsk, wordsOf } from "@courtyard/contract
 import { shownPath, staysInside } from "../../auth/workspace-files/index.ts";
 import { gitIgnores, gitOrNothing } from "../../lib/git.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
-import { allowsAll, codeWordsOf } from "./allowing-all.ts";
+import { allowsAll } from "./allowing-all.ts";
 import {
   alwaysOffer,
   type CommandRule,
@@ -15,8 +15,9 @@ import {
   ruleFor,
   runsFromOf,
 } from "./allowlist.ts";
+import { codeWordsOf } from "./inline-code.ts";
 import { outside, reachesOut } from "./paths.ts";
-import { withoutEnv } from "./routine.ts";
+import { afterEnv, withoutEnv } from "./routine.ts";
 
 /**
  * Whether a code session's commands and edits run without asking (ADR 0007): the allowlist, read
@@ -142,9 +143,13 @@ export const commandAllowed = async (
     if (checksEverything(command)) return err({ kind: "ci-runs-it" });
   }
   if (session.builder === true) {
-    const main = await pushesToDefault(worktree, words);
+    const main = await pushesToDefault(worktree, afterEnv(words));
     if (main !== undefined) return err({ kind: "default-branch", branch: main });
   }
+  // Any other environment could change what the command does (`GIT_TRACE=1`, `NODE_OPTIONS`), so
+  // it asks, and Allow all never covers it (#730).
+  if (afterEnv(words).length !== words.length)
+    return err({ kind: "needs-approval", reason: "off-allowlist" });
   const [gap, ...gaps] = issueGapsIn(words);
   if (gap !== undefined) return err({ kind: "unfiled", gaps: [gap, ...gaps] });
   const namesRepo = words.some((word) => /^(?:--repo|-R)/.test(word));

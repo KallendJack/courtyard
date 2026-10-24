@@ -308,17 +308,23 @@ describe("Run the build order (#347)", () => {
     await settledAll(request);
   });
 
-  it("refuses a builder's push to the default branch, without asking (#730)", async () => {
-    const coder = builderRunning(["git push origin main", "git push origin HEAD:main"]);
+  it("refuses a builder's push to the default branch, without asking, whatever environment it's given (#730)", async () => {
+    const pushes = [
+      "git push origin main",
+      "git push origin HEAD:main",
+      "GIT_TRACE=1 git push origin main",
+      "PORT=1 X=1 git push origin main",
+    ];
+    const coder = builderRunning(pushes);
     const { request } = await signedInWith(ISSUES.slice(0, 1), { providers: [coder.provider] });
 
     await run(request, CODING_MODEL);
-    await expect.poll(() => coder.answers.length).toBe(2);
+    await expect.poll(() => coder.answers.length).toBe(pushes.length);
 
     const refused = err(
       "A builder pushes only its own branch, never main: push yours (git push -u origin HEAD) and its pull request takes it there.",
     );
-    expect(coder.answers).toEqual([refused, refused]);
+    expect(coder.answers).toEqual(pushes.map(() => refused));
     await settledAll(request);
     expect((await builderOf(request, 22)).waiting).not.toBe("approval");
   });

@@ -295,6 +295,28 @@ const MAJOR: [string, string][] = [
   ["unzip trace.zip -d ../elsewhere", "reaches-out"],
   [`node -e "require('fs').writeFileSync('package.json', '{}')"`, "off-allowlist"],
   [`node -e "require('fs').rmSync('.git', { recursive: true })"`, "off-allowlist"],
+  // A setup folder given as a short option's value written onto it.
+  ["cp -t.claude settings.json", "off-allowlist"],
+  ["cp -t.github/workflows evil.yml", "off-allowlist"],
+  ["mv -t.husky pre-commit", "off-allowlist"],
+  // Code that climbs out from the worktree it runs in, however deep a file it names; only an
+  // import written into that file is taken from its folder.
+  [
+    `node -e "const fs=require('fs');fs.writeFileSync('apps/a/b/c/d/e/f.ts','x');fs.readFileSync('../../../x')"`,
+    "off-allowlist",
+  ],
+  [
+    `node -e "require('fs').rmSync(require('path').join('apps/worker/src/x.ts','..','..','..','..','..'),{recursive:true})"`,
+    "off-allowlist",
+  ],
+  // Code that runs another program, reaches the network or loads what it works out.
+  [`node -e "require('child_process').execSync('git status')"`, "off-allowlist"],
+  [`node -e "require('ht'+'tp')"`, "off-allowlist"],
+  [`node -e "new Function('return 1')()"`, "off-allowlist"],
+  [`python3 -c "import subprocess; subprocess.run(['git', 'status'])"`, "off-allowlist"],
+  [`ruby -e "puts 1"`, "off-allowlist"],
+  // A path outside in braces the shell expands.
+  ["cat {/path/to/elsewhere/notes.md,README.md}", "reaches-out"],
   // Switching or rewriting branches, other scripts, the machine's clock and services.
   ["git checkout main", "off-allowlist"],
   ["git rebase main", "off-allowlist"],

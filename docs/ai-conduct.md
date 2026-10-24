@@ -533,8 +533,10 @@ a path outside the worktree each wait for the owner's approval (#171), with no t
 until they answer. Routine work inside the worktree never asks (#730): moving, copying, making and removing its
 files, its other check scripts (`lint`, `test:e2e`), restoring files and bringing the branch onto its base, and code
 given on the line (`node -e`, `python -c`, #464), as the same code saved in the worktree would be, unless its text
-names a credential, a path outside the worktree or a file that decides what runs, or node is told to load other
-code first. While the session allows all (#428), most of the rest run without asking too. Allow lets it happen.
+names a credential, a path outside the worktree or a file that decides what runs, or could run another program,
+reach the network or load a name it works out (ADR 0038, whose Consequences say what such a check of words can't
+catch), or node is told to load other code first. While the session allows all (#428), most of the rest run without
+asking too. Allow lets it happen.
 Deny, and anything else refused, tells the model why, in one of these:
 
 - A command the owner denied: "The owner denied that command, so it didn't run. Find another way, or tell the owner

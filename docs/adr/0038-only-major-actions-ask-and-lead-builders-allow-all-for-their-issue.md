@@ -37,8 +37,10 @@ So:
 - **Keep the builder's Allow all ending at its pull request.** Rejected: after the pull request opens a builder still
   fixes failing checks and conflicts, unattended, which is when it waited.
 - **Check only the paths code given on the line opens.** Rejected for now: the worker can't tell from the text
-  alone. A `..` path counts as inside when it stays inside from the folder of a file the code names, which covers an
-  import written into that file.
+  alone. Every path is taken from the worktree, which the code runs in, with one exception: a relative import inside
+  one of JavaScript's strings (`"import { ok } from \"../../lib/result.ts\""`), text the code writes into a file,
+  counts as inside when it stays inside from the folder of a file the code names. A path given to the file system's
+  or path's functions never does.
 
 ## Consequences
 
@@ -46,6 +48,18 @@ So:
 - Still asking, from the same logs: GitHub writes through `gh api` (milestones' build orders, about a hundred asks),
   `gh api graphql`, and reading outside the worktree (the data folder, Claude Code's own task output in the temporary
   folder). They're outside the worktree, so they stay major; a later issue can decide them.
-- Code given on the line is checked by its words, so code that builds a path outside the worktree from parts isn't
-  caught; that was already true under Allow all, and the session is still held to its worktree's files by everything
-  else.
+- Code given on the line (`node -e`, `python -c`) now runs without asking in every code session, the owner's too,
+  when its words name no path outside the worktree, no credential, no setup file, and nothing that runs another
+  program or reaches the network: `child_process`, spawn, exec and fork, worker threads, `fetch` and sockets
+  (`http`, `https`, `net`, `dgram`, `tls`), node's bindings and native modules, `vm`, `eval`, a `require` or
+  `import` of a name it works out, Bun's and Deno's own calls; Python's `subprocess`, `os.system`, sockets and the
+  web. Perl's, Ruby's and PHP's always ask. Under Allow all the same code asks.
+- That is a check of words, not of what the code does. Code that builds a path from parts (`'.' + './x'`) or
+  reaches a function by a route the lists don't name can still read, write or delete outside the worktree, or run a
+  program, without asking. So can a script or test the session writes and runs (`node scripts/x.ts`, `pnpm test`),
+  as before this decision. The checks catch a model's mistakes; they don't hold a model trying to get past them.
+- Allow all covers any other command off the allowlist whose words name no path outside the worktree (braces
+  expanded as the shell does) and that isn't on its lists: `curl`, `cargo`, `pnpm add` and other programs, network
+  included, run without asking while it's on, for a builder all its issue long. An environment in front of a command
+  other than a test run's (`PORT`, `CI`, `TZ`, colours, `COURTYARD_E2E_SHOTS`) always asks, and a builder's push to
+  the default branch is refused whatever environment it's given.

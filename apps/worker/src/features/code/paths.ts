@@ -1,4 +1,4 @@
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { CommandRule } from "./allowlist.ts";
 
 /**
@@ -9,21 +9,28 @@ import type { CommandRule } from "./allowlist.ts";
 /**
  * The paths an argument could name: itself; whatever follows an `=` or a `:` in it
  * (`--option=value`, `HEAD:path`), a drive's colon aside; and, for short options, whatever follows
- * each of their letters, since a short option's value can be written onto it, after others too
- * (`-F../x`, `-qF../x`), but not the rest of that value (`-L13,13:apps/x`, #730).
+ * each of their letters (`attachedValues`), but not the rest of that value (`-L13,13:apps/x`, #730).
  */
-const pathsIn = (argument: string) => {
+export const pathsIn = (argument: string) => {
   const paths = [argument];
   for (let at = 0; at < argument.length; at += 1) {
     const char = argument[at];
     const drive = char === ":" && at === 1 && /^[A-Za-z]$/.test(argument[0] ?? "");
     if ((char === "=" || char === ":") && !drive) paths.push(argument.slice(at + 1));
   }
-  if (/^-[^-]/.test(argument)) {
-    for (let at = 2; at < argument.length && /[A-Za-z]/.test(argument[at - 1] ?? ""); at += 1)
-      paths.push(argument.slice(at));
-  }
-  return paths;
+  return [...paths, ...attachedValues(argument)];
+};
+
+/**
+ * What a short option could have written onto it as its value: whatever follows each of its
+ * letters, after others too (`-t.claude`, `-qF../x`); nothing for a word that isn't one.
+ */
+export const attachedValues = (argument: string) => {
+  const values: string[] = [];
+  if (!/^-[^-]/.test(argument)) return values;
+  for (let at = 2; at < argument.length && /[A-Za-z]/.test(argument[at - 1] ?? ""); at += 1)
+    values.push(argument.slice(at));
+  return values;
 };
 
 /** A search's options that give its pattern (#730): never a path. */
@@ -92,28 +99,4 @@ export const reachesOut = (worktree: string, rule: CommandRule, words: readonly 
   if (folder !== undefined && outside(worktree, folder)) return true;
   const from = folder === undefined ? worktree : resolve(worktree, folder);
   return pathsNamed(rule, words).some((path) => outside(worktree, path, from));
-};
-
-/** A path in code that names a file of the worktree: `apps/web/src/home.tsx`, not `..` or a name. */
-const FILE_IN_CODE = /^(?!\.\.)[\w.-]+(?:\/[\w.-]+)+\.\w+$/;
-
-/**
- * Whether the words in code given on the line (#464) name a path outside the worktree. A path
- * climbing with `..` that stays inside from the folder of a file the code names is an import it
- * writes into that file (`../../lib/result.ts` into `apps/worker/src/features/code/x.ts`), not a
- * path it opens (#730).
- */
-export const codeReachesOut = (worktree: string, words: readonly string[]) => {
-  const paths = words.flatMap(pathsIn);
-  const folders = paths
-    .filter((word) => FILE_IN_CODE.test(word) && !outside(worktree, word))
-    .map((file) => resolve(worktree, dirname(file)));
-  /** Whether a path only climbs with `..`: not from home, a drive or the root. */
-  const climbs = (word: string) =>
-    !isAbsolute(word) && !word.startsWith("~") && !/^[A-Za-z]:/.test(word);
-  return paths.some(
-    (word) =>
-      outside(worktree, word) &&
-      (!climbs(word) || folders.every((from) => outside(worktree, word, from))),
-  );
 };

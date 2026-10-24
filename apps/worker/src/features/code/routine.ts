@@ -1,5 +1,6 @@
 import { wordsOf } from "@courtyard/contract";
 import type { CommandRule } from "./allowlist.ts";
+import { attachedValues } from "./paths.ts";
 
 /**
  * Routine work inside a session's worktree (#730), which never asks: moving, copying, making and
@@ -30,6 +31,18 @@ const SAFE_ENV = new Set(["PORT", "CI", "TZ", "NO_COLOR", "FORCE_COLOR", "COURTY
 
 /** An assignment in front of a command: `NAME=value`. */
 const ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s;
+
+/** Whether a word is an assignment, as the shell reads one in front of a command. */
+export const isAssignment = (word: string) => ASSIGNMENT.test(word);
+
+/**
+ * A command's words after every assignment in front of it, safe or not (#730): the command the
+ * shell runs, which `GIT_TRACE=1 git push origin main` is too.
+ */
+export const afterEnv = (words: readonly string[]) => {
+  const at = words.findIndex((word) => !isAssignment(word));
+  return at === -1 ? [] : words.slice(at);
+};
 
 /**
  * A command's words without the environment in front of it, and that environment's values, when
@@ -68,11 +81,15 @@ export const isRoutineScript = (script: string | undefined) =>
   /^(?:check|typecheck|test|build|e2e|format|lint)(?::[\w:.-]+)?$/.test(script ?? "") &&
   !/watch|dev|serve|start|preview|ui|deploy|release|publish/.test(script ?? "");
 
-/** The paths a command that changes files names: its words that aren't options, and `--x=` values. */
+/**
+ * The paths a command that changes files names: its words that aren't options, `--x=` values, and
+ * whatever a short option could have written onto it (`cp -t.claude x`, #730).
+ */
 const named = (rest: readonly string[]) =>
-  rest.flatMap((word) =>
-    !word.startsWith("-") ? [word] : /^--[\w-]+=./.test(word) ? [word.replace(/^[^=]*=/, "")] : [],
-  );
+  rest.flatMap((word) => {
+    if (!word.startsWith("-")) return [word];
+    return /^--[\w-]+=./.test(word) ? [word.replace(/^[^=]*=/, "")] : attachedValues(word);
+  });
 
 /** The paths after `--`. */
 const afterDashes = (rest: readonly string[]) => {
