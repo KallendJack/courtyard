@@ -1743,8 +1743,8 @@ describe("projects (#603, ADR 0032)", () => {
     "",
     "## Steps",
     "",
-    "- [you can do this] Measure the ceiling · 5 minutes, tape measure",
-    "- [needs a pro] A socket for the fan · a registered electrician",
+    "- [ ] Measure the ceiling · 5 minutes, tape measure [id: s1] [who: you] [needs: the rack's height]",
+    "- [ ] A socket for the fan · a registered electrician [id: s2] [who: a pro]",
     "",
   ].join("\n");
   const withRack = async () => {
@@ -1760,7 +1760,7 @@ describe("projects (#603, ADR 0032)", () => {
     const { framing } = await firstTurn();
 
     expect(framing.instructions).toContain(
-      `${await quotedInGuide("The workspace's projects are below")}\n\n<projects>\n[P1] Rack by the window, active, next: Measure the ceiling (you can do this), 2 steps, 0 decisions (projects/rack-by-the-window.md)\n- projects/loft.md can't be read as a project: Its status isn't active or done.\n</projects>`,
+      `${await quotedInGuide("The workspace's projects are below")}\n\n<projects>\n[P1] Rack by the window, active, next: s1 Measure the ceiling (you, not ready yet: needs the rack's height), 2 steps (0 done), 0 decisions (projects/rack-by-the-window.md)\n- projects/loft.md can't be read as a project: Its status isn't active or done.\n</projects>`,
     );
     expect(framing.instructions).not.toContain("tape measure");
   });
@@ -1811,10 +1811,13 @@ describe("projects (#603, ADR 0032)", () => {
     );
     // Electrics need a pro, as a step, never one the owner does (ADR 0032).
     expect(framing?.instructions).toContain(
-      "needs a pro, work on electrics, gas or a building's structure",
+      "a pro, work on electrics, gas or a building's structure",
     );
-    // Two Garage sessions opened on a next step the real work had overtaken (#700).
-    expect(framing?.instructions).toContain("Keep its steps current");
+    // Two Garage sessions opened on a next step the real work had overtaken (#700, #710).
+    expect(framing?.instructions).toContain("keep its steps current");
+    expect(framing?.instructions).toContain("add that step before the first step not done");
+    // Six of the garage project's ten steps were decisions (ADR 0037).
+    expect(framing?.instructions).toContain("A decision is never a step");
   });
 
   it("refuses a project with the guide's reasons", async () => {
@@ -1825,8 +1828,10 @@ describe("projects (#603, ADR 0032)", () => {
         tool({ goal: "Somewhere to train" }),
         tool({ project: "P7", history: "Moved" }),
         tool({ name: "Rack by the window" }),
-        tool({ project: "P1", step: 5, done: true }),
+        tool({ project: "P1", step: "s5", done: true }),
         tool({ project: "P1", done: true }),
+        tool({ project: "P1", step: "s1", need: "the ceiling", known: "2.4 m" }),
+        tool({ project: "P1", step: "s1", need: "the rack's height" }),
         tool({ project: "P1", decision_pick: "Rogue" }),
         tool({ project: "P1", status: "active" }),
       ],
@@ -1849,11 +1854,16 @@ describe("projects (#603, ADR 0032)", () => {
         name: "Rack by the window",
         path: "projects/rack-by-the-window.md",
       }),
-      await quotedInGuide("There's no step <number>", { number: "5", count: "2 steps" }),
-      await quotedInGuide("Give the step's number"),
+      await quotedInGuide("There's no step <id>", { id: "s5", ids: "s1 and s2" }),
+      await quotedInGuide("Give the step's ID"),
+      await quotedInGuide("That step doesn't need", {
+        need: "the ceiling",
+        needs: "the rack's height",
+      }),
+      await quotedInGuide("Give the need and what was found"),
       await quotedInGuide("A decision needs what it was about"),
       await quotedInGuide("That changes nothing", { name: "Rack by the window" }),
-      `${await quotedInGuide("<label> has changed since you were shown it. The projects now", { label: "P1" })}\n[P1] Rack by the window, done, next: Measure the ceiling (you can do this), 2 steps, 0 decisions (projects/rack-by-the-window.md)`,
+      `${await quotedInGuide("<label> has changed since you were shown it. The projects now", { label: "P1" })}\n[P1] Rack by the window, done, next: s1 Measure the ceiling (you, not ready yet: needs the rack's height), 2 steps (0 done), 0 decisions (projects/rack-by-the-window.md)`,
     ]);
   });
 

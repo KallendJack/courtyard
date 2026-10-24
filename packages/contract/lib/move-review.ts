@@ -45,7 +45,8 @@ export const Move = z.object({
       slug: ProjectSlug.optional(),
       name: oneLine(PROJECT_FIELD_MAX_CHARACTERS).optional(),
       goal: oneLine(PROJECT_LINE_MAX_CHARACTERS).optional(),
-      steps: z.array(ProjectStep).max(MOVE_STEPS_MAX),
+      /** Its steps' words, detail and who does each; the worker gives them their IDs (#710). */
+      steps: z.array(ProjectStep.pick({ text: true, detail: true, who: true })).max(MOVE_STEPS_MAX),
     })
     .refine((project) => project.slug !== undefined || project.name !== undefined)
     .optional(),

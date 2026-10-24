@@ -60,10 +60,9 @@ export const BUILD_TOOL: TurnTool = {
       .optional()
       .describe("The project whose step makes it, by its label, such as P1, given with step."),
     step: z
-      .number()
-      .int()
+      .string()
       .optional()
-      .describe("That project's step that makes it, 1 for the first as its file lists them."),
+      .describe("That project's step that makes it, by its ID, such as s3."),
   },
 };
 
@@ -103,11 +102,11 @@ const stepBuildProblems = (projects: ReadProjects, builds: ReadBuilds) => {
     const read = readProjectText(text);
     return [
       ...(read.ok ? read.value.problems : []),
-      ...project.steps.flatMap(({ build }, index) =>
+      ...project.steps.flatMap(({ id, build }) =>
         build === undefined || there.has(buildPath(build))
           ? []
           : [
-              `Step ${index + 1}'s Build, ${build}: Build removed. Give the step a Build again with ${BUILD_TOOL_NAME}, or clear it with step_build as an empty text.`,
+              `Step ${id}'s Build, ${build}: Build removed. Give the step a Build again with ${BUILD_TOOL_NAME}, or clear it with step_build as an empty text.`,
             ],
       ),
     ].map((problem) => `- ${project.path}: ${problem}`);
@@ -121,7 +120,7 @@ export const STEP_BUILD = {
     .string()
     .optional()
     .describe(
-      `The Build the numbered step makes, by its file's name, which ${BUILD_TOOL_NAME} gives it. An empty text clears it, as for a Build removed.`,
+      `The Build the step makes, by its file's name, which ${BUILD_TOOL_NAME} gives it. An empty text clears it, as for a Build removed.`,
     ),
 };
 
@@ -195,7 +194,7 @@ const buildRefusalReason = (refusal: BuildToolRefusal) => {
     case "parameters":
       return `Those parameters can't be worked out:\n${refusal.problems.map((problem) => `- ${problem}`).join("\n")}`;
     case "no-step":
-      return "Give a project's label and its step's number together.";
+      return "Give a project's label and its step's ID together.";
     case "unknown-label":
       return `There's no Build labelled ${refusal.label}: the Builds are listed in your instructions.`;
     case "stale": {

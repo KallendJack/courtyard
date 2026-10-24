@@ -6,7 +6,6 @@ import {
   type MoveReview,
   type MovesMade,
   ProjectSlug,
-  type ProjectStep,
   ThingFields,
   type WorkspaceId,
 } from "@courtyard/contract";
@@ -26,6 +25,7 @@ import type { ContextFolder } from "../context-folder/index.ts";
 import { DOCS_FOLDER, documentPath, listDocuments, nameOf } from "../documents/index.ts";
 import { planningChange, planningFolder, slugFor } from "../planning-files/index.ts";
 import { projectPath, projectText, readProjects, readProjectText } from "../projects/index.ts";
+import { editSteps } from "../projects/steps.ts";
 import {
   historyDate,
   photoName,
@@ -88,8 +88,8 @@ const keptMove = (answered: MoveReviewAnswer["moves"][number]): Move | undefined
             ...(project.slug === null ? {} : { slug: project.slug }),
             ...(project.name === null ? {} : { name: project.name }),
             ...(project.goal === null ? {} : { goal: project.goal }),
-            steps: project.steps.map(({ kind, text, detail }) => ({
-              kind,
+            steps: project.steps.map(({ who, text, detail }) => ({
+              who,
               text,
               ...(detail === null ? {} : { detail }),
             })),
@@ -230,18 +230,14 @@ export const createMoveReviews = (target: MoveReviewsTarget) => {
         const today = historyDate(target.now());
 
         if (move.project !== undefined) {
-          const { slug, name, goal } = move.project;
-          const steps: ProjectStep[] = move.project.steps;
+          const { slug, name, goal, steps: added } = move.project;
+          const text = slug === undefined ? undefined : await read(projectPath(slug));
+          const was = text === undefined ? undefined : readProjectText(text);
+          const steps = editSteps(was?.ok ? was.value.steps : [], { addSteps: added }, today);
+          if (!steps.ok) return err({ problem: "These steps don't fit the project." });
           if (slug !== undefined) {
-            const text = await read(projectPath(slug));
-            const was = text === undefined ? undefined : readProjectText(text);
-            if (was === undefined || !was.ok) {
-              return err({ problem: `The project ${slug} isn't there to add to any more.` });
-            }
-            writes.set(
-              projectPath(slug),
-              projectText({ ...was.value, steps: [...was.value.steps, ...steps] }),
-            );
+            if (!was?.ok) return err({ problem: `The project ${slug} isn't there any more.` });
+            writes.set(projectPath(slug), projectText({ ...was.value, steps: steps.value.steps }));
           } else if (name !== undefined) {
             const named = slugFor(name, { slug: ProjectSlug, kind: "project" });
             if (named === undefined || (await read(projectPath(named))) !== undefined) {
@@ -251,7 +247,7 @@ export const createMoveReviews = (target: MoveReviewsTarget) => {
               projectPath(named),
               projectText({
                 fields: { name, ...(goal === undefined ? {} : { goal }), status: "active" },
-                steps,
+                steps: steps.value.steps,
                 decisions: [],
                 history: [{ date: today, text: `Started from ${move.title}` }],
               }),

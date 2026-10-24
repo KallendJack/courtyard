@@ -4,7 +4,7 @@ A planning workspace's projects (#603, ADR 0032): what the owner carries over da
 `projects/<slug>.md`, read, started and changed.
 
 **Example:** the owner says they want sockets by the desk in the garage office. The model's project tool adds a step
-"[needs a pro] Sockets by the desk · an electrician (Part P)" to `projects/turn-the-garage-into-an-office.md`, one
+"Sockets by the desk · an electrician (Part P)", for a pro, to `projects/turn-the-garage-into-an-office.md`, one
 change with one Undo; Home's Projects lists the office with its next step and Carry on.
 
 - **Uses:** `context-folder/` (each change), `planning-files/`.
@@ -15,7 +15,7 @@ change with one Undo; Home's Projects lists the office with its next step and Ca
 ## API
 
 - `PUT /api/workspaces/:id/projects/:slug/decision`: Pick on an options block in a session that belongs to the
-  project (#603), `ProjectDecision`, recorded as the model's tool records one (a decided step, a history line), the
+  project (#603), `ProjectDecision`, recorded as the model's tool records one (under Decisions, a history line), the
   owner's own change with Undo in Recent changes. Answers `ProjectDecided`.
 
 Otherwise Home (`GET /api/workspaces/:id/home`) carries the projects, a session starts from one with `project` in its
@@ -25,14 +25,19 @@ Recent changes. `routes.ts` holds how those answer a refusal.
 
 ## How it works
 
-- **The file** (`file.ts`): front matter (name, goal, status `active` or `done`), then `## Steps` (`- [needs a pro]
-  Sockets by the desk · an electrician`, and a step that makes a Build ending `[build: workbench]`, #697),
+- **The file** (`file.ts`): front matter (name, goal, status `active` or `done`), then `## Steps` (`- [ ] Sockets by the
+  desk · an electrician [id: s2] [who: a pro]`, done `- [x] … [done: 2026-10-23]`, one not ready yet `[needs: the
+  wall's construction]` until it's known, `[needs: … = brick]`, and one that makes a Build `[build: workbench]`, #697,
+  #710),
   `## Decisions` (a `###` heading each, then its pick, why and options) and `## History` (dated lines). A file that
   isn't a project as written is listed with its problem, never breaking a turn; a mistyped Build link is left off
-  its step alone, the turn told why.
-- **What's next** is the first step that isn't decided (`nextStepOf`, in the contract). A step done leaves the steps,
-  its history saying "Done: …". A decision about the same thing again replaces the last; its decided step leads the
-  list, after those decided already, or takes the place of the step it decides.
+  its step alone, the turn told why. A file from before #710 still reads: `[you can do this]` and `[needs a pro]`
+  steps get IDs in order, and its `[decided]` steps are left out, since its decisions say the same.
+- **Steps** (`steps.ts`) change by their IDs, which a reorder or a rename keeps: marked done (it stays, ticked, its
+  history saying "Done: …"), who, needs and what was found, moved, or added before a step. **What's next** is the
+  first step not done (`nextStepOf`, in the contract), "not ready yet" while it needs something unknown
+  (`unknownNeedsOf`). A decision is never a step: it's kept under Decisions, one about the same thing again replacing
+  the last.
 - **Saves** (`saveProject`) are one change each through `context-folder/`, its file named in the commit, so Undo
   (`undoProjectChange`) puts the file back whole, unless it's changed since.
 - **The tool** (`tool.ts`): one turn's `save_project`, by the labels the turn was shown (`P1`), keeping each file as

@@ -4,14 +4,14 @@ import {
   type ProjectDecision,
   type ProjectSlug,
   ProjectStatus,
-  type ProjectStep,
-  StepKind,
+  StepWho,
 } from "@courtyard/contract";
 import { z } from "zod";
 import { err, ok, type Result } from "../../lib/result.ts";
 import { sameFileText } from "../context-folder/index.ts";
 import type { PlanningFilesTarget } from "../planning-files/index.ts";
 import {
+  type NewStep,
   type ProjectEdit,
   type ProjectRefusal,
   type ProjectSaved,
@@ -36,9 +36,10 @@ const asLabel = (raw: string) =>
 
 /** A step as a model sends one to add. */
 const StepSent = z.object({
-  kind: StepKind,
   text: z.string(),
   detail: z.string().optional(),
+  who: StepWho,
+  needs: z.array(z.string()).optional(),
 });
 
 /** What a model sends the project tool, checked like anything else a model sends. */
@@ -48,17 +49,23 @@ const ProjectRequest = z.strictObject({
   goal: z.string().optional(),
   status: ProjectStatus.optional(),
   add_steps: z.array(StepSent).optional(),
-  step: z.number().int().optional(),
-  step_kind: StepKind.optional(),
+  add_before: z.string().optional(),
+  step: z.string().optional(),
   step_text: z.string().optional(),
   step_detail: z.string().optional(),
+  step_who: StepWho.optional(),
+  step_needs: z.array(z.string()).optional(),
+  need: z.string().optional(),
+  known: z.string().optional(),
   /**
-   * The Build the numbered step makes, by its file's name: given by the Build tool (#697), or an
-   * empty text to clear it, as for a Build since removed.
+   * The Build the step makes, by its file's name: given by the Build tool (#697), or an empty text
+   * to clear it, as for a Build since removed.
    */
   step_build: z.union([BuildSlug, z.literal("")]).optional(),
   done: z.boolean().optional(),
   remove_step: z.boolean().optional(),
+  /** The step to move it before, by its ID, or an empty text for the end. */
+  move_before: z.string().optional(),
   decision_about: z.string().optional(),
   decision_options: z.array(z.string()).optional(),
   decision_pick: z.string().optional(),
@@ -79,8 +86,10 @@ export type ProjectToolRefusal =
   | { readonly kind: "malformed" }
   /** A decision with no subject or no pick. */
   | { readonly kind: "decision-incomplete" }
-  /** A step's change, done or removal with no step numbered. */
+  /** A step's change, done or removal with no step named. */
   | { readonly kind: "no-step" }
+  /** A need's answer without the need, or the need without its answer. */
+  | { readonly kind: "need-incomplete" }
   /** No project has that label (or it's gone since). */
   | { readonly kind: "unknown-label"; readonly label: string }
   /** The project changed since the model was shown it: the projects now, labelled afresh. */
@@ -136,13 +145,20 @@ export const createTurnProjects = (
     if (label !== undefined && slug === undefined) return err({ kind: "unknown-label", label });
 
     const stepChange =
-      sent.step_kind !== undefined ||
       sent.step_text !== undefined ||
       sent.step_detail !== undefined ||
+      sent.step_who !== undefined ||
+      sent.step_needs !== undefined ||
+      sent.need !== undefined ||
+      sent.known !== undefined ||
       sent.step_build !== undefined ||
-      sent.done === true ||
-      sent.remove_step === true;
+      sent.done !== undefined ||
+      sent.remove_step === true ||
+      sent.move_before !== undefined;
     if (stepChange && sent.step === undefined) return err({ kind: "no-step" });
+    if ((sent.need === undefined) !== (sent.known === undefined)) {
+      return err({ kind: "need-incomplete" });
+    }
     const deciding =
       sent.decision_about !== undefined ||
       sent.decision_pick !== undefined ||
@@ -170,10 +186,11 @@ export const createTurnProjects = (
               .filter((option) => option !== ""),
           };
     const addSteps = (sent.add_steps ?? []).map(
-      ({ kind, text, detail }): ProjectStep => ({
-        kind,
+      ({ who, text, detail, needs }): NewStep => ({
+        who,
         text,
         ...(detail === undefined || detail.trim() === "" ? {} : { detail }),
+        ...(needs === undefined ? {} : { needs: needs.filter((need) => need.trim() !== "") }),
       }),
     );
     const edit: ProjectEdit = {
@@ -183,20 +200,32 @@ export const createTurnProjects = (
         ? {}
         : {
             step: {
-              number: sent.step,
-              ...(sent.step_kind === undefined ? {} : { kind: sent.step_kind }),
+              id: sent.step.trim(),
               ...(sent.step_text === undefined ? {} : { text: sent.step_text }),
               ...(sent.step_detail === undefined
                 ? {}
                 : { detail: sent.step_detail.trim() === "" ? null : sent.step_detail }),
+              ...(sent.step_who === undefined ? {} : { who: sent.step_who }),
+              ...(sent.step_needs === undefined
+                ? {}
+                : { needs: sent.step_needs.filter((need) => need.trim() !== "") }),
+              ...(sent.need === undefined || sent.known === undefined
+                ? {}
+                : { known: { need: sent.need, known: sent.known } }),
               ...(sent.step_build === undefined
                 ? {}
                 : { build: sent.step_build === "" ? null : sent.step_build }),
-              ...(sent.done ? { done: true } : {}),
+              ...(sent.done === undefined ? {} : { done: sent.done }),
               ...(sent.remove_step ? { remove: true } : {}),
+              ...(sent.move_before === undefined
+                ? {}
+                : { before: sent.move_before.trim() === "" ? null : sent.move_before }),
             },
           }),
       ...(addSteps.length === 0 ? {} : { addSteps }),
+      ...(sent.add_before === undefined || sent.add_before.trim() === ""
+        ? {}
+        : { addBefore: sent.add_before.trim() }),
       ...(decision === undefined ? {} : { decision }),
       ...(sent.history === undefined ? {} : { history: sent.history }),
     };

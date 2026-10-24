@@ -20,13 +20,13 @@ import {
   DOCUMENT_TOOL_NAME,
   LEAD_TOOL_NAME,
   PREVIEW_TOOL_NAME,
-  PROJECT_TOOL_NAME,
   READ_SESSION_TOOL_NAME,
   SAVE_TOOL_NAME,
   SUGGEST_REPLIES_TOOL_NAME,
   THING_TOOL_NAME,
   USE_SKILL_TOOL_NAME,
 } from "../prompts/index.ts";
+import { PROJECT_TOOL_NAME } from "../prompts/projects.ts";
 import type {
   Activity,
   AddedMessage,
@@ -203,8 +203,8 @@ const scriptedThings = (message: string): Record<string, unknown>[] =>
 
 /**
  * The project (#603) or Build (#697) saves a message scripts, one per line: "project: " or "build: "
- * and the tool's input as JSON, such as `project: {"name": "Garage office", "add_steps": [{"kind":
- * "needs a pro", "text": "Sockets"}]}`. A line whose JSON doesn't read is left out.
+ * and the tool's input as JSON, such as `project: {"name": "Garage office", "add_steps": [{"who":
+ * "a pro", "text": "Sockets"}]}`. A line whose JSON doesn't read is left out.
  */
 const scriptedJson = (word: string) => (message: string) =>
   message.split("\n").flatMap((line): unknown[] => {

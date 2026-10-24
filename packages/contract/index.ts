@@ -192,7 +192,11 @@ export {
   ProjectSlug,
   ProjectStatus,
   ProjectStep,
-  StepKind,
+  STEP_NEEDS_MAX,
+  StepId,
+  StepNeed,
+  StepWho,
+  unknownNeedsOf,
 } from "./lib/projects.ts";
 export {
   BumpStanding,

@@ -277,7 +277,7 @@ const LONG_GARAGE = {
 };
 
 const project = (name: string, step: string) =>
-  `project: ${JSON.stringify({ name, add_steps: [{ kind: "you can do this", text: step }] })}`;
+  `project: ${JSON.stringify({ name, add_steps: [{ who: "you", text: step }] })}`;
 
 type Edges = { left: number; top: number; right: number; bottom: number };
 

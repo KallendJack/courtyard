@@ -192,18 +192,19 @@ _Avoid_: shop for, search, compare (that's a table)
 **Project**:
 What the owner carries on over days and sessions in a planning workspace (#603, ADR 0032), such as turning the garage
 into an office: a file with its goal, its **steps**, its **decisions** and a dated history, kept by a model's project
-tool with Undo. Its first step that isn't decided is **what's next**, which Home lists with **Carry on**.
+tool with Undo. Its first step not done is **what's next**, which Home lists with **Carry on**.
 _Avoid_: task, goal (that's the line saying what it's for), todo list
 
 **Step**:
-One thing to do in a project, marked by what it asks of the owner: **you can do this** (with what it takes),
-**needs a pro** (work on electrics, gas or a building's structure, with who to get) or **decided**. A step done
-leaves the list, its history saying so.
+One thing to do in a project (#710), kept by an ID through a reorder or rename, with who does it: **you** (with what
+it takes), **a pro** (work on electrics, gas or a building's structure, with who to get) or **Courtyard** (working
+something out, such as a cut plan). A step done stays, ticked. One that needs something known first, such as a size
+to measure, is **not ready yet** until it's recorded.
 _Avoid_: task, todo, action item
 
 **Decision**:
 A choice made for a project, as buying a part is made (#603): the options weighed, the pick and why, kept on the
-project with a decided step for it.
+project under Decisions, never as a step.
 _Avoid_: plan, verdict, answer
 
 **Build**:

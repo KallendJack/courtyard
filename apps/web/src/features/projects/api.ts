@@ -30,12 +30,6 @@ export const carryOnMessage = (project: Project) => {
     : `Carry on with ${project.name}: ${next.text}.`;
 };
 
-/** A step's detail line: what it asks of the owner, then what it takes or who to get. */
-export const stepDetail = (step: { kind: string; detail?: string | undefined }) =>
-  [`${step.kind.charAt(0).toUpperCase()}${step.kind.slice(1)}`, step.detail]
-    .filter((said) => said !== undefined)
-    .join(" · ");
-
 /**
  * Pick on an options block in a session that belongs to a project (#603): the project's decision,
  * with the options, the pick and why, as a change Undo takes back from Recent changes.

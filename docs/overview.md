@@ -124,8 +124,8 @@ the chain  a time            changed                   Undo
 
 - **Every change to the context folder** goes through `context-folder`, so each one is a commit you can undo.
 - **`floor-plans`** keeps each room's last floor plan, drawn in an answer, as a document Home shows.
-- **`projects`** keeps what you carry over days (the garage into an office): its steps (you can do this, needs a
-  pro, decided), its decisions and what's next, which Home lists with Carry on.
+- **`projects`** keeps what you carry over days (the garage into an office): its steps (who does each, done, not
+  ready yet), its decisions and what's next, which Home lists with Carry on.
 - **`fabrication`** keeps a planning workspace's Builds (a workbench: its template and parameters), worked out by
   `packages/fabrication` each time they're read, and serves Fabrication's API. The model's Build tool starts and
   changes them and reports the numbers code works out; a project step can own one.

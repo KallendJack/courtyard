@@ -20,14 +20,27 @@ export const ProjectStatus = z.enum(["active", "done"]);
 export type ProjectStatus = z.infer<typeof ProjectStatus>;
 
 /**
- * What a step asks of the owner (ADR 0032): one they can do themselves, one that needs a pro (work
- * on electrics, gas or a building's structure), or one decided.
+ * Who does a step (ADR 0037): the owner, a pro (work on electrics, gas or a building's structure),
+ * or Courtyard (working something out, such as a Build's cut plan).
  */
-export const StepKind = z.enum(["you can do this", "needs a pro", "decided"]);
-export type StepKind = z.infer<typeof StepKind>;
+export const StepWho = z.enum(["you", "a pro", "courtyard"]);
+export type StepWho = z.infer<typeof StepWho>;
+
+/**
+ * A step's ID (#710): `s` and a number the worker gives it, kept through a reorder and a rename,
+ * so a model's change lands on the step it means.
+ */
+export const StepId = z
+  .string()
+  .regex(/^s[1-9]\d{0,3}$/)
+  .brand<"StepId">();
+export type StepId = z.infer<typeof StepId>;
 
 /** The longest a project's name, a step, its detail, or a decision's subject or option gets. */
 export const PROJECT_FIELD_MAX_CHARACTERS = 120;
+
+/** The most a step needs to know before it's ready. */
+export const STEP_NEEDS_MAX = 4;
 
 /** The longest a project's goal, a decision's pick or its why, or a history line gets. */
 export const PROJECT_LINE_MAX_CHARACTERS = 250;
@@ -44,22 +57,51 @@ const oneLine = (max: number, what: string) =>
     .max(max, `Keep the ${what} to ${max} characters.`)
     .refine((text) => !/[\r\n]/.test(text), `Keep the ${what} to one line.`);
 
+/** Words a step's file line ends with in brackets, so they can't hold a bracket. */
+const inMark = (max: number, what: string) =>
+  oneLine(max, what).refine(
+    (text) => !/[[\]]/.test(text) && !text.includes(" = "),
+    `Keep brackets and " = " out of the ${what}.`,
+  );
+
 /**
- * One of a project's steps: what it asks of the owner, what it is in a few words, and its detail:
- * what it takes ("about 10 minutes, laser measurer"), or for one that needs a pro, who to get and
- * what to ask ("an electrician (Part P)").
+ * Something a step needs to know before it's ready (#710, ADR 0037): a size ("the back wall's
+ * height") or a check ("the wall's construction"), and what was found once it's known.
+ */
+export const StepNeed = z.object({
+  what: inMark(PROJECT_FIELD_MAX_CHARACTERS, "need"),
+  known: inMark(PROJECT_FIELD_MAX_CHARACTERS, "need's answer").optional(),
+});
+export type StepNeed = z.infer<typeof StepNeed>;
+
+/**
+ * One of a project's steps (#710): its ID, what it is in a few words, its detail (what it takes,
+ * "about 10 minutes, laser measurer", or for a pro who to get, "an electrician (Part P)"), who does
+ * it, whether it's done and when, what it needs to know first, and the Build it makes.
  */
 export const ProjectStep = z.object({
-  kind: StepKind,
+  id: StepId,
   text: oneLine(PROJECT_FIELD_MAX_CHARACTERS, "step").refine(
     (text) => !text.includes(" · "),
     "Keep the step's detail out of its words: give it as its detail.",
   ),
   detail: oneLine(PROJECT_FIELD_MAX_CHARACTERS, "step's detail").optional(),
+  who: StepWho,
+  done: z.boolean(),
+  /** The day it was done (`2026-10-23`), when it's known. */
+  doneOn: z.iso.date().optional(),
+  needs: z.array(StepNeed).max(STEP_NEEDS_MAX, `Keep a step to ${STEP_NEEDS_MAX} needs.`),
   /** The Build the step makes (#697, ADR 0037), by its file's name: "Build the workbench". */
   build: BuildSlug.optional(),
 });
 export type ProjectStep = z.infer<typeof ProjectStep>;
+
+/**
+ * What a step still needs to know (#710): it's "not ready yet" while this has any. Worked out
+ * from its needs each time, never kept.
+ */
+export const unknownNeedsOf = (step: Pick<ProjectStep, "needs">) =>
+  step.needs.filter((need) => need.known === undefined);
 
 /**
  * A decision made for a project, as buying a part is (ADR 0032): what it was about, the options
@@ -86,8 +128,8 @@ export const ProjectFields = z
 export type ProjectFields = z.infer<typeof ProjectFields>;
 
 /**
- * A project as its page and Home show it: its fields, its steps in order (its first step not
- * decided is what's next, `nextStepOf`), its decisions, and where its file is.
+ * A project as its page and Home show it: its fields, its steps in order (its first step not done
+ * is what's next, `nextStepOf`), its decisions, and where its file is.
  */
 export const Project = ProjectFields.extend({
   slug: ProjectSlug,
@@ -99,9 +141,9 @@ export const Project = ProjectFields.extend({
 });
 export type Project = z.infer<typeof Project>;
 
-/** What's next on a project: its first step that isn't decided, if any. */
+/** What's next on a project: its first step not done, if any. */
 export const nextStepOf = (project: Pick<Project, "steps">) =>
-  project.steps.find((step) => step.kind !== "decided");
+  project.steps.find((step) => !step.done);
 
 /**
  * What one project save did (#603), by the project's file's name and its name then: started it or
