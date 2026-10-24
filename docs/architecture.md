@@ -814,7 +814,7 @@ on that device, on hearing it's logged out (from another device), or on turning 
 can't be reached, the root route reads it (its context's `reading`) and the pages' loaders answer from it.
 
 **The other settings** set the worker's port (`COURTYARD_PORT`), point at the web app's built files
-(`COURTYARD_WEB_DIR`), name the live copy and its update task (`COURTYARD_LIVE_COPY`, `COURTYARD_UPDATE_TASK`, set by
+(`COURTYARD_WEB_DIR`) and the Fabrication app's, served under `/fabrication` (`COURTYARD_FABRICATION_DIR`), name the live copy and its update task (`COURTYARD_LIVE_COPY`, `COURTYARD_UPDATE_TASK`, set by
 `scripts/live/`), or switch providers on and off. `apps/worker/src/config/settings.ts` lists them all;
 [`.env.example`](../.env.example) explains the ones an owner sets.
 

@@ -51,7 +51,7 @@ import {
   workspaceChange,
 } from "./features/context-folder/index.ts";
 import { documentRoutes } from "./features/documents/routes.ts";
-import { fabricationRoutes } from "./features/fabrication/routes.ts";
+import { FABRICATION_CHAT, fabricationRoutes } from "./features/fabrication/routes.ts";
 import { createFreshStart } from "./features/fresh-start/index.ts";
 import { freshStartRoutes } from "./features/fresh-start/routes.ts";
 import { createFriction } from "./features/friction/index.ts";
@@ -169,6 +169,7 @@ type FormRequest = { readonly method: string; readonly path: RegExp };
 /** The requests that take a message, and Something's off's report with its screen (#554). */
 const MESSAGE_REQUESTS: readonly FormRequest[] = [
   ...Object.values(MESSAGE_ROUTES),
+  `/fabrication${FABRICATION_CHAT}`,
   FRICTION_ROUTE,
 ].map((route) => ({ method: "POST", path: pathOf(route) }));
 
@@ -284,6 +285,7 @@ export const createWorker = (options: {
     contextRemote,
     dataDir,
     webDir,
+    fabricationDir,
     claudeProvider,
     codexProvider,
     fakeProvider,
@@ -624,7 +626,10 @@ export const createWorker = (options: {
   api.route("/", thingRoutes({ contextDir, contextFolder, now }));
   api.route("/", planningHomeRoutes({ contextDir, reviews }));
   api.route("/", projectRoutes({ contextDir, contextFolder, now }));
-  api.route("/fabrication", fabricationRoutes({ contextDir, contextFolder, now }));
+  api.route(
+    "/fabrication",
+    fabricationRoutes({ contextDir, contextFolder, now, sessions, providers }),
+  );
   api.route("/", moveReviewRoutes(reviews));
   api.route("/", statusLineRoutes(statusLines));
   const freshStart = createFreshStart({ contextDir, dataDir, contextFolder, sessions, now });
@@ -902,6 +907,20 @@ export const createWorker = (options: {
 
   const app = new Hono();
   app.route("/api", api);
+
+  // Fabrication's own app (#698), on the same origin so it shares the owner's login.
+  if (existsSync(fabricationDir)) {
+    const fabrication = new Hono();
+    fabrication.use(
+      "*",
+      serveStatic({
+        root: fabricationDir,
+        rewriteRequestPath: (path) => path.replace(/^\/fabrication/, ""),
+      }),
+    );
+    fabrication.get("*", serveStatic({ path: join(fabricationDir, "index.html") }));
+    app.route("/fabrication", fabrication);
+  }
 
   // Without a build (while developing with `pnpm dev`), Vite serves the page instead.
   if (existsSync(webDir)) {

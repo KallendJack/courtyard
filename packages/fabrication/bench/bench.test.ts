@@ -35,6 +35,32 @@ describe("the golden bench's parts", () => {
     });
   });
 
+  it("each say what it does, in a line, for the part's card (#698)", () => {
+    const does = Object.fromEntries(built(goldenBench).parts.map((part) => [part.label, part.does]));
+
+    expect(does.B).toBe(
+      "Front and back, top and bottom. The top pair holds the top, the bottom pair the shelf.",
+    );
+    expect(does.A).toBe("One at each corner, standing on the castor bases.");
+    for (const line of Object.values(does)) expect(line).toMatch(/^[A-Z].*\.$/);
+  });
+
+  it("say what they do as the bench is: on its legs, with no shelf, braced only at the back", () => {
+    const bench = built({
+      ...goldenBench,
+      castors: null,
+      shelf: { ...goldenBench.shelf, on: false },
+      braces: { ...goldenBench.braces, ends: false },
+    });
+    const does = Object.fromEntries(bench.parts.map((part) => [part.label, part.does]));
+
+    expect(does.A).toBe("One at each corner, standing on the floor.");
+    expect(does.B).toBe(
+      "Front and back, top and bottom. The top pair holds the top, the bottom pair stiffens the frame.",
+    );
+    expect(does.J).toBe("On the back, so the frame can't rack.");
+  });
+
   it("leave 1170 between the end frames, so the 1166 shelf has 4 mm to spare", () => {
     const build = built(goldenBench);
     const ends = build.parts.find((part) => part.label === "C")?.boxes ?? [];
