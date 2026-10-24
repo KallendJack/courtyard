@@ -172,6 +172,44 @@ test.describe("on a desktop", () => {
       await expect(page.getByRole("region", { name: panel })).toBeVisible();
     }
   });
+
+  test("the bench stays as the owner turned it when the Build is asked for again", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    const bench = page.getByRole("region", { name: "In 3D" });
+    const canvas = bench.locator("canvas");
+    const letter = bench.getByRole("button", { name: "B, Long rails" });
+    const placed = () => letter.evaluate((button) => button.style.transform);
+    await expect.poll(placed).not.toBe("");
+    const first = await placed();
+
+    // Turned by a drag across it, from its corner, clear of the letters.
+    const box = await canvas.boundingBox();
+    if (box === null) throw new Error("The bench isn't drawn.");
+    await page.mouse.move(box.x + 12, box.y + 12);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 172, box.y + 12, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(placed).not.toBe(first);
+    const turned = await placed();
+    await canvas.evaluate((element) => element.setAttribute("data-first", ""));
+
+    // Shown again, the page asks for the Build at once, as it does every 30 seconds.
+    const asked = page.waitForResponse((response) =>
+      new URL(response.url()).pathname.endsWith("/builds/split-bench"),
+    );
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await asked;
+    await page.evaluate(
+      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+    );
+
+    await expect(bench.locator("canvas[data-first]")).toHaveCount(1);
+    await expect(canvas).toHaveCount(1);
+    expect(await placed()).toBe(turned);
+  });
 });
 
 test("Fabrication is behind Courtyard's login", async ({ browser }) => {

@@ -32,8 +32,21 @@ const centreOf = (box: BuildBox, size: DerivedBuild["size"]) =>
   );
 
 /**
+ * What the scene is built from, as text to compare: the Build's size and every box, with each
+ * part's letter and kind. The page asks for the Build again every 30 seconds and gets the same
+ * numbers in a new object; only new numbers build the scene again.
+ */
+const shapeOf = (derived: DerivedBuild) =>
+  JSON.stringify([
+    derived.size,
+    derived.parts.map((part) => [part.label, part.material.kind, part.boxes]),
+    derived.fitted.map((each) => each.boxes),
+  ]);
+
+/**
  * The scene, drawn when something changes it (a turn, a part lit, a new size), never in a loop.
- * The part labels are buttons over the canvas, moved to where each part's first box is.
+ * The part labels are buttons over the canvas, moved to where each part's first box is. Built
+ * again only when the Build's numbers change, and then from where the owner had turned it.
  */
 export default function BenchView(props: {
   derived: DerivedBuild;
@@ -49,6 +62,12 @@ export default function BenchView(props: {
   const litNow = useRef(lit);
   litNow.current = lit;
   const [cantDraw, setCantDraw] = useState(false);
+  const shape = shapeOf(derived);
+  const [drawn, setDrawn] = useState({ derived, shape });
+  if (drawn.shape !== shape) setDrawn({ derived, shape });
+  const built = drawn.derived;
+  // Where the camera was from what it turns about, in the Build's reach, for the next scene.
+  const view = useRef<THREE.Vector3>(undefined);
 
   useEffect(() => {
     const element = host.current;
@@ -64,11 +83,16 @@ export default function BenchView(props: {
     renderer.domElement.setAttribute("aria-hidden", "true");
     element.prepend(renderer.domElement);
 
-    const { size } = derived;
+    const { size } = built;
     const reach = Math.max(size.length, size.depth, size.height);
     const world = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, 1, reach / 20, reach * 20);
-    camera.position.copy(new THREE.Vector3(-1, 0.85, 1.35).normalize().multiplyScalar(reach * 2.3));
+    const target = new THREE.Vector3(0, size.height / 2.2, 0);
+    camera.position.copy(
+      view.current === undefined
+        ? new THREE.Vector3(-1, 0.85, 1.35).normalize().multiplyScalar(reach * 2.3)
+        : view.current.clone().multiplyScalar(reach).add(target),
+    );
     world.add(new THREE.HemisphereLight(0xffffff, 0x202020, 2.2));
     const sun = new THREE.DirectionalLight(0xffffff, 2.4);
     sun.position.set(-reach, reach * 2, reach * 1.5);
@@ -95,20 +119,20 @@ export default function BenchView(props: {
       world.add(mesh);
       meshes.push({ label, mesh });
     };
-    for (const part of derived.parts) {
+    for (const part of built.parts) {
       const colour = themed(KIND_COLOUR[part.material.kind]);
       for (const box of part.boxes) add(box, colour, part.label);
     }
     const fitted = themed("fitted");
-    for (const each of derived.fitted) for (const box of each.boxes) add(box, fitted, undefined);
+    for (const each of built.fitted) for (const box of each.boxes) add(box, fitted, undefined);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, size.height / 2.2, 0);
+    controls.target.copy(target);
     controls.enablePan = false;
     controls.minDistance = reach * 1.1;
     controls.maxDistance = reach * 4;
 
-    const anchors = derived.parts.map((part) => ({
+    const anchors = built.parts.map((part) => ({
       label: part.label,
       at: part.boxes[0] === undefined ? undefined : centreOf(part.boxes[0], size),
     }));
@@ -178,6 +202,7 @@ export default function BenchView(props: {
 
     return () => {
       scene.current = undefined;
+      view.current = camera.position.clone().sub(controls.target).divideScalar(reach);
       watch.disconnect();
       controls.dispose();
       for (const { mesh } of meshes) {
@@ -188,7 +213,7 @@ export default function BenchView(props: {
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [derived]);
+  }, [built]);
 
   useEffect(() => scene.current?.light(lit), [lit]);
 
