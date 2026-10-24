@@ -32,9 +32,10 @@ export function Page(props: {
 }) {
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
   const oneColumn = useLayout() === "cover";
-  // From a tablet up the page sits straight on the frame, its title near the top (#503).
+  // From a tablet up the page sits straight on the frame, its title near the top (#503), 18 in
+  // from the rails as the boards draw it (#690).
   const column = classes(
-    "mx-auto flex w-full flex-col px-4 md:px-5",
+    "mx-auto flex w-full flex-col px-4 md:px-4.5",
     props.wide ? "@container max-w-5xl" : "max-w-reading",
   );
   const header = props.header !== undefined && (

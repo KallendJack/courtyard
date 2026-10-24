@@ -32,8 +32,9 @@ export function Block(props: {
   /** In the aside's place, the block's own controls: the Builders board's Pause (#592). */
   actions?: ReactNode;
   /**
-   * The Builders board's size (#592; Paper, "Tablet · Builders board"): from a tablet up, three
-   * shares of its `BlockColumn`'s height to the block under it's one, never shorter than its
+   * The Builders board's size (#592; Paper, "Tablet · Builders board"): from a tablet up, four
+   * shares of its `BlockColumn`'s height to the block under it's one, so on the Fold open it's the
+   * board's 326 and three rows fit whole (#690), never shorter than its
    * label, its header's two lines and its empty line (#635) unless that's more than half the
    * column (#646); on a phone, as tall as three rows.
    */
@@ -52,9 +53,9 @@ export function Block(props: {
    */
   twoRows?: boolean;
   /**
-   * From a tablet up, never shorter than one whole row (Needs you under the Builders board, #592),
-   * however little of the page's height its share is, unless that's more than half its
-   * `BlockColumn` (#646).
+   * From a tablet up, never shorter than its label and one whole row, and no taller (Needs you
+   * under the Builders board, #592, #690), however little of the page's height its share is,
+   * unless that's more than half its `BlockColumn` (#646).
    */
   aRowAtLeast?: boolean;
   children: ReactNode;
@@ -63,7 +64,9 @@ export function Block(props: {
     <section
       aria-label={props.label}
       className={classes(
-        "flex min-w-0 flex-col gap-1.5 rounded-card border bg-surface p-3.5",
+        "flex min-w-0 flex-col gap-1.5 rounded-card border bg-surface",
+        // The Builders board's rows run nearly to its foot, as the board draws them (#690).
+        props.tall ? "px-3.5 pt-3.5 pb-1.5" : "p-3.5",
         props.needs && "border-warning/25",
         // A block in a column is drawn inside its own edges, whatever it holds (#646): what
         // doesn't fit scrolls in its rows, and nothing of it is ever drawn over the next block.
@@ -74,11 +77,11 @@ export function Block(props: {
           classes(
             "md:flex-1 max-md:h-46 max-md:shrink-0",
             props.aRowAtLeast
-              ? "md:min-h-[min(--spacing(30),50%_-_--spacing(1.75))]"
+              ? "md:min-h-[min(--spacing(28.5),50%_-_--spacing(1.75))]"
               : "md:min-h-0",
           ),
         props.tall &&
-          "md:min-h-[min(--spacing(42),50%_-_--spacing(1.75))] md:flex-3 max-md:h-88 max-md:shrink-0",
+          "md:min-h-[min(--spacing(42),50%_-_--spacing(1.75))] md:flex-4 max-md:h-88 max-md:shrink-0",
         props.fillsSlot && "h-full min-h-0",
         props.twoRows && "h-44 shrink-0",
       )}

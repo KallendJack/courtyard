@@ -298,7 +298,8 @@ function BuilderRow(props: {
       ref={row}
       aria-label={name}
       className={classes(
-        "flex shrink-0 items-center gap-2.5 rounded-row border py-2 pr-2 pl-3",
+        // Its border inside the board's 8 above and below (#690), so three rows fit the board.
+        "flex shrink-0 items-center gap-2.5 rounded-row border py-1.75 pr-1.75 pl-2.75",
         look.row,
       )}
     >

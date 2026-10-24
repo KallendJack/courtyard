@@ -238,7 +238,7 @@ export default function CodeHome(props: {
         under,
         tabs: (
           <div data-code-home="">
-            <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} />
+            <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} beside />
           </div>
         ),
       })}

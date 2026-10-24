@@ -44,14 +44,26 @@ export function WorkspaceTabs(props: {
    * action first, in a tab's look (+ New), and no Home tab, the chosen tab leading back to Home.
    */
   pills?: { readonly action: { readonly label: string; readonly onClick: () => void } };
+  /**
+   * Beside the page's title from a tablet up (a code workspace's, #503): the boards' smaller tabs
+   * there (#690; Paper, "Tablet · Code Home: approvals in Needs you, one bottom bar"), 38 tall, so
+   * the line under the name keeps its room. Under the title they're the style guide's, 44 tall.
+   */
+  beside?: boolean;
 }) {
   const { pills } = props;
+  const size = props.beside
+    ? "h-11 gap-2 px-4.5 text-interface md:h-9.5 md:gap-1.75 md:px-3.75 md:text-sm/4.5"
+    : "h-11 gap-2 px-4.5 text-interface";
   return (
     <Scroller
       as="nav"
       axis="x"
       aria-label="Workspace tabs"
-      className="-mx-4 flex gap-2 px-4 md:mx-0 md:px-0"
+      className={classes(
+        "-mx-4 flex gap-2 px-4 md:mx-0 md:px-0",
+        props.beside === true && "md:gap-1.5",
+      )}
     >
       {pills !== undefined && (
         <button
@@ -69,7 +81,7 @@ export function WorkspaceTabs(props: {
             <span
               key={tab.hash}
               aria-hidden
-              className="invisible flex h-11 shrink-0 items-center gap-2 px-4.5 text-interface font-semibold"
+              className={classes("invisible flex shrink-0 items-center font-semibold", size)}
             >
               {tab.label}
               {tab.count !== undefined && <span className={COUNT}>0</span>}
@@ -86,7 +98,8 @@ export function WorkspaceTabs(props: {
             activeOptions={{ includeHash: true }}
             {...(chosen ? { "aria-current": "page" } : {})}
             className={classes(
-              "flex h-11 shrink-0 items-center gap-2 rounded-full px-4.5 text-interface outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+              "flex shrink-0 items-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+              size,
               chosen
                 ? "border-stroke border-primary-text bg-primary/12 font-bold text-foreground"
                 : tab.faint === true

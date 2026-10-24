@@ -1,6 +1,5 @@
 import type { WorkspaceConnections } from "@courtyard/contract";
 import { classes } from "@courtyard/ui/lib/classes.ts";
-import { ChevronRight } from "lucide-react";
 
 /** GitHub's mark, in the colour of the text around it. */
 export function GitHubMark(props: { size: number }) {
@@ -64,8 +63,9 @@ const gitHubWords = (github: WorkspaceConnections["github"]) => {
 };
 
 /**
- * The quiet line under a code workspace's name (#301, #308; Paper, "Code workspace Home"): its
- * GitHub repo and its Paper file, a tap from the Connections sheet. No chips. Its classes are in
+ * The quiet line under a code workspace's name (#301, #308; Paper, "Tablet · Code Home: approvals
+ * in Needs you, one bottom bar"): its GitHub repo and its Paper file, a tap from the Connections
+ * sheet, in words as the board writes them ("Paper · a file ›", #690). No chips. Its classes are in
  * the stylesheet of the page that shows it (code-home.css), off the first load.
  */
 export function ConnectionsLine(props: {
@@ -84,7 +84,7 @@ export function ConnectionsLine(props: {
       aria-haspopup="dialog"
       aria-expanded={props.open}
       onClick={props.onOpen}
-      className="flex h-5 w-fit max-w-full min-w-0 items-center gap-2 rounded-sm text-meta font-semibold text-foreground/80 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="flex h-5 w-fit max-w-full min-w-0 items-center gap-1.5 rounded-sm text-meta font-semibold text-foreground/80 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
     >
       <span className="text-muted-foreground">
         <GitHubMark size={14} />
@@ -93,13 +93,12 @@ export function ConnectionsLine(props: {
       <span aria-hidden className="text-placeholder">
         ·
       </span>
-      <span className="text-muted-foreground">
-        <PaperMark size={14} />
-      </span>
       <span className={classes("truncate", paper.kind === "none" && "text-muted-foreground")}>
         {paper.kind === "none" ? "No Paper file" : `Paper · ${paper.name ?? "a file"}`}
       </span>
-      <ChevronRight aria-hidden className="size-3.5 shrink-0 text-placeholder" />
+      <span aria-hidden className="-ml-1 shrink-0">
+        ›
+      </span>
     </button>
   );
 }

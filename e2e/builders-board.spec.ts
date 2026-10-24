@@ -636,6 +636,57 @@ test("the header lists every reason the Lead starts no more; Allow and Retry act
   await expect.poll(() => retried).toBe(1);
 });
 
+// The build at the board's sizes (#690; Paper, "Tablet · Builders board, running", 950 × 712, and
+// "Tablet · Code Home: approvals in Needs you, one bottom bar", 933 × 645): on the Fold open the
+// board's three rows fit whole inside it, and on both the line under the name and the tabs beside
+// it show the board's words whole.
+for (const viewport of [
+  { width: 950, height: 712 },
+  { width: 933, height: 645 },
+] as const) {
+  test(`the Home at the boards' sizes, ${viewport.width} × ${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await given(page, RUNNING);
+    await page.route(`**${API}/connections`, (route) =>
+      route.fulfill({
+        json: {
+          github: { kind: "connected", repo: "owner/courtyard" },
+          paper: { kind: "connected", fileId: "a-file", name: "a file" },
+        },
+      }),
+    );
+    await page.goto(HOME);
+    await expect(row(page, "Notify me")).toContainText("Ready for review");
+    // The frame's rails in, as the owner sees it, so the page has its own width.
+    await expect(page.getByRole("button", { name: /^Model: / })).toBeEnabled();
+    await shot(page, `tablet-home-at-board-size-${viewport.height}`);
+
+    const line = page.getByRole("button", { name: /owner\/courtyard.*Paper · a file/ });
+    await expect(line).toBeVisible();
+    const cut = (of: Locator) =>
+      of.evaluate((element) =>
+        [element, ...element.querySelectorAll("*")]
+          .filter((each) => each.scrollWidth > each.clientWidth)
+          .map((each) => each.textContent),
+      );
+    expect(await cut(line)).toEqual([]);
+    expect(await cut(page.getByRole("navigation", { name: "Workspace tabs" }))).toEqual([]);
+
+    if (viewport.height === 712) {
+      // Whole: none scrolled out of sight inside the board.
+      await expect(board(page).locator("[data-overflows]")).toHaveCount(0);
+      const block = await span(board(page));
+      for (const name of ["Ideas, ranked by value", "Journey book", "Notify me"]) {
+        const drawn = await span(row(page, name));
+        expect(drawn.top, name).toBeGreaterThanOrEqual(block.top);
+        expect(drawn.bottom, name).toBeLessThanOrEqual(block.bottom);
+      }
+    }
+  });
+}
+
 test("a question is answered in its session; In CI and Merged today show, yesterday's merge has gone", async ({
   page,
 }) => {

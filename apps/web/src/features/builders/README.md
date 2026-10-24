@@ -32,7 +32,7 @@ book is "Checking · 2 min", history.test.ts 2nd in line; Notify me is "Ready fo
   at the end of the day.
 - **From a notification** (#593): a builder's opens Home at `#builder-<session>` (the contract's `builderHash`),
   and its row is scrolled into view, inside the board and the page.
-- It keeps its size whatever it holds (#283): from a tablet up three shares of the column's height to Needs you's one (never less than a whole row there),
+- It keeps its size whatever it holds (#283): from a tablet up four shares of the column's height to Needs you's one (never less than its label and a row there; on the Fold open, three builder rows fit whole, #690),
   on a phone three rows tall, its rows scrolling inside. With nothing running (never run, or paused with no builders),
   it is the same in every workspace (#648): Run, and one quiet line, "Not running · Run starts the next issue". The
   first Run shows what the Lead does, in a dialog, before it starts; after that Run starts it straight away.
