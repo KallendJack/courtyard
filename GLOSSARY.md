@@ -71,7 +71,7 @@ _Avoid_: colour, emoji, logo, avatar
 **Workspace order**:
 The owner's order for the workspaces, the same on every device: one list in `workspace-order.json` at the context
 folder's top (#321). Planning workspaces come first, then code ones, each group in that order; a new one goes at the
-end of its group. The owner arranges it by holding a workspace on a tablet's rail or in the sidebar and dragging it.
+end of its group. The owner arranges it by holding a workspace on the thumb rail and dragging it.
 _Avoid_: sort order, ranking, position, pinning
 
 **Context file**:
@@ -291,13 +291,14 @@ _Avoid_: dashboard, launcher, Home (that's a workspace page's first tab)
 
 **Settings**:
 The page with the owner context, the backup when it needs the owner, the sign-ins and Connections, Fresh start and
-logging out every other device (#102): in the sidebar on a desktop, and from the frame's Settings sheet (All
-settings) on a touch screen.
+logging out every other device (#102): from the Handheld frame's Settings sheet (All settings).
 _Avoid_: preferences, account, profile
 
 **Home**:
-A workspace page's first tab (#300, #301), beside the tabs that show once they have something (Sessions, PRs or
-Sessions, Things, Docs), each with its count. A code workspace's Home shows, in a fixed order, the **Builders
+A workspace page's first tab (#300, #301). A code workspace's tabs are Home · Roadmap · Sessions · PRs: Roadmap
+always, Sessions once it has some, and PRs keeping its place until it's known to have some (#503, #532). A planning
+workspace's are pills, + New · History · Things · Docs, each once it has something. Each tab has its count. A code
+workspace's Home shows, in a fixed order, the **Builders
 board**, **Needs you**, **Next up** and **Main** (its repository's newest main commit with its build), the first three
 keeping their place when empty with one quiet line ("Nothing needs you"), then the message box; from a tablet up it fits the
 screen, a block with more rows than fit scrolling inside its card. A planning workspace's Home shows its **main
@@ -306,8 +307,9 @@ projects, or one quiet line; an empty workspace only its name, one line and the 
 _Avoid_: dashboard, overview, landing page
 
 **What Courtyard knows**:
-The one row at the foot of a planning workspace's Home (#300), with no counts, opening the workspace's facts and
-ideas (each line with Fix, which starts a session on it), Recent changes and its skills.
+A planning workspace's facts and ideas (each line with Fix, which starts a session on it), Recent changes and its
+skills (#300), in Home's place, opened first from the workspace's ⋯ (#481). Read from the device's copy, where there's
+no ⋯, it's one row on Home.
 _Avoid_: context file (that's the file it reads), memory, knowledge base
 
 **Needs you**:
@@ -366,7 +368,7 @@ progress, the current one open; inside, its issues in its Build order, each in o
 **Ready**, **To grill**, **After** a blocker, or **Done**. Read-only.
 
 **Next up**:
-The first block on a workspace's Home. A code workspace's: what starts the next of its repository's
+The block on a code workspace's Home, under Needs you, that starts the next of its repository's
 `ready-for-agent` issues nobody has claimed, in milestone order (#301), and nothing more (#532): the first has
 **Build** (#298): one tap shows the issue and the model, a second starts a session on it and claims the issue on
 GitHub. It also counts every issue that isn't ready yet (`needs-triage` or `needs-info`, #463), in its place; a
@@ -374,9 +376,8 @@ milestone's Build order line only orders them. **Grill** takes the top in gold o
 a session with the grilling skill on that issue, which ends with it marked ready; the first ready issue sits under it
 with a small Build. A grill claims nothing and takes no builder's place. A ready issue blocked by an open
 one (GitHub's blocked by) gets no Build until that closes (#377). Under the cards, one faint **Then** line names the
-next few titles, and **Whole roadmap · N more** opens the **Roadmap**. A planning workspace's (#300): the session to
-pick up again (one waiting on the owner, else the last used in the past week); with none, it keeps its place with
-one quiet line, "Nothing to pick up". Its plans due went with the Plans section (#603).
+next few titles, and **Whole roadmap · N more** opens the **Roadmap**. A planning workspace has none: its Home is its
+main subject and its projects (#603).
 _Avoid_: backlog, queue, roadmap (that's the milestones)
 
 **Connections line**:
@@ -610,8 +611,8 @@ workspace's preview command as a task of the owner's. The model looks at it with
 _Avoid_: dev server (that's what serves it), live view, staging
 
 **Web search**:
-A model in a planning workspace looking things up on the web when a question needs current facts, and reading the
-pages it finds or a link the owner sent (ADR 0019).
+A model looking things up on the web when a question needs current facts, and reading the pages it finds or a link
+the owner sent (ADR 0019): in every workspace, a code session's helpers too, on a provider that searches.
 _Avoid_: browsing, research, grounding
 
 **Source**:
@@ -703,9 +704,9 @@ _Avoid_: read-only tool, allowed tool
 ### On a touch screen
 
 **Handheld frame**:
-What a touch screen shows in place of the sidebar (#193): thumb rails on a tablet or the unfolded Fold, and the cover
-layout (workspace tiles across the top, buttons in a row above the bottom bar) on a phone or the folded Fold. A
-desktop keeps the sidebar.
+The app's one frame on every device, by the window's width alone (#193, #197): thumb rails from 600 px wide (a
+tablet, the unfolded Fold, a computer), and the cover layout (workspace tiles across the top, buttons in a row above
+the bottom bar) below it (a phone, the folded Fold, a narrow window).
 _Avoid_: mobile view, tablet mode, shell
 
 **Thumb rail**:

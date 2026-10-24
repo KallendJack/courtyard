@@ -1,8 +1,8 @@
 import type { SessionId } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { useEffect, useRef } from "react";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
-import { useAction } from "@/hooks/use-action";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { answerApproval } from "../sessions/composer/messages.ts";
 import { retryBuilder } from "./api.ts";

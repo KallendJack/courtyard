@@ -1,9 +1,9 @@
 import type { NeedYou } from "@courtyard/contract";
+import { PlaceholderRows } from "@courtyard/ui/layout/kept.tsx";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
-import { PlaceholderRows } from "@/components/layout/kept";
 import { Allow, Retry } from "../builders/builder-actions.tsx";
 import { builderName } from "../builders/words.ts";
 import { needLink, needTitle, needWords, useNeedsYou } from "../waiting/api.ts";

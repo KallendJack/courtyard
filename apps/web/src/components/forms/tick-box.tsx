@@ -1,5 +1,5 @@
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Check } from "lucide-react";
-import { classes } from "@/lib/classes";
 
 /**
  * A tick box (ADR 0012): violet with a white tick when ticked, an empty box when not. Put a

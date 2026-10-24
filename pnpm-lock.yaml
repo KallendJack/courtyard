@@ -187,9 +187,9 @@ importers:
       '@courtyard/contract':
         specifier: workspace:*
         version: link:../../packages/contract
-      '@fontsource-variable/figtree':
-        specifier: ^5.3.0
-        version: 5.3.0
+      '@courtyard/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@tanstack/react-router':
         specifier: ^1.170.45
         version: 1.170.45(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -366,6 +366,31 @@ importers:
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
+
+  packages/ui:
+    dependencies:
+      '@courtyard/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@fontsource-variable/figtree':
+        specifier: ^5.3.0
+        version: 5.3.0
+      lucide-react:
+        specifier: ^1.59.0
+        version: 1.59.0(@types/react@19.3.0)(react@19.3.1)
+      react:
+        specifier: ^19.3.1
+        version: 19.3.1
+      react-dom:
+        specifier: ^19.3.1
+        version: 19.3.1(react@19.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.3.0
+        version: 19.3.0(@types/react@19.3.0)
 
 packages:
 

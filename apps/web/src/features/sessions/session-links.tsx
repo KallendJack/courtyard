@@ -5,15 +5,15 @@ import {
   type SessionSummary,
   type WorkspaceMode,
 } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { CARD, LIST_ROW, SectionTitle } from "@courtyard/ui/layout/page.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Link, useRouter } from "@tanstack/react-router";
 import { CheckCheck } from "lucide-react";
-import { Button } from "@/components/buttons/button";
 import { ListedSessionText } from "@/components/chat/session-state";
 import { ByLead, LeadMark } from "@/components/code/lead-mark";
-import { FormError } from "@/components/forms/form-error";
-import { CARD, LIST_ROW, SectionTitle } from "@/components/layout/page";
-import { useAction } from "@/hooks/use-action";
-import { classes } from "@/lib/classes";
 import { deleteSession, markAllRead } from "../../api/worker.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { describeWhen } from "../../lib/when.ts";

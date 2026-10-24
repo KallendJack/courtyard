@@ -7,6 +7,9 @@ is the short version: what the parts are, where their code lives, and what each 
 ## 1 · The whole thing
 
 ```
+  🎨 ui
+  packages/ui
+      │
   📱 Web app  ◄── 📜 contract ──►  🖥️ Worker
   apps/web       packages/contract   apps/worker
 ```
@@ -14,6 +17,7 @@ is the short version: what the parts are, where their code lives, and what each 
 | Part | Its job |
 |---|---|
 | 📱 **Web app** | Shows things and asks the worker. Keeps nothing itself but a read-only copy to read offline, on a device that turns it on. |
+| 🎨 **ui** | The theme and the shared pieces the apps use (the page layout, buttons, the Reply box), so they look and behave the same. |
 | 📜 **Contract** | The shapes of everything the web app and worker send each other, checked on both sides. |
 | 🖥️ **Worker** | Does all the work: your login, your workspaces, sessions with the models. |
 
@@ -46,18 +50,32 @@ The API tests are in `apps/worker/test/`, beside `src/`.
 | Folder | What's in it |
 |---|---|
 | `features/` | One folder per screen or part of one, each with its `README.md`; a big one in parts (`sessions/answer/`) |
-| `components/` | Shared pieces, in groups by kind: `layout/`, `buttons/`, `forms/`, `sheets/`, `frame/`, `chat/`, `code/`, `workspace/`, `rich-blocks/` |
-| `hooks/` | Shared `use…` functions (a component's own stay beside it, like `useKept` in `components/layout/kept.tsx`) |
+| `components/` | The web app's own shared pieces, in groups by kind: `layout/`, `buttons/`, `forms/`, `sheets/`, `frame/`, `chat/`, `code/`, `workspace/`, `rich-blocks/` |
+| `hooks/` | Shared `use…` functions only this app uses (a component's own stay beside it, like `useKept` in `packages/ui/layout/kept.tsx`) |
 | `api/` | Talking to the worker (each feature's own calls are in its `api.ts`) |
 | `routes/` | One file per page |
-| `lib/` | Small helpers: joining classes, times, words |
-| `main.tsx`, `styles.css` | Start the app, and the one theme |
+| `lib/` | Small helpers: times, words, stylesheets |
+| `main.tsx`, `styles.css` | Start the app, and its stylesheet: Tailwind, the theme from `packages/ui`, and which classes load later (the app loads it through `lib/app.css`, which adds `packages/ui`'s classes) |
+
+**Shared pieces, `packages/ui`**
+
+What both apps use, so Fabrication (ADR 0036) looks and behaves as the web app does; what only one app uses stays in
+it. Its [`README.md`](../packages/ui/README.md) lists them.
+
+| Folder | What's in it |
+|---|---|
+| `theme.css` | The one theme, Handheld |
+| `layout/` | The page layout, the `Scroller`, the loading piece (`kept.tsx`) |
+| `buttons/`, `forms/`, `hooks/`, `lib/` | Buttons and the busy button, the error line, `useAction`, joining classes |
+| `frame/` | What the Handheld frame offers a page, and Talk |
+| `reply/` | The Reply box, its chips, model choice and attachments |
 
 **Packages, `packages/`**
 
 | Package | What's in it |
 |---|---|
 | `contract` | The shapes the apps send each other |
+| `ui` | The theme and the shared pieces both apps use (above) |
 | `fabrication` | Fabrication's engine: a Build's parts, cut plan, buy list and steps, worked out from its template and parameters (ADR 0036) |
 | `skills` | Courtyard's own skills |
 | `builds` | The machine's builds lock |
@@ -186,8 +204,8 @@ web app ─► the message's schema ─► worker's readBody ─► the same sch
 | You'd look for | In Courtyard |
 |---|---|
 | `features/` or `modules/` | `features/`, in both apps |
-| `components/` | `apps/web/src/components/` |
-| `hooks/` | `apps/web/src/hooks/`, or beside the component that owns it |
+| `components/` | `packages/ui/` for what both apps use, else `apps/web/src/components/` |
+| `hooks/` | `packages/ui/hooks/` or `apps/web/src/hooks/`, or beside the component that owns it |
 | `utils/` or `lib/` | `lib/`, in both apps |
 | `pages/` or `app/` | `apps/web/src/routes/` |
 | `api/` or `services/` | `apps/web/src/api/`, and each feature's `api.ts` |
@@ -207,8 +225,9 @@ web app ─► the message's schema ─► worker's readBody ─► the same sch
 | Build | Vite (web app) | `pnpm build` |
 | All of it | One build at a time on the machine (`scripts/builds`) | `pnpm verify` |
 
-`scripts/folders` fails `pnpm check` when a folder isn't one of those above, a feature isn't listed here, a feature has
-no README, or a folder holds more than 15 files, so this page can't drift from the code.
+`scripts/folders` fails `pnpm check` when a folder isn't one of those above (in either app or `packages/ui`), a feature
+isn't listed here, a feature has no README, or a folder holds more than 15 files, so this page can't drift from the
+code.
 
 ## Zoom in
 

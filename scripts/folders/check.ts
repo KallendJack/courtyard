@@ -5,9 +5,10 @@
 // for that app, a listed feature with no folder, and a folder that needs a README (every feature,
 // each of the worker's auth and integrations, its providers and prompts) with none or one
 // docs/architecture.md doesn't link. How many files a folder holds is the house size check's
-// (packages/house/check-size.ts, ADR 0035).
+// (packages/house/check-size.ts, ADR 0035). The shared pieces both apps use, packages/ui (#703), keep
+// to their own folders too.
 //
-//   node scripts/folders/check.ts [<worker's src> <web app's src> <overview> <architecture>]
+//   node scripts/folders/check.ts [<worker's src> <web app's src> <overview> <architecture> <packages/ui>]
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -17,10 +18,11 @@ const [
   webSrc = join(import.meta.dirname, "../../apps/web/src"),
   overview = join(import.meta.dirname, "../../docs/overview.md"),
   architecture = join(import.meta.dirname, "../../docs/architecture.md"),
+  uiPackage = join(import.meta.dirname, "../../packages/ui"),
 ] = process.argv.slice(2);
 
 type App = {
-  name: "Worker" | "Web";
+  name: "Worker" | "Web" | "UI";
   src: string;
   folders: readonly string[];
   files: readonly string[];
@@ -51,11 +53,22 @@ const APPS: readonly App[] = [
     readmeOwn: [],
     linkedAs: "../apps/web/src",
   },
+  {
+    name: "UI",
+    src: uiPackage,
+    folders: ["buttons", "forms", "frame", "hooks", "layout", "lib", "reply"],
+    files: ["README.md", "package.json", "theme.css", "tsconfig.json"],
+    readmeEach: [],
+    readmeOwn: [],
+    linkedAs: "../packages/ui",
+  },
 ];
 
-/** What's directly inside a folder: its folders and its files, each sorted. */
+/** What's directly inside a folder: its folders and its files, each sorted; never what's installed. */
 const contentsOf = async (path: string) => {
-  const entries = await readdir(path, { withFileTypes: true });
+  const entries = (await readdir(path, { withFileTypes: true })).filter(
+    (entry) => entry.name !== "node_modules",
+  );
   const names = (folders: boolean) =>
     entries
       .filter((entry) => entry.isDirectory() === folders)

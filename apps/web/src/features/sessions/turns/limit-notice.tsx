@@ -1,9 +1,9 @@
 import { type FailureReason, overflowFrom, type ProviderList } from "@courtyard/contract";
-import { Button } from "@/components/buttons/button";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { ButtonLink } from "@/components/buttons/button-link";
-import { FormError } from "@/components/forms/form-error";
 import { Notice } from "@/components/layout/notice";
-import { useAction } from "@/hooks/use-action";
 import { resetsWhen } from "../composer/limits.ts";
 import type { Turn } from "./events.ts";
 

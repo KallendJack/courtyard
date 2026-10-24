@@ -9,16 +9,16 @@ import {
   type WorkspaceConnections,
   type WorkspaceSummary,
 } from "@courtyard/contract";
+import { createKept, PlaceholderRows, useKept } from "@courtyard/ui/layout/kept.tsx";
+import { Page, type TitleBeside } from "@courtyard/ui/layout/page.tsx";
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
 import { ButtonLink } from "@/components/buttons/button-link";
 import { ConnectionsLine } from "@/components/code/connections-line";
 import { BlockColumn } from "@/components/layout/home-block";
-import { createKept, PlaceholderRows, useKept } from "@/components/layout/kept";
 import { InfoBox } from "@/components/layout/notice";
-import { Page, type TitleBeside } from "@/components/layout/page";
 import { useAnchorName } from "@/components/layout/place-under";
-import { Scroller } from "@/components/layout/scroller";
 import { type WorkspaceTab, WorkspaceTabs } from "@/components/workspace/workspace-tabs";
 import { addStylesheet } from "@/lib/stylesheet";
 import type { FromWorker } from "../../api/worker.ts";

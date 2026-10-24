@@ -1,5 +1,5 @@
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { ChevronRight } from "lucide-react";
-import { classes } from "@/lib/classes";
 
 /**
  * Where a task stands (#182), as its line shows it: running, or how it ended. Each colour means

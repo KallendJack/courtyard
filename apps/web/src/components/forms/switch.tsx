@@ -1,6 +1,6 @@
+import { useBusy } from "@courtyard/ui/buttons/button.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { LoaderCircle } from "lucide-react";
-import { classes } from "@/lib/classes";
-import { useBusy } from "../buttons/button.tsx";
 
 /**
  * An on/off switch (ADR 0012): violet with its knob to the right when on, grey with it to the

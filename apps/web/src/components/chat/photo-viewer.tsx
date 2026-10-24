@@ -1,6 +1,6 @@
+import { IconButton } from "@courtyard/ui/buttons/button.tsx";
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { IconButton } from "../buttons/button.tsx";
 
 /** How far a swipe goes before it moves to the next photo. */
 const SWIPE_PX = 50;

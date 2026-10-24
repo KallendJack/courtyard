@@ -1,13 +1,13 @@
 import type { SessionId, WorkspaceSummary } from "@courtyard/contract";
+import { useLayout } from "@courtyard/ui/frame/handheld.ts";
+import { PlaceholderRows } from "@courtyard/ui/layout/kept.tsx";
+import { Page, PageTitle } from "@courtyard/ui/layout/page.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
-import { useLayout } from "@/components/frame/handheld";
-import { PlaceholderRows } from "@/components/layout/kept";
 import { EmptyState } from "@/components/layout/notice";
-import { Page, PageTitle } from "@/components/layout/page";
 import { WorkspaceIcon } from "@/components/workspace/workspace-icon";
-import { classes } from "@/lib/classes";
 
 // Loaded once the page shows, so the page never waits for them and they stay off the first load:
 // each tile's line, and the foot rows.

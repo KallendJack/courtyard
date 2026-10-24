@@ -1,5 +1,5 @@
+import { buttonLook } from "@courtyard/ui/buttons/button.tsx";
 import type { ComponentProps } from "react";
-import { buttonLook } from "./button.tsx";
 
 /**
  * A link to a web page in an answer or its Sources: opened in a new tab, and telling the page

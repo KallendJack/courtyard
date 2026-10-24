@@ -12,6 +12,9 @@ memories. So the adapter turns all of it off (no setting sources, auto memory di
 MCP servers the adapter passes in) and gives each turn only its workspace folder, its context file and the workspace's
 tool connections.
 
+Amended by ADR 0022: a code session gets back the repository's own Claude Code setup (its project settings source in
+the session's worktree, its `CLAUDE.md` and its own skills); everything else stays off.
+
 ## Considered options
 
 - **The Claude API directly.** Rejected as the default: per-token billing. Kept as the API-key mode.

@@ -1,0 +1,8 @@
+/*
+ * The app's stylesheet: styles.css plus the shared pieces' classes from packages/ui. The
+ * packages/ui source is kept out of styles.css because the stylesheets loaded later
+ * @reference it: there it would put every packages/ui class in each of them, outside any
+ * layer, beating the main sheet's utilities (#725).
+ */
+@import "../styles.css";
+@source "../../../../packages/ui";

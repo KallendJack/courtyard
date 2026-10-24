@@ -1,10 +1,10 @@
 import type { MoveReview as Review, WorkspaceId } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
 import { TickBox } from "@/components/forms/tick-box";
-import { useAction } from "@/hooks/use-action";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { loadKeptHome } from "../planning-home/api.ts";
 import { moveTicked } from "./api.ts";

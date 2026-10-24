@@ -1,14 +1,12 @@
 {
   "files": {
-    "apps/web/src/components/frame/handheld-frame.tsx": 654,
-    "apps/web/src/components/frame/talk-strip.tsx": 630,
+    "apps/web/src/components/frame/handheld-frame.tsx": 659,
     "apps/web/src/components/rich-blocks/chart.tsx": 407,
     "apps/web/src/components/rich-blocks/floor-plan.tsx": 928,
     "apps/web/src/features/changes/recent-changes.tsx": 427,
     "apps/web/src/features/code-home/needs-you.tsx": 498,
     "apps/web/src/features/code-home/next-up.tsx": 413,
     "apps/web/src/features/pull-requests/review.tsx": 764,
-    "apps/web/src/features/sessions/composer/composer.tsx": 598,
     "apps/web/src/features/sessions/turns/events.ts": 894,
     "apps/web/src/features/sessions/turns/turn-view.tsx": 649,
     "apps/web/src/features/sign-ins/sign-ins.tsx": 535,
@@ -22,7 +20,7 @@
     "apps/worker/src/features/documents/index.ts": 483,
     "apps/worker/src/features/lead/index.ts": 960,
     "apps/worker/src/features/live/index.ts": 419,
-    "apps/worker/src/features/matt-setup/index.ts": 790,
+    "apps/worker/src/features/matt-setup/index.ts": 788,
     "apps/worker/src/features/move-review/index.ts": 425,
     "apps/worker/src/features/next-up/index.ts": 433,
     "apps/worker/src/features/notifications/index.ts": 429,
@@ -31,7 +29,7 @@
     "apps/worker/src/features/sessions/index.ts": 4253,
     "apps/worker/src/features/sessions/routes.ts": 672,
     "apps/worker/src/features/things/index.ts": 915,
-    "apps/worker/src/features/workspaces/index.ts": 866,
+    "apps/worker/src/features/workspaces/index.ts": 865,
     "apps/worker/src/integrations/github/api.ts": 1430,
     "apps/worker/src/integrations/github/fake.ts": 785,
     "apps/worker/src/integrations/github/index.ts": 803,
@@ -41,7 +39,9 @@
     "apps/worker/src/providers/fake.ts": 974,
     "apps/worker/src/providers/index.ts": 607,
     "apps/worker/src/worker.ts": 933,
-    "packages/contract/lib/session-event.ts": 481
+    "packages/contract/lib/session-event.ts": 481,
+    "packages/ui/frame/talk-strip.tsx": 630,
+    "packages/ui/reply/reply-box.tsx": 598
   },
   "folders": {
     "packages/contract/lib": 44

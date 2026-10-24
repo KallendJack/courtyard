@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from "react";
-import { classes } from "@/lib/classes";
 import { useLayout } from "../frame/handheld.ts";
+import { classes } from "../lib/classes.ts";
 import { PAGE_SCROLL, PageScrollContext } from "./page-scroll.ts";
 import { Scroller } from "./scroller.tsx";
 

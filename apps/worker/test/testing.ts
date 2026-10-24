@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   ApiError,
@@ -55,7 +55,9 @@ const SETTLE_MS = 5000;
  * For tests: removes a test's folder once the work its workers started in the background (its
  * turns, titling, notifying) has settled, since that work writes into it (#226). Throws when it
  * doesn't settle: a test that ends with a turn still running (one held, or waiting on an approval)
- * must stop it first (#230).
+ * must stop it first (#230). On Windows a process just stopped can hold a folder in it for a
+ * moment, so removing it tries again (`removeFolder`), and one still held after that is left in
+ * the temp folder rather than failing the test (#531, #617; the README says how to clear them).
  */
 export const removeTestFolder = async (root: string) => {
   let timer: NodeJS.Timeout | undefined;
@@ -69,7 +71,7 @@ export const removeTestFolder = async (root: string) => {
     }
   }
   clearTimeout(timer);
-  await rm(root, { recursive: true, force: true });
+  await removeFolder(root);
 };
 
 /**

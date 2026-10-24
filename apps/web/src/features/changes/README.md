@@ -4,7 +4,7 @@ The Recent changes list, with Undo. The worker's side is [`changes/`](../../../.
 
 **Example:** you delete a document by mistake. The page shows "Deleted · Undo", and Recent changes lists it too.
 
-- **Uses:** `components/layout/kept.tsx`.
+- **Uses:** `packages/ui/layout/kept.tsx`.
 - **Used by:** the Recent changes page (`routes/_app/changes.tsx`), `features/documents/`, `features/things/`.
 
 ## Screens

@@ -232,7 +232,6 @@ const readWorkspace = async (
       mode,
       // One made by hand, or before icons, shows the one its name suggests until the owner picks.
       icon: valid?.icon ?? suggestIcon(name, mode),
-      hasContextFile: contextFile !== null,
       ...(config.kind === "ignored" ? { configProblem: config.problem } : {}),
     },
     contextFile,

@@ -1,6 +1,6 @@
 import { WorkspaceId } from "@courtyard/contract";
+import { Page, PageTitle } from "@courtyard/ui/layout/page.tsx";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Page, PageTitle } from "@/components/layout/page";
 import { Problem } from "../../components/layout/problems.tsx";
 import { FindReplacement } from "../../features/things/find-replacement.tsx";
 import { ThingCard } from "../../features/things/thing-card.tsx";

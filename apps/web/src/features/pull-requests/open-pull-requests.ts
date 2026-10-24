@@ -1,5 +1,5 @@
 import type { CodeSessionList, OpenPullRequestList, WorkspaceId } from "@courtyard/contract";
-import { createKept, useKept } from "@/components/layout/kept";
+import { createKept, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { loadOpenPullRequests } from "./api.ts";
 
 // A code workspace's open pull requests, kept for the tab's lifetime: its PRs list and its Home's

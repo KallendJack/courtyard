@@ -1,8 +1,8 @@
 import type { OwnerContextDetail } from "@courtyard/contract";
+import { Page, PageTitle } from "@courtyard/ui/layout/page.tsx";
 import { createFileRoute, getRouteApi, Link } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 import { OfflineLine } from "@/components/layout/offline";
-import { Page, PageTitle } from "@/components/layout/page";
 import type { FromWorker } from "../../api/worker.ts";
 import { BackupStatus } from "../../features/settings/backup-status.tsx";
 import { LogOutOthers } from "../../features/settings/log-out-others.tsx";

@@ -1,10 +1,10 @@
+import { PAGE_SCROLL_SELECTOR } from "@courtyard/ui/layout/page-scroll.ts";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { PAGE_SCROLL_SELECTOR } from "@/components/layout/page-scroll";
 import { AppError } from "./components/layout/problems.tsx";
 import { routeTree } from "./routeTree.gen.ts";
-import "./styles.css";
+import "./lib/app.css";
 
 /** The address last drawn, so the scroll moves only for a move to another page. */
 let drawn: string | undefined;

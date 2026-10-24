@@ -5,6 +5,9 @@ and the owner's kit (a bike and its parts, a padel racket) had nowhere to live. 
 **Things** beside their context file, as plain files in the context folder, so they're in git and backed up like
 everything else. Both are written first and undone afterwards, as saves are, but they differ in who starts one.
 
+Amended by ADR 0032: a Thing's part holds what's **upcoming** next for it, documents are only for reference the owner
+would look up, and **projects** join them as files in the context folder, saved with Undo.
+
 - **Documents** are Markdown at `<workspace>/docs/<slug>.md`, named by their first heading. The owner saves one with
   Save as document on an answer, or asks a model, which saves it through a document tool. A model may offer to save
   one but never saves one unasked: a document is the owner's to keep, and a model saving its own answers would fill

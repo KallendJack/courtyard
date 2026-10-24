@@ -10,18 +10,18 @@ import {
   type SessionId,
   type WorkspaceId,
 } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { PlaceholderRows } from "@courtyard/ui/layout/kept.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/buttons/button";
 import { ButtonLink } from "@/components/buttons/button-link";
 import { doingWords } from "@/components/chat/session-state";
-import { FormError } from "@/components/forms/form-error";
 import { DialogCard } from "@/components/layout/dialog-card";
 import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
-import { PlaceholderRows } from "@/components/layout/kept";
-import { useAction } from "@/hooks/use-action";
-import { classes } from "@/lib/classes";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { pauseLead, runLead } from "../code-home/api.ts";
 import { useMergeInOrder } from "../code-home/merge-in-order.ts";

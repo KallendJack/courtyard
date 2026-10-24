@@ -1,6 +1,6 @@
 import type { WorkspaceConnections } from "@courtyard/contract";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { ChevronRight } from "lucide-react";
-import { classes } from "@/lib/classes";
 
 /** GitHub's mark, in the colour of the text around it. */
 export function GitHubMark(props: { size: number }) {

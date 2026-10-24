@@ -1,12 +1,12 @@
 import { DOCUMENT_NAME_MAX_LENGTH, type DocumentDetail, WorkspaceId } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { Page, PageTitle } from "@courtyard/ui/layout/page.tsx";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { BackLink } from "@/components/buttons/back-link";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
 import { RenameForm } from "@/components/forms/rename-form";
-import { Page, PageTitle } from "@/components/layout/page";
-import { useAction } from "@/hooks/use-action";
 import { describeProblem, Problem } from "../../components/layout/problems.tsx";
 import { deleteDocument, renameDocument } from "../../features/documents/api.ts";
 import { Answer } from "../../features/sessions/answer/answer.tsx";

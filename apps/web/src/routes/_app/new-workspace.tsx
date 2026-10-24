@@ -1,5 +1,5 @@
+import { PageTitle } from "@courtyard/ui/layout/page.tsx";
 import { createFileRoute } from "@tanstack/react-router";
-import { PageTitle } from "@/components/layout/page";
 import { NewWorkspaceForm } from "../../features/new-workspace/new-workspace-form.tsx";
 
 export const Route = createFileRoute("/_app/new-workspace")({

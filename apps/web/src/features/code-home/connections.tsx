@@ -1,15 +1,15 @@
 import type { PaperFile, WorkspaceConnections, WorkspaceId } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useEffect, useId, useState } from "react";
-import { Button } from "@/components/buttons/button";
 import { GitHubMark, PaperMark } from "@/components/code/connections-line";
-import { FormError } from "@/components/forms/form-error";
 import { RadioRow } from "@/components/forms/radio-row";
 import { CardDialog } from "@/components/layout/card-dialog";
 import { placeUnder } from "@/components/layout/place-under";
-import { Scroller } from "@/components/layout/scroller";
-import { useAction } from "@/hooks/use-action";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { connectPaper, loadPaperFiles } from "./api.ts";
 

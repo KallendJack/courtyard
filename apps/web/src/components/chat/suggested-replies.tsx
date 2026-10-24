@@ -1,5 +1,5 @@
+import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { useState } from "react";
-import { Button } from "../buttons/button.tsx";
 
 /**
  * The replies a model suggested under its latest answer (ADR 0017), as outlined pills that send

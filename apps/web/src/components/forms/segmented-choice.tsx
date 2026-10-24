@@ -1,5 +1,5 @@
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { type ReactNode, useId } from "react";
-import { classes } from "@/lib/classes";
 
 /**
  * How the choices look: pills in a track, or apart, the chosen one in violet (the PRs list's Open

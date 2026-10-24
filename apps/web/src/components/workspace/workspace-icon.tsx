@@ -1,6 +1,6 @@
 import type { WorkspaceIcon as Icon } from "@courtyard/contract";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { lazy, Suspense } from "react";
-import { classes } from "@/lib/classes";
 
 /** The icons themselves, loaded once a page first shows one, so they stay off the first load. */
 const WorkspaceMark = lazy(() => import("./workspace-marks.tsx"));

@@ -1,4 +1,5 @@
 import type { ProviderList, SessionId, WorkspaceId } from "@courtyard/contract";
+import { usePageScroll } from "@courtyard/ui/layout/page-scroll.ts";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type Ref,
@@ -9,7 +10,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { usePageScroll } from "@/components/layout/page-scroll";
 import type { DocumentsHere } from "../notes/documents.tsx";
 import type { QueuedMessage, Turn } from "./events.ts";
 import { TurnView } from "./turn-view.tsx";
