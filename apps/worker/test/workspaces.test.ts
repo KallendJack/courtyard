@@ -78,18 +78,6 @@ describe("the workspace list", () => {
     ]);
   });
 
-  it("says which workspaces have a context file", async () => {
-    await workspace("garage-gym", { "CONTEXT.md": "# Garage gym\n" });
-    await workspace("office");
-
-    const flags = (await listWorkspaces()).map((w) => [w.id, w.hasContextFile]);
-
-    expect(flags).toEqual([
-      ["garage-gym", true],
-      ["office", false],
-    ]);
-  });
-
   it("treats a workspace as a planning workspace unless its config says code", async () => {
     await workspace("side-project", {
       "workspace.json": '{ "mode": "code", "repoPath": "/path/to/repo" }',
@@ -149,7 +137,7 @@ describe("opening a workspace", () => {
 
     const { workspace: summary, contextFile } = await openWorkspace("garage-gym");
 
-    expect(summary).toMatchObject({ id: "garage-gym", name: "Garage gym", hasContextFile: true });
+    expect(summary).toMatchObject({ id: "garage-gym", name: "Garage gym" });
     expect(contextFile).toEqual({
       title: "Garage gym",
       intro: "Single garage, shared with the bikes.",
@@ -232,9 +220,8 @@ describe("opening a workspace", () => {
   it("says when a workspace has no context file yet", async () => {
     await workspace("office");
 
-    const { workspace: summary, contextFile } = await openWorkspace("office");
+    const { contextFile } = await openWorkspace("office");
 
-    expect(summary.hasContextFile).toBe(false);
     expect(contextFile).toBeNull();
   });
 
@@ -297,7 +284,6 @@ describe("adding a workspace", () => {
       id: "garage-gym",
       name: "Garage gym",
       mode: "planning",
-      hasContextFile: true,
     });
     const markdown = await readFile(join(contextDir, "garage-gym", "CONTEXT.md"), "utf8");
     expect(markdown).toMatch(/^# Garage gym\n/);

@@ -6,6 +6,9 @@ skills follow the open [Agent Skills](https://agentskills.io/specification) form
 optional `references/`, `assets/` and `scripts/`, and none of Claude's or Codex's own fields), and the worker loads
 them itself. Every provider, the fake included, gets the same skills the same way.
 
+Amended by ADR 0024: in a code session Claude gets Matt Pocock's skills as a plugin from Courtyard's pinned copy,
+loaded by Claude Code's own Skill tool; planning workspaces, and Codex, keep the use skill tool.
+
 - **House skills** are Courtyard's own, in the `@courtyard/skills` package (`packages/skills`). Its `skills.json`
   names each one, the kinds of workspace that get it (planning, code or both), and whether only the owner can start
   it (`"start": "owner"`). `pnpm verify` checks the list and every skill against the standard's validator.

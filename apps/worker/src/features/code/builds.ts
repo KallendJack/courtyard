@@ -187,5 +187,3 @@ export const createBuildsQueue = (lock: BuildsLock) => {
     },
   };
 };
-
-export type BuildsQueue = ReturnType<typeof createBuildsQueue>;

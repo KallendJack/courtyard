@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { Agent, get } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +9,7 @@ import { Health } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { serveWorker } from "../src/start.ts";
 import { createWorker, type Environment } from "../src/worker.ts";
-import { asOwner, errorOf } from "./testing.ts";
+import { asOwner, errorOf, removeTestFolder } from "./testing.ts";
 
 let root: string;
 let settings: Environment;
@@ -25,7 +25,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(root, { recursive: true, force: true });
+  await removeTestFolder(root);
 });
 
 const startWorker = (env: Environment = settings) => {

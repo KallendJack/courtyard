@@ -533,8 +533,6 @@ export const createMattSetup = (options: {
   };
 };
 
-export type MattSetupCheck = ReturnType<typeof createMattSetup>;
-
 /** Whether a card moves the repository anywhere: its Paper line alone doesn't. */
 const offersAnything = (card: SetupCard) => opensPullRequest(card) || card.labels.length > 0;
 

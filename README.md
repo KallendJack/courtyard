@@ -498,6 +498,9 @@ data folder as it is, and sign in to Claude Code on the new machine.
 - **`pnpm dev`** runs the worker and the web app with reloading. It needs a `.env` in the clone with its own context
   and data folders, never the live ones, and its own `COURTYARD_PORT` if the live worker runs on the same machine.
 - **On Windows,** some worker tests can time out while the PC is busy: [#130](https://github.com/KallendJack/courtyard/issues/130).
+  Each test removes its `courtyard-*` folder in the temp folder, trying again while Windows holds it. Folders left by
+  runs before that, or by a run that was stopped, can go once no tests are running: in PowerShell,
+  `Get-ChildItem $env:TEMP -Directory -Filter 'courtyard-*' | Remove-Item -Recurse -Force`.
 - **Version bumps come as Dependabot PRs every Monday** (`.github/dependabot.yml`): one for the routine npm bumps,
   one for GitHub Actions, and one each for the Claude Agent SDK and Codex. CI checks each, the first-load budget
   included.
