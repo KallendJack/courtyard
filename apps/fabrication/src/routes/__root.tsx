@@ -4,7 +4,7 @@ import { Problem } from "@/components/problem";
 
 export const Route = createRootRoute({
   // Behind Courtyard's login (ADR 0002), which is Courtyard's own page: a device that isn't in
-  // goes there, and comes back from Courtyard once it is.
+  // goes there, and logging in takes it to Courtyard's workspaces, where its step opens it again.
   beforeLoad: async () => {
     const auth = await authState();
     if (auth.kind === "loaded" && auth.data.state !== "logged-in") {
