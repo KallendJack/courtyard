@@ -8,6 +8,7 @@ import {
   type LabelledBuild,
   labelledBuilds,
 } from "../features/fabrication/tool.ts";
+import { type ReadProjects, readProjectText } from "../features/projects/index.ts";
 import type { Result } from "../lib/result.ts";
 import type { ToolReply, TurnTool, TurnToolName } from "../providers/index.ts";
 import { contained, textReply } from "./text.ts";
@@ -86,6 +87,41 @@ export const buildsPart = (builds: ReadBuilds) => {
   ].join("\n\n");
 };
 
+/**
+ * What's wrong with the projects' steps' Builds, a line each for the projects list (#697): a link
+ * mistyped by hand, read without, or one to a Build since removed (its start undone, say).
+ */
+const stepBuildProblems = (projects: ReadProjects, builds: ReadBuilds) => {
+  const there = new Set([
+    ...builds.builds.map(({ summary }) => summary.path),
+    ...builds.problems.map(({ path }) => path),
+  ]);
+  return projects.projects.flatMap(({ project, text }) => {
+    const read = readProjectText(text);
+    return [
+      ...(read.ok ? read.value.problems : []),
+      ...project.steps.flatMap(({ build }, index) =>
+        build === undefined || there.has(buildPath(build))
+          ? []
+          : [
+              `Step ${index + 1}'s Build, ${build}: Build removed. Give the step a Build again with ${BUILD_TOOL_NAME}, or clear it with step_build as an empty text.`,
+            ],
+      ),
+    ].map((problem) => `- ${project.path}: ${problem}`);
+  });
+};
+
+/** What the project tool and its list say of a step's Build (#697). */
+export const STEP_BUILD = {
+  problems: stepBuildProblems,
+  input: z
+    .string()
+    .optional()
+    .describe(
+      `The Build the numbered step makes, by its file's name, which ${BUILD_TOOL_NAME} gives it. An empty text clears it, as for a Build removed.`,
+    ),
+};
+
 const pounds = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
 const findingLine = (finding: Finding) => {
@@ -140,7 +176,7 @@ const numbersOf = (build: Build) => {
 };
 
 /** A Build the model saved in the conversation, and whether the owner has undone it since. */
-export type SaidBuild = { readonly save: BuildSave; undone: boolean };
+type SaidBuild = { readonly save: BuildSave; undone: boolean };
 
 /** A Build save as the model reads it in the conversation, with what the owner did with it. */
 export const buildSaveLine = ({ save, undone }: SaidBuild) =>

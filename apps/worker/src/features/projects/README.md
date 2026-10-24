@@ -28,7 +28,8 @@ Recent changes. `routes.ts` holds how those answer a refusal.
 - **The file** (`file.ts`): front matter (name, goal, status `active` or `done`), then `## Steps` (`- [needs a pro]
   Sockets by the desk · an electrician`, and a step that makes a Build ending `[build: workbench]`, #697),
   `## Decisions` (a `###` heading each, then its pick, why and options) and `## History` (dated lines). A file that
-  isn't a project as written is listed with its problem, never breaking a turn.
+  isn't a project as written is listed with its problem, never breaking a turn; a mistyped Build link is left off
+  its step alone, the turn told why.
 - **What's next** is the first step that isn't decided (`nextStepOf`, in the contract). A step done leaves the steps,
   its history saying "Done: …". A decision about the same thing again replaces the last; its decided step leads the
   list, after those decided already, or takes the place of the step it decides.
@@ -37,4 +38,5 @@ Recent changes. `routes.ts` holds how those answer a refusal.
 - **The tool** (`tool.ts`): one turn's `save_project`, by the labels the turn was shown (`P1`), keeping each file as
   shown or last saved, so a change to one edited since is refused with the projects as they are now; `session`
   attaches the turn's session to the project, which then gets the project's file whole on its turns. `step_build`,
-  which the Build tool sends through it rather than the model, gives a step its Build.
+  which the Build tool sends through it, gives a step its Build; the model sends it empty to clear a step's Build
+  once that Build is removed (its start undone, say), which the turn's projects list shows.

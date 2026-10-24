@@ -1,4 +1,10 @@
-import { ProjectDecision, ProjectFields, ProjectStep, StepKind } from "@courtyard/contract";
+import {
+  BuildSlug,
+  ProjectDecision,
+  ProjectFields,
+  ProjectStep,
+  StepKind,
+} from "@courtyard/contract";
 import { err, ok, type Result } from "../../lib/result.ts";
 
 // A project's file as written (#603): its name, goal and status between --- lines, then its steps,
@@ -33,8 +39,13 @@ export const DETAIL = " · ";
 const stepLine = ({ kind, text, detail, build }: ProjectStep) =>
   `- [${kind}] ${text}${detail === undefined ? "" : `${DETAIL}${detail}`}${build === undefined ? "" : ` [build: ${build}]`}`;
 
-/** A project's file read, or what's wrong with it. */
-export const readProjectText = (text: string): Result<ProjectFile, string> => {
+/**
+ * A project's file read, and what in it was read without (a step's Build link that isn't a Build's
+ * file name, #697), or what's wrong with it.
+ */
+export const readProjectText = (
+  text: string,
+): Result<ProjectFile & { readonly problems: readonly string[] }, string> => {
   const lines = text.replace(/^﻿/, "").replace(/\r\n/g, "\n").split("\n");
   const end = lines.indexOf("---", 1);
   if (lines[0] !== "---" || end === -1) {
@@ -64,6 +75,7 @@ export const readProjectText = (text: string): Result<ProjectFile, string> => {
   const steps: ProjectStep[] = [];
   const decisions: ProjectDecision[] = [];
   const history: ProjectHistoryLine[] = [];
+  const problems: string[] = [];
   let section: keyof typeof SECTIONS | undefined;
   let decision: Record<string, unknown> | undefined;
   const endDecision = (): string | undefined => {
@@ -89,7 +101,14 @@ export const readProjectText = (text: string): Result<ProjectFile, string> => {
     }
     if (section === "steps") {
       const [, kind = "", line = ""] = STEP_LINE.exec(said) ?? [];
-      const build = BUILD_MARK.exec(line)?.[1]?.trim();
+      const marked = BUILD_MARK.exec(line)?.[1]?.trim();
+      // A link mistyped by hand loses only itself: the step stays, read without it.
+      const build = marked === undefined ? undefined : BuildSlug.safeParse(marked).data;
+      if (marked !== undefined && build === undefined) {
+        problems.push(
+          `Step ${steps.length + 1}'s Build link "[build: ${marked}]" isn't a Build's file name (lowercase letters, digits and dashes), so the step is read without it.`,
+        );
+      }
       const rest = line.replace(BUILD_MARK, "");
       const at = rest.indexOf(DETAIL);
       const step = ProjectStep.safeParse({
@@ -132,7 +151,7 @@ export const readProjectText = (text: string): Result<ProjectFile, string> => {
   }
   const ended = endDecision();
   if (ended !== undefined) return err(ended);
-  return ok({ fields: fields.data, steps, decisions, history });
+  return ok({ fields: fields.data, steps, decisions, history, problems });
 };
 
 /** A project's file, written from its parts. */

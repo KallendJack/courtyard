@@ -372,6 +372,72 @@ describe("a project step's Build", () => {
     });
   });
 
+  it("shows a step whose Build was undone as removed, until the step's Build is cleared", async () => {
+    await withProject();
+    const saver = savingProvider([
+      [
+        buildTool({
+          name: "Workbench",
+          template: "framed-bench",
+          parameters: goldenBench,
+          project: "P1",
+          step: 2,
+        }),
+      ],
+      [{ call: "save_project", input: { project: "P1", step: 2, step_build: "" } }],
+    ]);
+    const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
+    const started = await postJson(request, "/api/workspaces/garage/sessions", {
+      text: "A bench for the garage.",
+      model: SAVING_MODEL,
+    });
+    const sessionId = SessionSummary.parse(await started.json()).id;
+    const events = await followSession(request, { sessionId, until: "turn-completed" });
+    const [saved] = buildSaves(events);
+    const undone = await postJson(
+      request,
+      `/api/sessions/${sessionId}/builds/${saved?.seq}/undo`,
+      {},
+    );
+    expect(undone.status).toBe(204);
+    const turn = async () => {
+      await postJson(request, `/api/sessions/${sessionId}/messages`, {
+        text: "And then?",
+        model: SAVING_MODEL,
+      });
+      events.push(
+        ...(await followSession(request, {
+          sessionId,
+          until: "turn-completed",
+          after: events.at(-1)?.seq ?? 0,
+        })),
+      );
+    };
+
+    await turn();
+    const removed =
+      "- projects/split-the-garage.md: Step 2's Build, workbench: Build removed. Give the step a Build again with save_build, or clear it with step_build as an empty text.";
+    expect(saver.framings[1]?.instructions).toContain(removed);
+    expect(saver.replies[1]).toEqual([{ ok: true, reply: "Changed [P1] Split the garage." }]);
+    expect(await readFile(projectFile(), "utf8")).toContain(
+      "- [you can do this] Build the workbench · a weekend\n",
+    );
+    await turn();
+    expect(saver.framings[2]?.instructions).not.toContain("Build removed");
+  });
+
+  it("reads a project with a mistyped Build link, keeping the step without it and saying why", async () => {
+    await withProject("- [you can do this] Fit the shelf [build: Work Bench]");
+    const { saver, request } = await sessionWith([[]]);
+
+    const home = PlanningHome.parse(await (await request("/api/workspaces/garage/home")).json());
+    expect(home.projects[0]?.steps[2]).toEqual({ kind: "you can do this", text: "Fit the shelf" });
+    expect(saver.framings[0]?.instructions).toContain(
+      `- projects/split-the-garage.md: Step 3's Build link "[build: Work Bench]" isn't a Build's file name (lowercase letters, digits and dashes), so the step is read without it.`,
+    );
+    expect(saver.framings[0]?.instructions).not.toContain("can't be read as a project");
+  });
+
   it("is given to a step by the Build's label alone, when the Build is there already", async () => {
     await withProject();
     const { saver, events } = await sessionWith([

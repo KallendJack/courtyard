@@ -1598,7 +1598,12 @@ between `<projects>` markers, those being carried on first, each by name (`[P1] 
 active, next: Measure the back wall and the boiler corner (you can do this), 3 steps, 1 decision
 (projects/turn-the-garage-into-an-office.md)`: its label, name, status, what's next, how many steps and decisions,
 then its file), and each file that isn't a project as written (`- projects/loft.md can't be read as a project:
-<problem>`):
+<problem>`). Then a line for each step's Build link that's wrong (#697, from the review of #732), the project still
+read: one mistyped by hand is left off the step, which stays (`- projects/split-the-garage.md: Step 2's Build link
+"[build: Work Bench]" isn't a Build's file name (lowercase letters, digits and dashes), so the step is read without
+it.`), and one to a Build since removed, by undoing its start, say, is shown as removed until it's given another or
+cleared with `step_build` (`- projects/split-the-garage.md: Step 2's Build, workbench: Build removed. Give the step a
+Build again with save_build, or clear it with step_build as an empty text.`):
 
 > The workspace's projects are below: what the owner is carrying on over days and sessions, such as turning the garage
 > into an office, one per line with its label in front ([P1] is the first), what's next and its file at the end. Read
@@ -1662,6 +1667,8 @@ asking:
 > - step_kind: The numbered step's new kind.
 > - step_text: The numbered step's new words.
 > - step_detail: The numbered step's new detail. An empty text clears it.
+> - step_build: The Build the numbered step makes, by its file's name, which save_build gives it. An empty text clears
+>   it, as for a Build removed.
 > - done: True once the owner has done the numbered step: it leaves the steps, and its history says so.
 > - remove_step: True to remove the numbered step, when the owner no longer means to do it.
 > - decision_about: What a decision the owner made is about, such as Layout or Desk.

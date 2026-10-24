@@ -157,8 +157,8 @@ export type ProjectEdit = {
     readonly text?: string;
     /** Its detail, or `null` to clear it. */
     readonly detail?: string | null;
-    /** The Build it makes (#697). */
-    readonly build?: BuildSlug;
+    /** The Build it makes (#697), or `null` to clear it. */
+    readonly build?: BuildSlug | null;
     /** The owner has done it: it leaves the steps, its history saying so. */
     readonly done?: boolean;
     readonly remove?: boolean;
@@ -286,7 +286,7 @@ export const saveProject = async (
               : (step.detail ?? there.detail) === undefined
                 ? {}
                 : { detail: step.detail ?? there.detail }),
-            ...((step.build ?? there.build) === undefined
+            ...(step.build === null || (step.build ?? there.build) === undefined
               ? {}
               : { build: step.build ?? there.build }),
           });
