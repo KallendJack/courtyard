@@ -51,9 +51,10 @@ boards move: `docs/ai-conduct.md`, Paper.
 
 ## Reviewing use
 
-Every couple of weeks the owner and an agent look at real use, as the builders and planning reviews of 2026-10-20 did
-(the Review use skill, #606, does it once built): from the session logs, each user-facing feature merged since the last
-review is **used**, **misused** or **unused**, and the builders' time is split into work and waiting. Unused after its
+Every couple of weeks the owner starts the Review use skill (#606, `packages/skills/review-use`) in the Courtyard code
+workspace: from the session logs, each user-facing feature merged in the window (a PR with a `What's new:` line) is
+**used**, **misused** or **unused**, and the builders' time is split into work and waiting. The owner ticks or changes
+its keep, fix or remove for each. Unused after its
 trial means **removed** unless the owner keeps it; a fix or a removal is filed as an issue; each model mistake found is
 added to the context eval, so it can't come back unseen. Abandoned worktrees clear themselves (#605).
 
