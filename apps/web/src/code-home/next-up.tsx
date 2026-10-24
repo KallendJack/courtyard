@@ -4,7 +4,7 @@ import { Zap } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
-import { Block } from "@/components/home-block";
+import { Block, EmptyLine } from "@/components/home-block";
 import { PlaceholderRows } from "@/components/kept";
 import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
@@ -19,7 +19,8 @@ const SHOWN = 3;
  * Next up (#301; Paper, "Code workspace Home"): the repository's ready issues nobody has claimed,
  * in milestone order, three of them then More, the milestone they're in beside its label. The
  * first has Build (#298): one tap shows the issue and the model it'll be built with, a second
- * starts the session, which the worker claims the issue for. Hidden when none is ready.
+ * starts the session, which the worker claims the issue for. With none ready it keeps its place
+ * with one quiet line (#283).
  */
 export function NextUp(props: {
   workspaceId: WorkspaceId;
@@ -42,7 +43,15 @@ export function NextUp(props: {
     );
   }
   const [first, ...rest] = props.issues;
-  if (first === undefined) return null;
+  if (first === undefined) {
+    return (
+      <div className={column}>
+        <Block label="Next up">
+          <EmptyLine>Nothing ready to build</EmptyLine>
+        </Block>
+      </div>
+    );
+  }
   const shown = more ? rest : rest.slice(0, SHOWN - 1);
   const hidden = rest.length - shown.length;
   return (

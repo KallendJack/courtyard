@@ -1,7 +1,7 @@
 import type { DuePlan, ListedSession, WorkspaceId } from "@courtyard/contract";
 import { Link } from "@tanstack/react-router";
 import { AlignLeft } from "lucide-react";
-import { Block } from "@/components/home-block";
+import { Block, EmptyLine } from "@/components/home-block";
 import { describeWhen } from "../when.ts";
 
 /** How long ago a session can have been used and still be one to pick up again. */
@@ -33,7 +33,7 @@ const dayWords = (due: string, now = new Date()) => {
 /**
  * Next up (#300; Paper, "Tablet · Planning workspace Home"): first, the session to pick up again;
  * then the plans dated in the next 7 days, as the worker reads them from the context file. With
- * neither, the block doesn't show.
+ * neither, it keeps its place with one quiet line (#283).
  */
 export function NextUp(props: {
   workspaceId: WorkspaceId;
@@ -41,9 +41,11 @@ export function NextUp(props: {
   duePlans: readonly DuePlan[];
 }) {
   const pickUp = sessionToPickUp(props.sessions);
-  if (pickUp === undefined && props.duePlans.length === 0) return null;
   return (
     <Block label="Next up">
+      {pickUp === undefined && props.duePlans.length === 0 && (
+        <EmptyLine>Nothing coming up</EmptyLine>
+      )}
       {pickUp !== undefined && (
         <Link
           to="/workspaces/$workspaceId/sessions/$sessionId"

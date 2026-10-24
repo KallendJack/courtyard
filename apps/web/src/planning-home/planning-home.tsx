@@ -59,7 +59,7 @@ export type PlanningLoaded = {
  * its Sessions, Things and Docs tabs): its tabs (Home · Sessions · Things · Docs), each but Home
  * shown once it has something, with its count, by the address's hash; on Home, Next up, then the
  * one row for What Courtyard knows, then the message box at the foot, which starts a new session.
- * An empty workspace shows only its name, one line and the box. Nothing on it is a warning or a
+ * An empty workspace shows its name, one line, Next up's quiet line (#283) and the box. Nothing on it is a warning or a
  * nudge: a planning workspace stays calm (AGENTS.md).
  */
 export default function PlanningHome(props: {

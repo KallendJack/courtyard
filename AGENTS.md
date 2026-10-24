@@ -95,6 +95,10 @@ The process is Matt Pocock's skills (below), as they are. On top of them:
   contents, what was just said), it fills it in and the owner taps to pick or confirms; any field can also be spoken.
   Before acting, show everything it filled in, all of it, so one tap does exactly what the owner sees. A text box is
   for words only the owner has, and opening a page never opens the keyboard on touch.
+- **Nothing moves once drawn.** Anything that loads later holds its space from the first frame, at its final
+  size (a placeholder the shape of what it replaces). A page's blocks are fixed: an empty one keeps its place
+  with one quiet line ("Nothing needs you"), and rows come and go inside a block's own area, so its neighbours
+  never move. `e2e/github.spec.ts` fails on any layout shift while a main page loads.
 - The owner reviews every PR on GitHub. Check a PR's state before pushing more commits to it.
 - A PR that adds a module, changes how the parts connect, or changes what's in a workspace folder updates
   `docs/architecture.md`.

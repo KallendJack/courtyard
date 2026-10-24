@@ -45,9 +45,15 @@ function Result(props: { result: LiveUpdateResult; offerReload: boolean }) {
  * Nothing at all on a worker that isn't a live copy. Asked for once the page is showing, since the
  * worker may be asking GitHub whether main has moved on: the page never waits for that. On Home
  * (#102), main's build is a row, labelled `label` ("New version"), `short` on a narrow screen.
+ * `live` is the live status as a page already asks for it, so that page knows when it's known.
  */
-export function LiveUpdate(props: { label?: string; short?: boolean }) {
-  const [status, setStatus] = useLive();
+export function LiveUpdate(props: {
+  label?: string;
+  short?: boolean;
+  live?: ReturnType<typeof useLive>;
+}) {
+  const own = useLive(props.live === undefined);
+  const [status, setStatus] = props.live ?? own;
   const [following, setFollowing] = useState<Following>({ kind: "idle" });
   const loaded = status?.kind === "loaded" ? status.data : undefined;
   // Started from another device, or before this page was opened.

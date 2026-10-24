@@ -9,9 +9,10 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { ButtonLink } from "@/components/button-link";
 import { FormError } from "@/components/form-error";
-import { Block, BlockRow } from "@/components/home-block";
+import { Block, BlockRow, EmptyLine } from "@/components/home-block";
 import { PlaceholderRows } from "@/components/kept";
 import { ThumbButton } from "@/components/thumb-button";
+import { classes } from "@/lib/classes";
 import { useAction } from "@/lib/use-action";
 import { MattSetupOffer } from "../matt-setup/matt-setup-offer.tsx";
 import { describeProblem } from "../problems.tsx";
@@ -43,12 +44,13 @@ const pullTitle = (pull: OpenPullRequest) =>
 /**
  * Needs you (#301; Paper, "Code workspace Home"): every approval, failing check, new reply, pull
  * request ready to merge, conflict, and Matt's setup offer, each a row with its one-tap action:
- * Approve, Review, Open, Merge, Bring up to date. Hidden when nothing waits on the owner.
+ * Approve, Review, Open, Merge, Bring up to date. Its size is fixed (#283): with nothing waiting on
+ * the owner it says so in one quiet line, and isn't gold, since nothing needs them.
  */
 export function NeedsYou(props: {
   workspaceId: WorkspaceId;
   needs: readonly Need[];
-  /** What it shows is still to come (a first visit): it keeps its place with faint rows. */
+  /** What it shows is still to come (a first visit): it keeps its place with a faint row. */
   pending: boolean;
   setup: MattSetup;
   onSetup: (setup: MattSetup) => void;
@@ -57,17 +59,18 @@ export function NeedsYou(props: {
 }) {
   const [settingUp, setSettingUp] = useState(false);
   const opened = props.setup.state === "opened";
-  if (props.needs.length === 0 && !opened && !props.pending) return null;
-  if (props.needs.length === 0 && props.pending) {
+  if (props.needs.length === 0 && !opened) {
     return (
-      <Block label="Needs you" needs>
-        <PlaceholderRows count={2} />
+      <Block label="Needs you">
+        <div className={ROWS}>
+          {props.pending ? <PlaceholderRows count={1} /> : <EmptyLine>Nothing needs you</EmptyLine>}
+        </div>
       </Block>
     );
   }
   return (
     <Block label="Needs you" count={props.needs.length} needs>
-      <ul className="flex flex-col gap-1.5">
+      <ul className={classes(ROWS, "flex flex-col gap-1.5")}>
         {props.needs.map((need) => (
           <NeedRow
             key={keyOf(need)}
@@ -92,6 +95,12 @@ export function NeedsYou(props: {
     </Block>
   );
 }
+
+/**
+ * Where its rows go: two rows tall whatever it holds, scrolling inside past two (owner, 2026-10-12,
+ * #283), so whether anything waits, and how many, never moves the blocks beside or under it.
+ */
+const ROWS = "h-29.5 shrink-0 overflow-y-auto";
 
 const keyOf = (need: Need) => {
   switch (need.kind) {

@@ -12,14 +12,17 @@ const dayFromNow = (days: number) =>
     month: "long",
   });
 
-test("a new workspace's Home is only its name, one line and the message box", async ({ page }) => {
+test("a new workspace's Home is its name, one line, an empty Next up and the message box", async ({
+  page,
+}) => {
   const name = `Shed ${Date.now()}`;
   await newWorkspace(page, name);
 
   await expect(page.getByText("Tell Courtyard about this, by voice or photo")).toBeVisible();
   await expect(page.getByLabel("Message", { exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Workspace tabs" })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Next up" })).toHaveCount(0);
+  // Its blocks are fixed (#283): an empty one keeps its place with one quiet line.
+  await expect(page.getByRole("region", { name: "Next up" })).toHaveText(/Nothing coming up/);
   await expect(page.getByRole("link", { name: "What Courtyard knows" })).toHaveCount(0);
 });
 

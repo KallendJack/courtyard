@@ -2,12 +2,16 @@ import type { ContextBackup, WorkspaceId, WorkspaceSummary } from "@courtyard/co
 import { ButtonLink } from "@/components/button-link";
 import { createKept, useKept } from "@/components/kept";
 import { LiveUpdate } from "../live/live-update.tsx";
+import { useLive } from "../live/main-build.tsx";
 import { describeWhen } from "../when.ts";
 import { loadBackup } from "../worker.ts";
 import "./stylesheet.ts";
 
-/** The context backup as last known, for the tab's lifetime (nothing jumps in late). */
-const KEPT_BACKUP = createKept<ContextBackup>();
+/**
+ * The context backup as last known, for the tab's lifetime (nothing jumps in late); `null` when
+ * the worker couldn't say.
+ */
+const KEPT_BACKUP = createKept<ContextBackup | null>();
 
 /**
  * Something actually wrong, in a few words, and where it's fixed: the backup in Settings, which
@@ -58,8 +62,9 @@ const problemsOf = (
 /**
  * Home's foot rows (#102; Paper, "Home"), near the thumbs and only when needed: main's build with
  * Update when a new version is there (`live/`), and one gold line for something actually wrong,
- * the worst, "and 1 more" when there's more, with Fix it, which opens where it's fixed. Nothing
- * above them moves when they come.
+ * the worst, "and 1 more" when there's more, with Fix it, which opens where it's fixed. They come
+ * together, once both are known, at the foot of the page, so neither pushes the other and nothing
+ * above them moves (#283).
  */
 export default function HomeFoot(props: {
   workspaces: readonly WorkspaceSummary[];
@@ -70,13 +75,15 @@ export default function HomeFoot(props: {
     key: "backup",
     load: async () => {
       const loaded = await loadBackup();
-      return loaded.kind === "loaded" ? loaded.data : undefined;
+      return loaded.kind === "loaded" ? loaded.data : null;
     },
   });
-  const [worst, ...more] = problemsOf(backup, props.workspaces);
+  const live = useLive();
+  if (backup === undefined || live[0] === undefined) return null;
+  const [worst, ...more] = problemsOf(backup ?? undefined, props.workspaces);
   return (
     <div className="flex flex-col gap-2.5 md:gap-3">
-      <LiveUpdate label="New version" short={props.short} />
+      <LiveUpdate label="New version" short={props.short} live={live} />
       {worst !== undefined && (
         <section
           aria-label="Problem"

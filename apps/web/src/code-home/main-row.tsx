@@ -15,8 +15,8 @@ const ASK_EVERY_MS = 15 * 1000;
  * Main (#301; Paper, "Code workspace Home"): the newest commit on the repository's main with
  * #249's build bar, what matters after a merge. Update shows only on the workspace whose
  * repository Courtyard's live copy runs from, once main has moved on from it (its Updates card,
- * which follows the update); other repositories show the bar alone. Hidden while there's no build
- * to show.
+ * which follows the update); other repositories show the bar alone. With no build to show it
+ * keeps its place with one quiet line (#283).
  */
 export function MainRow(props: { workspaceId: WorkspaceId }) {
   const [tick, setTick] = useState(0);
@@ -40,10 +40,27 @@ export function MainRow(props: { workspaceId: WorkspaceId }) {
 
   // Nothing known yet: the row keeps its place.
   if (main === undefined) return <PlaceholderRows count={1} />;
-  if (main === null) return null;
+  if (main === null) return <NoBuild />;
   if (main.liveCopy) return <LiveMain main={main} />;
-  return main.build === null ? null : (
+  return main.build === null ? (
+    <NoBuild />
+  ) : (
     <MainBuildCard label="Main" newest={main.newest} build={main.build} />
+  );
+}
+
+/** The row with no build to show: it keeps its place with one quiet line (#283). */
+function NoBuild() {
+  return (
+    <section
+      aria-label="Main"
+      className="flex min-h-14 items-center gap-3.5 rounded-bubble border bg-surface py-2.5 pr-2.5 pl-3.5"
+    >
+      <span className="shrink-0 text-label font-bold tracking-label text-muted-foreground uppercase">
+        Main
+      </span>
+      <span className="truncate text-sm text-muted-foreground">No build on main yet</span>
+    </section>
   );
 }
 
@@ -55,7 +72,9 @@ function LiveMain(props: { main: WorkspaceMain }) {
     return <LiveUpdate />;
   }
   const { main } = props;
-  return main.build === null ? null : (
+  return main.build === null ? (
+    <NoBuild />
+  ) : (
     <MainBuildCard label="Main" newest={main.newest} build={main.build} />
   );
 }

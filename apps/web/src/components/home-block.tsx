@@ -56,6 +56,19 @@ export function Block(props: {
 }
 
 /**
+ * What an empty block says instead of its rows (owner, 2026-10-12, #283): one quiet line, muted,
+ * no icon and no colour, as tall as one row, so the block keeps its place and size and nothing
+ * beside or under it moves when a row comes or goes.
+ */
+export function EmptyLine(props: { children: ReactNode }) {
+  return (
+    <p className="flex min-h-14 items-center px-3 text-sm text-muted-foreground">
+      {props.children}
+    </p>
+  );
+}
+
+/**
  * A row of a block: what it is in bold, a line under it in its colour, and its one action at the
  * end, in a slot of its own so the actions line up.
  */

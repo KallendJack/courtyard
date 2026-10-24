@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
+import { READING_SESSION_ID } from "./long-session.ts";
 import { pageScroll, pageScrollsSideways } from "./page-scroll.ts";
 
 // Signing in to GitHub through Courtyard (#99), against the fake GitHub start-worker.mjs gives the
@@ -715,6 +716,104 @@ test.describe("on the cover screen", () => {
   });
 });
 
+/** A layout shift the browser reported, and what moved in it. */
+type Shift = { readonly value: number; readonly moved: readonly string[] };
+
+/**
+ * Keeps every layout shift the browser reports on each page loaded from now on, from its first
+ * frame, leaving out those right after the owner's own input (a tap, a key).
+ */
+const watchLayoutShift = (page: Page) =>
+  page.addInitScript(() => {
+    const shifts: Shift[] = [];
+    Reflect.set(window, "layoutShifts", shifts);
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        const shift = entry.toJSON();
+        if (shift.hadRecentInput === true) continue;
+        const sources: { node?: Node | null; previousRect: DOMRect; currentRect: DOMRect }[] =
+          Reflect.get(entry, "sources") ?? [];
+        const named = (node: Node | null | undefined) =>
+          node instanceof Element
+            ? `${node.tagName.toLowerCase()}.${node.className} ${node.getAttribute("aria-label") ?? node.textContent?.slice(0, 40) ?? ""}`
+            : String(node?.nodeName);
+        const at = ({ x, y, width, height }: DOMRect) => `${x},${y} ${width}×${height}`;
+        shifts.push({
+          value: shift.value,
+          moved: sources.map(
+            (source) =>
+              `${named(source.node)}: ${at(source.previousRect)} → ${at(source.currentRect)}`,
+          ),
+        });
+      }
+    }).observe({ type: "layout-shift", buffered: true });
+  });
+
+/** The layout shifts reported on the page so far. */
+const layoutShifts = (page: Page) =>
+  page.evaluate((): Shift[] => Reflect.get(window, "layoutShifts") ?? []);
+
+// Owner rule (#283, AGENTS.md): once something is drawn, it doesn't move. Here rather than a file
+// of its own because two of the main pages need GitHub signed in, which is the worker's, shared by
+// every file running at once, and only this file signs in and out.
+test.describe("nothing moves once drawn (#283)", () => {
+  test.use({ hasTouch: true, isMobile: true });
+
+  test("no main page moves anything while it loads, on the unfolded or the cover screen", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    await signIn(request);
+    const open = (await (await request.get("/api/workspaces/workbench/pull-requests")).json()) as {
+      pullRequests: { pullRequest: { number: number; title?: string } }[];
+    };
+    const ready = open.pullRequests.find((pull) => pull.pullRequest.title === "Builds take turns");
+    if (ready === undefined) throw new Error("Workbench's ready pull request isn't open");
+    await watchLayoutShift(page);
+
+    // Each page, with what shows once it has loaded. Each is a new path, so each loads afresh.
+    const pages = [
+      { name: "Home", path: "/", shows: page.getByRole("heading", { level: 1 }) },
+      {
+        name: "a code workspace's board",
+        path: HOME,
+        shows: blocks(page).needsYou.getByRole("listitem").first(),
+      },
+      {
+        name: "a planning workspace's board",
+        path: "/workspaces/garage-gym",
+        shows: page.getByRole("heading", { level: 1 }),
+      },
+      {
+        name: "a session",
+        path: `/workspaces/garage-gym/sessions/${READING_SESSION_ID}`,
+        shows: page.getByRole("list", { name: "Session" }),
+      },
+      {
+        name: "a pull request's review",
+        path: `${HOME}#pr-${ready.pullRequest.number}`,
+        shows: page.getByRole("region", { name: "Review" }),
+      },
+    ];
+    for (const [screen, viewport] of [
+      ["unfolded", { width: 950, height: 712 }],
+      ["cover", { width: 400, height: 900 }],
+    ] as const) {
+      await page.setViewportSize(viewport);
+      for (const each of pages) {
+        await page.goto(each.path);
+        await expect(each.shows).toBeVisible();
+        // Everything that loads later has come, and had time to settle.
+        await expect(page.locator("[data-placeholder]")).toHaveCount(0);
+        await page.waitForTimeout(1500);
+        expect(await layoutShifts(page), `${each.name}, on the ${screen} screen`).toEqual([]);
+      }
+    }
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+});
+
 // A code workspace's Home (#301; Paper, "Code workspace Home", desktop, tablet and cover screen)
 // and connecting Paper from it (#308), on start-worker.mjs's Workbench: its one line, ready
 // issues on the fake GitHub in milestones (one claimed), and a helper's pull request whose checks
@@ -750,8 +849,9 @@ const showsHome = async (page: Page) => {
   const ready = needsYou.getByRole("listitem", { name: /Builds take turns/ });
   await expect(ready).toContainText("Checks passed · ready to merge");
   await expect(ready.getByRole("button", { name: /^Merge/ })).toBeVisible();
-  // Nothing runs yet, so its block isn't there at all.
-  await expect(running).toHaveCount(0);
+  // Nothing runs yet, so its block says so, in its place (#283).
+  await expect(running).toContainText("Nothing running");
+  await expect(running.getByRole("listitem")).toHaveCount(0);
 
   // The ready issues nobody claimed, in milestone order: three, then More.
   await expect(nextUp).toContainText("4 · Code workspaces");
@@ -874,6 +974,64 @@ test.describe("a code workspace's Home (#301, #308)", () => {
       const { nextUp } = blocks(page);
       await nextUp.getByRole("button", { name: "More · 9" }).click();
       await expect(nextUp.getByRole("listitem")).toHaveCount(11);
+      await request.post("/api/github/sign-out", { data: {} });
+    });
+
+    // Owner, 2026-10-12 (#283): a page's blocks are fixed. An empty one keeps its place and size
+    // with one quiet line, and its neighbours never move into its space.
+    test("with nothing waiting, Needs you keeps its place and size, and Next up and Main don't move", async ({
+      page,
+      request,
+    }) => {
+      await signIn(request);
+      const { needsYou, nextUp } = blocks(page);
+      const main = page.getByRole("region", { name: "Main" });
+      /** Home with the ready pull request waiting on the owner, or nothing at all. */
+      const showsHomeWith = async (waiting: "one row" | "nothing") => {
+        await page.unrouteAll({ behavior: "wait" });
+        await page.route("**/api/workspaces/workbench/matt-setup", (route) =>
+          route.fulfill({ json: { state: "none" } }),
+        );
+        await page.route("**/api/workspaces/workbench/pull-requests", async (route) => {
+          const response = await route.fetch();
+          const list = (await response.json()) as {
+            pullRequests: { pullRequest: { title?: string } }[];
+          };
+          const pullRequests =
+            waiting === "nothing"
+              ? []
+              : list.pullRequests.filter((pull) => pull.pullRequest.title === "Builds take turns");
+          await route.fulfill({ response, json: { ...list, pullRequests } });
+        });
+        await page.goto(HOME);
+        if (waiting === "nothing") {
+          await expect(needsYou).toContainText("Nothing needs you");
+          await expect(needsYou.getByRole("listitem")).toHaveCount(0);
+        } else {
+          await expect(needsYou.getByRole("listitem")).toHaveCount(1);
+        }
+        await expect(nextUp.getByRole("region", { name: "Build #197" })).toBeVisible();
+        await expect(main.getByRole("status")).toHaveText("Passed");
+        const [needs, next, below] = await Promise.all([
+          needsYou.boundingBox(),
+          nextUp.boundingBox(),
+          main.boundingBox(),
+        ]);
+        if (needs === null || next === null || below === null) throw new Error("Not on the page");
+        return { needs, next, below };
+      };
+
+      const one = await showsHomeWith("one row");
+      const none = await showsHomeWith("nothing");
+      await shot(page, "tablet-home-nothing-needs-you");
+      expect(Math.round(none.needs.height)).toBe(Math.round(one.needs.height));
+      expect(Math.round(none.needs.y)).toBe(Math.round(one.needs.y));
+      expect([Math.round(none.next.x), Math.round(none.next.y)]).toEqual([
+        Math.round(one.next.x),
+        Math.round(one.next.y),
+      ]);
+      expect(Math.round(none.below.y)).toBe(Math.round(one.below.y));
+      await page.unrouteAll({ behavior: "ignoreErrors" });
       await request.post("/api/github/sign-out", { data: {} });
     });
 

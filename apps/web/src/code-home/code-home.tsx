@@ -56,7 +56,7 @@ const known = <T,>(loaded: FromWorker<T>) => (loaded.kind === "loaded" ? loaded.
  * A code workspace's page under its name (#301; Paper, "Code workspace Home", desktop, tablet and
  * cover screen): its one line and its connections line (#308), its tabs (Home · Sessions · PRs),
  * and on Home, in a fixed order, Needs you, Running, Next up, then the message box at the foot.
- * Each block hides when it's empty, so a new workspace shows only its name, its line and the box.
+ * Its blocks are fixed (#283): an empty one keeps its place with one quiet line, so nothing jumps.
  * Its knowledge lives in its repository, so it has no context file, Things or skills here.
  */
 export default function CodeHome(props: {
@@ -92,7 +92,7 @@ export default function CodeHome(props: {
     key: workspace.id,
     load: async () => {
       const loaded = await loadNextUp(workspace.id);
-      // Not signed in, say: there's no Next up, so its block goes.
+      // Not signed in, say: there's no Next up, so its block says so.
       return loaded.kind === "offline"
         ? undefined
         : loaded.kind === "loaded"
@@ -139,15 +139,7 @@ export default function CodeHome(props: {
       ? [{ hash: "prs", label: TABS.prs, count: pulls.length }]
       : []),
   ];
-  // The tabs keep their row until the pull requests are known, so a PRs tab never pushes in.
-  const showsTabs = tabs.length > 1 || open === undefined;
   const chosen = tabs.some((each) => each.hash === tab) ? tab : "";
-  const anyLeft =
-    needsPending ||
-    needs.length > 0 ||
-    setup.state === "opened" ||
-    list.sessions.some((session) => session.now.kind === "working");
-  const beside = layout !== "cover" && anyLeft && (nextUp === undefined || nextUp.length > 0);
 
   return (
     <div data-code-home="">
@@ -183,11 +175,10 @@ export default function CodeHome(props: {
         <SignIns part="github-notice" />
       </Suspense>
 
-      {showsTabs && (
-        <div className="mt-3.5">
-          <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} />
-        </div>
-      )}
+      {/* The tabs keep their row with Home alone, so one coming or going never moves the blocks (#283). */}
+      <div className="mt-3.5">
+        <WorkspaceTabs workspaceId={workspace.id} tabs={tabs} chosen={chosen} />
+      </div>
 
       {chosen === "sessions" ? (
         <div className="mt-4 flex flex-col gap-4">
@@ -198,31 +189,27 @@ export default function CodeHome(props: {
           <PullRequests workspaceId={workspace.id} sessions={list.sessions} open={open} />
         </div>
       ) : (
-        <div className="mt-4 flex flex-col gap-3">
-          <div className="flex flex-col items-stretch gap-3.5 md:flex-row md:items-start">
-            {anyLeft && (
-              <div className="flex min-w-0 grow basis-0 flex-col gap-3.5">
-                <NeedsYou
-                  workspaceId={workspace.id}
-                  needs={needs}
-                  pending={needsPending}
-                  setup={setup}
-                  onSetup={(now) => KEPT_SETUP.set(workspace.id, now)}
-                  onChanged={changed}
-                />
-                <Running
-                  workspaceId={workspace.id}
-                  sessions={list.sessions}
-                  running={list.running}
-                />
-              </div>
-            )}
+        // A little closer than the other tabs, so with Running always in its place (#283) Home
+        // still fits the unfolded Fold's screen (#335).
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="flex flex-col items-stretch gap-2.5 md:flex-row md:items-start md:gap-3.5">
+            <div className="flex min-w-0 grow basis-0 flex-col gap-2.5">
+              <NeedsYou
+                workspaceId={workspace.id}
+                needs={needs}
+                pending={needsPending}
+                setup={setup}
+                onSetup={(now) => KEPT_SETUP.set(workspace.id, now)}
+                onChanged={changed}
+              />
+              <Running workspaceId={workspace.id} sessions={list.sessions} running={list.running} />
+            </div>
             {providers.kind === "loaded" && (
               <NextUp
                 workspaceId={workspace.id}
                 issues={nextUp}
                 providers={providers.data.providers}
-                beside={beside}
+                beside={layout !== "cover"}
               />
             )}
           </div>

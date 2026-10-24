@@ -77,6 +77,7 @@ export default function HandheldFrame(props: {
       root.setProperty("--frame-right", `${r?.offsetWidth ?? 0}px`);
       root.setProperty("--frame-bar", `${b?.offsetHeight ?? 0}px`);
       root.setProperty("--frame-bottom", `${all?.offsetHeight ?? 0}px`);
+      document.documentElement.dataset.frameMeasured = "";
     };
     const observer = new ResizeObserver(measure);
     for (const piece of [left, right, bar, bottom]) {
@@ -86,6 +87,7 @@ export default function HandheldFrame(props: {
     return () => {
       observer.disconnect();
       for (const inset of INSETS) root.removeProperty(inset);
+      delete document.documentElement.dataset.frameMeasured;
     };
   }, [layout]);
 
