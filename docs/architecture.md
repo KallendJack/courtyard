@@ -317,7 +317,7 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   **`hooks/`:** shared `use…` functions only this app uses; `useAction` (`packages/ui/hooks/use-action.ts`: an
   action's busy state and its error, #330) is the package's; a component's own stays beside it. **`lib/`:** small
   helpers shared by pages. **`styles.css`:** Tailwind with the theme, `packages/ui/theme.css` (Handheld, dark
-  whatever the device's setting, #210), and which files' classes load later.
+  whatever the device's setting, #210), and which files' classes load later; the stylesheets loaded later `@reference` it. The app loads it through `lib/app.css`, which adds `packages/ui`'s classes, kept out of `styles.css` so they don't land in every later sheet.
 - **`packages/ui`** ([its README](../packages/ui/README.md), #703): the theme and the pieces both apps use, so
   Fabrication (ADR 0036) looks and behaves as the web app does: the page layout, the `Scroller`, the loading piece,
   the buttons and the busy button, the error line, `useAction`, `classes`, what the frame offers a page and Talk, and

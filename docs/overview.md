@@ -55,7 +55,7 @@ The API tests are in `apps/worker/test/`, beside `src/`.
 | `api/` | Talking to the worker (each feature's own calls are in its `api.ts`) |
 | `routes/` | One file per page |
 | `lib/` | Small helpers: times, words, stylesheets |
-| `main.tsx`, `styles.css` | Start the app, and its stylesheet: Tailwind, the theme from `packages/ui`, and which classes load later |
+| `main.tsx`, `styles.css` | Start the app, and its stylesheet: Tailwind, the theme from `packages/ui`, and which classes load later (the app loads it through `lib/app.css`, which adds `packages/ui`'s classes) |
 
 **Shared pieces, `packages/ui`**
 
