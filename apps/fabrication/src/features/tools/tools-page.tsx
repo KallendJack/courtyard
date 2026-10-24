@@ -16,6 +16,7 @@ import {
   recount,
   startingPicks,
   tickHeard,
+  tileNote,
   toggle,
   unchanged,
 } from "./picks.ts";
@@ -28,9 +29,24 @@ import { type Ticking, ToolTiles } from "./tiles.tsx";
  */
 const ASKED = "fabrication-tools-asked";
 
-/** Whether Your tools has been skipped or saved on this visit. */
-export const toolsAsked = () => sessionStorage.getItem(ASKED) !== null;
-export const askedTools = () => sessionStorage.setItem(ASKED, "yes");
+/**
+ * Whether Your tools has been skipped or saved on this visit. Storage that's blocked (a private
+ * window) keeps nothing, so Your tools asks again, never stopping a Build from opening.
+ */
+export const toolsAsked = () => {
+  try {
+    return sessionStorage.getItem(ASKED) !== null;
+  } catch {
+    return false;
+  }
+};
+export const askedTools = () => {
+  try {
+    sessionStorage.setItem(ASKED, "yes");
+  } catch {
+    // Kept for nothing: the next Build asks again.
+  }
+};
 
 /** A panel, as the Build's page has them. */
 const PANEL = "flex min-h-0 flex-col rounded-card border border-border bg-surface";
@@ -70,6 +86,7 @@ export function ToolsPage(props: { tools: YourTools; back: string | undefined })
     recount: (name, by) => changeTo(recount(picks, name, by)),
     add: (name) => changeTo(tickHeard(picks, [{ name }])),
     describePrinter: (printer) => changeTo(describePrinter(picks, printer)),
+    noteOf: (pick) => tileNote(tools, pick),
   };
 
   const save = useAction(async () => {

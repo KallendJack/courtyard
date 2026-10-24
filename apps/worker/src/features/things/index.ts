@@ -363,7 +363,7 @@ const fieldsChanged = (
 ): NonNullable<ThingSave["fields"]> => {
   const changed: Record<string, string | null> = {};
   for (const [, field] of FILE_KEYS) {
-    if (field === "photo" || field === "subject") continue;
+    if (field === "photo" || field === "subject" || field === "tile") continue;
     // An item is what a Thing is when its file doesn't say.
     const unsaid = (value: unknown) => (field === "kind" && value === "item" ? undefined : value);
     const was = unsaid(before?.[field]);

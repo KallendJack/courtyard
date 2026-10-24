@@ -17,13 +17,16 @@ const noToolsSaved = async (page: Page) => {
   expect([200, 400]).toContain(cleared.status());
 };
 
-/** A workspace with a hand saw in its Things, and the golden bench as its project's step's Build. */
+/**
+ * A workspace with a tenon saw in its Things, which is the Hand saw tile, and the golden bench as
+ * its project's step's Build.
+ */
 const garageWithBuild = async (page: Page) => {
   await newWorkspace(page, `Tools garage ${Date.now()}`);
   await startSaving(
     page,
     [
-      "thing add: name Hand saw | status have",
+      "thing add: name Tenon saw | status have",
       `project: ${JSON.stringify({
         name: "Make a bench",
         add_steps: [{ kind: "you can do this", text: "Build the bench" }],
@@ -79,8 +82,12 @@ test.describe("on the unfolded Fold", () => {
     ]) {
       await expect(page.getByRole("heading", { name: group })).toBeVisible();
     }
-    // The garage's hand saw comes ticked, to move with the Save.
+    // The garage's tenon saw comes ticked as the Hand saw, saying what moves with the Save.
     await expect(tile(page, "Hand saw")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText(/^Tenon saw · from Tools garage \d+$/)).toBeVisible();
+    await expect(tile(page, "Hand saw")).toHaveAccessibleDescription(
+      /^Tenon saw · from Tools garage \d+$/,
+    );
     await expect(tile(page, "Jigsaw")).toHaveAttribute("aria-pressed", "false");
 
     // Ticking, and a count.
@@ -111,10 +118,13 @@ test.describe("on the unfolded Fold", () => {
     await expect(page.getByRole("status")).toContainText("Saved your tools.");
     await expect(page.getByRole("button", { name: "Done" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Save 7 tools" })).toBeDisabled();
+    // Moved, it's still the owner's tenon saw.
+    await expect(tile(page, "Hand saw")).toHaveAccessibleDescription("Tenon saw");
     await page.getByRole("button", { name: "Undo" }).click();
     await expect(page.getByRole("status")).toContainText("Undone: your tools are as they were.");
-    // The hand saw is back in the garage, so it comes ticked again.
+    // The tenon saw is back in the garage, so it comes ticked again.
     await expect(tile(page, "Hand saw")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText(/^Tenon saw · from Tools garage \d+$/)).toBeVisible();
     await expect(tile(page, "Workmate")).toHaveAttribute("aria-pressed", "false");
 
     // Skip for now goes straight on to the Build.

@@ -10,6 +10,7 @@ import {
   YourTools,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createFakeProvider } from "../src/providers/fake.ts";
 import {
   asOwner,
   changesIn,
@@ -241,8 +242,13 @@ describe("a workspace's tools, moved", () => {
     expect(response.status).toBe(200);
     const saved = ToolsSaved.parse(await response.json());
     expect(saved.tools.found.map(({ thingName }) => thingName)).toEqual(["Router", "Tape measure"]);
-    expect(await toolFile("clamps")).toBe(
-      "---\nname: Clamps\nstatus: have\nkind: tool\ncount: 2\nbrand: Bessey, 300 mm\n---\n\n- 2026-09-01: Bought two\n",
+    // The owner's name stays, the tile it's ticked as beside it.
+    expect(saved.tools.tools.map(({ name, tile }) => [name, tile])).toEqual([
+      ["F-clamps", "Clamps"],
+      ["Hand saw", undefined],
+    ]);
+    expect(await toolFile("f-clamps")).toBe(
+      "---\nname: F-clamps\nstatus: have\nkind: tool\ncount: 2\nbrand: Bessey, 300 mm\ntile: Clamps\n---\n\n- 2026-09-01: Bought two\n",
     );
     await expect(garageThing("f-clamps")).rejects.toThrow();
     const garage = ThingList.parse(await (await request("/api/workspaces/garage/things")).json());
@@ -251,10 +257,22 @@ describe("a workspace's tools, moved", () => {
       "Courtyard-Change: thing",
       "Courtyard-Place: owner-context",
       "Courtyard-Place: workspace/garage",
-      "Courtyard-File: things/clamps.md",
+      "Courtyard-File: things/f-clamps.md",
       "Courtyard-File: things/hand-saw.md",
       "Courtyard-File: garage/things/f-clamps.md",
     ]);
+
+    // Ticked again by its tile, it's still the owner's F-clamps.
+    const recounted = ToolsSaved.parse(
+      await (await saveTools(request, [{ name: "Clamps", count: 3 }, { name: "Hand saw" }])).json(),
+    );
+    expect(recounted.tools.tools.map(({ name, count }) => [name, count])).toEqual([
+      ["F-clamps", 3],
+      ["Hand saw", undefined],
+    ]);
+    expect(await toolFile("f-clamps")).toContain("name: F-clamps\n");
+    await expect(toolFile("clamps")).rejects.toThrow();
+    await postJson(request, "/api/fabrication/tools/undo", { change: recounted.change });
 
     const undone = await postJson(request, "/api/fabrication/tools/undo", {
       change: saved.change,
@@ -281,7 +299,10 @@ describe("a workspace's tools, moved", () => {
 
 describe("Or just say it", () => {
   it("ticks the tools a model heard, counts and all, and saves nothing", async () => {
-    const request = await asOwner(testWorker({ root }));
+    // The fake's scripted answer, so no real model is needed (CI has none).
+    const request = await asOwner(
+      testWorker({ root, providers: [createFakeProvider({ delayMs: 0 })] }),
+    );
 
     const response = await postJson(request, "/api/fabrication/tools/heard", {
       said: "A hand saw, the Workmate and two clamps",

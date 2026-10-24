@@ -58,7 +58,8 @@ or Recent changes.
 - **The owner's tools** (`tools.ts`, ADR 0037): Things of kind tool in the context folder's own `things/`, so every
   workspace and Build sees the same ones; `sessions/` lists them in every planning turn. A Save writes them all as one
   change: a tool given is written (its count, make and size; a size gives it a subject ID), one not given is removed,
-  and a workspace's Thing a tool moves from goes with it, its history and photo too. A Thing with parts never moves.
+  and a workspace's Thing a tool moves from goes with it, its name, history and photo too (its `tile` kept beside
+  a name that isn't the tile's: F-clamps are Clamps). A Thing with parts never moves.
   Undo takes the whole Save back. "Or just say it" is one question to the errand model (`prompts/tools.ts`), each
   tool by a tile's name or the owner's own, once.
 - **The chat** (`chat.ts`): which session is the Build's, and its events read as the chat's lines, through

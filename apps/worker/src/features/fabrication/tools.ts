@@ -58,6 +58,9 @@ export type ToolsRefusal =
   | { readonly kind: "has-parts"; readonly name: string }
   | { readonly kind: "storage" };
 
+/** A tool's name as compared, and as its file is named: "clamps" is the Clamps tile. */
+const keyOf = (name: string) => slugFor(name, { slug: ThingSlug, kind: "thing" });
+
 /** A path in the owner's tools' folder, from the context folder's top, as changes name it. */
 const ownerPath = (path: string) => `${OWNER_THINGS_FOLDER}/${path}`;
 
@@ -179,7 +182,9 @@ const movingOf = async (
  * Saves the owner's tools as they ticked them, as one change: each tool written as a Thing of kind
  * tool (a new one, or one whose count, make or size changed), each one not given removed, and each
  * workspace's Thing a tool moves from removed there, what it held (its details, history and photo)
- * going with it. A tool with a size gets its subject ID (ADR 0037). Undo takes it back whole.
+ * going with it. Each keeps the owner's name for it, its tile kept beside it when that's another
+ * (F-clamps, ticked as Clamps). A tool with a size gets its subject ID (ADR 0037). Undo takes it
+ * back whole.
  */
 export const saveTools = async (
   target: ToolsTarget,
@@ -195,23 +200,35 @@ export const saveTools = async (
       const toolFile = (name: string) => join(contextDir, OWNER_THINGS_FOLDER, name);
       const read = await readTools(contextDir);
       if (!read.ok) return read;
-      const current = new Map(read.value.tools.map((tool) => [tool.summary.slug, tool]));
-      /** Each tool given, by its file's name, named as first given. */
-      const slugs = new Map<ThingSlug, string>();
+      /** Each tool given, by its tile's or its own name as a file would be named, as first given. */
+      const given = new Map<ThingSlug, string>();
+      /** Each tool's file written or kept, by its name. */
+      const slugs = new Set<ThingSlug>();
       const writes: { slug: ThingSlug; text: string; photo?: Uint8Array }[] = [];
       const leaving: Moving[] = [];
 
       for (const pick of picks) {
-        const slug = slugFor(pick.name, { slug: ThingSlug, kind: "thing" });
+        const key = keyOf(pick.name);
+        if (key === undefined) {
+          return err({ kind: "invalid", problem: "A tool's name needs a letter or a digit." });
+        }
+        const first = given.get(key);
+        if (first !== undefined) return err({ kind: "twice", name: first });
+        given.set(key, pick.name);
+        const moving = pick.from === undefined ? undefined : await movingOf(contextDir, pick.from);
+        if (moving !== undefined && !moving.ok) return moving;
+        // The tool saved that a pick is, by its tile or its own name. The owner's name for it stays:
+        // the one saved, else the moved Thing's (their F-clamps, ticked as Clamps), else the pick's.
+        const there = read.value.tools.find(
+          ({ summary }) => keyOf(summary.tile ?? summary.name) === key,
+        );
+        const name = there?.summary.name ?? moving?.value.thing.summary.name ?? pick.name;
+        const slug = there?.summary.slug ?? keyOf(name);
         if (slug === undefined) {
           return err({ kind: "invalid", problem: "A tool's name needs a letter or a digit." });
         }
-        const first = slugs.get(slug);
-        if (first !== undefined) return err({ kind: "twice", name: first });
-        slugs.set(slug, pick.name);
-        const moving = pick.from === undefined ? undefined : await movingOf(contextDir, pick.from);
-        if (moving !== undefined && !moving.ok) return moving;
-        const there = current.get(slug);
+        if (slugs.has(slug)) return err({ kind: "twice", name });
+        slugs.add(slug);
         const fromThere = there === undefined ? undefined : readThingText(there.text);
         const fromMoving =
           moving === undefined ? undefined : readThingText(moving.value.thing.text);
@@ -219,7 +236,7 @@ export const saveTools = async (
         // A tool the owner has already keeps what it holds; one moved in brings what it held.
         const were: Partial<ThingFields> =
           fromThere?.value.fields ?? fromMoving?.value.fields ?? {};
-        const { partOf: _partOf, photo: _photo, ...kept } = were;
+        const { partOf: _partOf, photo: _photo, tile: _tile, ...kept } = were;
         const movedPhoto = moving?.value.thing.summary.photo && there === undefined;
         const photo = movedPhoto
           ? await readBytes(
@@ -229,9 +246,11 @@ export const saveTools = async (
         if (photo !== undefined && !photo.ok) return err({ kind: "storage" });
         const merged: Record<string, unknown> = {
           ...kept,
-          name: pick.name,
+          name,
           status: "have",
           kind: "tool",
+          // The tile it's ticked as, when that isn't its own name.
+          ...(keyOf(name) === key ? {} : { tile: pick.name }),
           count: pick.count === 1 ? undefined : pick.count,
           ...(pick.brand === undefined ? {} : { brand: pick.brand }),
           ...(pick.size === undefined ? {} : { size: pick.size }),

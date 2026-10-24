@@ -14,6 +14,7 @@ export const FILE_KEYS = [
   ["part of", "partOf"],
   ["photo", "photo"],
   ["subject", "subject"],
+  ["tile", "tile"],
   ["upcoming", "upcoming"],
   ["upcoming price", "upcomingPrice"],
   ["upcoming shop", "upcomingShop"],

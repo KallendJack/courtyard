@@ -1,9 +1,14 @@
-import { COMMON_TOOLS, PRINTER_TOOL, THING_FIELD_MAX_CHARACTERS } from "@courtyard/contract";
+import {
+  COMMON_TOOLS,
+  PRINTER_TOOL,
+  THING_FIELD_MAX_CHARACTERS,
+  type ToolPick,
+} from "@courtyard/contract";
 import { Button, IconButton } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Check, Minus, Plus } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { ownPicks, type Picks, pickOf, tileName } from "./picks.ts";
 
 /** A tile: the board's 44 high, its tool's name beside a tick when it's ticked. */
@@ -15,12 +20,19 @@ export type Ticking = {
   recount: (name: string, by: 1 | -1) => void;
   add: (name: string) => void;
   describePrinter: (printer: { brand: string; size: string }) => void;
+  /** The line under a ticked tile: what Save keeps or moves, if it says more than the tile. */
+  noteOf: (pick: ToolPick) => string | undefined;
 };
 
-/** One tool to tick: its name, and on a ticked one, one more or one fewer. */
+/**
+ * One tool to tick: its name, and on a ticked one, one more or one fewer, and the line saying what
+ * Save keeps or moves ("F-clamps · from Garage"), which describes the tile rather than naming it.
+ */
 function Tile(props: { name: string; picks: Picks; ticking: Ticking }) {
   const pick = pickOf(props.picks, props.name);
   const ticked = pick !== undefined;
+  const note = pick && props.ticking.noteOf(pick);
+  const id = useId();
   return (
     <li
       className={classes(
@@ -32,14 +44,23 @@ function Tile(props: { name: string; picks: Picks; ticking: Ticking }) {
       <button
         type="button"
         aria-pressed={ticked}
+        aria-labelledby={`${id}-name`}
+        aria-describedby={note === undefined ? undefined : `${id}-note`}
         onClick={() => props.ticking.toggle(props.name)}
         className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-row pl-3 text-left text-interface text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <span aria-hidden className="w-3.5 shrink-0 text-success">
           {ticked && <Check className="size-3.5" />}
         </span>
-        <span className={classes("truncate", ticked && "font-semibold")}>
-          {pick === undefined ? props.name : tileName(pick)}
+        <span className="flex min-w-0 flex-col">
+          <span id={`${id}-name`} className={classes("truncate", ticked && "font-semibold")}>
+            {pick === undefined ? props.name : tileName(pick)}
+          </span>
+          {note !== undefined && (
+            <span id={`${id}-note`} className="truncate text-label text-muted-foreground">
+              {note}
+            </span>
+          )}
         </span>
       </button>
       {ticked && (pick.count ?? 1) > 1 && (

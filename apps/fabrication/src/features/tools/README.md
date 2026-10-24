@@ -20,5 +20,6 @@ Build opens next, and its Tools panel's Your tools comes back here.
 | `say-it.tsx` | "Or just say it": the words said or typed, ticked by a model for the owner to check |
 | `picks.ts` | What's ticked: from the tools saved and the workspaces' tools to move, and each change to it |
 
-**Screens:** tapping a tile ticks or unticks it; a ticked one has + and − for how many. Ticking 3D printer asks for its
+**Screens:** tapping a tile ticks or unticks it; a ticked one has + and − for how many, and one small line saying what
+Save moves and from where ("F-clamps · from Garage"), or the owner's own name for a saved one. Ticking 3D printer asks for its
 make and plate size. Nothing is saved until Save, which is greyed out while the ticks are the tools as saved.

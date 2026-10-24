@@ -1359,7 +1359,8 @@ folder. Its front matter holds its fields: name, status (`have`, `want`, or `rep
 to replace), kind (`space` or `tool`, ADR 0037, #707; left out for an item, as every file before kinds is), count
 (left out for one), brand, bought (a year, a month or a day), price, shop (where it was bought, #245), condition, size, where,
 part of (another Thing's file name, one level only), photo (`photos/<slug>.jpg`, beside it), subject (its subject ID,
-which the worker gives it with its first size and it keeps through a rename, ADR 0037) and its **upcoming**
+which the worker gives it with its first size and it keeps through a rename, ADR 0037), tile (the tile Your tools
+ticks a tool as, when its own name is another: F-clamps are Clamps, #707) and its **upcoming**
 replacement (#602): upcoming (its make and model), upcoming price, upcoming shop, upcoming link (the page it's sold
 on) and upcoming why (one line); all but name and status can be left out. A part holds what's on it and what's coming next: a new one of a part that's there is
 upcoming on it, never a Thing of its own. A Thing with an upcoming one is one to replace, and once it's bought or

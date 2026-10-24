@@ -777,7 +777,7 @@ things live only in the worker's memory and go when it restarts.
 - `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter (an upcoming
   replacement among them, its `upcoming …` lines, #602) and a dated history, each file named by the Thing's name when it was added; `<workspace>/things/photos/<slug>.jpg`: a Thing's
   photo, resized to fit 1600 px and 300 KB, in plain git. A Thing's `kind` (item when left out), `count` and
-  `subject` ID (ADR 0037) are front matter too.
+  `subject` ID (ADR 0037) are front matter too, and a tool's `tile` when its name isn't the tile's (#707).
 - `things/<slug>.md` at the top: the owner's tools (#707, ADR 0037), Things of kind tool kept as a workspace's are
   (photos in `things/photos/`), so no workspace can be named `things`.
 - `<workspace>/projects/<slug>.md`: a planning workspace's projects (#603, ADR 0032): name, goal and status in front

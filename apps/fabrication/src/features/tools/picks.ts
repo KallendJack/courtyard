@@ -2,6 +2,7 @@ import {
   COMMON_TOOLS,
   PRINTER_TOOL,
   THING_COUNT_MAX,
+  type ThingSummary,
   type ToolPick,
   type YourTools,
 } from "@courtyard/contract";
@@ -22,6 +23,9 @@ export const pickOf = (picks: Picks, name: string) =>
 export const ownPicks = (picks: Picks) =>
   picks.filter((pick) => !TILES.some((tile) => keyOf(tile) === keyOf(pick.name)));
 
+/** The tile a saved tool is ticked as: its own name, unless it's kept a tile beside it (F-clamps). */
+const tileOf = (tool: ThingSummary) => tool.tile ?? tool.name;
+
 /**
  * What Your tools opens with: the owner's tools as saved, then the workspaces' tools not among
  * them, ticked to move with the Save (the garage's hand saw).
@@ -29,7 +33,7 @@ export const ownPicks = (picks: Picks) =>
 export const startingPicks = (tools: YourTools): Picks => {
   const saved = tools.tools.map(
     (tool): ToolPick => ({
-      name: tool.name,
+      name: tileOf(tool),
       ...(tool.count === undefined ? {} : { count: tool.count }),
       ...(tool.brand === undefined ? {} : { brand: tool.brand }),
       ...(tool.size === undefined ? {} : { size: tool.size }),
@@ -39,6 +43,22 @@ export const startingPicks = (tools: YourTools): Picks => {
     if (!pickOf(saved, found.tool.name)) saved.push(found.tool);
   }
   return saved;
+};
+
+/**
+ * The line under a ticked tile, so the owner sees what Save keeps or moves: the workspace's Thing
+ * it moves from ("F-clamps · from Garage"), or the owner's own name for a saved one ("F-clamps").
+ */
+export const tileNote = (tools: YourTools, pick: ToolPick) => {
+  const { from } = pick;
+  if (from !== undefined) {
+    const found = tools.found.find(
+      ({ tool }) => tool.from.workspace === from.workspace && tool.from.thing === from.thing,
+    );
+    return found && `${found.thingName} · from ${found.workspaceName}`;
+  }
+  const saved = tools.tools.find((tool) => keyOf(tileOf(tool)) === keyOf(pick.name));
+  return saved !== undefined && saved.name !== tileOf(saved) ? saved.name : undefined;
 };
 
 /** Ticks a tool by its name, or unticks it when it's ticked. */
@@ -98,7 +118,7 @@ export const unchanged = (picks: Picks, tools: YourTools) =>
   picks.every((pick) => pick.from === undefined) &&
   picks.length === tools.tools.length &&
   picks.every((pick) => {
-    const tool = tools.tools.find((one) => keyOf(one.name) === keyOf(pick.name));
+    const tool = tools.tools.find((one) => keyOf(tileOf(one)) === keyOf(pick.name));
     return (
       tool !== undefined &&
       (tool.count ?? 1) === (pick.count ?? 1) &&

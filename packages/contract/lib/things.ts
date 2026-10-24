@@ -105,7 +105,7 @@ export type ThingUpcoming = z.infer<typeof ThingUpcoming>;
 /**
  * A Thing's fields as its file's front matter holds them: its name and status, its kind and count
  * (ADR 0037), then the details it has, the Thing it's part of (by its file's name, one level only),
- * its photo, its subject ID and its upcoming replacement. What's next is a project's step (#603),
+ * its photo, its subject ID, a tool's tile and its upcoming replacement. What's next is a project's step (#603),
  * never a Thing's.
  */
 export const ThingFields = z
@@ -127,6 +127,11 @@ export const ThingFields = z
     partOf: ThingSlug.optional(),
     photo: ThingPhotoPath.optional(),
     subject: SubjectId.optional(),
+    /**
+     * The tile Your tools ticks a tool as (#707), when its own name isn't the tile's: the owner's
+     * F-clamps are Clamps. Its name stays the owner's.
+     */
+    tile: oneLine(THING_FIELD_MAX_CHARACTERS, "tile").optional(),
     /** Its upcoming replacement's name (#602), and the rest of it: see `ThingUpcoming`. */
     upcoming: ThingUpcoming.shape.name.optional(),
     upcomingPrice: ThingUpcoming.shape.price,
