@@ -355,7 +355,8 @@ describe("a quiet code session whose work clearing could lose", () => {
     const { branch, worktree } = await codeSession(
       "edit file notes.md: The rack goes on the back wall",
     );
-    await writeFile(join(origin, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n");
+    // Executable, or git on Linux ignores it.
+    await writeFile(join(origin, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
 
     clock += 4 * DAY_MS;
     await runJobs();
