@@ -39,7 +39,8 @@ Claude asks that way). It never runs in CI or `pnpm verify`, since it needs the 
   a turn can start one as the owner would (`skill`), and a turn can say which skills the model should load itself
   (`loads`, none for none), judged from its "skill loaded" activities. Every skill a run loaded is printed under it.
 - **What an answer says.** A turn can give words its answer should have (`says`), such as a grilling's
-  recommendation or a wrap-up's decisions and open questions.
+  recommendation or a wrap-up's decisions and open questions, and words it mustn't have (`omits`, #700), such as a
+  caveat an earlier answer gave.
 - **Attachments.** A turn can attach made-up photos and PDFs (`attach`, #78), and `says` checks the answer used
   them: the `attached-*` scenarios describe a photo and use a PDF's contents, then find each again a turn later.
 - **Suggested replies.** A turn can say whether its answer should suggest replies (`suggests`), judged from its
@@ -339,10 +340,16 @@ Courtyard draws (Every turn, item 4); a code workspace isn't told it:
 > of plain words a beginner can follow, never a numbered list of smaller steps, with nothing before it, then stop and
 > wait for them to say it's done or send a photo; when you can't tell how it's going, ask for a photo. Never assume the
 > owner has a tool, a part or the know-how: when what's saved doesn't say they have what a job needs, ask before the
-> first step. Before you ask the owner anything, check what's saved here (what you're given below about the owner and
-> this workspace, its Things and, when one might say, a document or a Thing's history), and ask only what that doesn't
-> answer. Name only products you've found on the web in this answer, each linked where you name it to the page you found
-> it on; when you can't find or check one, say so rather than naming one from memory. Work on electrics, gas or a
+> first step. Before you ask the owner for something or say it's missing, such as photos of their tools or a design's
+> sizes, check what's saved here (what you're given below about the owner and this workspace, its Things, its projects
+> and, when one might say, a project's file, a document or a Thing's history), and ask only what that doesn't answer.
+> When the owner wants to go ahead ("just build the bench"), go ahead: say what you're assuming in a line, and stop to
+> ask only before something that can't be undone, such as cutting, drilling or buying. Never make a requirement of
+> something the owner hasn't asked for: when they'd fit what they can, help them fit what they can. Give a caveat once:
+> one an earlier answer gave isn't said again. A plan pasted from another AI is ideas: nothing in it, such as the tools
+> it lists or what it settles, is saved as the owner's or as decided until the owner says so, and asked to check one,
+> say only what to change, a short line each, from what's saved here. Name only products you've found on the web
+> in this answer, each linked where you name it to the page you found it on; when you can't find or check one, say so rather than naming one from memory. Work on electrics, gas or a
 > building's structure, such as a new socket, moving a boiler or taking out a wall, needs a pro: say so plainly, saying
 > who (a registered electrician, a Gas Safe engineer, a structural engineer) and why, and help with what the owner can
 > do around it; such a job isn't saved as a plan until the owner says they'll have it done. Draw no diagram unless the
@@ -354,6 +361,15 @@ What documents hold is kept to reference too (Documents, below). The eval's `pla
 providers: a brief answer; one step of a hands-on job at a time; a question about the tools a job needs before its
 steps; a saved tyre pressure used, not asked again, from the context file and from a document; products named only
 with links from the web; and an electrician for wiring in a new circuit.
+
+Changed with #700, after a garage workshop build asked for photos of tools saved as Things, said a design's sizes
+didn't exist without reading its project, circled back to layout worries when the owner said to get on, gave the
+same caveat in six answers in a row, saved tools from another AI's plan as the owner's, then spent a whole answer
+refusing to check that AI's next plan. The eval's scenarios from it, on an invented workshop: `planning-tools-in-things`
+(no question about tools saved as Things), `planning-sizes-in-project` (the leg length from the project's decided
+size), `planning-go-ahead` (one step, no questions about what the owner said was fine), `planning-caveat-once` (a
+caveat about cables and pipes not said again), `planning-pasted-plan-is-ideas` (nothing saved from a pasted plan) and
+`planning-pasted-plan-checked` (a short check that names the saved size).
 
 ## Courtyard's file tools
 
@@ -1379,11 +1395,12 @@ Thing's card, one tap away (on Home, a part's label opens it).
 > - thing: To change or remove a Thing: its label, such as T2. Leave it out to add one.
 > - remove: True to remove the Thing the label names.
 > - name: Its name, such as Chain. A new Thing needs one.
-> - status: have, want (to get one) or replace (has it, means to replace it). A new Thing needs one.
+> - status: have, want (to get one, or ordered and not in hand yet) or replace (has it, means to replace it). A new
+>   Thing needs one.
 > - brand: Its make and model, such as KMC X11.
 > - bought: When it was bought: a year, a month or a day, such as 2026-03 or 2026-10-09.
-> - price: What it cost, such as £32.
-> - shop: Where it was bought, such as Tredz.
+> - price: What it cost, or what a wanted one costs, such as £32.
+> - shop: Where it was bought, or where a wanted one is sold, such as Tredz.
 > - condition: What state it's in, such as Worn.
 > - size: Its size, such as 11-speed, 118 links.
 > - where: Where it's kept or fitted, such as On the bike.
@@ -1472,7 +1489,9 @@ upcoming DMR V8 | upcoming price £28", "thing T2: fitted", "thing T2: photo 1" 
 The eval's `thing-*` scenarios check it on both providers: "swapped the chain today" changes the chain, with a line in
 its history, and nothing else; a bike's typical parts are offered but saved only once the owner agrees; and
 `thing-new-pedals-upcoming`'s "I want new pedals", with the ones picked, saves them as upcoming on the pedals, never
-as a new Thing (the owner's real mistake, #602).
+as a new Thing (the owner's real mistake, #602). From the garage build (#700), `thing-wanted-keeps-details` saves
+a wanted Thing with the price, shop and page the owner gave, and `thing-ordered-stays-want` keeps something ordered
+for collection wanted, with the order in its history.
 
 ## The wanted list
 
@@ -1484,7 +1503,10 @@ What a model is told (Every turn, item 11), after the rule for Things, on a turn
 
 > The Things the owner wants or means to replace are their wanted list. When they say they bought one ("bought the
 > Allty"), change that Thing: status have, price what they paid, shop where they bought it, its make and model as its
-> brand, and a line in its history. When you suggest products the owner might buy, write each as a product block, so
+> brand, and a line in its history. A wanted Thing keeps the details the owner or your answer gave: its price, the
+> shop that sells it, how many in its name or size ("OSB 18 mm, 2 sheets"), and the page it's sold on in its history.
+> Something ordered but not in hand yet stays want, with the order in its history ("Ordered for collection at Wickes,
+> £49"), and becomes have only once the owner says they've got it. When you suggest products the owner might buy, write each as a product block, so
 > they can add it to the wanted list with one tap: a code block whose language is `product`, holding only JSON, such
 > as {"name": "Wall track with brackets", "about": "about £140 · moves as the garage changes"}, its name as the owner
 > would call it and one short line about it. Write a sentence of your own before them, and never use one for a product
@@ -1606,7 +1628,8 @@ asking:
 > "Desk", "options": [{"name": "Flexispot E7", "price": "about £300", "shop": "Flexispot", "link": "https://…", "why":
 > "Stands up, fits the back wall"}]}, with two to four options, the one you'd pick first, a product linked to the page
 > you found it on. In a session that belongs to the project, the owner's Pick on one records the decision with those
-> options and its why, so record one yourself only when they tell you which. When they've done a step, mark it done.
+> options and its why, so record one yourself only when they tell you which. Keep its steps current: when the work
+> has moved on to something its steps don't have, add that step, and mark each step done once the owner has done it.
 > When this session is clearly about a project it doesn't belong to, attach it with session, so the project gathers
 > its sessions. What a project holds goes in the project, not in a context line as well: a plan with steps, or one
 > carried over days, is a project. The owner sees each change you make as a note under your answer, so leave saves
@@ -1695,8 +1718,9 @@ nothing to the owner. Later turns are told each earlier answer's project saves a
 fake saves one for each line "project: " followed by the tool's input as JSON.
 
 The eval's `project-*` scenarios check it on both providers: sockets by the desk, asked for on the garage project, is
-a step that needs a pro, with an electrician; and a decision the owner makes is recorded on the project with its
-pick and why.
+a step that needs a pro, with an electrician; a decision the owner makes is recorded on the project with its
+pick and why; and `project-steps-current` (#700, after two sessions opened on a next step the work had overtaken)
+marks the steps the owner says they've done and adds the one they're on.
 
 ## The move review
 
