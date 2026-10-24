@@ -1,14 +1,6 @@
-import { basename, dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { BuildsLock } from "@courtyard/builds";
-import {
-  type AlwaysAllow,
-  type ApprovalAsk,
-  CODE_SESSIONS_AT_ONCE,
-  type PullRequestReview,
-  type SessionId,
-  wordsOf,
-} from "@courtyard/contract";
-import { shownPath, staysInside } from "../../auth/workspace-files/index.ts";
+import { CODE_SESSIONS_AT_ONCE, type PullRequestReview, type SessionId } from "@courtyard/contract";
 import type {
   FoundPullRequest,
   GitHub,
@@ -16,22 +8,9 @@ import type {
   OpenFound,
 } from "../../integrations/github/index.ts";
 import { exists, isFolder, listFolder, removeFolder } from "../../lib/files.ts";
-import { type CommandEnv, git, gitFailureReason, gitIgnores, gitOrNothing } from "../../lib/git.ts";
+import { type CommandEnv, git, gitFailureReason, gitOrNothing } from "../../lib/git.ts";
 import { createOneAtATime } from "../../lib/one-at-a-time.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
-import {
-  allowsAll,
-  alwaysOffer,
-  type CommandRule,
-  checksEverything,
-  type IssueGap,
-  isBuild,
-  issueGapsIn,
-  isTaskOnly,
-  reachesOut,
-  ruleFor,
-  runsFromOf,
-} from "./allowlist.ts";
 import { BRANCH_PREFIX, helperBranchStem, isHelperBranchOf } from "./branches.ts";
 import { createBuildsQueue } from "./builds.ts";
 import {
@@ -55,6 +34,13 @@ export {
   namedAs,
 } from "./allowlist.ts";
 export { BUILD_HELD_ENV } from "./builds.ts";
+export {
+  type CodeRefusal,
+  type CommandApproval,
+  commandAllowed,
+  type EditPlace,
+  editPlaceIn,
+} from "./commands.ts";
 export type { BranchRefusal } from "./remote.ts";
 
 /**
@@ -86,222 +72,6 @@ export type HelperBranch = { readonly branch: string; readonly worktree: string 
 
 /** How a helper's branch merging back into its session branch went (#395). */
 export type MergeBack = "merged" | "clash";
-
-/** Why a code session's edit or command didn't happen, for the prompts module to word. */
-export type CodeRefusal =
-  /** The owner stopped the turn: nothing more is done. */
-  | { readonly kind: "stopped" }
-  /** A command that chains, pipes, redirects or substitutes, so it could run something else. */
-  | { readonly kind: "chained" }
-  /** A command whose quotes don't close. */
-  | { readonly kind: "unreadable" }
-  /** A command for the session branch only, such as committing, while the worktree is off it. */
-  | { readonly kind: "off-branch"; readonly branch: string }
-  /** The dev or start script, run in the foreground: it runs only as a task (#182). */
-  | { readonly kind: "task-only" }
-  /** A Lead's builder's heavy check asked to run as a task: it runs in the turn (#589). */
-  | { readonly kind: "check-in-turn" }
-  /** A Lead's builder's check of a whole suite, which CI runs (#589). */
-  | { readonly kind: "ci-runs-it" }
-  /** The owner denied the approval it needed (#171). */
-  | { readonly kind: "denied"; readonly what: "command" | "edit" | "tool" }
-  /** `gh issue create` filing an issue without a milestone, a category or one triage label (#324). */
-  | { readonly kind: "unfiled"; readonly gaps: readonly [IssueGap, ...IssueGap[]] };
-
-/**
- * A command only the owner can allow (#171): one off the command allowlist, one naming a path
- * outside the worktree, or one running code from a folder git ignores (#219).
- */
-export type CommandApproval = {
-  readonly kind: "needs-approval";
-  readonly reason: Extract<ApprovalAsk, { kind: "command" }>["reason"];
-  /** What Allow always would allow (#185), when it may be offered: never for one reaching out. */
-  readonly always?: AlwaysAllow;
-  /** Allow all for this task would cover it (#428): it runs without asking while that's on. */
-  readonly all?: true;
-};
-
-/**
- * Whether a command may run in a session's worktree without asking: one command, on the command
- * allowlist, naming no path outside the worktree, and, for committing, with the worktree on the
- * session branch. One that could run only with the owner's approval says so. An issue filed
- * without what every issue has is refused before anyone is asked (#324).
- */
-export const commandAllowed = async (
-  session: {
-    readonly worktree: string;
-    readonly branch: string;
-    /** Its pull request's number, once it has one (#172). */
-    readonly pullRequest?: number | undefined;
-    /** Its code workspace's command allowlist (`allowlistFor`). */
-    readonly allowlist: readonly CommandRule[];
-    /** The command is to run as a task (#182), so the dev and start scripts may. */
-    readonly asTask?: boolean;
-    /**
-     * It's a Lead's builder (#589): it runs its heavy checks in the turn, and none of a whole
-     * suite, which CI runs.
-     */
-    readonly builder?: boolean;
-  },
-  command: string,
-): Promise<Result<null, CodeRefusal | CommandApproval>> => {
-  const words = wordsOf(command);
-  if (!words.ok) return err({ kind: words.error });
-  if (session.builder === true && isBuild(command)) {
-    if (session.asTask === true) return err({ kind: "check-in-turn" });
-    if (checksEverything(command)) return err({ kind: "ci-runs-it" });
-  }
-  const [gap, ...gaps] = issueGapsIn(words.value);
-  if (gap !== undefined) return err({ kind: "unfiled", gaps: [gap, ...gaps] });
-  const work = { branch: session.branch, pullRequest: session.pullRequest };
-  if (session.asTask !== true && isTaskOnly(session.allowlist, words.value, work))
-    return err({ kind: "task-only" });
-  const rule = ruleFor(session.allowlist, words.value, work);
-  if (rule === undefined) {
-    const always = alwaysOffer(words.value);
-    return err({
-      kind: "needs-approval",
-      reason: "off-allowlist",
-      ...(always === undefined ? {} : { always }),
-      ...(allowsAll(session.worktree, words.value) ? { all: true } : {}),
-    });
-  }
-  if (reachesOut(session.worktree, rule, words.value)) {
-    return err({ kind: "needs-approval", reason: "reaches-out" });
-  }
-  // Code a download can bring is run only with the owner's OK (#219), and so is code where git
-  // can't say.
-  for (const from of runsFromOf(session.allowlist, words.value, work)) {
-    if ((await gitIgnores(session.worktree, from)) !== false) {
-      return err({ kind: "needs-approval", reason: "ignored-folder" });
-    }
-  }
-  if (rule.unpacksInto !== undefined) {
-    const folder = rule.unpacksInto(words.value.slice(rule.words.length));
-    if (folder === undefined || !(await unpacksSafely(session.worktree, folder))) {
-      return err({ kind: "needs-approval", reason: "off-allowlist" });
-    }
-  }
-  if (rule.onSessionBranch) {
-    const on = await gitOrNothing(session.worktree, ["branch", "--show-current"]);
-    if (on !== session.branch) return err({ kind: "off-branch", branch: session.branch });
-  }
-  return ok(null);
-};
-
-/**
- * Folders that decide what a repository's allowed commands run, wherever they are in it: git's own
- * (`.git`, a file in a worktree, saying where the repository is), git hooks' usual homes, Claude
- * Code's project settings and hooks, and `.github` (CI workflows and actions, which run with the
- * repository's secrets).
- */
-const SETUP_FOLDERS = new Set([".git", ".githooks", ".husky", ".lefthook", ".claude", ".github"]);
-/** Files that do, by name: package scripts and the package managers' own settings. */
-const SETUP_FILES = new Set([
-  "package.json",
-  "package.json5",
-  "package.yaml",
-  "pnpm-workspace.yaml",
-  ".npmrc",
-  ".yarnrc",
-  ".yarnrc.yml",
-  ".pnpmfile.cjs",
-  ".pnpmfile.mjs",
-]);
-
-/**
- * A path's part as Windows reads it: case aside, without trailing dots and spaces, or a stream
- * after a colon (`.GIT.` and `package.json::$DATA` are `.git` and `package.json` there).
- */
-const asWindowsReads = (part: string) =>
-  (part.split(":")[0] ?? "").replace(/[. ]+$/, "").toLowerCase();
-
-/**
- * Whether a path in a worktree (as the owner sees it, from the worktree) is a file that decides
- * what its allowed commands run: one of `SETUP_FILES`, lefthook's settings, anything in one of
- * `SETUP_FOLDERS` or in the repository's own git hooks folder (`hooks`, from the worktree), or a
- * name Windows could shorten one of those to (`GIT~1`).
- */
-const isSetup = (shown: string, hooks: string | undefined) => {
-  const parts = shown.split("/").map(asWindowsReads);
-  const name = parts.at(-1) ?? "";
-  const hooksParts = hooks?.split("/").map(asWindowsReads);
-  return (
-    SETUP_FILES.has(name) ||
-    /^\.?lefthook/.test(name) ||
-    parts.some((part) => SETUP_FOLDERS.has(part) || /~\d/.test(part)) ||
-    hooksParts?.every((part, at) => parts[at] === part) === true
-  );
-};
-
-/**
- * Setup folders and files Allow all for this task (#428) never edits without asking: git's own
- * (which says where the repository is, outside the worktree), `.github` (workflows that run with
- * the repository's secrets), Claude Code's settings (which decide what the model itself may do),
- * and the package managers' settings, which hold registry tokens.
- */
-const ALL_ASKING_SETUP = new Set([
-  ".git",
-  ".github",
-  ".claude",
-  ".npmrc",
-  ".yarnrc",
-  ".yarnrc.yml",
-]);
-
-/**
- * Whether Allow all for this task covers an edit to a setup file (`isSetup`): package scripts and
- * git hooks ("package.json, hooks and the like"), never one in `ALL_ASKING_SETUP` or a name
- * Windows could shorten one of those to.
- */
-const allowsAllSetup = (shown: string) =>
-  !shown
-    .split("/")
-    .map(asWindowsReads)
-    .some((part) => ALL_ASKING_SETUP.has(part) || /~\d/.test(part));
-
-/** Where an edit a model asks for in a session's worktree would land. */
-export type EditPlace =
-  /** Inside the worktree: it applies without asking. By its path as the owner sees it. */
-  | { readonly kind: "inside"; readonly shown: string }
-  /**
-   * Inside, but on a file that decides what its allowed commands run: it needs an approval, unless
-   * the session allows all and that covers it (`all`, #428).
-   */
-  | { readonly kind: "setup"; readonly shown: string; readonly all: boolean }
-  /** Outside the worktree, once symlinks are followed: it needs an approval. */
-  | { readonly kind: "outside" };
-
-/**
- * Where an edit of the file at `path` (from the worktree, or absolute) lands in a session's
- * worktree: inside it, on a file that decides what its allowed commands run (`isSetup`, which
- * includes the folder the repository's `core.hooksPath` names), or outside it.
- */
-export const editPlaceIn = async (worktree: string, path: string): Promise<EditPlace> => {
-  if (!(await staysInside(worktree, { paths: [path], globs: [] }))) return { kind: "outside" };
-  const shown = shownPath(worktree, path);
-  if (shown === "") return { kind: "outside" };
-  const hooksPath = await gitOrNothing(worktree, ["config", "--get", "core.hooksPath"]);
-  const hooks =
-    hooksPath === undefined || hooksPath === "" ? undefined : shownPath(worktree, hooksPath);
-  const inHooks = hooks !== undefined && !hooks.startsWith("..") && !isAbsolute(hooks);
-  return isSetup(shown, inHooks ? hooks : undefined)
-    ? { kind: "setup", shown, all: allowsAllSetup(shown) }
-    : { kind: "inside", shown };
-};
-
-/**
- * Whether a command may unpack files into a folder of the worktree without asking (`gh run
- * download -D`, #202): one git ignores, that's neither the worktree itself nor a file that decides
- * what allowed commands run (`editPlaceIn`). Anywhere else, what it unpacks could replace one of
- * those without the approval an edit to it needs.
- */
-const unpacksSafely = async (worktree: string, folder: string) => {
-  const place = await editPlaceIn(worktree, folder);
-  if (place.kind !== "inside") return false;
-  // With a trailing slash, git reads it as a folder even before the download makes it.
-  return (await gitIgnores(worktree, `${place.shown}/`)) === true;
-};
 
 /**
  * What a code session's commands get in their environment: its slot among the code sessions

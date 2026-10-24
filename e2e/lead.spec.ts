@@ -46,8 +46,8 @@ test("Run on the Builders board starts the Lead, which starts two builders and k
   const dialog = page.getByRole("dialog", { name: "Run", exact: true });
   await expect(dialog).toContainText("The Lead runs the build order");
   await expect(dialog).toContainText("beginning with #31 Hooks on the pegboard");
-  // Every builder allows all until its PR opens, and it keeps going through the night (#591).
-  await expect(dialog).toContainText("allows all until its PR opens");
+  // Every builder allows all until its PR merges, and it keeps going through the night (#591, #730).
+  await expect(dialog).toContainText("allows all until its PR merges");
   await expect(dialog).toContainText("pauses itself while 4 PRs wait for your review");
   await expect(dialog.getByRole("switch")).toHaveCount(0);
   await shot(page, "lead-confirm");
@@ -61,7 +61,31 @@ test("Run on the Builders board starts the Lead, which starts two builders and k
   await expect(board.getByRole("listitem")).toHaveCount(2);
   await expect(board.getByRole("link", { name: /^Answer / })).toHaveCount(2);
   await expect(board.getByRole("button", { name: "Pause" })).toBeVisible();
+  // Each row says its builder is allowing all (#730).
+  await expect(board.getByRole("listitem").filter({ hasText: "allowing all" })).toHaveCount(2);
   await shot(page, "lead-running");
+});
+
+test("a builder's session says it's allowing all until its PR merges, and Turn off stops it for that builder (#730)", async ({
+  page,
+}) => {
+  await page.goto(HOME);
+  const board = page.getByRole("region", { name: "Builders" });
+  const first = board.getByRole("listitem").first();
+  await expect(first).toContainText("allowing all");
+  await first.getByRole("link", { name: /^Answer / }).click();
+  await expect(page).toHaveURL(/\/workspaces\/toolshed\/sessions\//);
+
+  const strip = page.getByRole("region", { name: "Allowing all" });
+  await expect(strip).toHaveText(/^Allowing all · until its PR merges/);
+  await shot(page, "builder-allowing-all");
+  await strip.getByRole("button", { name: "Turn off" }).click();
+  await expect(strip).toBeHidden();
+
+  // Back on the board, only the other builder still allows all.
+  await page.goto(HOME);
+  await expect(board.getByRole("listitem")).toHaveCount(2);
+  await expect(board.getByRole("listitem").filter({ hasText: "allowing all" })).toHaveCount(1);
 });
 
 /** The Lead's chat (#347), which stays as its history (#592), opened by its session. */

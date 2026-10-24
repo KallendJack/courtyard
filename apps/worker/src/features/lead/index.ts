@@ -20,7 +20,7 @@ import {
   WorkspaceId,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { allowAllUntil } from "../../auth/allow-all/index.ts";
+import { builderAllowAllUntil } from "../../auth/allow-all/index.ts";
 import { readJsonFile, writeJsonFile } from "../../lib/files.ts";
 import { createOneAtATime } from "../../lib/one-at-a-time.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
@@ -636,11 +636,11 @@ export const createLead = (options: {
         }
         const model = await sessions.lastModelOf(kept.session);
         if (model === undefined) break;
-        // Every builder allows all until its pull request opens (#591), covering what it always has.
+        // Every builder allows all for its issue (#591, #730), covering what it always has.
         const built = await nextUp.build(workspaceId, issue.number, {
           ...model,
           byLead: true,
-          allowAllUntil: allowAllUntil("task", options.now()),
+          allowAllUntil: builderAllowAllUntil(options.now()),
         });
         if (!built.ok) {
           // Claimed by someone else meanwhile, or blocked by an open issue (#377): the next one, then.

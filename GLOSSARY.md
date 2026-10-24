@@ -625,8 +625,15 @@ allowlist, or an action of a tool connection that is not a safe action.
 _Avoid_: permission, confirmation, prompt
 
 **Command allowlist**:
-The commands a code workspace lets a model run without an approval.
+The commands a code workspace lets a model run without an approval, routine work inside the worktree among them.
 _Avoid_: whitelist, safe commands
+
+**Routine work**:
+What a code session does all the time inside its worktree, which never asks: editing, moving and generating its
+files (code given on the line included), the repository's check scripts, committing, bringing its branch up to date
+and pushing it. Only major actions ask: anything outside the worktree, pushing elsewhere or forcing, deleting a
+branch or repository, merging, credentials, publishing, the machine's services (#730).
+_Avoid_: safe commands, trivial work
 
 **Coding tools**:
 Courtyard's own tools for coding in a code session (run a command, write a file, edit a file), for a provider that
@@ -644,7 +651,7 @@ _Avoid_: don't ask again, trust, auto-approve
 One code session, for 1, 4 or 12 hours or until its task is done (its PR opens, 12 hours at most), runs commands
 off the allowlist and edits setup files without asking, each step marked "ran under Allow all", under a gold strip
 with Turn off. What must always ask still does. Turned on from an approval or the session's ⋯, never extended
-while on; every Lead's builder starts with it, until its pull request opens (#591).
+while on; every Lead's builder starts with it, for its issue, until its pull request merges (#591, #730).
 _Avoid_: yolo mode, skip permissions, auto-approve
 
 **Session branch**:

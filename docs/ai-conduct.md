@@ -403,12 +403,14 @@ works on its own session branch, in its own worktree. Its access line (Every tur
 
 > You're working on your own session branch of this workspace's repository, checked out in its own folder: your
 > working directory. Read, change and add files there as the work needs, and run the commands this workspace allows
-> without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, its package
-> scripts (in some of its packages too, with pnpm's --filter, -C or -r), vitest run, playwright test, tsc --noEmit,
-> biome check and biome format (with pnpm exec, never npx), the repository's own scripts and tests with node (node <script>,
-> node --test naming its test files), git and gh commands that only look, gh run download with -D naming a folder in your working directory
-> that git ignores, adding and committing on your branch, fetching origin and merging its branches into yours (git
-> merge origin/main), pushing it (git push -u origin HEAD), opening or
+> without asking: cat, ls, head, tail, wc, grep, rg, pwd and diff on files in your working directory, and mv, cp,
+> mkdir, rm, git mv and git rm on them, code given on the line (node -e, python -c) naming only files there, its
+> package scripts that check, test, build or format, such as lint or test:e2e (in some of its packages too, with
+> pnpm's --filter, -C or -r), vitest run, playwright test, tsc --noEmit, biome check and biome format (with pnpm
+> exec, never npx), the repository's own scripts and tests with node (node <script>, node --test naming its test
+> files), git and gh commands that only look, gh run download with -D naming a folder in your working directory that
+> git ignores, adding and committing on your branch, fetching origin and bringing its branches into yours (git merge
+> origin/main, git rebase origin/main), pushing it (git push -u origin HEAD, then git push), opening or
 > updating its pull request, and filing, labelling, commenting on and closing the repository's issues, all with gh. Anything else, such as a change outside your working directory, a change to what
 > decides how commands run (a package.json, git hooks, the .claude folder), running what's in a folder git ignores (where a download puts it), or another command, waits for the owner
 > to allow it; if they deny it, you're told, so find another way or tell the owner what you need. Run one command at a
@@ -537,10 +539,14 @@ The worker decides each edit and command before it happens, the same way for eve
 worktree, an edit inside it to a file that decides what its allowed commands run (a `package.json` or the package
 manager's settings, git hooks, `.claude`, git's own `.git`), a command off the command allowlist, and a command naming
 a path outside the worktree each wait for the owner's approval (#171), with no time limit; the model hears nothing
-until they answer. While the session allows all (#428), most of those run without asking; code given on the line
-(`node -e`, `python -c`, #464) is one of them, as the same code saved in the worktree would be, unless its text names
-a credential or a path outside the worktree, or node is told to load other code first. Allow lets it happen. Deny,
-and anything else refused, tells the model why, in one of these:
+until they answer. Routine work inside the worktree never asks (#730): moving, copying, making and removing its
+files, its other check scripts (`lint`, `test:e2e`), restoring files and bringing the branch onto its base, and code
+given on the line (`node -e`, `python -c`, #464), as the same code saved in the worktree would be, unless its text
+names a credential, a path outside the worktree or a file that decides what runs, or could run another program,
+reach the network or load a name it works out (ADR 0038, whose Consequences say what such a check of words can't
+catch), or node is told to load other code first. While the session allows all (#428), most of the rest run without
+asking too. Allow lets it happen.
+Deny, and anything else refused, tells the model why, in one of these:
 
 - A command the owner denied: "The owner denied that command, so it didn't run. Find another way, or tell the owner
   why it's needed."
@@ -551,6 +557,8 @@ and anything else refused, tells the model why, in one of these:
 - A commit, a push or a pull request command while the worktree is off the session branch: "Committing, pushing and
   opening your pull request work only on your session branch, <branch>, and the worktree isn't on it now, so that
   didn't run."
+- A Lead's builder's push to the default branch (#730), refused before the owner is asked: "A builder pushes only
+  its own branch, never <branch>: push yours (git push -u origin HEAD) and its pull request takes it there."
 - A command whose quotes don't close: "That command couldn't be read: check its quotes close."
 - `gh issue create` filing an issue with no milestone, no category label, or not exactly one triage label (#324),
   refused before the owner is asked where it would ask: "That issue wasn't filed: every issue goes in a milestone
@@ -787,8 +795,8 @@ never Later or one with none (#591). It holds back while 4 of its builders' pull
 while one of its builders waits for its model's usage limit to reset, while main's build is red (starting only the
 issue #355 files for it, titled "Main fails: …"), or while the owner's own code sessions leave only one place free; a
 builder waiting on the owner (an approval, a question) holds back only itself. It rests when nothing is ready to
-build, and starts again as soon as something is. Every builder starts allowing all until its pull request opens
-(#428), covering only what Allow all covers. Paused, it takes no turn of its own: the merges meanwhile wait, its row
+build, and starts again as soon as something is. Every builder starts allowing all for its issue, until its pull
+request merges or closes (#428, #730), covering only what Allow all covers. Paused, it takes no turn of its own: the merges meanwhile wait, its row
 saying how many ("Builders carry on · 2 merges to tidy"), until it runs again. A builder fixes its own failing checks and conflicts (Coding, above). The Lead and its builders send no "Turn
 finished" notifications: the owner hears only that a builder's pull request is ready to merge ("Ready to merge"), and
 what needs their decision (an approval, checks failing again).

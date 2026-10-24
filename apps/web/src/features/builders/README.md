@@ -26,7 +26,7 @@ book is "Checking · 2 min", history.test.ts 2nd in line; Notify me is "Ready fo
   Merge in order once more than one is ready.
 - **A row per builder** (`builders-board.tsx`): its issue's name, one of the eight statuses and since when, and what
   it's doing now (what its model does, the check and its place in line, what it asks, when it carries on, why it's
-  stuck). A button only when it acts: **Allow** (an approval) or **Answer** (a question, in its session) while
+  stuck), after a gold "allowing all" while it allows all (#730). A button only when it acts: **Allow** (an approval) or **Answer** (a question, in its session) while
   Waiting on you, in gold; **Review** while Ready for review, in moss; **Retry** while Stuck, in red. A row that's only
   working (Building, Checking, In CI, Waiting for the limit) has a quiet › and opens its session. A merged one leaves
   at the end of the day.

@@ -18,7 +18,9 @@ None of its own: `sessions/`' `POST /api/sessions/:id/allow-all` (for `1h`, `4h`
 - On from `allow-all-started` (the owner's turning it on, or the Lead giving it to every builder at its start, #591,
   marked `byLead`), which stores its end time.
 - Off at that time, at `allow-all-ended` (Turn off), when its pull request merges or closes, or, for `task`, when a
-  pull request opens.
+  pull request opens. A Lead's builder's is for its issue (#730, ADR 0038): its pull request opening leaves it on,
+  for a week at most (`builderAllowAllUntil`), and its summary says `byLead`, so its strip says "until its PR
+  merges". Turn off ends it for that builder alone, which then asks again.
 - It's never extended while on.
 - `sessions/` keeps each session's as its events are written and puts it on the session's summary (`allowingAll`),
   for its strip and its row in Running.

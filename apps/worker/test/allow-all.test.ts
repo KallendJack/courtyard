@@ -169,6 +169,12 @@ const STILL_ASKS: readonly (readonly [{ run: string } | { edit: string }, unknow
   [{ edit: ".github/workflows/ci.yml" }, ".github/workflows/ci.yml"],
   [{ edit: ".claude/settings.json" }, ".claude/settings.json"],
   [{ edit: ".git" }, ".git"],
+  // Git hooks, which would run on the owner's own commits after the task.
+  [{ edit: ".husky/pre-commit" }, ".husky/pre-commit"],
+  [{ edit: ".githooks/pre-push" }, ".githooks/pre-push"],
+  [{ edit: "lefthook.yml" }, "lefthook.yml"],
+  [{ run: "mv -t.husky pre-commit" }, "mv -t.husky pre-commit"],
+  [{ run: "cp pre-commit .husky/pre-commit" }, "cp pre-commit .husky/pre-commit"],
   // Programs that run another command.
   [{ run: "sh -c ls" }, "sh -c ls"],
   [{ run: "pnpm exec sh -c ls" }, "pnpm exec sh -c ls"],
@@ -181,6 +187,34 @@ const STILL_ASKS: readonly (readonly [{ run: string } | { edit: string }, unknow
     `python -c "import os; print(os.environ['GH_TOKEN'])"`,
     `node -e "console.log(require('os').homedir() + '/.ssh/config')"`,
     "node --require ./hook.js -e 1",
+    // Or one of the setup files Allow all never edits (#730).
+    `node -e "require('fs').rmSync('.github', { recursive: true })"`,
+    // Removing them asks however it's done.
+    "rm -rf .github",
+    "git rm -r .claude",
+    // Or writing them, a short option's value written onto it (#730).
+    "cp -t.claude settings.json",
+    "cp -t.github/workflows ci.yml",
+    // An environment in front that isn't a test run's, whatever the command after it (#730).
+    "GIT_TRACE=1 git push origin main",
+    "X=1 gh pr merge 5 --admin",
+    "X=1 git push --force origin HEAD",
+    "X=1 npm publish",
+    "X=1 kill 1234",
+    // Code that climbs out from the worktree, however deep a file it names (#730).
+    `node -e "const fs=require('fs');fs.writeFileSync('apps/a/b/c/d/e/f.ts','x');fs.readFileSync('../../../x')"`,
+    `node -e "require('fs').rmSync(require('path').join('apps/worker/src/x.ts','..','..','..','..','..'),{recursive:true})"`,
+    `node -e 'require("fs").writeFileSync("apps/worker/src/x.ts", "import { a } from \\"../../../../x.ts\\";")'`,
+    // Code that runs another program, reaches the network or loads what it works out (#730).
+    `node -e "require('child_process').execSync('git push --force origin main')"`,
+    `node -e "fetch(process.argv[1])" courtyard.example`,
+    `node -e "require('ht'+'tp')"`,
+    `node -e "eval('1')"`,
+    `bun -e "Bun.spawn(['ls'])"`,
+    `python3 -c "import subprocess; subprocess.run(['ls'])"`,
+    `perl -e "print 1"`,
+    // A path outside in braces the shell expands (#730).
+    "cat {/path/to/elsewhere/notes.md,README.md}",
   ].map((run) => [{ run }, run] as const),
 ];
 
@@ -190,7 +224,7 @@ describe("Allow all for this task", () => {
       { run: "pnpm add left-pad" },
       { run: "cargo test --release" },
       { edit: "package.json" },
-      { edit: ".husky/pre-commit" },
+      { edit: "pnpm-workspace.yaml" },
       { run: "pnpm exec eslint src" },
     ]);
     const request = await start(provider);
@@ -223,7 +257,7 @@ describe("Allow all for this task", () => {
       { kind: "ran-command", command: "pnpm add left-pad" },
       { kind: "ran-command", command: "cargo test --release" },
       { kind: "edited-file", path: "package.json" },
-      { kind: "edited-file", path: ".husky/pre-commit" },
+      { kind: "edited-file", path: "pnpm-workspace.yaml" },
       { kind: "ran-command", command: "pnpm exec eslint src" },
     ]);
     expect(answers.every((answer) => answer.ok)).toBe(true);
@@ -243,8 +277,8 @@ describe("Allow all for this task", () => {
     expect(asked.map((each) => each.all)).toEqual(STILL_ASKS.map(() => undefined));
   });
 
-  it("runs code given on the line (#464), which asks without it", async () => {
-    const commands = [
+  it("isn't needed for code given on the line that stays in the worktree (#464, #730), and covers it naming a package.json", async () => {
+    const routine = [
       `node -e "const fs=require('fs'); console.log(fs.readdirSync('apps').length)"`,
       "node --eval=1+1",
       "node -p process.version",
@@ -252,20 +286,21 @@ describe("Allow all for this task", () => {
       `deno eval "console.log(1)"`,
       "bun -e 1",
     ];
-    const { provider } = codingProvider(commands.map((run) => ({ run })));
+    const setup = `node -e "require('fs').writeFileSync('package.json', '{}')"`;
+    const { provider } = codingProvider([...routine, setup].map((run) => ({ run })));
     const request = await start(provider);
     const id = await startSession(request);
     const first = await denyingEach(request, id);
-    expect(askedAbout(first.asked)).toEqual(commands);
+    expect(askedAbout(first.asked)).toEqual([setup]);
+    expect(first.asked[0]?.all).toBe(true);
+    expect(ranUnderAllowAll(first.events)).toEqual([]);
     expect((await allowAll(request, id, "4h")).status).toBe(200);
 
     await sendAgain(request, id);
     const { asked, events } = await denyingEach(request, id, first.last);
 
     expect(asked).toEqual([]);
-    expect(ranUnderAllowAll(events)).toEqual(
-      commands.map((command) => ({ kind: "ran-command", command })),
-    );
+    expect(ranUnderAllowAll(events)).toEqual([{ kind: "ran-command", command: setup }]);
   });
 
   it("still asks before running what's in a folder git ignores (#219), never offering itself or Allow always", async () => {
