@@ -379,7 +379,10 @@ flame, person or the default book; a skill of the owner's gives one as `icon` in
 holds the format check (`checkSkill`, the reference validator's rules in TypeScript), which its own test runs on the
 house skills in `pnpm verify` and the worker runs on everyone's. It's a package of its own so it can move to a repo of its own (#88).
 `matt.json` pins the release of Matt Pocock's skills code workspaces get (ADR 0024): its version, the checksum of the
-copy the worker keeps, the ones the Skill picker lists, and the marks some of them show (`icons`).
+copy the worker keeps, the ones the Skill picker lists, and the marks some of them show (`icons`). Review use
+(`review-use`, #606) is the one house skill with a script: plain Node that reads the data folder's session logs and
+the context folder's workspace names, read-only, for the use review (its [README](../packages/skills/review-use/README.md)).
+The package's [README](../packages/skills/README.md) lists every house skill.
 
 ### The machine's builds lock: `packages/builds`
 
