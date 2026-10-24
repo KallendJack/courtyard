@@ -18,7 +18,6 @@ export {
   AttachmentId,
   MESSAGE_FIELD,
   PDF_TYPE,
-  PHOTO_TYPES,
   PhotoAttachment,
   PhotoMediaType,
 } from "./lib/attachment.ts";
@@ -30,7 +29,7 @@ export {
   sizeInWords,
   TOO_MANY_ATTACHMENTS,
 } from "./lib/attachment-file.ts";
-export { AuthState, MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, PasswordForm } from "./lib/auth.ts";
+export { AuthState, MIN_PASSWORD_LENGTH, PasswordForm } from "./lib/auth.ts";
 export { ContextBackup } from "./lib/backup.ts";
 export { ChangeId } from "./lib/change-id.ts";
 export {
@@ -41,14 +40,13 @@ export {
   RecentChangeUndo,
   Undone,
 } from "./lib/changes.ts";
-export { CHART_MAX_COLOURS, CHART_MAX_LABELS, Chart } from "./lib/chart.ts";
+export { Chart } from "./lib/chart.ts";
 export {
   BuilderStatus,
   BuildIssue,
   buildable,
   builderHash,
   builderIn,
-  GitHubLink,
   GitHubUnread,
   LEAD_BUILDERS,
   LEAD_REVIEWS_AT_MOST,
@@ -66,7 +64,6 @@ export {
   PaperConnecting,
   PaperFile,
   PaperFileList,
-  PaperLink,
   Roadmap,
   RoadmapIssue,
   RoadmapMilestone,
@@ -75,7 +72,7 @@ export {
   WorkspaceMain,
 } from "./lib/code-home.ts";
 export { CODE_SESSIONS_AT_ONCE, CodeSessionList } from "./lib/code-sessions.ts";
-export { type UnreadableCommand, wordsOf } from "./lib/command-words.ts";
+export { wordsOf } from "./lib/command-words.ts";
 export {
   DOCUMENT_MAX_CHARACTERS,
   DOCUMENT_NAME_MAX_LENGTH,
@@ -83,25 +80,13 @@ export {
   DocumentChanged,
   DocumentDetail,
   DocumentList,
-  DocumentName,
   DocumentRename,
   DocumentRenamed,
   DocumentSlug,
   DocumentSummary,
   SaveAsDocument,
 } from "./lib/documents.ts";
-export {
-  FLOOR_PLAN_MAX_ITEMS,
-  FloorPlan,
-  PlanFloorItem,
-  PlanItem,
-  PlanOpening,
-  PlanPartition,
-  PlanWall,
-  PlanWallItem,
-  PlanZone,
-  wallLength,
-} from "./lib/floor-plan.ts";
+export { FloorPlan, PlanItem, PlanOpening, PlanWall, wallLength } from "./lib/floor-plan.ts";
 export {
   FRESH_START_WORDS,
   FreshStartRequest,
@@ -110,13 +95,11 @@ export {
 } from "./lib/fresh-start.ts";
 export { FrictionPlace, FrictionReport } from "./lib/friction.ts";
 export { GitHubConnection } from "./lib/github.ts";
-export { GitHubRepoName } from "./lib/github-repo-name.ts";
 export {
   GitHubRepo,
   GitHubRepoList,
   NewRepo,
   NewRepoMade,
-  NewRepoName,
   NewRepoOffer,
   REPO_NAME_MAX_LENGTH,
   repoNameFrom,
@@ -153,7 +136,6 @@ export {
   MOVES_MAX,
   Move,
   MoveReview,
-  MoveShown,
   MovesMade,
   MoveTicks,
 } from "./lib/move-review.ts";
@@ -181,18 +163,10 @@ export {
   HomeSubject,
   PlanningHome,
 } from "./lib/planning-home.ts";
-export {
-  PREVIEW_COMMAND_MAX_LENGTH,
-  PREVIEW_SIZES,
-  Preview,
-  PreviewSize,
-  StartPreview,
-} from "./lib/preview.ts";
+export { PREVIEW_SIZES, Preview, PreviewSize, StartPreview } from "./lib/preview.ts";
 export { ProductBlock } from "./lib/product.ts";
 export {
-  DECISION_OPTIONS_MAX,
   nextStepOf,
-  PROJECT_FIELD_MAX_CHARACTERS,
   PROJECT_LINE_MAX_CHARACTERS,
   Project,
   ProjectChange,
@@ -212,8 +186,6 @@ export {
   OpenPullRequest,
   OpenPullRequestList,
   PullRequest,
-  PullRequestChanges,
-  PullRequestCheck,
   PullRequestChecks,
   PullRequestFix,
   PullRequestFixed,
@@ -240,7 +212,6 @@ export {
   FirstMessage,
   GetToKnowRequest,
   LinePlace,
-  MAX_MESSAGE_LENGTH,
   ModelDefault,
   ModelId,
   ModelInfo,
@@ -280,7 +251,6 @@ export {
 } from "./lib/session-event.ts";
 export {
   Doing,
-  ListedSession,
   NeedsYou,
   NeedYou,
   SessionList,
@@ -299,14 +269,13 @@ export {
   skillTitle,
   UsableSkillSummary,
 } from "./lib/skills.ts";
-export { SizeSource, SizeUnit, SourcedSize } from "./lib/sourced/size.ts";
+export { SourcedSize } from "./lib/sourced/size.ts";
 export {
   STATUS_ITEM_MAX_LENGTH,
   StatusItem,
   StatusLine,
 } from "./lib/status-line.ts";
 export {
-  RunningTask,
   RunningTasks,
   TASK_OUTPUT_MAX_CHARACTERS,
   TASKS_AT_ONCE,
@@ -320,8 +289,6 @@ export {
   THING_FORM_FIELD,
   THING_HISTORY_MAX_CHARACTERS,
   THING_PHOTO_FIELD,
-  THING_WHY_MAX_CHARACTERS,
-  ThingBought,
   ThingChange,
   ThingChanged,
   ThingDeleted,
@@ -332,7 +299,6 @@ export {
   ThingHistoryEntry,
   ThingList,
   ThingMark,
-  ThingPhotoPath,
   ThingProblem,
   ThingSave,
   ThingSlug,
@@ -348,7 +314,6 @@ export {
   USAGE_WARNS_AGAIN_AT,
   USAGE_WARNS_AT,
   UsageList,
-  UsageMeter,
   UsageNotNow,
   UsageWarning,
   UsageWindow,
@@ -359,7 +324,6 @@ export {
   CONTEXT_LINE_MAX_CHARACTERS,
   CONTEXT_SECTION_NAMES,
   ContextFile,
-  ContextLine,
   ContextSection,
   hasLines,
   NewWorkspace,

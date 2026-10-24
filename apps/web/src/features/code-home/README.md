@@ -15,8 +15,8 @@ Needs you has the owner's own session's approval, and Next up offers Build on th
 
 ## Screens
 
-- **Its name**, with one quiet ⋯ beside it (`components/workspace/workspace-menu.tsx`: Rename, Change icon and
-  Archive, #333), then its connections line under it; from a tablet up its tabs share the name's row, before the ⋯
+- **Its name**, with one quiet ⋯ beside it (`components/workspace/workspace-menu.tsx`: Rename, Change icon, Allowed
+  commands, Notify me and Archive, #333, #185, #493), then its connections line under it; from a tablet up its tabs share the name's row, before the ⋯
   (#503). Its one line stays in `workspace.json`, off the page.
 - **The Connections sheet** (`connections.tsx`): GitHub, and the Paper file to pick (the one named after the
   workspace picked already), or make; opened by itself as `#connections` right after New workspace → Code.

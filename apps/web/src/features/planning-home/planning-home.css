@@ -13,8 +13,8 @@
 
 /*
  * Home fills its place in the page; from a tablet up the middle is the room left between the
- * pinned header and footer (`Page`'s fill), and Next up fills it down to What Courtyard knows
- * (#398; Paper, "Planning Home, fixed block sizes").
+ * pinned header and footer (`Page`'s fill), which the main subject and the projects share (#398,
+ * #603).
  */
 [data-planning-home] {
   display: flex;
