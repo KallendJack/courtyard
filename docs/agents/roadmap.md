@@ -9,7 +9,9 @@ agent's memory. Inside a spec, order comes from GitHub's blocked-by links, as Ma
 - **Its description may give the build order inside it:** `Build order: #A → #B → #C.`, with a note when something
   waits on the owner. The line is optional and only orders: a code workspace's Next up offers every ready issue and
   every one that needs grilling, whether the line names it or not, the ones it names first in its order, then the
-  rest by number (#463). It ends at the first full stop, so notes go after it.
+  rest by number (#463). It ends at the first full stop, so notes go before it (`Order: the owner's, <date>.`) or
+  after it, never inside it: the worker also reads `Build order (<note>): …`, but the plain form is the one to write
+  (#687).
 - **Holding an issue back is "blocked by", never taking `ready-for-agent` off.** Issues that edit the same files are
   each marked blocked by the one before (GitHub's blocked by): Next up keeps a blocked one in its place, "After …",
   with no Build, and the Lead starts it once its blocker closes (#377).

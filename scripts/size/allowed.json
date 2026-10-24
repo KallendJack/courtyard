@@ -25,7 +25,7 @@
     "apps/worker/src/features/live/index.ts": 419,
     "apps/worker/src/features/matt-setup/index.ts": 790,
     "apps/worker/src/features/move-review/index.ts": 425,
-    "apps/worker/src/features/next-up/index.ts": 441,
+    "apps/worker/src/features/next-up/index.ts": 433,
     "apps/worker/src/features/notifications/index.ts": 429,
     "apps/worker/src/features/projects/index.ts": 584,
     "apps/worker/src/features/saves/index.ts": 430,

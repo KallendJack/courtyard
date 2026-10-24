@@ -1,0 +1,74 @@
+import type { BuyLine, BuyList, CutPlan } from "./build.ts";
+import type { Price, Sheet, Timber } from "./stock.ts";
+
+// A Build's buy list: how many of each thing to buy, in whole packs, at the prices the parameters
+// give. A line with no price is listed and counted, never guessed.
+
+/** One line: the packs that cover what's needed, and their cost when the price is known. */
+export const buyLine = (line: {
+  item: string;
+  kind: BuyLine["kind"];
+  for: string;
+  needed: number;
+  price: Price | undefined;
+}): BuyLine => {
+  const packOf = line.price?.packOf ?? 1;
+  const packs = Math.ceil(line.needed / packOf);
+  const { price, ...rest } = line;
+  if (!price) return { ...rest, packOf, packs };
+  return {
+    ...rest,
+    packOf,
+    packs,
+    price: {
+      pence: price.pence,
+      ...(price.shop === undefined ? {} : { shop: price.shop }),
+      ...(price.link === undefined ? {} : { link: price.link }),
+    },
+    total: packs * price.pence,
+  };
+};
+
+/** The lengths and sheets the cut plan uses, each with what it's for. */
+export const stockLines = (options: {
+  cutPlan: CutPlan;
+  timbers: readonly Timber[];
+  sheets: readonly Sheet[];
+  /** What each part is, by its label. */
+  names: ReadonlyMap<string, string>;
+}): BuyLine[] => {
+  const usedFor = (labels: readonly string[]) =>
+    [...new Set(labels)]
+      .map((label) => options.names.get(label)?.toLowerCase() ?? label)
+      .join(", ");
+  return [
+    ...options.cutPlan.timber.map((plan) =>
+      buyLine({
+        item: `${plan.stock}, ${plan.stockLength / 1000} m`,
+        kind: "timber",
+        for: usedFor(plan.lengths.flatMap((length) => length.cuts.map((cut) => cut.label))),
+        needed: plan.lengths.length,
+        price: options.timbers.find((timber) => timber.name === plan.stock)?.price,
+      }),
+    ),
+    ...options.cutPlan.sheets.map((plan) =>
+      buyLine({
+        item: `${plan.stock}, ${plan.sheetLength} × ${plan.sheetWidth}`,
+        kind: "sheet",
+        for: usedFor(plan.sheets.flatMap((sheet) => sheet.pieces.map((piece) => piece.label))),
+        needed: plan.sheets.length,
+        price: options.sheets.find((sheet) => sheet.name === plan.stock)?.price,
+      }),
+    ),
+  ];
+};
+
+/** The list, with the priced lines' total; lines needing none are left off. */
+export const buyListOf = (lines: readonly BuyLine[]): BuyList => {
+  const needed = lines.filter((line) => line.needed > 0);
+  return {
+    lines: needed,
+    total: needed.reduce((sum, line) => sum + (line.total ?? 0), 0),
+    unpriced: needed.filter((line) => line.total === undefined).length,
+  };
+};

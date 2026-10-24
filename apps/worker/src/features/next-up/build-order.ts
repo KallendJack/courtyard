@@ -1,6 +1,7 @@
 import type { FoundMilestone, GitHub, GitHubProblem } from "../../integrations/github/index.ts";
 import { ok, type Result } from "../../lib/result.ts";
-import { buildOrderOf, milestoneRank } from "./index.ts";
+import { buildOrderLineOf, buildOrderOf } from "./build-order-line.ts";
+import { milestoneRank } from "./index.ts";
 
 /**
  * Filing an issue the worker found for the Lead, in its place in the build order: a red main
@@ -24,24 +25,23 @@ const currentOf = (milestones: readonly FoundMilestone[]) =>
 
 /** A milestone's description with issue `number` first in its `Build order:` line, or a new one. */
 const putFirst = (description: string, number: number) => {
-  const line = /build order:[ \t]*/i.exec(description);
+  const line = buildOrderLineOf(description);
   if (line === null) {
     return description.trim() === ""
       ? `Build order: #${number}.`
       : `Build order: #${number}. ${description}`;
   }
-  const at = line.index + line[0].length;
+  const at = line.at + (/^[ \t]*/.exec(line.list)?.[0].length ?? 0);
   const then = buildOrderOf(description).length > 0 ? " → " : "";
   return `${description.slice(0, at)}#${number}${then}${description.slice(at)}`;
 };
 
 /** A milestone's description with issue `number` last in its `Build order:` line, or a new one. */
 const putLast = (description: string, number: number) => {
-  // The line as `buildOrderOf` reads it, to its full stop or its end.
-  const line = /build order:(.*?)(?:\.(?=\s|$)|$)/im.exec(description);
-  const last = [...(line?.[1] ?? "").matchAll(/#\d+/g)].at(-1);
+  const line = buildOrderLineOf(description);
+  const last = [...(line?.list ?? "").matchAll(/#\d+/g)].at(-1);
   if (line === null || last === undefined) return putFirst(description, number);
-  const at = line.index + "build order:".length + last.index + last[0].length;
+  const at = line.at + last.index + last[0].length;
   return `${description.slice(0, at)} → #${number}${description.slice(at)}`;
 };
 

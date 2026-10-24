@@ -53,6 +53,16 @@ The API tests are in `apps/worker/test/`, beside `src/`.
 | `lib/` | Small helpers: joining classes, times, words |
 | `main.tsx`, `styles.css` | Start the app, and the one theme |
 
+**Packages, `packages/`**
+
+| Package | What's in it |
+|---|---|
+| `contract` | The shapes the apps send each other |
+| `fabrication` | Fabrication's engine: a Build's parts, cut plan, buy list and steps, worked out from its template and parameters (ADR 0036) |
+| `skills` | Courtyard's own skills |
+| `builds` | The machine's builds lock |
+| `house` | The house standard's configs and size check |
+
 ## 3 · The features, by job
 
 ### 🤖 Talking to the models

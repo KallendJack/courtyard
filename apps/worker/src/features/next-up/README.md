@@ -22,8 +22,8 @@ gets "Building this: …" with the session's branch.
 - **What's listed:** its repository's open `ready-for-agent` issues through `github/`, less those claimed (a comment
   starting "Building this" that no later "Stopped" released, or an open pull request that closes it).
 - **The order:** milestone order (the number a milestone's title leads with, then Later, then none) and, inside a
-  milestone, the order its description's `Build order:` line lists, the rest by number (#336). The line only
-  orders: it never decides what shows (#463).
+  milestone, the order its description's `Build order:` line lists (a note in brackets before its colon is read too,
+  #687), the rest by number (#336). The line only orders: it never decides what shows (#463).
 - Asked of GitHub only when a page asks, and kept two minutes.
 - **GitHub refuses** (#519): when GitHub's hourly allowance is used up, or the read fails another way, `GET …/next-up`
   still answers 200 with the last list known and `unread`: `rate-limited` with `backAt` (from GitHub's

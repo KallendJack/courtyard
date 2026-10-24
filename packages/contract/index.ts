@@ -299,6 +299,7 @@ export {
   skillTitle,
   UsableSkillSummary,
 } from "./lib/skills.ts";
+export { SizeSource, SizeUnit, SourcedSize } from "./lib/sourced/size.ts";
 export {
   STATUS_ITEM_MAX_LENGTH,
   StatusItem,

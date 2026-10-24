@@ -17,6 +17,7 @@ import { buildIssueMessage, grillIssueMessage } from "../../prompts/index.ts";
 import type { Code } from "../code/index.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
 import { getWorkspace, type WorkspaceError } from "../workspaces/index.ts";
+import { buildOrderOf } from "./build-order-line.ts";
 import { roadmapOf } from "./roadmap.ts";
 
 /**
@@ -114,15 +115,6 @@ export const milestoneRank = (milestone: string | null): readonly [number, numbe
   if (milestone === null) return [2, 0];
   const leading = /^\s*(\d+)/.exec(milestone)?.[1];
   return leading === undefined ? [1, 0] : [0, Number(leading)];
-};
-
-/**
- * The issue numbers a milestone's description lists on its `Build order: #A → #B → #C` line
- * (docs/agents/roadmap.md), in that order: the line ends at a full stop or the line's end.
- */
-export const buildOrderOf = (description: string | null): readonly number[] => {
-  const line = /build order:(.*?)(?:\.(?=\s|$)|$)/im.exec(description ?? "")?.[1] ?? "";
-  return [...line.matchAll(/#(\d+)/g)].map((match) => Number(match[1]));
 };
 
 /** Where an issue comes in its milestone: its place on the Build order line, else after them all. */

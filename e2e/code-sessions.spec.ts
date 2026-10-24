@@ -437,13 +437,28 @@ test.describe("several code sessions at once (#174)", () => {
     for (const id of busy.splice(0)) await stopFirstTurn(request, id);
   });
 
+  /** How many code sessions are running across the worker. */
+  const running = async (request: APIRequestContext) => {
+    const response = await request.get("/api/workspaces/side-project/sessions");
+    return ((await response.json()) as { running: number }).running;
+  };
+
+  /**
+   * Starts busy sessions until every place is taken. Counted from the worker, not assumed: a
+   * session another test on the worker left waiting for the owner holds a place too (#717).
+   */
+  const takeEveryPlace = async (request: APIRequestContext) => {
+    for (let now = await running(request); now < AT_ONCE; now = await running(request)) {
+      busy.push(await startCoding(request, LONG_TASK));
+      await expect.poll(() => running(request)).toBeGreaterThan(now);
+    }
+  };
+
   test("one more waits, saying why, and starts once one of the others ends", async ({
     page,
     request,
   }) => {
-    for (let started = 0; started < AT_ONCE; started += 1) {
-      busy.push(await startCoding(request, LONG_TASK));
-    }
+    await takeEveryPlace(request);
 
     await page.goto("/workspaces/side-project");
     await chooseModel(page, "fake/echo");
@@ -469,9 +484,7 @@ test.describe("several code sessions at once (#174)", () => {
     page,
     request,
   }) => {
-    for (let started = 0; started < AT_ONCE; started += 1) {
-      busy.push(await startCoding(request, LONG_TASK));
-    }
+    await takeEveryPlace(request);
     await startCoding(request, "From session to pull request");
 
     await page.goto("/workspaces/side-project#sessions");
