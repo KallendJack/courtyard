@@ -3,13 +3,13 @@ import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { type Layout, type TalkTarget, useFinePointer } from "@courtyard/ui/frame/handheld.ts";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { createKept, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useEffect, useRef, useState } from "react";
 import { fileReport, loadPlace } from "../../features/friction/api.ts";
 import { type FilledIn, sizeWords } from "../../features/friction/filled-in.ts";
-import { CapsLabel } from "../layout/caps-label.tsx";
 import { describeProblem } from "../layout/problems.tsx";
 
 /** Where a report goes, as last known, so the sheet opens with it at once. */

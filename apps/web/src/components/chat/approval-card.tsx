@@ -1,13 +1,13 @@
 import type { AlwaysAllow, AlwaysFor, ApprovalAnswer, ApprovalAsk } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { Clock } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { alwaysWords } from "@/lib/always-words";
 import { addStylesheet } from "@/lib/stylesheet";
 import type { Waiting } from "../../lib/patience.ts";
 import { ThumbButton } from "../buttons/thumb-button.tsx";
-import { CapsLabel } from "../layout/caps-label.tsx";
 import { StatusPill } from "../layout/notice.tsx";
 import { describeProblem } from "../layout/problems.tsx";
 import css from "./approval-card.css?inline";

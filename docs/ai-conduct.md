@@ -375,7 +375,7 @@ same caveat in six answers in a row, saved tools from another AI's plan as the o
 refusing to check that AI's next plan. The eval's scenarios from it, on an invented workshop: `planning-tools-in-things`
 (no question about tools saved as Things), `planning-sizes-in-project` (a cut list from the project's decided size),
 `planning-go-ahead` (one step, no questions about what the owner said was fine), `planning-caveat-once` (a caveat
-about cables not said again once the owner has checked), `planning-pasted-plan-is-ideas` (a pasted plan's steps put
+not said again once the owner has dealt with it; its scenario changed with #729, below), `planning-pasted-plan-is-ideas` (a pasted plan's steps put
 on the project when the owner takes them, none of its tools saved) and `planning-pasted-plan-checked` (a short check
 that names the saved size). Today's models already passed the first, second and fifth before the change; they're
 kept so it can't come back unseen.
@@ -385,6 +385,13 @@ applies. `planning-safety-step-not-a-repeat` gives a caveat about cables early, 
 the first hole now: the answer includes the scan. Run 3 times on each provider on 2026-10-24 (#732): Claude passed 3 of
 3; Codex passed 1 of 3, saving "considering fixing a shelf" as an idea, until the save rule said what the owner says
 they'll do, even "at some point", is never an idea, then 3 of 3.
+
+Changed with #729: `planning-caveat-once` had its caveat about cables under a light switch, then marked it a fail
+when the owner drilled just under that switch and the answer warned again, which the safety sentence above calls
+right (a detector doesn't clear cables running down from a switch). Its caveat is now one that isn't a safety step:
+damp timber moves as it dries, so leave it a few days. Once the owner has let it dry and asks about screw lengths,
+saying it again is only a repeat. `planning-safety-step-not-a-repeat` now also wants the warning at the drilling step
+said briefly, in 100 words or fewer. The rule's wording is unchanged.
 
 ## Courtyard's file tools
 

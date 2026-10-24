@@ -55,6 +55,10 @@ const Env = z.object({
     unsetIfEmpty,
     z.string().refine(isFolder, "must be an existing folder").optional(),
   ),
+  COURTYARD_FABRICATION_DIR: z.preprocess(
+    unsetIfEmpty,
+    z.string().refine(isFolder, "must be an existing folder").optional(),
+  ),
   // Both set by scripts/live/run.ps1 when it starts the live worker, never by hand.
   COURTYARD_LIVE_COPY: z.preprocess(
     unsetIfEmpty,
@@ -97,6 +101,9 @@ const Env = z.object({
 /** Where `pnpm build` puts the web app, relative to this file. */
 const builtWebApp = resolve(import.meta.dirname, "../../../web/dist");
 
+/** Where `pnpm build` puts the Fabrication app (#698), relative to this file. */
+const builtFabricationApp = resolve(import.meta.dirname, "../../../fabrication/dist");
+
 export type Settings = {
   readonly port: number;
   readonly contextDir: string;
@@ -105,6 +112,8 @@ export type Settings = {
   readonly contextRemote: string | null;
   /** The web app's built files, served on the same origin as the API. */
   readonly webDir: string;
+  /** The Fabrication app's built files, served under `/fabrication` on the same origin (#698). */
+  readonly fabricationDir: string;
   /** Whether to offer Claude, through the worker machine's Claude Code (on unless turned off). */
   readonly claudeProvider: boolean;
   /**
@@ -174,6 +183,7 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
     dataDir: resolve(parsed.data.COURTYARD_DATA_DIR),
     contextRemote: parsed.data.COURTYARD_CONTEXT_REMOTE ?? null,
     webDir: resolve(parsed.data.COURTYARD_WEB_DIR ?? builtWebApp),
+    fabricationDir: resolve(parsed.data.COURTYARD_FABRICATION_DIR ?? builtFabricationApp),
     claudeProvider: parsed.data.COURTYARD_CLAUDE_PROVIDER,
     codexProvider: parsed.data.COURTYARD_CODEX_PROVIDER,
     fakeProvider: parsed.data.COURTYARD_FAKE_PROVIDER,

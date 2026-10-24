@@ -12,13 +12,23 @@ rest is worked out again.
 
 - **Uses:** `@courtyard/fabrication` (the engine), `context-folder/` (each change), `planning-files/`.
 - **Used by:** `sessions/` (the Build tool, Undo from its note), `prompts/` (the list, the rule, the tool and its
-  reply, `prompts/builds.ts`), `changes/` (Recent changes and Undo); in the web app, `features/fabrication/`.
+  reply, `prompts/builds.ts`), `changes/` (Recent changes and Undo); in the web app, `features/fabrication/`; and the
+  Fabrication app (`apps/fabrication`).
+- **Its chat uses** `sessions/` (list, events, create, send) and `projects/` (which project's step has the Build).
 
 ## API
 
 - `GET /api/fabrication/workspaces/:id/builds`: the workspace's Builds by name, and each file that can't be read as
   one with what's wrong. Answers `Builds`.
-- `GET /api/fabrication/workspaces/:id/builds/:slug`: one Build with everything derived. Answers `BuildView`.
+- `GET /api/fabrication/workspaces/:id/builds/:slug`: one Build with everything derived, and where it is: its
+  workspace and the project whose step makes it (#698). Answers `BuildOpened`.
+- `GET /api/fabrication/workspaces/:id/builds/:slug/chat`: its chat (#698), from its project's latest session, or
+  else the latest that saved it: what was said and each change saved, and whether an answer is coming. Answers
+  `BuildChat`.
+- `POST /api/fabrication/workspaces/:id/builds/:slug/chat`: the owner's next message, a `NewMessage` (with photos or
+  PDFs, as a form, as a session's take them), into that session, or a new one that belongs to the project. Answers
+  `BuildChatSent`, 202.
+- `GET /api/fabrication/models`: the models the chat can answer with, for its Reply box. Answers `ProviderList`.
 - `PATCH /api/fabrication/workspaces/:id/builds/:slug/parameters`: the owner's change to its parameters,
   `BuildParametersChange`, a JSON merge patch (an object merges, `null` takes a value out), worked out before it's
   saved. Answers `BuildChanged`, the change Undo in Recent changes takes back.
@@ -51,4 +61,7 @@ or Recent changes.
   and a workspace's Thing a tool moves from goes with it, its history and photo too. A Thing with parts never moves.
   Undo takes the whole Save back. "Or just say it" is one question to the errand model (`prompts/tools.ts`), each
   tool by a tile's name or the owner's own, once.
-- **The API** (`routes.ts`): under `/api/fabrication`, mounted by `worker.ts`.
+- **The chat** (`chat.ts`): which session is the Build's, and its events read as the chat's lines, through
+  `sessions/`.
+- **The API** (`routes.ts`): under `/api/fabrication`, mounted by `worker.ts`, which also serves the Fabrication
+  app's files under `/fabrication`.

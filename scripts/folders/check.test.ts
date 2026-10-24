@@ -29,6 +29,8 @@ const OVERVIEW = `# At a glance
 
 **Web features:** \`sessions\`
 
+**Fabrication features:** \`builds\`
+
 You ask:
 `;
 
@@ -40,6 +42,7 @@ const READMES = [
   "worker/providers/README.md",
   "worker/prompts/README.md",
   "web/features/sessions/README.md",
+  "fabrication/features/builds/README.md",
 ];
 
 const ARCHITECTURE = READMES.map(
@@ -63,6 +66,12 @@ const WEB = [
   "web/components/button.tsx",
   "web/main.tsx",
 ];
+/** Fabrication, the second web app (#698, ADR 0036). */
+const FABRICATION = [
+  "fabrication/features/builds/build-page.tsx",
+  "fabrication/features/builds/README.md",
+  "fabrication/main.tsx",
+];
 /** The shared pieces both apps use (packages/ui, #703), and what's installed beside them. */
 const UI = [
   "ui/buttons/button.tsx",
@@ -75,7 +84,7 @@ const UI = [
 
 /** Runs the guard on apps made of these files and on these docs; what it says, and whether it passed. */
 const check = async ({
-  files = [...WORKER, ...WEB, ...UI],
+  files = [...WORKER, ...WEB, ...FABRICATION, ...UI],
   overview = OVERVIEW,
   architecture = ARCHITECTURE,
 }: {
@@ -83,7 +92,8 @@ const check = async ({
   overview?: string;
   architecture?: string;
 } = {}) => {
-  for (const app of ["worker", "web", "ui"]) await mkdir(join(root, app), { recursive: true });
+  for (const app of ["worker", "web", "ui", "fabrication"])
+    await mkdir(join(root, app), { recursive: true });
   for (const file of files) {
     await mkdir(dirname(join(root, file)), { recursive: true });
     await writeFile(join(root, file), "");
@@ -99,6 +109,7 @@ const check = async ({
       join(root, "overview.md"),
       join(root, "architecture.md"),
       join(root, "ui"),
+      join(root, "fabrication"),
     ],
     { encoding: "utf8" },
   );
@@ -126,6 +137,23 @@ test("fails a folder or a loose file in the shared pieces that isn't one of thei
   assert.match(said, /UI: features\/ isn't one of its folders/);
   assert.match(said, /UI: when\.ts belongs in one of its folders/);
   assert.doesNotMatch(said, /node_modules/);
+});
+
+test("checks Fabrication as the web app: its own folders, its features listed (#698)", async () => {
+  const { passed, said } = await check({
+    files: [
+      ...WORKER,
+      ...WEB,
+      ...FABRICATION,
+      ...UI,
+      "fabrication/three/scene.ts",
+      "fabrication/features/chat/README.md",
+    ],
+    architecture: `${ARCHITECTURE}\n- [\`x\`](../apps/fabrication/src/features/chat/README.md)`,
+  });
+  assert.equal(passed, false);
+  assert.match(said, /Fabrication: three\/ isn't one of its folders/);
+  assert.match(said, /Fabrication: features\/chat\/ isn't listed in docs\/overview\.md/);
 });
 
 test("fails a feature the overview doesn't list for its app", async () => {

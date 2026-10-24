@@ -254,7 +254,7 @@ const NOTHING_TO_SEND = "Write something or attach a photo or PDF first";
  * A message the owner sent and its attachments, checked (#78); or the response refusing it, with
  * the reason one of them can't go. It has words, attachments or both (#164).
  */
-const readMessageWithAttachments = async <T extends { text: string }>(
+export const readMessageWithAttachments = async <T extends { text: string }>(
   c: Context,
   schema: z.ZodType<T>,
 ): Promise<Result<{ message: T; attachments: PreparedAttachment[] }, Response>> => {

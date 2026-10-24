@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content, viewport-fit=cover" />
+    <!-- Pictures come only from Courtyard itself, as in the web app (ADR 0021). -->
+    <meta http-equiv="Content-Security-Policy" content="img-src 'self' blob: data:" />
+    <title>Fabrication</title>
+    <!-- Dark whatever the device's setting (#210), as Courtyard is. -->
+    <meta name="theme-color" content="#070707" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
