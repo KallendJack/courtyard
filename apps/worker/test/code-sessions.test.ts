@@ -221,6 +221,98 @@ const askAbout = async (commands: readonly string[]) => {
 
 const CHAINED = /^Run one command at a time: /;
 
+/**
+ * Routine work inside the worktree (#730): each kind of command that asked in the 14 days of
+ * session logs before it, with made-up paths. None asks now.
+ */
+const ROUTINE = [
+  // A test run told its port or where its screenshots go.
+  "PORT=4392 pnpm exec playwright test e2e/home.spec.ts --reporter=line",
+  "COURTYARD_E2E_SHOTS=test-results/shots pnpm exec playwright test e2e/lead.spec.ts",
+  // Code given on the line, editing and generating files in the worktree.
+  `node -e "const fs=require('fs');const f='apps/web/src/home.tsx';fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace('a','b'))"`,
+  `python3 -c "print(open('README.md').read())"`,
+  // An import path it writes into a file, from that file's folder, isn't a path it opens.
+  `node -e 'require("fs").writeFileSync("apps/worker/src/features/code/moved.ts", "import { ok } from \\"../../lib/result.ts\\";\\n")'`,
+  // Moving, copying, making and removing files and folders.
+  "git mv apps/web/src/block.tsx apps/web/src/components/block.tsx",
+  "git rm -q apps/web/src/old-view.tsx",
+  "rm e2e/scratch.spec.ts",
+  "rm -rf test-results/trace",
+  "mkdir -p test-results/trace",
+  "mv notes.md docs/notes.md",
+  "cp notes.md docs/copy.md",
+  "git checkout HEAD -- apps/web/src",
+  "git checkout origin/main -- apps/web/src/home.tsx",
+  "git checkout --theirs docs/architecture.md",
+  "git restore --staged notes.md",
+  "git reset -q",
+  // The repository's other scripts, and what the registry says of a package.
+  "pnpm lint",
+  "pnpm run lint",
+  "pnpm run format:check",
+  "pnpm check:ideas",
+  "pnpm view hono version",
+  // Paths taken from the package folder pnpm runs in.
+  "pnpm -C apps/worker exec vitest run --reporter=json --outputFile.json=../../test-results/worker.json",
+  // Bringing the branch up to date, and git that only looks.
+  "git merge --ff-only origin/main",
+  "git rebase origin/main",
+  "git rebase --continue",
+  "git branch -r",
+  "git branch --list courtyard/* -vv",
+  "git worktree list",
+  'git for-each-ref "--format=%(refname:short) %(subject)" refs/heads',
+  "git log -L13,13:apps/web/scripts/finish-build.mjs --oneline -s",
+  // A search's pattern is text, never a path.
+  'git grep -n "role=\\|aria-label=" -- apps/web/src',
+  'rg -o "\\"failureMessages\\":\\[" apps/worker/test-results/worker.json',
+  // The time, a pause, what a file is.
+  "date -u",
+  "echo skip",
+  "sleep 5",
+  "file docs/van.jpg",
+  "cmp docs/a.png docs/b.png",
+  // GitHub, read, and this repository's issues named by its name.
+  'gh search issues "All sessions" --json number,title,state',
+  "gh release list --limit 3",
+  "gh workflow list --all",
+  "gh issue comment 66 --repo octo-owner/side-project --body 'Boards agreed'",
+  "gh issue edit 66 -R octo-owner/side-project --add-label ready-for-agent",
+  'gh issue reopen 5 --comment "Reopened to close it as not planned"',
+] as const;
+
+/** Major actions (#730), which still ask, by why. */
+const MAJOR: [string, string][] = [
+  // Outside the worktree, or the whole of it, or files that decide what runs.
+  ["rm -rf .", "off-allowlist"],
+  ["rm -rf .*", "off-allowlist"],
+  ["rm .github/workflows/ci.yml", "off-allowlist"],
+  ["mv package.json old.json", "off-allowlist"],
+  ["cp ../outside.txt notes.md", "reaches-out"],
+  ["git checkout -- .", "off-allowlist"],
+  ["tar -xf trace.zip -C docs", "off-allowlist"],
+  ["unzip trace.zip -d ../elsewhere", "reaches-out"],
+  [`node -e "require('fs').writeFileSync('package.json', '{}')"`, "off-allowlist"],
+  [`node -e "require('fs').rmSync('.git', { recursive: true })"`, "off-allowlist"],
+  // Switching or rewriting branches, other scripts, the machine's clock and services.
+  ["git checkout main", "off-allowlist"],
+  ["git rebase main", "off-allowlist"],
+  ["git reset --hard origin/main", "off-allowlist"],
+  ["git branch -D main", "off-allowlist"],
+  ["pnpm deploy", "off-allowlist"],
+  ["pnpm run release:npm", "off-allowlist"],
+  ["pnpm test:watch", "off-allowlist"],
+  ["date -s 2026-01-01", "off-allowlist"],
+  ["NODE_OPTIONS=--require=./x.cjs pnpm test", "off-allowlist"],
+  ["PORT=4392 rm -rf /path/to/elsewhere", "reaches-out"],
+  ["PORT=../../x pnpm test", "reaches-out"],
+  // Another repository, publishing, a release.
+  ["gh issue comment 66 --repo someone/else --body Mine", "off-allowlist"],
+  ["gh release create v1.0.0", "off-allowlist"],
+  ["pnpm publish", "off-allowlist"],
+];
+
 describe("a code workspace's command allowlist", () => {
   it.each([
     "pnpm install --frozen-lockfile",
@@ -320,6 +412,8 @@ describe("a code workspace's command allowlist", () => {
     'gh issue comment 79 --body "Fixed: see https://courtyard.example/pull/80"',
     'gh issue create --title Rack --body="Steps:\n\n1. See ../notes.md\n2. Bolt it down" --label=bug --label=needs-triage --milestone=Later',
     'git commit -m "Link the docs: https://courtyard.example/docs"',
+    // Routine work in the worktree, as asked for in the 14 days before #730.
+    ...ROUTINE,
   ])("runs %s without asking, shown in the activity", async (command) => {
     const { answers, ran } = await askAbout([command]);
 
@@ -385,7 +479,6 @@ describe("a code workspace's command allowlist", () => {
   });
 
   it.each([
-    ["rm -rf node_modules", "off-allowlist"],
     ["curl https://courtyard.example", "off-allowlist"],
     ["git push origin main", "off-allowlist"],
     ["git checkout main", "off-allowlist"],
@@ -403,11 +496,11 @@ describe("a code workspace's command allowlist", () => {
     ["git fetch origin main:main", "off-allowlist"],
     ["git fetch upstream", "off-allowlist"],
     ["git fetch --upload-pack=./evil origin", "off-allowlist"],
-    // A script in the worktree, never code given on the line or loaded from elsewhere (#388).
+    // A script in the worktree, or code given on the line (#730), never code loaded from
+    // elsewhere (#388).
     ["node", "off-allowlist"],
-    ['node -e "process.exit()"', "off-allowlist"],
-    ["node --eval 1", "off-allowlist"],
     ["node --import ./x.mjs scripts/a.js", "off-allowlist"],
+    ['node --require ./x.cjs -e "process.exit()"', "off-allowlist"],
     ["node --test --require ./x.cjs", "off-allowlist"],
     ["node ../outside.js", "reaches-out"],
     ["node --test ../outside.test.ts", "reaches-out"],
@@ -490,6 +583,7 @@ describe("a code workspace's command allowlist", () => {
     ["tail -f notes.md", "off-allowlist"],
     ["tail -n 5 -F notes.md", "off-allowlist"],
     ["tail --follow=name notes.md", "off-allowlist"],
+    ...MAJOR,
   ])("asks the owner before running %s, and doesn't once they deny it", async (command, reason) => {
     const { answers, asked, ran } = await askAbout([command]);
 
@@ -576,14 +670,14 @@ describe("a code workspace's command allowlist", () => {
       JSON.stringify({
         mode: "code",
         repoPath: repo,
-        allowlist: { add: ["cargo test ...", "pnpm lint"], remove: ["npm ci", "git log ..."] },
+        allowlist: { add: ["cargo test ...", "pnpm stylelint"], remove: ["npm ci", "git log ..."] },
       }),
     );
     const commands = [
       "cargo test --all",
-      "pnpm lint",
+      "pnpm stylelint",
       "pnpm test",
-      "pnpm lint --fix",
+      "pnpm stylelint --fix",
       "npm ci",
       "git log --oneline",
       "cargo test --manifest-path=../elsewhere/Cargo.toml",
@@ -597,7 +691,7 @@ describe("a code workspace's command allowlist", () => {
       { ok: true, value: null },
     ]);
     expect(asked).toEqual([
-      { kind: "command", command: "pnpm lint --fix", reason: "off-allowlist" },
+      { kind: "command", command: "pnpm stylelint --fix", reason: "off-allowlist" },
       { kind: "command", command: "npm ci", reason: "off-allowlist" },
       { kind: "command", command: "git log --oneline", reason: "off-allowlist" },
       {
@@ -635,6 +729,25 @@ describe("a code workspace's command allowlist", () => {
     };
     expect(answers.slice(3)).toEqual([offBranch, offBranch, offBranch]);
   });
+
+  it("pushes with a bare git push once the session branch pushes to its own name on origin (#730)", async () => {
+    const { provider, answers } = codingProvider([{ run: "git push" }]);
+    const request = await start([provider]);
+    const { id, events, asked } = await firstTurn(request, "Hello", CODING_MODEL);
+    // With nowhere set to push to, it asks.
+    expect(asked).toEqual([{ kind: "command", command: "git push", reason: "off-allowlist" }]);
+    const { folder } = await sessionWorktree();
+    await gitIn(folder, "push", "--quiet", "-u", "origin", "HEAD");
+
+    await postJson(request, `/api/sessions/${id}/messages`, { text: "Push", model: CODING_MODEL });
+    await followSession(request, {
+      sessionId: id,
+      until: "turn-completed",
+      after: events.at(-1)?.seq ?? 0,
+    });
+
+    expect(answers.at(-1)).toEqual({ ok: true, value: null });
+  });
 });
 
 describe("a code session's downloads of a run's artifacts (#202)", () => {
@@ -649,6 +762,9 @@ describe("a code session's downloads of a run's artifacts (#202)", () => {
   it.each([
     "gh run download 123 -D test-results/ci",
     "gh run download 123 -n playwright-report --dir=test-results/ci",
+    // A trace unpacked from a run's results, as a fixing turn does (#730).
+    "tar -xf test-results/run/trace.zip -C test-results/trace",
+    "unzip -o -q test-results/run/trace.zip -d test-results/trace",
   ])("run without asking into a folder git ignores: %s", async (command) => {
     const { answers, ran } = await askAbout([command]);
 

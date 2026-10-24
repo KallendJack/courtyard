@@ -181,6 +181,11 @@ const STILL_ASKS: readonly (readonly [{ run: string } | { edit: string }, unknow
     `python -c "import os; print(os.environ['GH_TOKEN'])"`,
     `node -e "console.log(require('os').homedir() + '/.ssh/config')"`,
     "node --require ./hook.js -e 1",
+    // Or one of the setup files Allow all never edits (#730).
+    `node -e "require('fs').rmSync('.github', { recursive: true })"`,
+    // Removing them asks however it's done.
+    "rm -rf .github",
+    "git rm -r .claude",
   ].map((run) => [{ run }, run] as const),
 ];
 
@@ -243,8 +248,8 @@ describe("Allow all for this task", () => {
     expect(asked.map((each) => each.all)).toEqual(STILL_ASKS.map(() => undefined));
   });
 
-  it("runs code given on the line (#464), which asks without it", async () => {
-    const commands = [
+  it("isn't needed for code given on the line that stays in the worktree (#464, #730), and covers it naming a package.json", async () => {
+    const routine = [
       `node -e "const fs=require('fs'); console.log(fs.readdirSync('apps').length)"`,
       "node --eval=1+1",
       "node -p process.version",
@@ -252,20 +257,21 @@ describe("Allow all for this task", () => {
       `deno eval "console.log(1)"`,
       "bun -e 1",
     ];
-    const { provider } = codingProvider(commands.map((run) => ({ run })));
+    const setup = `node -e "require('fs').writeFileSync('package.json', '{}')"`;
+    const { provider } = codingProvider([...routine, setup].map((run) => ({ run })));
     const request = await start(provider);
     const id = await startSession(request);
     const first = await denyingEach(request, id);
-    expect(askedAbout(first.asked)).toEqual(commands);
+    expect(askedAbout(first.asked)).toEqual([setup]);
+    expect(first.asked[0]?.all).toBe(true);
+    expect(ranUnderAllowAll(first.events)).toEqual([]);
     expect((await allowAll(request, id, "4h")).status).toBe(200);
 
     await sendAgain(request, id);
     const { asked, events } = await denyingEach(request, id, first.last);
 
     expect(asked).toEqual([]);
-    expect(ranUnderAllowAll(events)).toEqual(
-      commands.map((command) => ({ kind: "ran-command", command })),
-    );
+    expect(ranUnderAllowAll(events)).toEqual([{ kind: "ran-command", command: setup }]);
   });
 
   it("still asks before running what's in a folder git ignores (#219), never offering itself or Allow always", async () => {

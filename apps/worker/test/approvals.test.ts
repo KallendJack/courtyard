@@ -352,7 +352,7 @@ describe("Allow always", () => {
     const alwaysAsks = [
       // Naming a path outside the worktree, or only its program before an option.
       "git diff /path/to/notes.md",
-      "rm -rf build",
+      "chmod -R 755 build",
       // Pushing anywhere but its own branch, force pushing, deleting a branch, merging a PR.
       "git push origin main",
       "git push --force origin HEAD",
@@ -470,7 +470,7 @@ describe("Allow always", () => {
   });
 
   it("is refused for an approval that doesn't offer it, and with Deny", async () => {
-    const { provider, answers } = codingProvider([{ run: "rm -rf build" }]);
+    const { provider, answers } = codingProvider([{ run: "chmod -R 755 build" }]);
     const request = await start([provider]);
     const { id, asked } = await untilApproval(request);
 

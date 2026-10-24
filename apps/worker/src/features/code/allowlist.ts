@@ -1,6 +1,13 @@
-import { isAbsolute, relative, resolve } from "node:path";
-import { type AlwaysAllow, wordsOf } from "@courtyard/contract";
+import type { AlwaysAllow } from "@courtyard/contract";
 import { isHelperBranchOf } from "./branches.ts";
+import {
+  commandWords,
+  GH_NEVER,
+  GIT_NEVER,
+  isBuildScript,
+  isRoutineScript,
+  ROUTINE,
+} from "./routine.ts";
 
 /**
  * The command allowlist (ADR 0007): the commands a code session runs without asking. A command is
@@ -50,22 +57,32 @@ export type CommandRule = {
   readonly runsFrom?: (rest: readonly string[]) => readonly string[];
   /** Allowed only as a task (#182): the dev and start scripts, which run on after the turn. */
   readonly taskOnly?: true;
+  /** A search (#730): its pattern is never read as a path. */
+  readonly searches?: true;
+  /**
+   * Its next word is one of the repository's package scripts that only checks, builds or formats
+   * (`lint`, `test:e2e`, #730), by its name: a command it doesn't match can still be allowed always.
+   */
+  readonly script?: true;
+  /** The folder it runs in, from the worktree (pnpm's `-C`, #730): its paths are taken from there. */
+  readonly runsIn?: (rest: readonly string[]) => string | undefined;
+  /**
+   * For a command that moves, copies, makes or removes files (#730): the paths it changes, which
+   * the code module allows only inside the worktree, never a file that decides what runs.
+   */
+  readonly writes?: (rest: readonly string[]) => readonly string[];
 };
 
-/** A session's own branch, and its pull request's number once it has one. */
-export type OwnWork = { readonly branch: string; readonly pullRequest: number | undefined };
+/**
+ * A session's own branch, its pull request's number once it has one, and its repository on GitHub
+ * (`owner/name`) when a command names one (#730).
+ */
+export type OwnWork = {
+  readonly branch: string;
+  readonly pullRequest: number | undefined;
+  readonly repo?: string | undefined;
+};
 
-/** What git and gh are never asked for: writing a file, reading one from elsewhere, a browser. */
-const GIT_NEVER = [
-  /^--output/,
-  /^--no-index$/,
-  /^--ext-diff$/,
-  /^--textconv$/,
-  /^-O/,
-  /^--open-files-in-pager/,
-  /^--exec/,
-];
-const GH_NEVER = [/^--web$/, /^-w$/];
 /** What ripgrep is never asked for: running a program on each file, or for the host's name. */
 const RG_NEVER = [/^--pre/, /^--hostname-bin/];
 /** What tail is never asked for: following a file, which never ends, so the turn would wait forever. */
@@ -76,11 +93,13 @@ const TAIL_NEVER = [/^-[A-Za-z0-9]*[fF]/, /^--follow/];
  * program or write a file. `find` isn't one: it can `-exec`.
  */
 const LOOKS = ["cat", "ls", "head", "wc", "grep", "diff"];
+/** Grep's first word is its pattern, never a path (#730). */
+const searches = (look: string) => (look === "grep" ? { searches: true as const } : {});
 
 /** The package scripts a session runs to check its own work, and to format it (#388). */
 const PACKAGE_SCRIPTS = ["check", "typecheck", "test", "build", "e2e", "verify", "format"];
-/** The package scripts that run until they're stopped, allowed only as tasks (#182). */
-const TASK_SCRIPTS = ["dev", "start"];
+/** The package scripts that run until they're stopped, allowed only as tasks (#182, #730). */
+const TASK_SCRIPTS = ["dev", "start", "preview"];
 /**
  * The tools those scripts run, run directly (#202), never in a mode that waits forever. They run
  * the same code the scripts do; `biome check --write` formats only files in the worktree, since a
@@ -144,6 +163,12 @@ const pnpmPicks = (rest: readonly string[]) => {
 /** The pnpm command that pnpm's workspace options pick packages for (#202). */
 const pickedCommand = (rest: readonly string[]) => pnpmPicks(rest).command;
 
+/** The one folder pnpm's workspace options say it runs in (`-C apps/worker`, #730), if one. */
+const pnpmRunsIn = (rest: readonly string[]) => {
+  const { folders } = pnpmPicks(rest);
+  return folders.length === 1 ? folders[0] : undefined;
+};
+
 /**
  * The paths a command's options name for what it runs (#219): the values of `folders` (a folder
  * it runs in) and `files` (a file it loads), written `--option value` or `--option=value`, before
@@ -190,12 +215,6 @@ const testFiles = (rest: readonly string[]) => [
   ...optionPaths({ files: ["--test-reporter"] })(rest),
 ];
 
-/**
- * The package scripts that build or test, which wait their turn in the builds queue (#281). The
- * others (`check`, `typecheck`) are light enough to run at once.
- */
-const BUILD_SCRIPTS = new Set(["test", "build", "e2e", "verify"]);
-
 /** Whether a command's words, after any runner, start one of the test tools that build or test. */
 const startsBuildTool = (words: readonly string[]) => {
   const [tool, mode] = words;
@@ -210,20 +229,20 @@ const startsBuildTool = (words: readonly string[]) => {
  * command, is light.
  */
 export const isBuild = (command: string) => {
-  const read = wordsOf(command);
+  const read = commandWords(command);
   if (!read.ok) return false;
   const [runner, ...rest] = read.value;
   if (runner === "npm") {
     const [first, second] = rest;
-    return first === "test" || (first === "run" && BUILD_SCRIPTS.has(second ?? ""));
+    return first === "test" || (first === "run" && isBuildScript(second));
   }
   if (runner === "npx") return startsBuildTool(rest);
   if (runner !== "pnpm") return startsBuildTool(read.value);
   const picked = pickedCommand(rest)?.slice(1) ?? rest;
   const [first, ...after] = picked;
   if (first === "exec") return startsBuildTool(after);
-  if (first === "run") return BUILD_SCRIPTS.has(after[0] ?? "");
-  return BUILD_SCRIPTS.has(first ?? "") || startsBuildTool(picked);
+  if (first === "run") return isBuildScript(after[0]);
+  return isBuildScript(first) || startsBuildTool(picked);
 };
 
 /** A test file, as a test tool or a package's test script is given one: `test/live.test.ts`. */
@@ -258,9 +277,14 @@ const namesTestFiles = (words: readonly string[]) => {
   return false;
 };
 
-/** Whether a package script checks everything: `verify`, or `test` or `e2e` naming no file. */
-const scriptChecksEverything = (script: string, rest: readonly string[]) =>
-  script === "verify" || ((script === "test" || script === "e2e") && !namesTestFiles(rest));
+/**
+ * Whether a package script checks everything: `verify`, or `test` or `e2e` naming no file, or one
+ * of theirs (`test:e2e`, #730).
+ */
+const scriptChecksEverything = (script: string, rest: readonly string[]) => {
+  const [base] = script.split(":");
+  return base === "verify" || ((base === "test" || base === "e2e") && !namesTestFiles(rest));
+};
 
 /** Whether a test tool's run checks everything: `vitest` or `playwright test` naming no file. */
 const toolChecksEverything = (words: readonly string[]) => {
@@ -275,7 +299,7 @@ const toolChecksEverything = (words: readonly string[]) => {
  * pnpm's workspace options pick. A Lead's builder leaves those to CI.
  */
 export const checksEverything = (command: string) => {
-  const read = wordsOf(command);
+  const read = commandWords(command);
   if (!read.ok || !isBuild(command)) return false;
   const [runner, ...rest] = read.value;
   if (runner === "npm") {
@@ -289,7 +313,7 @@ export const checksEverything = (command: string) => {
   const [first, ...after] = picked;
   if (first === "exec") return toolChecksEverything(after);
   if (first === "run") return scriptChecksEverything(after[0] ?? "", after.slice(1));
-  if (BUILD_SCRIPTS.has(first ?? "")) return scriptChecksEverything(first ?? "", after);
+  if (isBuildScript(first)) return scriptChecksEverything(first ?? "", after);
   return toolChecksEverything(picked);
 };
 
@@ -331,10 +355,12 @@ const PUSH_FLAGS = new Set(["-u", "--set-upstream", "-q", "--quiet"]);
 
 /**
  * Whether a push sends only the session branch to its remote, under its own name: `git push -u
- * origin HEAD`, `git push origin <branch>` or `git push origin HEAD:<branch>`.
+ * origin HEAD`, `git push origin <branch>` or `git push origin HEAD:<branch>`; or a bare `git push`,
+ * which the code module allows once git says it goes there (#730).
  */
 const pushesOwn = (rest: readonly string[], { branch }: OwnWork) => {
   const named = rest.filter((word) => !PUSH_FLAGS.has(word));
+  if (named.length === 0) return true;
   const [remote, refspec, ...more] = named;
   if (remote !== "origin" || refspec === undefined || more.length > 0) return false;
   return [
@@ -348,7 +374,7 @@ const pushesOwn = (rest: readonly string[], { branch }: OwnWork) => {
 };
 
 /** What `git merge` may say besides the branch it merges in: no strategy, no squash (#388). */
-const MERGE_FLAGS = new Set(["--no-edit", "--no-ff", "-q", "--quiet"]);
+const MERGE_FLAGS = new Set(["--no-edit", "--no-ff", "--ff-only", "-q", "--quiet"]);
 
 /**
  * Whether a merge brings a branch from origin into the session branch, plainly (#388): `git merge
@@ -389,7 +415,7 @@ const fetchesOrigin = (rest: readonly string[]) => {
 };
 
 /** What node is never asked for that Allow all never covers either: code loaded first, a debugger. */
-const NODE_LOADS = [
+export const NODE_LOADS = [
   /^-r$/,
   /^--require/,
   /^--import/,
@@ -515,11 +541,22 @@ const rerunsFailed = (rest: readonly string[]) => {
   );
 };
 
+/** Gh's flags for a browser or an editor, which the commands on the repository's issues never take. */
+const GH_ELSEWHERE = [/^--web/, /^-w$/, /^--editor/, /^-e$/];
+
 /**
- * Gh's flags for another repository, a browser or an editor, which the commands on the
- * repository's issues and labels never take.
+ * Whether every repository gh is told (`--repo`, `-R`) is the session's own (#730): a command on
+ * this repository's issues, named by its name.
  */
-const GH_ELSEWHERE = [/^--repo/, /^-R/, /^--web/, /^-w$/, /^--editor/, /^-e$/];
+const namesOwnRepo = (rest: readonly string[], { repo }: OwnWork) =>
+  rest.every((word, at) => {
+    const value = /^(?:--repo|-R)$/.test(rest[at - 1] ?? "")
+      ? word
+      : /^(?:--repo=|-R)./.test(word)
+        ? word.replace(/^--repo=|^-R/, "")
+        : undefined;
+    return value === undefined || (repo !== undefined && value === repo);
+  });
 
 /** What Matt Pocock's skills change on the repository's issues and labels (#181). */
 const GH_ISSUES = [
@@ -527,6 +564,7 @@ const GH_ISSUES = [
   ["issue", "edit"],
   ["issue", "comment"],
   ["issue", "close"],
+  ["issue", "reopen"],
   ["label", "create"],
   ["label", "list"],
 ];
@@ -620,9 +658,9 @@ const readsOnly = (rest: readonly string[]) => {
  * and running the repository's own scripts and tests with node (#388).
  */
 const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
-  ...LOOKS.map((look) => ({ words: [look], more: true })),
+  ...LOOKS.map((look) => ({ words: [look], more: true, ...searches(look) })),
   { words: ["tail"], more: true, never: TAIL_NEVER },
-  { words: ["rg"], more: true, never: RG_NEVER },
+  { words: ["rg"], more: true, never: RG_NEVER, searches: true },
   { words: ["pwd"], more: false },
   { words: ["pnpm", "install", "--frozen-lockfile"], more: false },
   { words: ["npm", "ci"], more: false },
@@ -642,8 +680,19 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
   ...TEST_TOOLS.flatMap((tool) =>
     TOOL_RUNNERS.map((runner) => ({ ...tool, words: [...runner, ...tool.words], more: true })),
   ),
-  { words: ["pnpm"], more: true, runs: pickedCommand, runsFrom: (rest) => pnpmPicks(rest).folders },
-  ...GIT_LOOKS.map((look) => ({ words: ["git", look], more: true, never: GIT_NEVER })),
+  {
+    words: ["pnpm"],
+    more: true,
+    runs: pickedCommand,
+    runsFrom: (rest) => pnpmPicks(rest).folders,
+    runsIn: pnpmRunsIn,
+  },
+  ...GIT_LOOKS.map((look) => ({
+    words: ["git", look],
+    more: true,
+    never: GIT_NEVER,
+    ...searches(look),
+  })),
   { words: ["git", "branch"], more: false },
   { words: ["git", "branch", "--show-current"], more: false },
   { words: ["git", "remote", "-v"], more: false },
@@ -660,6 +709,7 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
     words: ["gh", ...words],
     more: true,
     never: GH_ELSEWHERE,
+    own: namesOwnRepo,
     texts: GH_TEXTS,
   })),
   // A run's artifacts, for a fixing turn, into a folder git ignores (#202).
@@ -712,6 +762,8 @@ const DEFAULT_ALLOWLIST: readonly CommandRule[] = [
     runsFrom: testFiles,
   },
   { words: ["node"], more: true, never: NODE_NEVER, own: runsScript, runsFrom: theScript },
+  // Routine work in the worktree (#730).
+  ...ROUTINE,
 ];
 
 /** A command named by its first words in a workspace's settings, with ` ...` when more may follow. */
@@ -766,13 +818,14 @@ const PLAIN_WORD = /^[a-z][a-z0-9-]*$/;
  * on, whose pull request it names, the paths it reaches): a command of theirs that asks failed
  * one of those checks, which Allow always would skip.
  */
-const CHECKED = DEFAULT_ALLOWLIST.filter(
+export const CHECKED = DEFAULT_ALLOWLIST.filter(
   (rule) =>
     !rule.more ||
     rule.never !== undefined ||
     rule.own !== undefined ||
     rule.onSessionBranch === true ||
-    rule.unpacksInto !== undefined,
+    rule.unpacksInto !== undefined ||
+    rule.writes !== undefined,
 );
 
 /**
@@ -780,7 +833,7 @@ const CHECKED = DEFAULT_ALLOWLIST.filter(
  * (pushing to a branch not the session's), deleting a repository, a release or a ref, and git's
  * and gh's settings and sign-in, which hold credentials and decide what runs.
  */
-const ALWAYS_ASKS: readonly (readonly string[])[] = [
+export const ALWAYS_ASKS: readonly (readonly string[])[] = [
   ["gh", "pr", "merge"],
   ["gh", "repo", "delete"],
   ["gh", "release", "delete"],
@@ -799,7 +852,7 @@ const ALWAYS_ASKS: readonly (readonly string[])[] = [
  * Programs that must always ask (#185): those that run another command named after them (a shell,
  * `xargs`, `find`'s `-exec`, `sudo`), or that read or hold credentials (the environment, keys).
  */
-const ALWAYS_ASKING_PROGRAMS = new Set([
+export const ALWAYS_ASKING_PROGRAMS = new Set([
   ...["sh", "bash", "zsh", "fish", "dash", "pwsh", "powershell", "cmd", "eval", "exec"],
   ...["sudo", "su", "doas", "xargs", "find", "env", "printenv", "nohup", "timeout", "time"],
   ...["nice", "watch", "command", "builtin", "ssh", "scp", "sftp", "ssh-add", "ssh-keygen"],
@@ -807,11 +860,11 @@ const ALWAYS_ASKING_PROGRAMS = new Set([
 ]);
 
 /** Words that name a credential, or where one is kept: a token, a key, `.env`, `.ssh`, a login. */
-const CREDENTIALS =
+export const CREDENTIALS =
   /token|secret|credential|passw|\.env|\.ssh|\.netrc|\.npmrc|\.pypirc|\.aws|\.gnupg|id_rsa|id_ed25519|\bauth\b/i;
 
 /** Whether one list of words starts with the other. */
-const startsWith = (words: readonly string[], first: readonly string[]) =>
+export const startsWith = (words: readonly string[], first: readonly string[]) =>
   first.every((word, index) => words[index] === word);
 
 /**
@@ -843,106 +896,6 @@ export const alwaysOffer = (words: readonly string[]): AlwaysAllow | undefined =
 };
 
 /**
- * Programs Allow all for this task (#428) never covers, besides those that must always ask: gh,
- * whose commands off the allowlist change things on GitHub, outside the session branch, and those
- * that reach beyond the worktree to the machine's services and processes.
- */
-const ALL_ASKING_PROGRAMS = new Set([
-  ...["gh", "docker", "podman", "kubectl", "systemctl", "service", "launchctl", "schtasks"],
-  ...["kill", "pkill", "killall", "taskkill", "shutdown", "reboot"],
-]);
-
-/** Commands Allow all never covers, by their first words: publishing a package, and signing in. */
-const ALL_ASKS: readonly (readonly string[])[] = ["npm", "pnpm", "yarn"].flatMap((manager) =>
-  ["publish", "unpublish", "deprecate", "login", "logout", "adduser"].map((what) => [
-    manager,
-    what,
-  ]),
-);
-
-/** Programs whose options before their command Allow all never reads past (#428). */
-const OPTIONS_FIRST = new Set(["git", "pnpm", "npm", "yarn", "bun"]);
-
-/** What runs another command named after it, by its first words (#428): `pnpm exec gh …`. */
-const RUNNERS: readonly (readonly string[])[] = [
-  ...[
-    ["pnpm", "exec"],
-    ["pnpm", "dlx"],
-    ["npm", "exec"],
-    ["yarn", "exec"],
-    ["yarn", "dlx"],
-  ],
-  ...[["bun", "x"], ["npx"], ["pnpx"], ["bunx"]],
-];
-
-/** Programs that run code given on the line, by the options that give it (`python -c`, #428). */
-const INLINE_CODE = new Map<string, readonly string[]>([
-  ["node", ["-e", "--eval", "-p", "--print"]],
-  ["python", ["-c"]],
-  ["python3", ["-c"]],
-  ["py", ["-c"]],
-  ["perl", ["-e", "-E"]],
-  ["ruby", ["-e"]],
-  ["php", ["-r"]],
-  ["deno", ["eval"]],
-  ["bun", ["-e", "--eval", "-p", "--print"]],
-]);
-
-/** Whether a word is one of a program's options that give code on the line: `-e`, `--eval=…`. */
-const givesCode = (program: string, word: string) =>
-  INLINE_CODE.get(program)?.some(
-    (option) => word === option || (option.startsWith("--") && word.startsWith(`${option}=`)),
-  ) === true;
-
-/**
- * The words in code given on the line (#464), split where code separates them (spaces, quotes,
- * brackets, operators), so a path in it is read as one: `/etc/hosts` of `open('/etc/hosts')`.
- */
-const codeWords = (word: string) => word.split(/[\s'"`(){}[\],;+*<>|&!?%^@#$]+/);
-
-/**
- * Whether Allow all for this task (#428) covers a command only the owner could allow otherwise, so
- * it runs without asking while the session allows all. Never one that must still ask (decision
- * 4): one naming a path outside the worktree; one of a default rule's that failed its checks,
- * which covers pushing anywhere but the session's own branch, force pushing, deleting a branch and
- * gh's commands that act on another's pull request; anything else that must always ask (merging a
- * pull request, deleting a repository, a release or a ref, git's and gh's settings and sign-in, a
- * program that runs another, anything naming a credential); gh's other commands, publishing,
- * signing in, and the machine's services and processes; nor one told options before its command,
- * nor a runner's whose command isn't covered itself. Code given on the line (`node -e`, `python
- * -c`, #464) is covered, as the same code saved in the worktree would be, with its text checked
- * for paths and credentials too; never node's loading other code first or a debugger.
- */
-export const allowsAll = (worktree: string, words: readonly string[]): boolean => {
-  const [program, next] = words;
-  if (program === undefined) return false;
-  const code = words.some((word) => givesCode(program, word));
-  // Options before the command it runs (`git -c … push`, `pnpm --filter … exec`) could change
-  // what it does, so they're never read past: it asks. Code given on the line (`bun -e`) isn't one.
-  if (OPTIONS_FIRST.has(program) && next?.startsWith("-") === true && !givesCode(program, next))
-    return false;
-  if (ALWAYS_ASKING_PROGRAMS.has(program) || ALL_ASKING_PROGRAMS.has(program)) return false;
-  if (words.some((word) => CREDENTIALS.test(word))) return false;
-  if (program === "node" && words.some((word) => NODE_LOADS.some((loads) => loads.test(word))))
-    return false;
-  // Node's rule fails code given on the line, which Allow all covers (#464); `node --test` stays.
-  const checked = CHECKED.filter((rule) => !(code && rule.words.join(" ") === "node"));
-  const first = [...ALWAYS_ASKS, ...ALL_ASKS, ...checked.map((rule) => rule.words)];
-  if (first.some((asks) => startsWith(words, asks))) return false;
-  if (code) {
-    const read = [program, ...words.slice(1).flatMap(codeWords)];
-    if (reachesOut(worktree, { words: [program], more: true }, read)) return false;
-  }
-  // A runner (`pnpm exec`, `npx`) is covered only as far as the command it runs is.
-  const runner = RUNNERS.find((runs) => startsWith(words, runs));
-  if (runner !== undefined) {
-    const runs = words.slice(runner.length);
-    return runs[0]?.startsWith("-") === false && allowsAll(worktree, runs);
-  }
-  return !reachesOut(worktree, { words: [program], more: true }, words);
-};
-
-/**
  * The rule a command's words match, or `undefined` when none does. A push or a pull request
  * command matches only when it names the session's own branch and pull request, and one that
  * picks where another runs only when that other matches too.
@@ -957,6 +910,7 @@ export const ruleFor = (
     if (!rule.words.every((first, index) => words[index] === first)) return false;
     const rest = words.slice(rule.words.length);
     if (!rule.more && rest.length > 0) return false;
+    if (rule.script === true && !isRoutineScript(rest[0])) return false;
     if (rule.own !== undefined && !rule.own(rest, work)) return false;
     if (rule.runs !== undefined) {
       const runs = rule.runs(rest);
@@ -1000,62 +954,3 @@ export const runsFromOf = (
     ...(runs === undefined ? [] : runsFromOf(allowlist, runs, work)),
   ];
 };
-
-/**
- * The paths an argument could name: itself; whatever follows an `=` or a `:` in it
- * (`--option=value`, `HEAD:path`), a drive's colon aside; and, for short options, whatever follows
- * each letter, since a short option's value can be written onto it, after others too (`-F../x`,
- * `-qF../x`).
- */
-const pathsIn = (argument: string) => {
-  const paths = [argument];
-  for (let at = 0; at < argument.length; at += 1) {
-    const char = argument[at];
-    const drive = char === ":" && at === 1 && /^[A-Za-z]$/.test(argument[0] ?? "");
-    if ((char === "=" || char === ":") && !drive) paths.push(argument.slice(at + 1));
-  }
-  if (/^-[^-]/.test(argument)) {
-    for (let at = 2; at < argument.length; at += 1) paths.push(argument.slice(at));
-  }
-  return paths;
-};
-
-/**
- * The paths a command matching a rule could name: those in each argument after the rule's words
- * (`pathsIn`), but only the whole of a text option's value (`texts`), so a link in a pull
- * request's body isn't read as a path (#202).
- */
-const pathsNamed = (rule: CommandRule, words: readonly string[]) => {
-  const rest = words.slice(rule.words.length);
-  const texts = new Set(rule.texts);
-  const paths: string[] = [];
-  for (let at = 0; at < rest.length; at += 1) {
-    const word = rest[at] ?? "";
-    const equals = word.startsWith("--") ? word.indexOf("=") : -1;
-    if (texts.has(word)) {
-      paths.push(word, ...rest.slice(at + 1, at + 2));
-      at += 1;
-    } else if (equals !== -1 && texts.has(word.slice(0, equals))) {
-      paths.push(word.slice(equals + 1));
-    } else {
-      paths.push(...pathsIn(word));
-    }
-  }
-  return paths;
-};
-
-/**
- * Whether a command matching a rule names a path outside the worktree (`pathsNamed`): one from
- * the home folder (`~`), an absolute one elsewhere, one that climbs out with `..`, or one naming
- * a drive that isn't absolute here (`C:/x` off Windows, `C:x` on it), whose place the worker
- * can't tell.
- */
-export const reachesOut = (worktree: string, rule: CommandRule, words: readonly string[]) =>
-  pathsNamed(rule, words).some((path) => {
-    if (path.startsWith("~")) return true;
-    const absolute = isAbsolute(path);
-    if (/^[A-Za-z]:/.test(path) && !absolute) return true;
-    if (!absolute && !path.split(/[\\/]/).includes("..")) return false;
-    const fromWorktree = relative(worktree, resolve(worktree, path));
-    return fromWorktree.startsWith("..") || isAbsolute(fromWorktree);
-  });

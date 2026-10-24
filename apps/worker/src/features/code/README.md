@@ -37,8 +37,24 @@ Code sessions' git, and what they may do
 - A file that decides what allowed commands run (a `package.json`, git hooks, `.claude` or git's own `.git`) needs an
   approval.
 
-### Commands: `allowlist.ts`
+### Commands: `allowlist.ts`, `routine.ts`, `paths.ts`, `allowing-all.ts`, `commands.ts`
 
+`allowlist.ts` holds the rules, `routine.ts` the routine work in the worktree (#730), `paths.ts` how a command's
+paths are read, `allowing-all.ts` what Allow all covers, and `commands.ts` (`commandAllowed`, `editPlaceIn`) reads
+them against the worktree's files and git.
+
+- **Routine work never asks** (#730, ADR 0038): moving, copying, making and removing the worktree's files (`mv`,
+  `cp`, `mkdir`, `rm`, `git mv`, `git rm`, `git restore`, `git checkout <ref> -- <paths>`, `git reset -q`), never the
+  whole worktree, what a glob would find, or a file that decides what runs (each rule's `writes`); code given on the
+  line (`node -e`, `python -c`) as Allow all reads it, naming no setup file; the repository's other check scripts by
+  name (`lint`, `test:e2e`, `format:check`; never one that watches, serves, deploys or publishes); `git rebase
+  origin/<branch>`, `git merge --ff-only`; a bare `git push` once git says it goes to the session branch's own name
+  on origin; listing branches and worktrees; a trace unpacked with `tar` or `unzip` into a folder git ignores;
+  `date`, `echo`, `sleep`, `file`, `cmp`, `cut`, `pnpm view`; gh's search, release and workflow lists; the
+  repository's issues named with `--repo` by its own name; and a test run's `PORT`, `CI`, `TZ`, colours or
+  `COURTYARD_E2E_SHOTS` in front of a command (`withoutEnv`). A search's pattern is never read as a path, a short
+  option's value only after its letters (`-L13,13:path`), a pnpm `-C` folder's paths from that folder, and code's
+  `..` paths from the folder of a file it names, so an import it writes isn't one it opens.
 - **Matched on words.** The command allowlist is matched on the command's words once its quotes are read (the
   contract's `wordsOf`), never on the start of its text, so a command that chains, pipes, redirects or substitutes
   never matches. One naming a path outside the worktree is refused. Committing, pushing and the session's own PR need
@@ -118,3 +134,5 @@ Code sessions' git, and what they may do
   runs: `checksEverything`, a `verify` package script, or a `test` or `e2e` one, `vitest` or `playwright test` that
   names no test file (a `.ts`/`.js` file past the tool's options), at the root or in any package. Each refusal's
   words are `prompts/`'. The owner's own sessions are refused neither.
+- It refuses a builder's `git push` to the default branch too (`default-branch`, #730): origin's HEAD, or `main` or
+  `master`. A builder only ever pushes its own branch.

@@ -229,18 +229,23 @@ describe("Run the build order (#347)", () => {
     expect(github.commentsOn(onGitHub, 24)).toEqual([]);
   });
 
-  it("starts every builder allowing all until its pull request opens, 12 hours at most (#591)", async () => {
-    const { request } = await signedInWith(ISSUES);
+  it("starts every builder allowing all for its issue, its pull request opening or not (#591, #730)", async () => {
+    const { github, request } = await signedInWith(ISSUES);
 
     await run(request);
 
     for (const issue of [22, 23]) {
       const allowing = (await builderOf(request, issue)).allowingAll;
-      expect(allowing).toMatchObject({ task: true });
+      expect(allowing).toMatchObject({ task: true, byLead: true });
       const left = Date.parse(allowing?.until ?? "") - Date.now();
-      expect(left).toBeGreaterThan(11.9 * 60 * 60 * 1000);
-      expect(left).toBeLessThanOrEqual(12 * 60 * 60 * 1000);
+      expect(left).toBeGreaterThan(6.9 * 24 * 60 * 60 * 1000);
+      expect(left).toBeLessThanOrEqual(7 * 24 * 60 * 60 * 1000);
     }
+    // Its pull request opening leaves it on, so fixing its checks doesn't ask.
+    const { branch } = await builderOf(request, 22);
+    github.openPullRequest({ repo: onGitHub, branch: branch ?? "", head: "c0ffee1" });
+    await runJobs();
+    expect((await builderOf(request, 22)).allowingAll).toMatchObject({ byLead: true });
     // The Lead itself doesn't allow all, only its builders.
     const listed = await sessionsOf(request);
     expect(listed.find((session) => session.lead === true)?.allowingAll).toBeUndefined();
@@ -258,6 +263,64 @@ describe("Run the build order (#347)", () => {
 
     expect(coder.answers).toContainEqual(ok(null));
     expect(coder.answers.every((answer) => answer.ok)).toBe(true);
+  });
+
+  /**
+   * A coder that runs `commands` in #22's builder's first turn and in each turn the owner asks for
+   * with "Again", keeping the worker's answers; every other turn just ends.
+   */
+  const builderRunning = (commands: readonly string[]) => {
+    const answers: unknown[] = [];
+    const { provider: coder } = codingProvider([]);
+    const provider: Provider = {
+      ...coder,
+      runTurn: async (input) => {
+        const asked = input.framing.newMessage;
+        if (input.code !== null && (asked.startsWith("Build issue #22") || asked === "Again")) {
+          for (const command of commands) answers.push(await input.code.run(command));
+        }
+        await input.emit("Done.");
+        return ok(null);
+      },
+    };
+    return { provider, answers };
+  };
+
+  it("lets a builder run what Allow all covers without asking, until the owner turns it off for it (#730)", async () => {
+    const coder = builderRunning(["cargo test --release"]);
+    const { request } = await signedInWith(ISSUES.slice(0, 1), { providers: [coder.provider] });
+
+    await run(request, CODING_MODEL);
+    await expect.poll(() => coder.answers).toEqual([ok(null)]);
+    await settledAll(request);
+
+    const { id } = await builderOf(request, 22);
+    expect((await postJson(request, `/api/sessions/${id}/allow-all/off`, {})).status).toBe(200);
+    expect((await builderOf(request, 22)).allowingAll).toBeUndefined();
+    await postJson(request, `/api/sessions/${id}/messages`, { text: "Again", model: CODING_MODEL });
+
+    await expect.poll(async () => (await builderOf(request, 22)).waiting).toBe("approval");
+    const waiting = await builderOf(request, 22);
+    if (waiting.now.kind !== "needs-you") throw new Error("#22's builder isn't asking");
+    await postJson(request, `/api/sessions/${id}/approvals/${waiting.now.approval}`, {
+      answer: "deny",
+    });
+    await settledAll(request);
+  });
+
+  it("refuses a builder's push to the default branch, without asking (#730)", async () => {
+    const coder = builderRunning(["git push origin main", "git push origin HEAD:main"]);
+    const { request } = await signedInWith(ISSUES.slice(0, 1), { providers: [coder.provider] });
+
+    await run(request, CODING_MODEL);
+    await expect.poll(() => coder.answers.length).toBe(2);
+
+    const refused = err(
+      "A builder pushes only its own branch, never main: push yours (git push -u origin HEAD) and its pull request takes it there.",
+    );
+    expect(coder.answers).toEqual([refused, refused]);
+    await settledAll(request);
+    expect((await builderOf(request, 22)).waiting).not.toBe("approval");
   });
 
   it("rests when what's left waits on an open issue, saying how many (#377)", async () => {

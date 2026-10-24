@@ -43,10 +43,12 @@ const useClock = (until: string, onPast: () => void) => {
 };
 
 /**
- * What a session allowing all says of how long (#428): until its PR opens (or, with one open
- * already, until it's done), and how long at most; or how long is left.
+ * What a session allowing all says of how long (#428): a Lead's builder's, for its issue, until its
+ * PR merges (#730); until its PR opens (or, with one open already, until it's done), and how long
+ * at most; or how long is left.
  */
 const howLong = (on: { allowing: AllowingAll; pullRequestOpen: boolean; now: number }) => {
+  if (on.allowing.byLead === true) return "until its PR merges";
   const left = timeLeft({ until: on.allowing.until, now: on.now });
   return on.allowing.task
     ? `until ${on.pullRequestOpen ? "it's done" : "the PR opens"} · ${left} at most`

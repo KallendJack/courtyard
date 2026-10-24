@@ -47,5 +47,7 @@ because it changes the same file, and starts it once the first one's PR merges.
   review is its pull request ready to merge; every other status is Building and holds its slot. One started before
   statuses were kept stands as its open pull request does, and with none it has ended, so it's let go (#635). The
   Builders board's header counts the same builders its rows show. Nothing stalls: there's no timer.
-- **Allow all:** every builder starts allowing all until its pull request opens, 12 hours at most (`allow-all/`'s
-  `task`), covering what Allow all always covers (#428); the Lead has no switch of its own (#591).
+- **Allow all:** every builder starts allowing all for its issue, until its pull request merges or closes, a week at
+  most (`allow-all/`'s `builderAllowAllUntil`, #730, ADR 0038), covering what Allow all always covers (#428); its
+  row and session say so, and the owner's Turn off ends it for that builder. The Lead has no switch of its own
+  (#591). A builder's push to the default branch is refused (`code/`).

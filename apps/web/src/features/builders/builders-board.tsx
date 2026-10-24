@@ -20,6 +20,7 @@ import { ChevronRight } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ButtonLink } from "@/components/buttons/button-link";
 import { doingWords } from "@/components/chat/session-state";
+import { AllowAllMark } from "@/components/code/allowing-all";
 import { DialogCard } from "@/components/layout/dialog-card";
 import { Block, BlockEmpty, BlockRows } from "@/components/layout/home-block";
 import { describeProblem } from "../../components/layout/problems.tsx";
@@ -206,7 +207,7 @@ function Board(props: Parameters<typeof BuildersBoard>[0] & { lead: LeadStatus }
         says={
           model === undefined
             ? "No model that codes is available right now."
-            : `The Lead runs the build order with ${model.label}: it starts the next issues ${lead.builders} at a time${first === undefined ? "" : `, beginning with #${first.number} ${first.title}`}.${grilling ? " Issues that need grilling wait for you." : ""} Each is in a session of its own that claims its issue and allows all until its PR opens, still asking before anything outside its own branch. It keeps going through the night, and pauses itself while 4 PRs wait for your review. Merging stays yours.`
+            : `The Lead runs the build order with ${model.label}: it starts the next issues ${lead.builders} at a time${first === undefined ? "" : `, beginning with #${first.number} ${first.title}`}.${grilling ? " Issues that need grilling wait for you." : ""} Each is in a session of its own that claims its issue and allows all until its PR merges, still asking before anything outside its own branch. It keeps going through the night, and pauses itself while 4 PRs wait for your review. Merging stays yours.`
         }
         open={explaining}
         onClose={() => setExplaining(false)}
@@ -311,8 +312,10 @@ function BuilderRow(props: {
               <span className={classes("text-label font-semibold", look.words)}>
                 {STATUS_NAMES[status.kind]} · {lastedWords(status.since)}
               </span>
-              <span className="truncate text-label font-medium text-foreground/75">
-                {nowWords(status, session, doing)}
+              <span className="flex min-w-0 items-center gap-1.5 text-label font-medium text-foreground/75">
+                {/* It runs what Allow all covers without asking, until turned off (#730). */}
+                {session?.allowingAll !== undefined && <AllowAllMark>allowing all</AllowAllMark>}
+                <span className="truncate">{nowWords(status, session, doing)}</span>
               </span>
             </span>
           </span>

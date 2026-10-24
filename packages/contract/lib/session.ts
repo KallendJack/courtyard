@@ -180,9 +180,14 @@ export type GetToKnowRequest = z.infer<typeof GetToKnowRequest>;
 /**
  * A code session allowing all (#428), as the worker decides it now: until when at most, and
  * whether it ends sooner, once the task is done. While it's on, the session runs commands off the
- * allowlist and edits setup files without asking; what must always ask still does.
+ * allowlist and edits setup files without asking; what must always ask still does. A Lead's
+ * builder's (`byLead`, #730) is for its issue, until its pull request merges.
  */
-export const AllowingAll = z.object({ until: z.iso.datetime(), task: z.boolean() });
+export const AllowingAll = z.object({
+  until: z.iso.datetime(),
+  task: z.boolean(),
+  byLead: z.literal(true).optional(),
+});
 export type AllowingAll = z.infer<typeof AllowingAll>;
 
 export const SessionSummary = z.object({
