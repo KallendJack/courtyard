@@ -29,10 +29,10 @@ The session page (`routes/_app/workspaces.$workspaceId.sessions.$sessionId.tsx`)
   grammar from `code-languages.ts` only when used), formulas drawn by KaTeX (`maths.ts` finds and rewrites them,
   `maths-plugins.ts` is loaded only when an answer has maths, and maths keeps its room unseen until its formulas can
   be drawn), and an answer's Sources (`sources.tsx`).
-- **`composer/`:** the message box (`composer.tsx`) with its model, effort and skill pickers (`model-pickers.tsx`,
-  `models.ts`, `limits.ts`; the frame's Skills and Model sheets are `handheld-choices.tsx`) and its attachments
-  (`attaching.ts` shrinks photos to JPEG and checks each file). `messages.ts` sends a message with its files, beside
-  `api/worker.ts` so it's not on the first load.
+- **`composer/`:** the message box (`composer.tsx`): the Reply box from `packages/ui` (`reply/reply-box.tsx`, with
+  its model, effort and skill pickers, and its attachments: `attaching.ts` shrinks photos to JPEG and checks each
+  file), given this app's Skills and Model sheets (`handheld-choices.tsx`, with how a limit reads in `limits.ts`).
+  `messages.ts` sends a message with its files, beside `api/worker.ts` so it's not on the first load.
 - **`notes/`:** save notes (`save-note.tsx`), Save as document with each document's note (`documents.tsx`), each Thing
   save's note (`things.tsx`), each project save's note (`projects.tsx`, #603), and the Get to know offer
   (`get-to-know.tsx`).

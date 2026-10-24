@@ -1,5 +1,5 @@
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import type { ReactNode } from "react";
-import { classes } from "@/lib/classes";
 
 const TONES = {
   /** Something that needs the owner: "Needs you". */

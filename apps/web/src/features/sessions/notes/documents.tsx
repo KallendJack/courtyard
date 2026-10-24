@@ -1,10 +1,10 @@
 import { DOCUMENT_NAME_MAX_LENGTH, type SessionId, type WorkspaceId } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { FileCheck, FilePlus } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/buttons/button";
 import { FileSaveNote } from "@/components/chat/file-save-note";
 import { TextField } from "@/components/forms/text-field";
-import { useAction } from "@/hooks/use-action";
 import { describeProblem } from "../../../components/layout/problems.tsx";
 import { saveAsDocument, undoDocumentSave } from "../../documents/api.ts";
 import type { DocumentNote } from "../turns/events.ts";

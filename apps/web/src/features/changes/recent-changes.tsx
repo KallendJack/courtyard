@@ -5,15 +5,15 @@ import {
   type RecentChanges as RecentChangesPage,
   type WorkspaceId,
 } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { createKept, PlaceholderRows, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { BookmarkCheck, FileText, ListChecks, Pencil, Route, Tag, Undo2 } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@/components/buttons/button";
 import { NoteRow, NoteWords } from "@/components/chat/note-row";
-import { FormError } from "@/components/forms/form-error";
-import { createKept, PlaceholderRows, useKept } from "@/components/layout/kept";
 import { EmptyState } from "@/components/layout/notice";
-import { useAction } from "@/hooks/use-action";
 import type { ContextPlace } from "../../api/worker.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { describeWhen } from "../../lib/when.ts";

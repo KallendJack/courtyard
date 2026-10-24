@@ -51,7 +51,7 @@ Needs you has the owner's own session's approval, and Next up offers Build on th
   the two Homes show: `workspace-tabs.tsx`, `home-block.tsx`, `connections-line.tsx`, `radio-row.tsx`, the thumb
   buttons and `row-button.tsx`), like `features/pull-requests/`.
 - **Nothing jumps in late:** each block that loads after the page keeps its last answer for the tab's lifetime
-  (`components/layout/kept.tsx`), so a revisit shows it at once and asks again quietly, and a first visit shows faint
+  (`packages/ui/layout/kept.tsx`), so a revisit shows it at once and asks again quietly, and a first visit shows faint
   placeholder rows in its place; the PRs list does the same.
 - That GitHub isn't connected comes with the connections line, from the workspace's own connections.
 - **What waits on the owner** is the worker's say (`waiting/`, on each listed session and open pull request), read in

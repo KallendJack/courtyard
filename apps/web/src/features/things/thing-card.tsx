@@ -6,17 +6,17 @@ import {
   type ThingSummary,
   type WorkspaceId,
 } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { Page, PageTitle } from "@courtyard/ui/layout/page.tsx";
+import { preparePhoto } from "@courtyard/ui/reply/attaching.ts";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import { BackLink } from "@/components/buttons/back-link";
-import { Button } from "@/components/buttons/button";
 import { useFilePicker } from "@/components/forms/file-picker";
-import { FormError } from "@/components/forms/form-error";
-import { Page, PageTitle } from "@/components/layout/page";
-import { useAction } from "@/hooks/use-action";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { Answer } from "../sessions/answer/answer.tsx";
-import { preparePhoto } from "../sessions/composer/attaching.ts";
 import { changeThing, deleteThing, uploadThingPhoto } from "./api.ts";
 import { ThingsScope } from "./scope.tsx";
 import { ThingForm } from "./thing-form.tsx";

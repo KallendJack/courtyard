@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@courtyard/contract": "workspace:*",
-    "@fontsource-variable/figtree": "^5.3.0",
+    "@courtyard/ui": "workspace:*",
     "@tanstack/react-router": "^1.170.45",
     "@tanstack/react-virtual": "^3.14.21",
     "highlight.js": "^11.12.0",

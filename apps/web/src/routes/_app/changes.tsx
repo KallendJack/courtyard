@@ -1,7 +1,7 @@
 import { WorkspaceId } from "@courtyard/contract";
+import { Page, PageTitle } from "@courtyard/ui/layout/page.tsx";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
 import { BackLink } from "@/components/buttons/back-link";
-import { Page, PageTitle } from "@/components/layout/page";
 import { RecentChanges } from "../../features/changes/recent-changes.tsx";
 
 export const Route = createFileRoute("/_app/changes")({

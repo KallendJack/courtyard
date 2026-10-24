@@ -6,7 +6,7 @@ which decides what's in it, is [`offline-copy/`](../../../../worker/src/features
 **Example:** you turn on Keep a copy to read offline on your phone. Later, on the train with the PC off, you open
 Courtyard and read Tuesday's session about the back wall, with "Offline · reading a copy" at the foot.
 
-- **Uses:** IndexedDB (`store.ts`), `components/layout/kept.tsx`'s `useFresh`, `components/layout/offline.tsx`,
+- **Uses:** IndexedDB (`store.ts`), `packages/ui/layout/kept.tsx`'s `useFresh`, `components/layout/offline.tsx`,
   `sessions/` (its turns, drawn from the copy's events).
 - **Used by:** the root route (`routes/__root.tsx`: reads the copy when the worker can't be reached, wipes it when the
   worker says the device isn't logged in), `routes/_app.tsx` (keeps it fresh, wipes it on Log out), the workspace,

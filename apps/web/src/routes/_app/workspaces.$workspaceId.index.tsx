@@ -1,9 +1,9 @@
 import { ChangeId, type CodeSessionList, WORKSPACE_NAME_MAX_LENGTH } from "@courtyard/contract";
+import { Page, PageTitle, type TitleBeside } from "@courtyard/ui/layout/page.tsx";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { lazy, Suspense, useState, useSyncExternalStore } from "react";
 import { ConfirmStep } from "@/components/forms/confirm-step";
 import { RenameForm } from "@/components/forms/rename-form";
-import { Page, PageTitle, type TitleBeside } from "@/components/layout/page";
 import { WorkspaceMenu } from "@/components/workspace/workspace-menu";
 import { archiveWorkspace, changeWorkspace, NOT_FOUND } from "../../api/worker.ts";
 import { describeProblem, Problem } from "../../components/layout/problems.tsx";

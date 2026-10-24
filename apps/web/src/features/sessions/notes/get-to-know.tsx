@@ -1,9 +1,9 @@
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
 import { InfoBox } from "@/components/layout/notice";
-import { useAction } from "@/hooks/use-action";
 import type { ContextPlace } from "../../../api/worker.ts";
 import { startGettingToKnow } from "../../../api/worker-calls.ts";
 import { describeProblem } from "../../../components/layout/problems.tsx";

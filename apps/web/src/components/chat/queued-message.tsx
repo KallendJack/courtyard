@@ -1,7 +1,7 @@
+import { IconButton } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { Pencil, X } from "lucide-react";
 import { useState } from "react";
-import { IconButton } from "../buttons/button.tsx";
-import { FormError } from "../forms/form-error.tsx";
 import { ChatFlowScope } from "./chat-flow-scope.tsx";
 
 /** One of the owner's messages waiting for the running turn to end (#177). */

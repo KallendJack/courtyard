@@ -1,5 +1,5 @@
 import type { ModelUsageMeter, PlanUsage } from "@courtyard/contract";
-import { classes } from "@/lib/classes";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { percent, readingAge, resetsWords, standingOf, windowName } from "./words.ts";
 
 /** Each standing's bar and number: violet with room, gold near the limit, red at it. */

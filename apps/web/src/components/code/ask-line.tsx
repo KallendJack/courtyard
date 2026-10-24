@@ -1,9 +1,9 @@
+import { Button, IconButton } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useDock } from "@courtyard/ui/frame/handheld.ts";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { ArrowUp } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { useAction } from "@/hooks/use-action";
-import { Button, IconButton } from "../buttons/button.tsx";
-import { FormError } from "../forms/form-error.tsx";
-import { useDock } from "../frame/handheld.ts";
 
 /**
  * The slim ask line (#278; Paper, "PR page: checks passed, ask line"): one line to ask or say

@@ -1,9 +1,9 @@
 import type { LiveUpdateResult, LiveVersion } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { PlaceholderRows } from "@courtyard/ui/layout/kept.tsx";
 import { type ReactNode, useEffect, useState } from "react";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
 import { CapsLabel } from "@/components/layout/caps-label";
-import { PlaceholderRows } from "@/components/layout/kept";
 import { InfoBox } from "@/components/layout/notice";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { cancelLiveUpdate, loadLive, startLiveUpdate } from "./api.ts";

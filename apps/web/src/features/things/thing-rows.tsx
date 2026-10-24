@@ -1,7 +1,7 @@
 import type { ThingSlug, ThingStatus, ThingSummary, WorkspaceId } from "@courtyard/contract";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Link } from "@tanstack/react-router";
 import { Tag } from "lucide-react";
-import { classes } from "@/lib/classes";
 import { thingPhotoUrl } from "./api.ts";
 import { STATUS_WORDS, thingLine } from "./words.ts";
 

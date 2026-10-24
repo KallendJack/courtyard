@@ -1,11 +1,11 @@
 import { ProductBlock as Product, WorkspaceId } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { useKept } from "@courtyard/ui/layout/kept.tsx";
 import { useParams } from "@tanstack/react-router";
 import { Check, Plus } from "lucide-react";
 import { useMemo } from "react";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
-import { useKept } from "@/components/layout/kept";
-import { useAction } from "@/hooks/use-action";
 import { addThing, KEPT_THINGS, loadKeptThings, loadThings } from "../../features/things/api.ts";
 import { describeProblem } from "../layout/problems.tsx";
 import type { DrawingProps } from "./fenced.tsx";

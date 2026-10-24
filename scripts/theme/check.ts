@@ -1,28 +1,31 @@
-// The theme guard (#232), run by `pnpm verify`. The web app's look is one theme, in
-// apps/web/src/styles.css: everywhere else uses its names, never values. This fails on a size,
+// The theme guard (#232), run by `pnpm check`. The apps' look is one theme, in
+// packages/ui/theme.css: everywhere else uses its names, never values. This fails on a size,
 // colour, radius, shadow or ring written by value in a Tailwind class (`text-[13px]`,
-// `shadow-[0_0_8px_red]`, `text-sm/[18px]`), and on a colour's hex outside styles.css. A real
+// `shadow-[0_0_8px_red]`, `text-sm/[18px]`), and on a colour's hex outside the theme. A real
 // one-off goes on the allowlist, allowed.json, with the reason it can't be the theme's; an entry
 // nothing needs any more fails too, so the list stays short. It also fails a button greyed out
 // while it works (`disabled={save.busy}`), which shows it's busy instead (#330), and anything that
-// scrolls by itself rather than as the shared scroller, components/layout/scroller.tsx (#420), and a
+// scrolls by itself rather than as the shared scroller, packages/ui/layout/scroller.tsx (#420), and a
 // label in capitals written by hand rather than as the shared CapsLabel, components/layout/caps-label.tsx
-// (#242).
+// (#242). It reads the web app's source and the shared pieces' (packages/ui, #703).
 //
-//   node scripts/theme/check.ts [<web app's src folder> <allowlist>]
+//   node scripts/theme/check.ts [<repo's root> <allowlist>]
 
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { z } from "zod";
 
 const [
-  src = join(import.meta.dirname, "../../apps/web/src"),
+  root = join(import.meta.dirname, "../.."),
   allowlist = join(import.meta.dirname, "allowed.json"),
 ] = process.argv.slice(2);
 
+/** The folders read, from the repo's root. */
+const FOLDERS = ["apps/web/src", "packages/ui"];
+
 const Allowed = z.array(
   z.object({
-    /** The file, from the web app's src folder. */
+    /** The file, from the repo's root. */
     file: z.string().min(1),
     /** The class or hex, exactly as written. */
     value: z.string().min(1),
@@ -30,8 +33,12 @@ const Allowed = z.array(
   }),
 );
 
-/** The theme itself, and what the router writes. */
-const SKIPPED = new Set(["styles.css", "routeTree.gen.ts"]);
+/** The theme itself, the stylesheet that brings it in, and what the router writes. */
+const SKIPPED = new Set([
+  "packages/ui/theme.css",
+  "apps/web/src/styles.css",
+  "apps/web/src/routeTree.gen.ts",
+]);
 
 /** Tailwind utilities that take a colour, a size, a radius, a shadow or a ring. */
 const STYLED =
@@ -79,9 +86,23 @@ const problemsIn = (file: string, text: string): Problem[] => {
   return problems;
 };
 
-const files = (await readdir(src, { recursive: true }))
-  .map((path) => path.split(sep).join("/"))
-  .filter((path) => /\.(tsx?|css)$/.test(path) && !SKIPPED.has(path));
+/** A folder's files, from the repo's root; none of what's installed, and nothing in a folder that isn't there. */
+const filesIn = async (folder: string) => {
+  try {
+    return (await readdir(join(root, folder), { recursive: true })).map((path) =>
+      [folder, ...path.split(sep)].join("/"),
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+};
+
+const files = (await Promise.all(FOLDERS.map(filesIn)))
+  .flat()
+  .filter(
+    (path) => /\.(tsx?|css)$/.test(path) && !path.includes("/node_modules/") && !SKIPPED.has(path),
+  );
 
 const parsed = Allowed.safeParse(JSON.parse(await readFile(allowlist, "utf8")));
 if (!parsed.success) {
@@ -97,7 +118,7 @@ const isAllowed = (problem: Problem) =>
  * thumb and its fade, so nothing else sets an overflow that scrolls: a class
  * (`md:overflow-y-auto`), a style (`overflowY: "auto"`) or a stylesheet's rule.
  */
-const SCROLLER = "components/layout/scroller.tsx";
+const SCROLLER = "packages/ui/layout/scroller.tsx";
 const SCROLLS_CLASS = /^overflow(?:-[xy])?-(?:auto|scroll)$/;
 const SCROLLS_STYLE = /\boverflow[XY]?\s*:\s*["'](?:auto|scroll)["']/g;
 const SCROLLS_RULE = /\boverflow(?:-[xy])?\s*:\s*(?:auto|scroll)\b/g;
@@ -123,7 +144,7 @@ const scrollsIn = (file: string, text: string): Problem[] => {
  * guide's `label` (12/16, 600, +8%), so nothing else sets capitals: a class (`uppercase`) or a
  * stylesheet's rule.
  */
-const CAPS_LABEL = "components/layout/caps-label.tsx";
+const CAPS_LABEL = "apps/web/src/components/layout/caps-label.tsx";
 const CAPS_CLASS = /^uppercase$/;
 const CAPS_RULE = /\btext-transform\s*:\s*uppercase\b/g;
 
@@ -141,7 +162,7 @@ const capsIn = (file: string, text: string): Problem[] => {
 };
 
 const texts = await Promise.all(
-  files.map(async (file) => ({ file, text: await readFile(join(src, file), "utf8") })),
+  files.map(async (file) => ({ file, text: await readFile(join(root, file), "utf8") })),
 );
 const found = texts.flatMap(({ file, text }) => problemsIn(file, text));
 const problems = found.filter((problem) => !isAllowed(problem));
@@ -161,7 +182,7 @@ const greyedWhileBusy = (
       .filter((file) => file.endsWith(".tsx"))
       // As written, comments too: a string such as "image/*" would read as one opening.
       .map(async (file) =>
-        (await readFile(join(src, file), "utf8")).split("\n").flatMap((line, index) =>
+        (await readFile(join(root, file), "utf8")).split("\n").flatMap((line, index) =>
           [...line.matchAll(GREYED_WHILE_BUSY)].map(([value]) => ({
             file,
             line: index + 1,
@@ -180,7 +201,7 @@ const unused = allowed.filter(
 
 if (problems.length > 0) {
   console.error(
-    "Styles by value, not by the theme's names (apps/web/src/styles.css). Use a name, add one to the theme, or allow a real one-off in scripts/theme/allowed.json with its reason:",
+    "Styles by value, not by the theme's names (packages/ui/theme.css). Use a name, add one to the theme, or allow a real one-off in scripts/theme/allowed.json with its reason:",
   );
   for (const { file, line, value } of problems) console.error(`  ${file}:${line}: ${value}`);
 }
@@ -198,7 +219,7 @@ if (greyedWhileBusy.length > 0) {
 }
 if (scrolls.length > 0) {
   console.error(
-    "Scrolls by itself: everything that scrolls is the shared Scroller (components/layout/scroller.tsx), with its thin thumb and fade (#420). Use it, or allow what can't (an element a library makes) in scripts/theme/allowed.json with its reason:",
+    "Scrolls by itself: everything that scrolls is the shared Scroller (packages/ui/layout/scroller.tsx), with its thin thumb and fade (#420). Use it, or allow what can't (an element a library makes) in scripts/theme/allowed.json with its reason:",
   );
   for (const { file, line, value } of scrolls) console.error(`  ${file}:${line}: ${value}`);
 }

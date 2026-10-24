@@ -1,6 +1,6 @@
 import type { LeadStatus, SessionId, WorkspaceId } from "@courtyard/contract";
+import { createKept, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { z } from "zod";
-import { createKept, useKept } from "@/components/layout/kept";
 import { sendJson } from "../../api/worker.ts";
 import { loadLead } from "../code-home/api.ts";
 

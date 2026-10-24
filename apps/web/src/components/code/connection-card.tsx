@@ -1,6 +1,6 @@
+import { CARD } from "@courtyard/ui/layout/page.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import type { ReactNode } from "react";
-import { classes } from "@/lib/classes";
-import { CARD } from "../layout/page.tsx";
 
 /** Where a connection stands, as its card says at its top right. */
 export type ConnectionState = "connected" | "waiting" | "off";

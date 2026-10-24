@@ -5,15 +5,15 @@ import {
   type ThingStatus,
   type ThingSummary,
 } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { preparePhoto } from "@courtyard/ui/reply/attaching.ts";
 import { type FormEvent, type ReactNode, useState } from "react";
-import { Button } from "@/components/buttons/button";
 import { FileField } from "@/components/forms/file-picker";
-import { FormError } from "@/components/forms/form-error";
 import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { Select } from "@/components/forms/select";
 import { TextField } from "@/components/forms/text-field";
-import { useAction } from "@/hooks/use-action";
-import { preparePhoto } from "../sessions/composer/attaching.ts";
 import { boughtFromWords, boughtInWords, STATUS_CHOICES } from "./words.ts";
 
 const DETAIL_LABELS: Readonly<Record<ThingDetailName, string>> = {
