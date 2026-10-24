@@ -586,6 +586,15 @@ const webActivity = (notice: unknown): Activity | undefined => {
   return searched === "" ? undefined : { kind: "web-searched", query: searched };
 };
 
+/** What a turn found on the web, its helpers' searches included, for its sources (ADR 0019). */
+type TurnWeb = { used: boolean; readonly read: string[] };
+
+/** Notes a search or page read on the turn's web record. */
+const heardOnWeb = (web: TurnWeb, activity: Activity) => {
+  web.used = true;
+  if (activity.kind === "page-read") web.read.push(activity.url);
+};
+
 /** The ways a turn fails that Courtyard tells apart; anything else counts as "other". */
 const CodexErrorCode = z
   .enum([
@@ -753,7 +762,11 @@ const framingTool = (input: TurnInput, tool: CourtyardTool): TurnTool => ({
  * folder, its coding tools and helper tool in a code session, and Courtyard's other tools (the
  * save tool, use skill…), each call's input going to the worker as Codex sent it (ADRs 0013, 0016).
  */
-const toolsFor = (input: TurnInput, codex: Connection): ReadonlyMap<string, TurnTool> => {
+const toolsFor = (
+  input: TurnInput,
+  codex: Connection,
+  web: TurnWeb,
+): ReadonlyMap<string, TurnTool> => {
   const tools = workTools({ input, folder: input.folder, report: input.report, code: input.code });
   const { code } = input;
   const { codeTools } = input.framing;
@@ -761,7 +774,7 @@ const toolsFor = (input: TurnInput, codex: Connection): ReadonlyMap<string, Turn
     tools.push({
       tool: codeTools.helper,
       answer: async (args) =>
-        fromToolReply(await startHelper({ codex, input, code, codeTools, args })),
+        fromToolReply(await startHelper({ codex, input, code, codeTools, web, args })),
     });
   }
   for (const tool of input.framing.tools) tools.push(framingTool(input, tool));
@@ -779,16 +792,19 @@ const HelperArgs = z.object({
  * own sub-agents get none of Courtyard's tools: once the worker gives it a place, it works on a
  * fresh thread of its own, on the turn's model and effort, in the session's worktree or a branch
  * of its own, with the file and coding tools asked of its own `HelperCode`. The use skill tool
- * too, but never the helper tool, tasks or the save tool. Answers its report.
+ * too, and web search when the session has it (#517), but never the helper tool, tasks or the save
+ * tool. Answers its report.
  */
 const startHelper = async (start: {
   codex: Connection;
   input: TurnInput;
   code: CodeTurn;
   codeTools: CodeTools;
+  /** What the session's turn found on the web, which the helper's searches add to. */
+  web: TurnWeb;
   args: unknown;
 }): Promise<ToolReply> => {
-  const { codex, input, code } = start;
+  const { codex, input, code, web } = start;
   const parsed = HelperArgs.safeParse(start.args);
   if (!parsed.success) return malformedInputReply();
   const { description, prompt, own_branch } = parsed.data;
@@ -805,12 +821,22 @@ const startHelper = async (start: {
       await helper.workIn(made.value);
     }
     const folder = resolve(helper.code.worktree);
+    // Its searches go out in order on its own line, each before the tool calls that follow it.
+    let reporting = Promise.resolve();
     const tools = [
       ...workTools({ input, folder, report: helper.report, code: helper.code }),
       ...input.framing.tools
         .filter((tool) => tool.name === USE_SKILL_TOOL_NAME)
         .map((tool) => framingTool(input, tool)),
-    ];
+    ].map(
+      (turnTool): TurnTool => ({
+        ...turnTool,
+        answer: async (args) => {
+          await reporting;
+          return turnTool.answer(args);
+        },
+      }),
+    );
     let said = "";
     let report: string | undefined;
     const end = await turnOnThread(codex, {
@@ -820,9 +846,15 @@ const startHelper = async (start: {
       instructions: start.codeTools.helperInstructions,
       message: prompt,
       tools: new Map(tools.map((turnTool) => [turnTool.tool.name, turnTool])),
-      searchesWeb: false,
+      searchesWeb: input.framing.webSearch !== null,
       readsRepoInstructions: true,
       heard: (notice) => {
+        const activity = webActivity(notice);
+        if (activity !== undefined) {
+          heardOnWeb(web, activity);
+          reporting = reporting.then(() => helper.report(activity)).catch(() => {});
+          return;
+        }
         const text = TextDelta.safeParse(notice);
         if (text.success) said += text.data.params.delta;
         const message = MessageCompleted.safeParse(notice);
@@ -832,6 +864,7 @@ const startHelper = async (start: {
       },
       signal: input.signal,
     });
+    await reporting;
     if (!end.ok) return { kind: "failed", reason: end.error.message };
     switch (end.value.kind) {
       case "completed":
@@ -1416,8 +1449,7 @@ export const createCodexProvider = (options: {
       };
       // What the turn found on the web, for its sources (ADR 0019).
       let answer = "";
-      let usedWeb = false;
-      const read: string[] = [];
+      const web: TurnWeb = { used: false, read: [] };
       // What Codex says of its plan's windows as the turn runs (#66), which names no thread.
       const stopHearingUsage = codex.onOtherNotice((notice) => {
         const limits = RateLimitsUpdated.safeParse(notice);
@@ -1431,14 +1463,13 @@ export const createCodexProvider = (options: {
         instructions: input.framing.instructions,
         message: input.framing.message,
         photos: photosOf(input.framing.attachments),
-        tools: toolsFor(input, codex),
+        tools: toolsFor(input, codex, web),
         searchesWeb: input.framing.webSearch !== null,
         readsRepoInstructions: input.code !== null,
         heard: (notice) => {
           const activity = webActivity(notice);
           if (activity !== undefined) {
-            usedWeb = true;
-            if (activity.kind === "page-read") read.push(activity.url);
+            heardOnWeb(web, activity);
             inOrder(() => input.report(activity));
             return;
           }
@@ -1460,7 +1491,7 @@ export const createCodexProvider = (options: {
           // It proves Codex answers, so its status is good for a while longer (#282).
           keptStatus.worked();
           // Codex gives no list of results, so its sources are the links its answer gives.
-          const sources = usedWeb ? turnSources({ answer, read, searches: [] }) : [];
+          const sources = web.used ? turnSources({ answer, read: web.read, searches: [] }) : [];
           if (sources.length > 0) await input.cite(sources);
           return ok(null);
         }

@@ -2064,7 +2064,14 @@ describe("Codex's helpers in a code session (#470)", () => {
   });
 
   /** A helper the session's model starts: what it's asked, and what it runs before reporting. */
-  type Asked = { description: string; command: string; report: string; own_branch?: boolean };
+  type Asked = {
+    description: string;
+    command: string;
+    report: string;
+    own_branch?: boolean;
+    /** A page it searches for and opens first. */
+    reads?: { query: string; url: string };
+  };
 
   /**
    * A Codex code session whose model starts the helpers asked, all at once, then answers; each
@@ -2096,6 +2103,11 @@ describe("Codex's helpers in a code session (#470)", () => {
         const helper = helpers.find(({ command }) => turn.text === `Run ${command}.`);
         working += 1;
         most = Math.max(most, working);
+        if (helper?.reads !== undefined) {
+          const { query, url } = helper.reads;
+          webSearchItem(turn, query, { type: "search", query, queries: null });
+          webSearchItem(turn, "", { type: "openPage", url });
+        }
         await turn.call("run_command", { command: helper?.command ?? "pwd" });
         await new Promise((done) => setTimeout(done, 50));
         turn.notify("item/completed", {
@@ -2216,6 +2228,32 @@ describe("Codex's helpers in a code session (#470)", () => {
     });
     // The model reads the helper's report as the tool's answer.
     expect(JSON.stringify(answers[0])).toContain("Seen the files.");
+  });
+
+  it("lets a helper search the web as the session does (#517): cached, on its own line, its pages among the turn's sources", async () => {
+    const { events, codex } = await helpingTurn([
+      {
+        description: "Check zod's version",
+        command: "ls",
+        report: "Zod 4 is current.",
+        reads: { query: "zod latest version", url: "https://zod.dev/v4" },
+      },
+    ]);
+
+    const [session, helper] = codex.requests("thread/start");
+    for (const thread of [session, helper]) {
+      expect(thread?.params).toMatchObject({ config: { web_search: "cached" } });
+    }
+    expect(helperLine(events, "Check zod's version")).toEqual([
+      { started: "Check zod's version" },
+      { kind: "web-searched", query: "zod latest version" },
+      { kind: "page-read", url: "https://zod.dev/v4", site: "zod.dev" },
+      { kind: "ran-command", command: "ls" },
+      { finished: "Zod 4 is current." },
+    ]);
+    expect(events.find((event) => event.type === "sources")).toMatchObject({
+      sources: [{ url: "https://zod.dev/v4" }],
+    });
   });
 
   it("gives a helper that writes code a branch of its own, and merges it back as it finishes", async () => {

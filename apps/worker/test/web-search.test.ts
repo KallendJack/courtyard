@@ -80,7 +80,7 @@ describe("a turn that searches the web", () => {
     }
   });
 
-  it("searches nothing in a code workspace", async () => {
+  it("searches in a code workspace too, on the same terms (#517)", async () => {
     const { repo } = await codeRepo(root);
     await codeWorkspace(root, "garage-gym", repo);
     const request = await asOwner(
@@ -90,7 +90,13 @@ describe("a turn that searches the web", () => {
 
     const events = await followSession(request, { sessionId: session.id, until: "turn-completed" });
 
-    expect(events.map((event) => event.type)).not.toContain("activity");
-    expect(events.map((event) => event.type)).not.toContain("sources");
+    const shown = events.flatMap((event) =>
+      event.type === "activity" || event.type === "sources" ? [event] : [],
+    );
+    expect(shown).toMatchObject([
+      { activity: { kind: "web-searched", query: "Titan T-3 J-hooks price" } },
+      { activity: { kind: "page-read", url: "https://titan.fitness/j-hooks" } },
+      { type: "sources", sources: [{ url: "https://titan.fitness/j-hooks" }, {}] },
+    ]);
   });
 });

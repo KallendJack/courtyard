@@ -433,10 +433,11 @@ Where the rest fits:
   `suggested-replies/` checks them; the session records them as an event and the browser shows them as buttons under
   the latest answer, once its turn completes, until the owner replies. A tap sends one as the owner's message
   ([ADR 0017](adr/0017-models-offer-suggested-replies-through-a-courtyard-tool.md)).
-- **Web search.** In a planning workspace, a model searches the web with its provider's own search and reads pages
-  (ADR 0019): Claude through Claude Code's `WebSearch` and `WebFetch`, the adapter's hook allowing a fetch only for a
-  page in the turn's search results or a link the owner sent; Codex on cached search, set for its thread. Each search
-  and page read is an activity. Once the answer is written, the provider hands the worker the turn's sources
+- **Web search.** In any workspace, a model searches the web with its provider's own search and reads pages
+  (ADR 0019, #517): Claude through Claude Code's `WebSearch` and `WebFetch`, the adapter's hook allowing a fetch only
+  for a page in the turn's search results or a link the owner sent; Codex on cached search, set for its thread. Each
+  search and page read is an activity. In a code session, helpers search too: a Claude helper's calls go through the
+  same hook, a Codex helper's thread starts on cached search, and either's searches are activities on its own line. Once the answer is written, the provider hands the worker the turn's sources
   (`sources/`), which the session records as one `sources` event and the browser lists under the answer.
 - **Code sessions.** Only a provider that codes works in a code workspace; any other is refused, saying so. A new
   session there starts its session branch and worktree (`code/`) before its first turn, and keeps the branch in its
@@ -727,8 +728,8 @@ Everything Courtyard's models read is built in one place, from written rules, an
 - **Each provider passes it on unchanged:**
   - Claude gets it as the system prompt, with Courtyard's tools on one in-process server, and none of the worker
     machine's Claude Code setup, its skills included (ADR 0003). Each turn's message goes as streaming input: one
-    message from the owner, its text then each photo as an image. In a planning workspace it also gets `WebSearch`
-    and `WebFetch`, confined as ADR 0019 says. In a code session the framing is appended to Claude Code's own system
+    message from the owner, its text then each photo as an image. On a turn with web search (every workspace) it
+    also gets `WebSearch` and `WebFetch`, confined as ADR 0019 says. In a code session the framing is appended to Claude Code's own system
     prompt (its `claude_code` preset) instead, with no turn limit
     ([ADR 0025](adr/0025-a-code-session-runs-on-the-providers-own-coding-instructions-with-courtyards-appended.md)),
     and it works in the session branch's worktree with `Edit`, `Write`, `Bash`, `TodoWrite` and `Skill` as well, and
@@ -740,7 +741,7 @@ Everything Courtyard's models read is built in one place, from written rules, an
     asked of the worker (ADR 0023).
   - Codex gets it as its instructions, with Courtyard's file tools and other tools as the thread's own, in its own
     Codex home with its own skills and `AGENTS.md` switched off (ADR 0015); each thread starts with every skill Codex
-    finds itself turned off, and in a planning workspace searches the web on cached mode (ADR 0019). In a code
+    finds itself turned off, and searches the web on cached mode (ADR 0019), a helper's thread too. In a code
     session its shell stays off too: it codes with Courtyard's coding tools (`run_command`, `write_file`,
     `edit_file`), each asked of the worker through `CodeTurn` as Claude's hook asks, then done by the adapter in the
     worktree, a command through bash with the session's environment (`lib/commands.ts`); it reads the repository's

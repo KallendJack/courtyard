@@ -17,8 +17,10 @@ pages, on these terms:
 - **Nothing from context goes into a search or an address** beyond what the question needs. The fetch rule above
   makes that hold for addresses; for searches it's a rule in `docs/ai-conduct.md`, since a search's words are the
   model's.
-- **Planning workspaces only, always on.** The model decides when to search. A code workspace, whose models will work
-  on repositories, gets none until phase 4 decides what its models may reach.
+- **Every workspace, always on.** The model decides when to search. Planning workspaces had it first; code workspaces
+  joined on the same terms (#517), since building means checking libraries, APIs and release notes. There, the
+  session's model, the Lead and their helpers all search, each helper's searches and reads on its own line, under the
+  same hook (Claude) or the same cached mode (Codex), and what they read counts towards the turn's sources.
 - **Sources** are recorded as an event and listed under the answer, so the owner can check where facts came from.
   They are the pages the turn used: those its answer links to, then those it read. A Claude turn that searched but
   used none lists its search results instead: the ones whose site the answer names ("Screwfix", "Titan Fitness"),
@@ -42,4 +44,8 @@ pages, on these terms:
 - **Codex can't read a page the owner pastes** unless its cached index has it; ai-conduct says "if you can".
 - **Codex gives no list of results,** so its sources are the links its answer gives; Claude's take their titles from
   its search results, and fall back to them when its answer neither links nor reads a page.
-- **The real-Codex check** covers the per-thread search setting (`docs/real-codex-check.md`).
+- **The real-Codex check** covers the per-thread search setting (`docs/real-codex-check.md`), in a planning and a code
+  session.
+- **In a code session, a page that talks a model into a bad change** changes only its session branch: anything outside
+  the branch, and any command off the workspace's allowlist (a `curl`, say), still waits for an approval (ADRs 0007,
+  0008), and the owner reviews every PR. A fetch still can't carry the repository anywhere, for the reason above.

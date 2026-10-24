@@ -1878,6 +1878,61 @@ describe("helpers on a Claude code turn (#117, ADR 0027)", () => {
     await rm(worktree, { recursive: true, force: true });
   });
 
+  it("lets a helper search the web under the session's rules (#517): its searches on its own line, reading only a page from a search", async () => {
+    const { worktree, code, reported } = await helpingSession();
+    const { claudeCode, runs } = stubClaudeCode({
+      messages: [taskStarted("agent-a", "tool-1"), success],
+    });
+    await runTurn(claudeCode, { folder: worktree, code, framing: searchingFraming() });
+    const options = runs[0]?.options;
+    if (!options) throw new Error("no turn ran");
+    await call(options, {
+      name: "Agent",
+      input: { description: "Check zod's version", prompt: "Look.", subagent_type: "Explore" },
+    });
+    const fetch = (url: string, id: string) =>
+      call(options, {
+        name: "WebFetch",
+        input: { url, prompt: "Version?" },
+        id,
+        helper: "agent-a",
+      });
+
+    const searching = await call(options, {
+      name: "WebSearch",
+      input: { query: "zod latest version" },
+      id: "tool-2",
+      helper: "agent-a",
+    });
+    await postToolUse(options, {
+      name: "WebSearch",
+      input: { query: "zod latest version" },
+      response: searchResults("zod latest version", [
+        { title: "Zod 4", url: "https://zod.dev/v4" },
+      ]),
+    });
+    const found = await fetch("https://zod.dev/v4", "tool-3");
+    const madeUp = await fetch("https://courtyard.example/elsewhere", "tool-4");
+
+    expect(options.tools).toEqual(expect.arrayContaining(["Agent", "WebSearch", "WebFetch"]));
+    expect([searching, found, madeUp]).toEqual([
+      expect.objectContaining({ permissionDecision: "allow" }),
+      expect.objectContaining({ permissionDecision: "allow" }),
+      expect.objectContaining({ permissionDecision: "deny" }),
+    ]);
+    expect(reported).toEqual([
+      {
+        helper: "Check zod's version",
+        activity: { kind: "web-searched", query: "zod latest version" },
+      },
+      {
+        helper: "Check zod's version",
+        activity: { kind: "page-read", url: "https://zod.dev/v4", site: "zod.dev" },
+      },
+    ]);
+    await rm(worktree, { recursive: true, force: true });
+  });
+
   it("refuses a helper starting helpers of its own, and one the worker couldn't start as the turn stopped", async () => {
     const { worktree, code } = await helpingSession();
     const stopped: CodeTurn = { ...code, helper: async () => undefined };
