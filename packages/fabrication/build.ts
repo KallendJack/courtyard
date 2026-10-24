@@ -31,10 +31,15 @@ export type Material =
   | { readonly kind: "sheet"; readonly stock: string }
   | { readonly kind: "printed"; readonly stock: string };
 
-/** A part, once for all its pieces: its label (A, B…), its cut size and a box for each piece. */
+/**
+ * A part, once for all its pieces: its label (A, B…), what it does in the Build in a line, its
+ * cut size and a box for each piece.
+ */
 export type Part = {
   readonly label: string;
   readonly name: string;
+  /** Where it goes and what it holds: "One at each corner, standing on the castor bases." */
+  readonly does: string;
   readonly count: number;
   readonly material: Material;
   readonly length: number;

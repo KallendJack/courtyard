@@ -8,7 +8,9 @@
 // (packages/house/check-size.ts, ADR 0035). The shared pieces both apps use, packages/ui (#703), keep
 // to their own folders too.
 //
-//   node scripts/folders/check.ts [<worker's src> <web app's src> <overview> <architecture> <packages/ui>]
+// Fabrication (#698, ADR 0036), the second web app, keeps to the web app's folders.
+//
+//   node scripts/folders/check.ts [<worker's src> <web app's src> <overview> <architecture> <packages/ui> <Fabrication's src>]
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -19,10 +21,11 @@ const [
   overview = join(import.meta.dirname, "../../docs/overview.md"),
   architecture = join(import.meta.dirname, "../../docs/architecture.md"),
   uiPackage = join(import.meta.dirname, "../../packages/ui"),
+  fabricationSrc = join(import.meta.dirname, "../../apps/fabrication/src"),
 ] = process.argv.slice(2);
 
 type App = {
-  name: "Worker" | "Web" | "UI";
+  name: "Worker" | "Web" | "Fabrication" | "UI";
   src: string;
   folders: readonly string[];
   files: readonly string[];
@@ -52,6 +55,15 @@ const APPS: readonly App[] = [
     readmeEach: ["features"],
     readmeOwn: [],
     linkedAs: "../apps/web/src",
+  },
+  {
+    name: "Fabrication",
+    src: fabricationSrc,
+    folders: ["features", "components", "hooks", "api", "routes", "lib"],
+    files: ["main.tsx", "styles.css", "routeTree.gen.ts"],
+    readmeEach: ["features"],
+    readmeOwn: [],
+    linkedAs: "../apps/fabrication/src",
   },
   {
     name: "UI",

@@ -1,9 +1,15 @@
-import { nextStepOf, type Project, type StepKind, type WorkspaceId } from "@courtyard/contract";
-import { Button } from "@courtyard/ui/buttons/button.tsx";
+import {
+  type BuildSlug,
+  nextStepOf,
+  type Project,
+  type StepKind,
+  type WorkspaceId,
+} from "@courtyard/contract";
+import { Button, buttonLook } from "@courtyard/ui/buttons/button.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { BackLink } from "@/components/buttons/back-link";
-import { CapsLabel } from "@/components/layout/caps-label";
 import { stepDetail } from "./api.ts";
 import { useCarryOn } from "./carry-on.ts";
 
@@ -13,6 +19,19 @@ const CHIPS: Readonly<Record<StepKind, { label: string; look: string }>> = {
   "you can do this": { label: "You can do this", look: "bg-primary/12 text-primary-text" },
   "needs a pro": { label: "Needs a pro", look: "bg-warning/10 text-warning" },
 };
+
+/**
+ * A step's Build opened in Fabrication (#698), its own app beside Courtyard: a page load, not a
+ * move within Courtyard.
+ */
+function OpenInFabrication(props: { workspaceId: WorkspaceId; build: BuildSlug }) {
+  const href = `/fabrication/workspaces/${encodeURIComponent(props.workspaceId)}/builds/${props.build}`;
+  return (
+    <a href={href} className={classes(buttonLook({ variant: "soft", size: "row" }), "shrink-0")}>
+      Open in Fabrication
+    </a>
+  );
+}
 
 /**
  * A project on its workspace's page (#603; Paper, "Tablet · Project: turn the garage into an
@@ -46,6 +65,9 @@ export function ProjectView(props: { workspaceId: WorkspaceId; project: Project 
               <p className="text-interface font-bold text-foreground">{next.text}</p>
               <p className="text-meta font-medium text-primary-text">{stepDetail(next)}</p>
             </div>
+            {next.build !== undefined && (
+              <OpenInFabrication workspaceId={workspaceId} build={next.build} />
+            )}
             <Button
               onClick={() => void carryOn.run(project)}
               busy={carryOn.busy}
@@ -77,9 +99,12 @@ export function ProjectView(props: { workspaceId: WorkspaceId; project: Project 
                     {CHIPS[step.kind].label}
                   </span>
                 </span>
-                <span className="min-w-0 text-sm/5 font-semibold text-foreground/90">
+                <span className="min-w-0 grow text-sm/5 font-semibold text-foreground/90">
                   {step.detail === undefined ? step.text : `${step.text} · ${step.detail}`}
                 </span>
+                {step.build !== undefined && (
+                  <OpenInFabrication workspaceId={workspaceId} build={step.build} />
+                )}
               </li>
             ))}
           </ul>

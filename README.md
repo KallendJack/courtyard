@@ -497,6 +497,8 @@ data folder as it is, and sign in to Claude Code on the new machine.
   test`, `e2e` and `build` wait their turn in the machine's builds lock, behind Courtyard's sessions and each other.
 - **`pnpm dev`** runs the worker and the web app with reloading. It needs a `.env` in the clone with its own context
   and data folders, never the live ones, and its own `COURTYARD_PORT` if the live worker runs on the same machine.
+  Fabrication (`apps/fabrication`) runs beside it on port 5174, under `/fabrication/`; log in on the web app's
+  port first. Built, the worker serves it under `/fabrication` itself, from `apps/fabrication/dist`.
 - **On Windows,** some worker tests can time out while the PC is busy: [#130](https://github.com/KallendJack/courtyard/issues/130).
   Each test removes its `courtyard-*` folder in the temp folder, trying again while Windows holds it. Folders left by
   runs before that, or by a run that was stopped, can go once no tests are running: in PowerShell,

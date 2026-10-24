@@ -6,8 +6,9 @@
 // nothing needs any more fails too, so the list stays short. It also fails a button greyed out
 // while it works (`disabled={save.busy}`), which shows it's busy instead (#330), and anything that
 // scrolls by itself rather than as the shared scroller, packages/ui/layout/scroller.tsx (#420), and a
-// label in capitals written by hand rather than as the shared CapsLabel, components/layout/caps-label.tsx
-// (#242). It reads the web app's source and the shared pieces' (packages/ui, #703).
+// label in capitals written by hand rather than as the shared CapsLabel, packages/ui/layout/caps-label.tsx
+// (#242). It reads both apps' source, the web app's and Fabrication's (#698), and the shared pieces'
+// (packages/ui, #703).
 //
 //   node scripts/theme/check.ts [<repo's root> <allowlist>]
 
@@ -21,7 +22,7 @@ const [
 ] = process.argv.slice(2);
 
 /** The folders read, from the repo's root. */
-const FOLDERS = ["apps/web/src", "packages/ui"];
+const FOLDERS = ["apps/web/src", "apps/fabrication/src", "packages/ui"];
 
 const Allowed = z.array(
   z.object({
@@ -38,6 +39,8 @@ const SKIPPED = new Set([
   "packages/ui/theme.css",
   "apps/web/src/styles.css",
   "apps/web/src/routeTree.gen.ts",
+  "apps/fabrication/src/styles.css",
+  "apps/fabrication/src/routeTree.gen.ts",
 ]);
 
 /** Tailwind utilities that take a colour, a size, a radius, a shadow or a ring. */
@@ -144,7 +147,7 @@ const scrollsIn = (file: string, text: string): Problem[] => {
  * guide's `label` (12/16, 600, +8%), so nothing else sets capitals: a class (`uppercase`) or a
  * stylesheet's rule.
  */
-const CAPS_LABEL = "apps/web/src/components/layout/caps-label.tsx";
+const CAPS_LABEL = "packages/ui/layout/caps-label.tsx";
 const CAPS_CLASS = /^uppercase$/;
 const CAPS_RULE = /\btext-transform\s*:\s*uppercase\b/g;
 
@@ -225,7 +228,7 @@ if (scrolls.length > 0) {
 }
 if (caps.length > 0) {
   console.error(
-    "Capitals by hand: a section's label is the shared CapsLabel (components/layout/caps-label.tsx), the style guide's label (#242). Use it, give it an option, or allow what isn't a label (a mark in a pill) in scripts/theme/allowed.json with its reason:",
+    "Capitals by hand: a section's label is the shared CapsLabel (packages/ui/layout/caps-label.tsx), the style guide's label (#242). Use it, give it an option, or allow what isn't a label (a mark in a pill) in scripts/theme/allowed.json with its reason:",
   );
   for (const { file, line, value } of caps) console.error(`  ${file}:${line}: ${value}`);
 }

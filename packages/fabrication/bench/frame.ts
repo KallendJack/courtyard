@@ -103,12 +103,20 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
   const middle = (thickness: number) => (s.length - thickness) / 2;
   const frameTimber = { width: s.wide, thickness: s.thick, material: timber };
   const wideCut = { width: s.wideWidth, thickness: s.wideThick, material: wideTimber };
+  const { ends, rear } = parameters.braces;
+  const braced =
+    ends && rear
+      ? "the outside of the ends and the back"
+      : ends
+        ? "the outside of the ends"
+        : "the back";
 
   const parts: (Omit<Part, "count"> & { on: boolean })[] = [
     {
       on: true,
       label: "A",
       name: "Legs",
+      does: `One at each corner, standing on ${parameters.castors ? "the castor bases" : "the floor"}.`,
       length: s.leg,
       ...frameTimber,
       boxes: [s.left, s.right - s.wide].flatMap((x) =>
@@ -121,6 +129,7 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
       on: true,
       label: "B",
       name: "Long rails",
+      does: `Front and back, top and bottom. The top pair holds the top, the bottom pair ${parameters.shelf.on ? "the shelf" : "stiffens the frame"}.`,
       length: cutSize(s.frameLength),
       ...frameTimber,
       boxes: [s.front, s.back - s.thick].flatMap((y) =>
@@ -131,6 +140,7 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
       on: true,
       label: "C",
       name: "End rails",
+      does: "Join each end's two legs, top and bottom, making the two end frames.",
       length: cutSize(s.endRail),
       ...frameTimber,
       boxes: [s.left + s.wide, s.right - s.wide - s.thick].flatMap((x) =>
@@ -141,6 +151,7 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
       on: parameters.shelf.on,
       label: "D",
       name: "Shelf support",
+      does: "Across the middle under the shelf, so it doesn't sag.",
       length: cutSize(s.endRail),
       ...frameTimber,
       boxes: [box(middle(s.thick), s.front + s.thick, lower, s.thick, s.endRail, s.wide)],
@@ -149,6 +160,7 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
       on: parameters.castors !== null,
       label: "E",
       name: "Castor bases",
+      does: "Under each end frame, with a castor bolted under each end.",
       length: cutSize(s.frameDepth),
       ...wideCut,
       boxes: [s.left, s.right - s.wideWidth].map((x) =>
@@ -159,6 +171,7 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
       on: true,
       label: "F",
       name: "Top support",
+      does: "Across the middle under the top, so it doesn't sag.",
       length: cutSize(s.endRail),
       ...wideCut,
       boxes: [
@@ -176,6 +189,10 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
       on: true,
       label: "G",
       name: "Top",
+      does:
+        s.overhang > 0
+          ? "The worktop, reaching past the frame on every side."
+          : "The worktop, flush with the frame.",
       length: cutSize(s.length),
       width: cutSize(s.depth),
       thickness: s.top,
@@ -186,6 +203,7 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
       on: parameters.shelf.on,
       label: "H",
       name: "Shelf",
+      does: "Rests on the lower long rails, between the end frames.",
       length: cutSize(s.shelfLength),
       width: cutSize(s.frameDepth),
       thickness: s.shelfSheet,
@@ -205,6 +223,7 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
       on: parameters.braces.ends || parameters.braces.rear,
       label: "J",
       name: "Braces",
+      does: `On ${braced}, so the frame can't rack.`,
       length: cutSize(s.endRail),
       width: cutSize(s.braceHeight),
       thickness: s.braceSheet,

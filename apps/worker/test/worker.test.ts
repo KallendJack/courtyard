@@ -177,6 +177,59 @@ describe("the web app", () => {
   });
 });
 
+describe("Fabrication (#698)", () => {
+  let fabricationDir: string;
+
+  beforeEach(async () => {
+    const webDir = join(root, "web");
+    await mkdir(webDir, { recursive: true });
+    await writeFile(join(webDir, "index.html"), "<h1>Courtyard page</h1>");
+    fabricationDir = join(root, "fabrication");
+    await mkdir(join(fabricationDir, "assets"), { recursive: true });
+    await writeFile(join(fabricationDir, "index.html"), "<h1>Fabrication page</h1>");
+    await writeFile(join(fabricationDir, "assets", "app.js"), "console.log('fabrication')");
+    await writeFile(join(root, "secret.txt"), "outside the Fabrication folder");
+  });
+
+  const startWithFabrication = () =>
+    startWorker({
+      ...settings,
+      COURTYARD_WEB_DIR: join(root, "web"),
+      COURTYARD_FABRICATION_DIR: fabricationDir,
+    }).app;
+
+  it("serves its page under /fabrication, for each of its own routes, and the web app's elsewhere", async () => {
+    const app = startWithFabrication();
+
+    for (const path of [
+      "/fabrication",
+      "/fabrication/",
+      "/fabrication/workspaces/garage/builds/workbench",
+    ]) {
+      expect(await (await app.request(path)).text()).toContain("Fabrication page");
+    }
+    expect(await (await app.request("/fabrications")).text()).toContain("Courtyard page");
+    expect(await (await app.request("/workspaces/garage")).text()).toContain("Courtyard page");
+  });
+
+  it("serves its files with their type, and none from outside its folder", async () => {
+    const app = startWithFabrication();
+
+    const file = await app.request("/fabrication/assets/app.js");
+    expect(file.headers.get("content-type")).toContain("javascript");
+    expect(await file.text()).toBe("console.log('fabrication')");
+    for (const path of ["/fabrication/../secret.txt", "/fabrication/assets/..%2f..%2fsecret.txt"]) {
+      expect(await (await app.request(path)).text()).not.toContain("outside the Fabrication");
+    }
+  });
+
+  it("refuses a Fabrication folder that was set but doesn't exist", () => {
+    const error = startupError({ ...settings, COURTYARD_FABRICATION_DIR: join(root, "no-build") });
+
+    expect(error).toContain("COURTYARD_FABRICATION_DIR");
+  });
+});
+
 describe("served behind a proxy", () => {
   /** Asks for the health check over `agent`, saying whether it went on a connection already open. */
   const askHealth = (port: number, agent: Agent) =>

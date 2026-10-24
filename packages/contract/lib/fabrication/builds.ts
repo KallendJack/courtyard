@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChangeId } from "../change-id.ts";
+import { DerivedBuild } from "./derived.ts";
 
 // Builds (ADR 0036, 0037, #697): a design worked out by code, which Fabrication owns and a planning
 // workspace hosts, a JSON file each in its `builds` folder. The file holds only what's chosen, its
@@ -67,7 +68,7 @@ export type Builds = z.infer<typeof Builds>;
  */
 export const BuildView = BuildSummary.extend({
   parameters: BuildParameters,
-  derived: z.record(z.string(), z.unknown()),
+  derived: DerivedBuild,
 });
 export type BuildView = z.infer<typeof BuildView>;
 

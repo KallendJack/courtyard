@@ -41,6 +41,10 @@
   --color-chart-moss: var(--chart-moss);
   --color-chart-bracken: var(--chart-bracken);
   --color-chart-peat: var(--chart-peat);
+  --color-timber: var(--timber);
+  --color-sheet: var(--sheet);
+  --color-fitted: var(--fitted);
+  --color-printed: var(--printed);
   --color-code-keyword: var(--code-keyword);
   --color-code-name: var(--code-name);
   --color-code-number: var(--code-number);
@@ -192,6 +196,15 @@
   --chart-moss: #a9bc85;
   --chart-bracken: #c9a26b;
   --chart-peat: #a88f7e;
+
+  /*
+   * What a Build is made of, in Fabrication's 3D view and cut plan (#698): timber, sheet (plywood),
+   * what's fitted as bought (castors) and what's printed. Hex, since the 3D view reads them too.
+   */
+  --timber: #c9a26b;
+  --sheet: #dcc99c;
+  --fitted: #6b6b6b;
+  --printed: #9fb2c6;
 
   /* Code in answers. */
   --code-keyword: #b784bb;

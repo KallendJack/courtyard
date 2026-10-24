@@ -7,6 +7,7 @@ import {
 } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { useBlocksFill } from "@courtyard/ui/frame/handheld.ts";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { useKept } from "@courtyard/ui/layout/kept.tsx";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
@@ -15,7 +16,6 @@ import { PanelsTopLeft } from "lucide-react";
 import { type KeyboardEvent, use, useLayoutEffect, useMemo, useState } from "react";
 import { RowButton } from "@/components/buttons/row-button";
 import { SegmentedChoice } from "@/components/forms/segmented-choice";
-import { CapsLabel } from "@/components/layout/caps-label";
 import { CardDialog } from "@/components/layout/card-dialog";
 import { KEPT_HOME, loadKeptHome } from "../../features/planning-home/api.ts";
 import { type DrawingProps, OnHome } from "./fenced.tsx";
