@@ -3,8 +3,9 @@ import { AlwaysAllow, AlwaysFor, ApprovalAnswer, ApprovalAsk } from "./approval.
 import { Attachment, PhotoAttachment } from "./attachment.ts";
 import { ChangeId } from "./change-id.ts";
 import { DocumentSlug } from "./documents.ts";
+import { BuildSave } from "./fabrication/builds.ts";
 import { ProjectSave } from "./projects.ts";
-import { PullRequest } from "./pull-request.ts";
+import { PullRequest, WorktreeKeptWhy } from "./pull-request.ts";
 import { Effort, ModelRef, PlacedLine } from "./session.ts";
 import { SkillName, SkillSource } from "./skill-name.ts";
 import { TaskEnding, TaskId } from "./tasks.ts";
@@ -110,6 +111,14 @@ export const SUGGESTED_REPLIES = { atLeast: 2, atMost: 3 } as const;
 export const SUGGESTED_REPLY_MAX_CHARACTERS = 60;
 
 const eventBase = { seq: z.number().int().positive(), at: z.iso.datetime() };
+
+/** A file the model saved, and the change it was committed as (none when git couldn't keep it). */
+const fileSaved = <T extends string, S extends z.ZodType>(type: T, save: S) =>
+  z.object({ ...eventBase, type: z.literal(type), save, change: z.optional(ChangeId) });
+
+/** The owner undid the file save numbered `save`, whenever and from wherever they did it. */
+const fileUndone = <T extends string>(type: T) =>
+  z.object({ ...eventBase, type: z.literal(type), save: z.number().int().positive() });
 
 /** One recorded thing that happened in a session, numbered from 1 with no gaps (ADR 0006). */
 export const SessionEvent = z.discriminatedUnion("type", [
@@ -336,26 +345,15 @@ export const SessionEvent = z.discriminatedUnion("type", [
   }),
   /** The owner undid the document save numbered `save`, whenever and from wherever they did it. */
   z.object({ ...eventBase, type: z.literal("document-undone"), save: z.number().int().positive() }),
-  /** A Thing the model saved during the turn: added, changed or removed (ADR 0020). */
-  z.object({
-    ...eventBase,
-    type: z.literal("thing-saved"),
-    save: ThingSave,
-    /** The change it was committed as, which Undo reverses; absent when git couldn't keep it. */
-    change: z.optional(ChangeId),
-  }),
-  /** The owner undid the Thing save numbered `save`, whenever and from wherever they did it. */
-  z.object({ ...eventBase, type: z.literal("thing-undone"), save: z.number().int().positive() }),
-  /** A project the model started or changed during the turn (#603). */
-  z.object({
-    ...eventBase,
-    type: z.literal("project-saved"),
-    save: ProjectSave,
-    /** The change it was committed as, which Undo reverses; absent when git couldn't keep it. */
-    change: z.optional(ChangeId),
-  }),
-  /** The owner undid the project save numbered `save`, whenever and from wherever they did it. */
-  z.object({ ...eventBase, type: z.literal("project-undone"), save: z.number().int().positive() }),
+  /** A Thing the model added, changed or removed (ADR 0020), and the owner undoing it. */
+  fileSaved("thing-saved", ThingSave),
+  fileUndone("thing-undone"),
+  /** A project the model started or changed (#603), and the owner undoing it. */
+  fileSaved("project-saved", ProjectSave),
+  fileUndone("project-undone"),
+  /** A Build the model started or changed (#697), and the owner undoing it. */
+  fileSaved("build-saved", BuildSave),
+  fileUndone("build-undone"),
   /** A model gave the session this title after its first answer, in place of the first line. */
   z.object({ ...eventBase, type: z.literal("session-titled"), title: z.string() }),
   /** Replies the model offered the owner to tap, with the answer it's writing (ADR 0017). */
@@ -423,6 +421,11 @@ export const SessionEvent = z.discriminatedUnion("type", [
   }),
   /** The owner turned Allow all for this task off (#428) before it ran out. */
   z.object({ ...eventBase, type: z.literal("allow-all-ended") }),
+  // Its worktree after 3 quiet days with no pull request (#605): cleared, what GitHub lacked on
+  // `wip` first, until its next turn checks the branch out again (`restored`); or kept, and why.
+  z.object({ ...eventBase, type: z.literal("worktree-cleared"), wip: z.string().optional() }),
+  z.object({ ...eventBase, type: z.literal("worktree-kept"), why: WorktreeKeptWhy }),
+  z.object({ ...eventBase, type: z.literal("worktree-restored") }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEvent>;
 
@@ -474,10 +477,4 @@ export const tasksIn = (events: readonly SessionEvent[]): TaskTold[] => {
     }
   }
   return [...tasks.values()];
-};
-
-/** A session's pull request as it last stood, from its events, or `undefined` before it has one. */
-export const pullRequestIn = (events: readonly SessionEvent[]) => {
-  const last = events.findLast((event) => event.type === "pull-request");
-  return last?.type === "pull-request" ? last.pullRequest : undefined;
 };

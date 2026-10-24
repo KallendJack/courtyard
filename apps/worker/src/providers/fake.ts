@@ -15,6 +15,7 @@ import { pngOf } from "../../test/test-files.ts";
 import { pageRead, turnSources } from "../features/sources/index.ts";
 import { writeTextFileIn } from "../lib/files.ts";
 import { err, ok, type Result } from "../lib/result.ts";
+import { BUILD_TOOL_NAME } from "../prompts/builds.ts";
 import {
   DOCUMENT_TOOL_NAME,
   LEAD_TOOL_NAME,
@@ -200,16 +201,14 @@ const scriptedThings = (message: string): Record<string, unknown>[] =>
     return [input];
   });
 
-const PROJECT = /^project: *(\{.*\})$/i;
-
 /**
- * The project saves a message scripts (#603), one per line: "project: " and the tool's input as
- * JSON, such as `project: {"name": "Garage office", "add_steps": [{"kind": "needs a pro", "text":
- * "Sockets"}]}`. A line whose JSON doesn't read is left out.
+ * The project (#603) or Build (#697) saves a message scripts, one per line: "project: " or "build: "
+ * and the tool's input as JSON, such as `project: {"name": "Garage office", "add_steps": [{"kind":
+ * "needs a pro", "text": "Sockets"}]}`. A line whose JSON doesn't read is left out.
  */
-const scriptedProjects = (message: string): unknown[] =>
-  message.split("\n").flatMap((line) => {
-    const [, json] = PROJECT.exec(line.trim()) ?? [];
+const scriptedJson = (word: string) => (message: string) =>
+  message.split("\n").flatMap((line): unknown[] => {
+    const [, json] = new RegExp(`^${word}: *(\\{.*\\})$`, "i").exec(line.trim()) ?? [];
     if (json === undefined) return [];
     try {
       return [JSON.parse(json)];
@@ -270,7 +269,8 @@ const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unk
   [SAVE_TOOL_NAME, scriptedSaves],
   [DOCUMENT_TOOL_NAME, scriptedDocuments],
   [THING_TOOL_NAME, scriptedThings],
-  [PROJECT_TOOL_NAME, scriptedProjects],
+  [PROJECT_TOOL_NAME, scriptedJson("project")],
+  [BUILD_TOOL_NAME, scriptedJson("build")],
   [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
   [LEAD_TOOL_NAME, scriptedBuildOrder],
 ];

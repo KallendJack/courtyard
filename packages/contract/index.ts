@@ -86,6 +86,21 @@ export {
   DocumentSummary,
   SaveAsDocument,
 } from "./lib/documents.ts";
+export {
+  BUILD_NAME_MAX_CHARACTERS,
+  BuildChange,
+  BuildChanged,
+  BuildFile,
+  BuildName,
+  BuildParameters,
+  BuildParametersChange,
+  BuildSave,
+  BuildSlug,
+  BuildSummary,
+  Builds,
+  BuildTemplate,
+  BuildView,
+} from "./lib/fabrication/builds.ts";
 export { FloorPlan, PlanItem, PlanOpening, PlanWall, wallLength } from "./lib/floor-plan.ts";
 export {
   FRESH_START_WORDS,
@@ -195,11 +210,14 @@ export {
   PullRequestSessionStart,
   PullRequestWaiting,
   pullRequestEnded,
+  pullRequestIn,
   QUICK_LINES_MAX,
   QuickAnswer,
   QuickLine,
   QuickQuestion,
   QuickQuestions,
+  WorktreeKeptWhy,
+  worktreeClearedIn,
 } from "./lib/pull-request.ts";
 export {
   AllowingAll,
@@ -238,7 +256,6 @@ export {
   endsTurn,
   FailureReason,
   HelperId,
-  pullRequestIn,
   queuedIn,
   Save,
   SessionEvent,

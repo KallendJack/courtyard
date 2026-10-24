@@ -12,7 +12,7 @@ const LABELS = { add: "Started project", change: "Updated project" } as const;
  * pro)"), with Open, which goes to the project, and Undo. It follows the session, so an Undo from
  * any device shows here too.
  */
-export function ProjectNoteRow(props: {
+function ProjectNoteRow(props: {
   sessionId: SessionId;
   /** The session's workspace, where the project is; none for a session that has none. */
   workspaceId: WorkspaceId | undefined;
@@ -38,5 +38,27 @@ export function ProjectNoteRow(props: {
       undone={note.undone}
       undo={() => undoProjectSave(sessionId, note.seq)}
     />
+  );
+}
+
+/** The projects the model started or changed in an answer, as notes under it; nothing for none. */
+export function ProjectNotes(props: {
+  sessionId: SessionId;
+  workspaceId: WorkspaceId | undefined;
+  notes: readonly ProjectNote[];
+}) {
+  const { sessionId, workspaceId, notes } = props;
+  if (notes.length === 0) return null;
+  return (
+    <ul aria-label="Projects saved" className="space-y-1.5">
+      {notes.map((note) => (
+        <ProjectNoteRow
+          key={note.seq}
+          sessionId={sessionId}
+          workspaceId={workspaceId}
+          note={note}
+        />
+      ))}
+    </ul>
   );
 }

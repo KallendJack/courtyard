@@ -1,6 +1,5 @@
 import {
   type Activity,
-  type FailureReason,
   type HelperId,
   type ProviderList,
   type SessionId,
@@ -29,13 +28,15 @@ import { TaskEndedLine } from "../../tasks/task-lines.tsx";
 import { Answer } from "../answer/answer.tsx";
 import { SourceList, sourcesAsMarkdown } from "../answer/sources.tsx";
 import { answerApproval, attachmentUrl } from "../composer/messages.ts";
+import { BuildNotes } from "../notes/builds.tsx";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "../notes/documents.tsx";
-import { ProjectNoteRow } from "../notes/projects.tsx";
+import { ProjectNotes } from "../notes/projects.tsx";
 import { SaveNote } from "../notes/save-note.tsx";
 import { ThingNoteRow } from "../notes/things.tsx";
 import { CutOffCard } from "./cut-off-card.tsx";
 import type { AnswerPart, Helper, MarkedActivity, ShownImage, Turn } from "./events.ts";
 import { LimitNotice } from "./limit-notice.tsx";
+import { describeFailure, worktreeWords } from "./turn-words.ts";
 
 /**
  * The value a command gives one of `options` (`-m "…"`, `--title=…`), the first time, or nothing.
@@ -268,21 +269,6 @@ function HelperLines(props: { turn: Turn; helpers: readonly HelperId[] }) {
     </section>
   );
 }
-
-/** A failure's reason in plain words. */
-export const describeFailure = (reason: FailureReason) => {
-  switch (reason.kind) {
-    case "rate-limited":
-      return reason.resetAt
-        ? `You've hit this model's usage limit. It resets at ${new Date(reason.resetAt).toLocaleString()}.`
-        : "You've hit this model's usage limit.";
-    case "interrupted":
-      return "Courtyard's worker stopped before this turn finished.";
-    case "provider-unavailable":
-    case "unknown":
-      return reason.message;
-  }
-};
 
 /** A line about where a turn stands, under the owner's message: waiting, or stopped. */
 function TurnNote(props: { children: ReactNode }) {
@@ -588,18 +574,8 @@ export const TurnView = memo(function TurnView(props: {
           ))}
         </ul>
       )}
-      {turn.projects.length > 0 && (
-        <ul aria-label="Projects saved" className="space-y-1.5">
-          {turn.projects.map((note) => (
-            <ProjectNoteRow
-              key={note.seq}
-              sessionId={sessionId}
-              workspaceId={workspaceId}
-              note={note}
-            />
-          ))}
-        </ul>
-      )}
+      <ProjectNotes sessionId={sessionId} workspaceId={workspaceId} notes={turn.projects} />
+      <BuildNotes sessionId={sessionId} notes={turn.builds} />
       {/* What the worker did for a code workspace's Lead since, in its words (#347). */}
       {turn.leadNotes.length > 0 && (
         <section aria-label="What the Lead did" className="space-y-2">
@@ -610,6 +586,8 @@ export const TurnView = memo(function TurnView(props: {
         </section>
       )}
       {turn.state.kind === "stopped" && <TurnNote>You stopped this turn.</TurnNote>}
+      {/* Its worktree cleared after quiet days, with nothing lost, or kept, and why (#605). */}
+      {turn.worktree !== undefined && <TurnNote>{worktreeWords(turn.worktree)}</TurnNote>}
       {/* The latest turn's end, so a finished session never looks like one still working (#179). */}
       {latest && (turn.state.kind === "done" || turn.state.kind === "stopped") && (
         <TurnEndMark at={turn.state.at} stopped={turn.state.kind === "stopped"} />

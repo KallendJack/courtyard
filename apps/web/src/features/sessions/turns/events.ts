@@ -4,6 +4,7 @@ import {
   ApiError,
   type ApprovalAsk,
   type Attachment,
+  type BuildSave,
   type DocumentSave,
   type Doing,
   type Effort,
@@ -24,6 +25,8 @@ import {
 } from "@courtyard/contract";
 import { useEffect, useReducer, useRef, useState } from "react";
 import type { Queued } from "@/components/chat/queued-message";
+import { changeHelper, withActivity, withHelper, withText } from "./parts.ts";
+import { type WorktreeNote, worktreeNoteOf } from "./turn-words.ts";
 
 /**
  * A save the model made, shown as a note under its answer, and what the owner has done with it
@@ -40,31 +43,23 @@ export type Note = {
 };
 
 /**
- * A document saved from an answer (ADR 0020), by the model or with Save as document, shown as a
- * note under it, and whether the owner has undone it since.
+ * A file saved from an answer, shown as a note under it, and whether the owner has undone it
+ * since: by its event number, which Undo names it by.
  */
-export type DocumentNote = {
-  /** The save's event number, which Undo names it by. */
-  readonly seq: number;
-  readonly save: DocumentSave;
-  readonly undone: boolean;
-};
+type FileNote<Save> = { readonly seq: number; readonly save: Save; readonly undone: boolean };
 
-/** A Thing the model saved in its answer (ADR 0020), shown as a note under it, and whether the owner has undone it since. */
-export type ThingNote = {
-  /** The save's event number, which Undo names it by. */
-  readonly seq: number;
-  readonly save: ThingSave;
-  readonly undone: boolean;
-};
+/** The notes with the one for the save numbered `save` undone. */
+const undoneIn = <N extends FileNote<unknown>>(notes: readonly N[], save: number) =>
+  notes.map((note) => (note.seq === save ? { ...note, undone: true } : note));
 
-/** A project the model started or changed in its answer (#603), shown as a note under it, and whether the owner has undone it since. */
-export type ProjectNote = {
-  /** The save's event number, which Undo names it by. */
-  readonly seq: number;
-  readonly save: ProjectSave;
-  readonly undone: boolean;
-};
+/** A document saved from an answer (ADR 0020), by the model or with Save as document. */
+export type DocumentNote = FileNote<DocumentSave>;
+/** A Thing the model saved in its answer (ADR 0020). */
+export type ThingNote = FileNote<ThingSave>;
+/** A project the model started or changed in its answer (#603). */
+export type ProjectNote = FileNote<ProjectSave>;
+/** A Build the model started or changed in its answer (#697). */
+export type BuildNote = FileNote<BuildSave>;
 
 /** An image a tool connection showed (ADR 0023), by what it shows. */
 export type ShownImage = {
@@ -130,58 +125,6 @@ export type Helper = {
 /** Where a helper's work goes (#395), as its line shows it. */
 export type HelperBranch = "shared" | "own" | "merged" | "clashed";
 
-/** A helper started after a turn's parts so far: with the ones just before it, or after the rest. */
-const withHelper = (parts: readonly AnswerPart[], helper: HelperId): readonly AnswerPart[] => {
-  const last = parts.at(-1);
-  if (last?.kind !== "helpers") return [...parts, { kind: "helpers", helpers: [helper] }];
-  return [...parts.slice(0, -1), { kind: "helpers", helpers: [...last.helpers, helper] }];
-};
-
-/** A turn's helpers with the one numbered `helper` changed, leaving the rest as they were. */
-const changeHelper = (
-  helpers: readonly Helper[],
-  helper: HelperId,
-  change: (helper: Helper) => Helper,
-) => helpers.map((each) => (each.id === helper ? change(each) : each));
-
-/** Text after a turn's parts so far: added to the text it's writing, or a new piece. */
-const withText = (
-  parts: readonly AnswerPart[],
-  text: string,
-  replayed: boolean,
-): readonly AnswerPart[] => {
-  const last = parts.at(-1);
-  if (last?.kind === "text") {
-    const whole = last.text + text;
-    return [
-      ...parts.slice(0, -1),
-      { kind: "text", text: whole, replayed: replayed ? whole.length : last.replayed },
-    ];
-  }
-  // A new piece starts at its first words, not at the break before them.
-  const start = text.trimStart();
-  if (start === "") return parts;
-  return [...parts, { kind: "text", text: start, replayed: replayed ? start.length : 0 }];
-};
-
-/**
- * An activity after a turn's parts so far: with the ones just before it, or after the text. A
- * build's newer place in the queue takes the older one's line (#281).
- */
-const withActivity = (
-  parts: readonly AnswerPart[],
-  activity: MarkedActivity,
-): readonly AnswerPart[] => {
-  const last = parts.at(-1);
-  if (last?.kind !== "activities") {
-    return [...parts, { kind: "activities", activities: [activity] }];
-  }
-  const moved =
-    activity.kind === "waiting-for-build" && last.activities.at(-1)?.kind === "waiting-for-build";
-  const before = moved ? last.activities.slice(0, -1) : last.activities;
-  return [...parts.slice(0, -1), { kind: "activities", activities: [...before, activity] }];
-};
-
 /** One message from the owner and everything the model did in response to it. */
 export type Turn = {
   readonly seq: number;
@@ -207,8 +150,9 @@ export type Turn = {
   readonly documents: readonly DocumentNote[];
   /** The Things its model saved, in order. */
   readonly things: readonly ThingNote[];
-  /** The projects its model started or changed, in order (#603). */
+  /** The projects (#603) and Builds (#697) its model started or changed, in order. */
   readonly projects: readonly ProjectNote[];
+  readonly builds: readonly BuildNote[];
   /** Replies the model suggested the owner tap (ADR 0017); none when it suggested none. */
   readonly replies: readonly string[];
   /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
@@ -247,6 +191,8 @@ export type Turn = {
   readonly fromWorker: boolean;
   /** What the worker did for a code workspace's Lead after this turn (#347), each in its words. */
   readonly leadNotes: readonly string[];
+  /** What became of its session's worktree after it, 3 quiet days on with no pull request (#605). */
+  readonly worktree: WorktreeNote | undefined;
   /** When the owner's message was recorded, which the Working line counts from (#179). */
   readonly startedAt: string;
   /**
@@ -367,6 +313,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             documents: [],
             things: [],
             projects: [],
+            builds: [],
             replies: [],
             sources: [],
             images: [],
@@ -380,6 +327,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
               event.carriesOn === true ||
               event.afterLimit === true,
             leadNotes: [],
+            worktree: undefined,
             startedAt: event.at,
             doing: { kind: "thinking" },
             state: { kind: "running" },
@@ -672,12 +620,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return withTurn(log, {
         seq,
         holds: (turn) => turn.documents.some((note) => note.seq === event.save),
-        change: (turn) => ({
-          ...turn,
-          documents: turn.documents.map((note) =>
-            note.seq === event.save ? { ...note, undone: true } : note,
-          ),
-        }),
+        change: (turn) => ({ ...turn, documents: undoneIn(turn.documents, event.save) }),
       });
     case "thing-saved": {
       const note: ThingNote = { seq, save: event.save, undone: false };
@@ -693,16 +636,21 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         seq,
         change: (turn) => ({ ...turn, leadNotes: [...turn.leadNotes, event.text] }),
       });
+    // Its worktree cleared or kept after quiet days (#605), said under the turn before; the next
+    // turn checking it out again needs no words.
+    case "worktree-cleared":
+    case "worktree-kept":
+      return withLastTurn(log, {
+        seq,
+        change: (turn) => ({ ...turn, worktree: worktreeNoteOf(event) }),
+      });
+    case "worktree-restored":
+      return { ...log, lastSeq: seq };
     case "thing-undone":
       return withTurn(log, {
         seq,
         holds: (turn) => turn.things.some((note) => note.seq === event.save),
-        change: (turn) => ({
-          ...turn,
-          things: turn.things.map((note) =>
-            note.seq === event.save ? { ...note, undone: true } : note,
-          ),
-        }),
+        change: (turn) => ({ ...turn, things: undoneIn(turn.things, event.save) }),
       });
     case "project-saved": {
       const note: ProjectNote = { seq, save: event.save, undone: false };
@@ -716,12 +664,21 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       return withTurn(log, {
         seq,
         holds: (turn) => turn.projects.some((note) => note.seq === event.save),
-        change: (turn) => ({
-          ...turn,
-          projects: turn.projects.map((note) =>
-            note.seq === event.save ? { ...note, undone: true } : note,
-          ),
-        }),
+        change: (turn) => ({ ...turn, projects: undoneIn(turn.projects, event.save) }),
+      });
+    case "build-saved": {
+      const note: BuildNote = { seq, save: event.save, undone: false };
+      return withTurn(log, {
+        seq,
+        holds: (_, last) => last,
+        change: (turn) => ({ ...turn, builds: [...turn.builds, note] }),
+      });
+    }
+    case "build-undone":
+      return withTurn(log, {
+        seq,
+        holds: (turn) => turn.builds.some((note) => note.seq === event.save),
+        change: (turn) => ({ ...turn, builds: undoneIn(turn.builds, event.save) }),
       });
   }
 };

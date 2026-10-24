@@ -258,6 +258,12 @@ describe("changing one parameter", () => {
     expect(after.steps.map((step) => step.title)).not.toContain("Fit the castors to the bases");
     expect(after.size.height).toBe(900);
   });
+
+  it("leaving the castors out is the same as taking them off, as a merge patch's null does (#697)", () => {
+    const { castors: _castors, ...withoutCastors } = goldenBench;
+
+    expect(built(withoutCastors)).toEqual(built({ ...goldenBench, castors: null }));
+  });
 });
 
 describe("the golden bench's steps", () => {
