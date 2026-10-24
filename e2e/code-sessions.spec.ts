@@ -38,7 +38,7 @@ test("a code session's edits and commands show as it works, and anything off the
     "edit file notes.md: The rack goes on the back wall",
     "run command: git add notes.md",
     "run command: git diff --cached --name-only",
-    "run command: rm -rf node_modules",
+    "run command: git count-objects",
   ]);
   await approvalOn(page).getByRole("button", { name: "Deny" }).click();
 
@@ -55,7 +55,7 @@ test("a code session's edits and commands show as it works, and anything off the
     // What the command printed, from the session's own worktree.
     await expect(session).toContainText("Ran git diff --cached --name-only: notes.md");
     await expect(session).toContainText(
-      "Couldn't run rm -rf node_modules: The owner denied that command, so it didn't run.",
+      "Couldn't run git count-objects: The owner denied that command, so it didn't run.",
     );
     await expect(approvalOn(page)).toHaveCount(0);
   }

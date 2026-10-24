@@ -380,7 +380,7 @@ test.describe("the chat never jumps back to the top", () => {
     const other = await context.newPage();
     await other.goto(page.url());
     await openBox(other);
-    await other.getByRole("textbox", { name: "Message" }).fill("run command: rm -rf node_modules");
+    await other.getByRole("textbox", { name: "Message" }).fill("run command: git count-objects");
     await other.getByRole("button", { name: "Send" }).click();
     const card = page.getByRole("region", { name: "Needs your OK" });
     await expect(card).toBeAttached();
