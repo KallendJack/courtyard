@@ -1,6 +1,7 @@
 /*
  * A code workspace's Home's own classes (#301), with those of the shared pieces only it shows yet
- * (its tabs, the connections line, the thumb buttons). Tailwind puts every class it
+ * (its tabs, the connections line, the thumb buttons), and the buttons', so their tablet sizes
+ * aren't outranked by its own (#690: Pause was a phone's 36 tall). Tailwind puts every class it
  * finds into the first load's stylesheet, even one only lazily loaded code uses, so styles.css
  * leaves these out and this stylesheet, loaded with the Home, has their classes instead. The
  * theme is by reference: its names, nothing of its own. They apply only inside the Home: coming

@@ -53,9 +53,9 @@ export function Block(props: {
    */
   twoRows?: boolean;
   /**
-   * From a tablet up, never shorter than its label and one whole row, and no taller (Needs you
-   * under the Builders board, #592, #690), however little of the page's height its share is,
-   * unless that's more than half its `BlockColumn` (#646).
+   * From a tablet up, never shorter than its label and one whole row (Needs you under the
+   * Builders board, #592, #690), however little of the page's height its share is, unless that's
+   * more than half its `BlockColumn` (#646).
    */
   aRowAtLeast?: boolean;
   children: ReactNode;
