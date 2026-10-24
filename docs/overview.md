@@ -12,11 +12,14 @@ is the short version: what the parts are, where their code lives, and what each 
       │
   📱 Web app  ◄── 📜 contract ──►  🖥️ Worker
   apps/web       packages/contract   apps/worker
+  🪚 Fabrication       ▲
+  apps/fabrication ────┘
 ```
 
 | Part | Its job |
 |---|---|
 | 📱 **Web app** | Shows things and asks the worker. Keeps nothing itself but a read-only copy to read offline, on a device that turns it on. |
+| 🪚 **Fabrication** | A second web app, served under `/fabrication` (ADR 0036): a Build's 3D view, cut plan, buy list and chat. Like the web app, it keeps nothing, and asks only Fabrication's API. |
 | 🎨 **ui** | The theme and the shared pieces the apps use (the page layout, buttons, the Reply box), so they look and behave the same. |
 | 📜 **Contract** | The shapes of everything the web app and worker send each other, checked on both sides. |
 | 🖥️ **Worker** | Does all the work: your login, your workspaces, sessions with the models. |
@@ -57,6 +60,14 @@ The API tests are in `apps/worker/test/`, beside `src/`.
 | `lib/` | Small helpers: times, words, stylesheets |
 | `main.tsx`, `styles.css` | Start the app, and its stylesheet: Tailwind, the theme from `packages/ui`, and which classes load later (the app loads it through `lib/app.css`, which adds `packages/ui`'s classes) |
 
+**Fabrication, `apps/fabrication/src`**
+
+The web app's folders, for its own screens: `features/` (each with its `README.md`), `components/`, `api/` (its calls
+to Fabrication's API, `/api/fabrication`), `routes/`, and `main.tsx` with `styles.css`. `three` draws the 3D view, in
+a file of its own that only a Build's page loads.
+
+**Fabrication features:** `builds`
+
 **Shared pieces, `packages/ui`**
 
 What both apps use, so Fabrication (ADR 0036) looks and behaves as the web app does; what only one app uses stays in
@@ -65,7 +76,7 @@ it. Its [`README.md`](../packages/ui/README.md) lists them.
 | Folder | What's in it |
 |---|---|
 | `theme.css` | The one theme, Handheld |
-| `layout/` | The page layout, the `Scroller`, the loading piece (`kept.tsx`) |
+| `layout/` | The page layout, the `Scroller`, the loading piece (`kept.tsx`), the label in capitals |
 | `buttons/`, `forms/`, `hooks/`, `lib/` | Buttons and the busy button, the error line, `useAction`, joining classes |
 | `frame/` | What the Handheld frame offers a page, and Talk |
 | `reply/` | The Reply box, its chips, model choice and attachments |
@@ -128,7 +139,9 @@ the chain  a time            changed                   Undo
   ready yet), its decisions and what's next, which Home lists with Carry on.
 - **`fabrication`** keeps a planning workspace's Builds (a workbench: its template and parameters), worked out by
   `packages/fabrication` each time they're read, and serves Fabrication's API. The model's Build tool starts and
-  changes them and reports the numbers code works out; a project step can own one.
+  changes them and reports the numbers code works out; a project step can own one, and opens it in Fabrication,
+  whose `builds` shows it: in 3D, its cut plan, buy list, tools and steps, and a chat about it in its project's
+  session.
 - **`move-review`** proposes, once, where a planning workspace's guides, Plans lines and wanted Things go now
   (projects, parts, the archive), which the owner ticks on Home, each move with Undo.
 - **`status-line`** builds the line under a code workspace's name, ✓ just done · ● now · ○ next, from its pull

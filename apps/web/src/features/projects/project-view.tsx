@@ -1,10 +1,10 @@
 import { nextStepOf, type Project, type WorkspaceId } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { BackLink } from "@/components/buttons/back-link";
-import { CapsLabel } from "@/components/layout/caps-label";
 import { useCarryOn } from "./carry-on.ts";
-import { notReadyWords, ProjectSteps, WHO } from "./project-steps.tsx";
+import { notReadyWords, OpenInFabrication, ProjectSteps, WHO } from "./project-steps.tsx";
 
 /**
  * A project on its workspace's page (#603, #710; Paper, "Tablet · Project page: steps (#710)"):
@@ -42,6 +42,9 @@ export function ProjectView(props: { workspaceId: WorkspaceId; project: Project 
               <p className="text-interface font-bold text-foreground">{next.text}</p>
               <p className="text-meta font-medium text-primary-text">{nextLine}</p>
             </div>
+            {next.build !== undefined && (
+              <OpenInFabrication workspaceId={workspaceId} build={next.build} />
+            )}
             <Button
               onClick={() => void carryOn.run(project)}
               busy={carryOn.busy}
@@ -53,7 +56,7 @@ export function ProjectView(props: { workspaceId: WorkspaceId; project: Project 
         )}
         <FormError message={carryOn.error} />
       </div>
-      <ProjectSteps project={project} next={next} />
+      <ProjectSteps workspaceId={workspaceId} project={project} next={next} />
     </section>
   );
 }

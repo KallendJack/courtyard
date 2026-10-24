@@ -20,8 +20,9 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-/** The web app's source and the shared pieces', from the repo's root. */
+/** The web app's source, Fabrication's (#698) and the shared pieces', from the repo's root. */
 const WEB = "apps/web/src";
+const FABRICATION = "apps/fabrication/src";
 const UI = "packages/ui";
 
 /** Source in one of those folders: each file's path in it and what's in it. */
@@ -171,9 +172,11 @@ export const Lines = () => (
 });
 
 test("fails a label in capitals written by hand, outside the shared CapsLabel (#242)", async () => {
+  await sourceIn(UI, {
+    "layout/caps-label.tsx": `const LOOK = "text-label font-semibold tracking-label uppercase";`,
+  });
   await source({
     "styles.css": THEME,
-    "components/layout/caps-label.tsx": `const LOOK = "text-label font-semibold tracking-label uppercase";`,
     "routes/workspace.tsx": `// A label in uppercase, the old way (#232).
 export const Above = () => (
   <>
@@ -203,6 +206,18 @@ export const Above = () => (
     { file: `${WEB}/routes/workspace.tsx`, value: "md:uppercase", reason: "A pill's mark." },
   ]);
   assert.deepEqual(allowed, { passed: true, said: "" });
+});
+
+test("reads Fabrication's source as the web app's, skipping its stylesheet and router file (#698)", async () => {
+  await sourceIn(FABRICATION, {
+    "styles.css": THEME,
+    "routeTree.gen.ts": `export const written = "#123456";`,
+    "features/builds/cut-plan.tsx": `export const Cut = () => <span className="text-[13px]" />;`,
+  });
+  const { passed, said } = await check();
+  assert.equal(passed, false);
+  assert.match(said, /apps\/fabrication\/src\/features\/builds\/cut-plan\.tsx:1: text-\[13px\]/);
+  assert.doesNotMatch(said, /styles\.css|routeTree/);
 });
 
 test("passes a one-off on the allowlist, which has to say why", async () => {

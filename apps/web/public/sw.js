@@ -45,6 +45,8 @@ self.addEventListener("fetch", (event) => {
   // Only the app's own files: never the API, never another site, never anything but reading.
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
+  // Fabrication is an app of its own under /fabrication (#698): its page isn't Courtyard's.
+  if (url.pathname === "/fabrication" || url.pathname.startsWith("/fabrication/")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(

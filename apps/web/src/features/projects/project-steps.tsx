@@ -1,8 +1,29 @@
-import { type Project, type ProjectStep, type StepWho, unknownNeedsOf } from "@courtyard/contract";
+import {
+  type BuildSlug,
+  type Project,
+  type ProjectStep,
+  type StepWho,
+  unknownNeedsOf,
+  type WorkspaceId,
+} from "@courtyard/contract";
+import { buttonLook } from "@courtyard/ui/buttons/button.tsx";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useId, useState } from "react";
-import { CapsLabel } from "@/components/layout/caps-label";
 import { dayWords } from "@/lib/when";
+
+/**
+ * A step's Build opened in Fabrication (#698), its own app beside Courtyard: a page load, not a
+ * move within Courtyard.
+ */
+export function OpenInFabrication(props: { workspaceId: WorkspaceId; build: BuildSlug }) {
+  const href = `/fabrication/workspaces/${encodeURIComponent(props.workspaceId)}/builds/${props.build}`;
+  return (
+    <a href={href} className={classes(buttonLook({ variant: "soft", size: "row" }), "shrink-0")}>
+      Open in Fabrication
+    </a>
+  );
+}
 
 /** Who does a step, as its chip says it, by what its colour means (AGENTS.md): violet the owner's, gold a pro. */
 export const WHO: Readonly<Record<StepWho, { label: string; look: string }>> = {
@@ -29,7 +50,7 @@ const MARKS: Readonly<Record<StepState, { label: string; look: string }>> = {
   "to do": { label: "To do", look: "border-2 border-muted-foreground" },
 };
 
-function StepRow(props: { step: ProjectStep; next: boolean }) {
+function StepRow(props: { workspaceId: WorkspaceId; step: ProjectStep; next: boolean }) {
   const { step, next } = props;
   const notReady = step.done ? undefined : notReadyWords(step);
   const state: StepState = step.done
@@ -88,6 +109,9 @@ function StepRow(props: { step: ProjectStep; next: boolean }) {
         </span>
         {sub !== undefined && <span className={classes("text-label", sub.look)}>{sub.words}</span>}
       </span>
+      {!step.done && !next && step.build !== undefined && (
+        <OpenInFabrication workspaceId={props.workspaceId} build={step.build} />
+      )}
       <span className="flex w-30 shrink-0 justify-end">
         {step.done ? (
           <span className="text-label text-muted-foreground">
@@ -113,7 +137,11 @@ function StepRow(props: { step: ProjectStep; next: boolean }) {
  * each, ticked once done, the next in violet, one not ready in gold saying what it needs, and who
  * does each. Then its decisions, folded into one row that opens to show each.
  */
-export function ProjectSteps(props: { project: Project; next: ProjectStep | undefined }) {
+export function ProjectSteps(props: {
+  workspaceId: WorkspaceId;
+  project: Project;
+  next: ProjectStep | undefined;
+}) {
   const { steps, decisions } = props.project;
   const done = steps.filter((step) => step.done).length;
   const [open, setOpen] = useState(false);
@@ -129,7 +157,12 @@ export function ProjectSteps(props: { project: Project; next: ProjectStep | unde
           </div>
           <ul className="flex flex-col">
             {steps.map((step) => (
-              <StepRow key={step.id} step={step} next={step === props.next} />
+              <StepRow
+                key={step.id}
+                workspaceId={props.workspaceId}
+                step={step}
+                next={step === props.next}
+              />
             ))}
           </ul>
         </section>

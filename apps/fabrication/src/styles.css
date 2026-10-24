@@ -1,0 +1,4 @@
+@import "tailwindcss";
+/* Courtyard's theme, shared with every app: packages/ui/theme.css. */
+@import "@courtyard/ui/theme.css";
+@source "../../../packages/ui";

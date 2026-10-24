@@ -1,5 +1,3 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { holdersOf } from "@courtyard/builds";
 import {
@@ -32,7 +30,6 @@ import {
   workspaceNameFrom,
 } from "@courtyard/contract";
 import { HOUSE_SKILLS_FOLDER } from "@courtyard/skills";
-import { serveStatic } from "@hono/node-server/serve-static";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createOwner } from "./auth/owner/index.ts";
@@ -51,7 +48,7 @@ import {
   workspaceChange,
 } from "./features/context-folder/index.ts";
 import { documentRoutes } from "./features/documents/routes.ts";
-import { fabricationRoutes } from "./features/fabrication/routes.ts";
+import { FABRICATION_CHAT, fabricationRoutes } from "./features/fabrication/routes.ts";
 import { createFreshStart } from "./features/fresh-start/index.ts";
 import { freshStartRoutes } from "./features/fresh-start/routes.ts";
 import { createFriction } from "./features/friction/index.ts";
@@ -120,6 +117,7 @@ import { createGitHubApi, type GitHubApi } from "./integrations/github/api.ts";
 import { createGitHub, KEEP_FRESH_EVERY_MS } from "./integrations/github/index.ts";
 import { gitHubProblem, gitHubRoutes } from "./integrations/github/routes.ts";
 import { createPaperFiles, type PaperFiles } from "./integrations/paper/files.ts";
+import { serveApps } from "./lib/apps.ts";
 import { apiError, contextError, readBody } from "./lib/http.ts";
 import { type Repeat, repeatForever } from "./lib/repeat.ts";
 import { err, ok, type Result } from "./lib/result.ts";
@@ -169,6 +167,7 @@ type FormRequest = { readonly method: string; readonly path: RegExp };
 /** The requests that take a message, and Something's off's report with its screen (#554). */
 const MESSAGE_REQUESTS: readonly FormRequest[] = [
   ...Object.values(MESSAGE_ROUTES),
+  `/fabrication${FABRICATION_CHAT}`,
   FRICTION_ROUTE,
 ].map((route) => ({ method: "POST", path: pathOf(route) }));
 
@@ -284,6 +283,7 @@ export const createWorker = (options: {
     contextRemote,
     dataDir,
     webDir,
+    fabricationDir,
     claudeProvider,
     codexProvider,
     fakeProvider,
@@ -624,7 +624,10 @@ export const createWorker = (options: {
   api.route("/", thingRoutes({ contextDir, contextFolder, now }));
   api.route("/", planningHomeRoutes({ contextDir, reviews }));
   api.route("/", projectRoutes({ contextDir, contextFolder, now }));
-  api.route("/fabrication", fabricationRoutes({ contextDir, contextFolder, now }));
+  api.route(
+    "/fabrication",
+    fabricationRoutes({ contextDir, contextFolder, now, sessions, providers }),
+  );
   api.route("/", moveReviewRoutes(reviews));
   api.route("/", statusLineRoutes(statusLines));
   const freshStart = createFreshStart({ contextDir, dataDir, contextFolder, sessions, now });
@@ -902,17 +905,7 @@ export const createWorker = (options: {
 
   const app = new Hono();
   app.route("/api", api);
-
-  // Without a build (while developing with `pnpm dev`), Vite serves the page instead.
-  if (existsSync(webDir)) {
-    app.use("*", serveStatic({ root: webDir }));
-    // Any other path is one of the web app's own routes, so a reload lands on the app.
-    app.get("*", serveStatic({ path: join(webDir, "index.html") }));
-  } else {
-    app.get("*", (c) =>
-      c.text("The web app isn't built. Run `pnpm build`, or use `pnpm dev` while developing.", 404),
-    );
-  }
+  serveApps(app, { webDir, fabricationDir });
 
   return ok({ app, port });
 };

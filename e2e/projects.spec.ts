@@ -161,7 +161,13 @@ test("a project's steps show done, who does each, a Build, what's not ready yet,
   await expect(state(1)).toHaveAccessibleName("Next");
   await expect(rows.nth(1)).toContainText("Assemble the storage, clear the garageYou");
   await expect(state(2)).toHaveAccessibleName("To do");
-  await expect(rows.nth(2)).toContainText("Build the workbenchA Build: workbenchYou");
+  await expect(rows.nth(2)).toContainText(
+    "Build the workbenchA Build: workbenchOpen in FabricationYou",
+  );
+  await expect(rows.nth(2).getByRole("link", { name: "Open in Fabrication" })).toHaveAttribute(
+    "href",
+    /\/fabrication\/workspaces\/[^/]+\/builds\/workbench$/,
+  );
   await expect(state(3)).toHaveAccessibleName("Not ready yet");
   await expect(rows.nth(3)).toContainText("Not ready yet: needs the wall's construction");
   await expect(rows.nth(4)).toContainText(

@@ -327,8 +327,8 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   whatever the device's setting, #210), and which files' classes load later; the stylesheets loaded later `@reference` it. The app loads it through `lib/app.css`, which adds `packages/ui`'s classes, kept out of `styles.css` so they don't land in every later sheet.
 - **`packages/ui`** ([its README](../packages/ui/README.md), #703): the theme and the pieces both apps use, so
   Fabrication (ADR 0036) looks and behaves as the web app does: the page layout, the `Scroller`, the loading piece,
-  the buttons and the busy button, the error line, `useAction`, `classes`, what the frame offers a page and Talk, and
-  the Reply box with its chips. The app imports each by its path (`@courtyard/ui/layout/page.tsx`) and adds the package
+  the buttons and the busy button, the error line, `useAction`, `classes`, the label in capitals (`CapsLabel`), what
+  the frame offers a page and Talk, and the Reply box with its chips. The app imports each by its path (`@courtyard/ui/layout/page.tsx`) and adds the package
   to its stylesheet's sources, leaving out what loads later (the talk strip, the frame's buttons).
 - **`components/rich-blocks/`:** the blocks Courtyard draws in answers and documents
   ([ADR 0021](adr/0021-rich-answers-are-blocks-courtyard-draws-itself.md)), through the answer renderer, so a
@@ -415,6 +415,28 @@ passes through, tools needed and not to hand, sizes assumed). A size without a s
 functions with no worker, web app, file system or model in it, so it could ship on its own; its one Courtyard import
 is the contract's `SourcedSize`. The first template is the framed bench (`bench/`). [Its README](../packages/fabrication/README.md)
 has the files. The worker's `features/fabrication/` keeps Builds and works them out with it (#697).
+
+### Fabrication's app: `apps/fabrication`
+
+`@courtyard/fabrication-app` is Fabrication's own web app (#698, ADR 0036): Vite, React, TanStack Router and
+Tailwind with the theme and pieces from `packages/ui`, built to `apps/fabrication/dist` and served by the worker
+under `/fabrication` (`COURTYARD_FABRICATION_DIR` moves it), so it shares the owner's login: a device that isn't in
+goes to Courtyard's login. It holds no state and does no model work, and calls only Fabrication's API
+(`/api/fabrication`, ADR 0037), never Courtyard's own routes. Its folders are the web app's
+(`scripts/folders/check.ts` keeps them so, and `scripts/theme/check.ts` reads it with the rest).
+
+- [`features/builds/`](../apps/fabrication/src/features/builds/README.md): a Build's page, three panels on the PC and
+  the unfolded Fold and tabs on the cover screen: its chat, the Build in 3D and its cut plan, buy list, tools and
+  steps, under the making-rule findings. A part tapped anywhere lights everywhere and opens its card. The 3D view is
+  `three` in a file of its own, loaded only by this page, so nothing of it reaches the web app's first load.
+- **The chat** is a session in Courtyard: the Build's project's latest, or else the latest that saved the Build;
+  sending with none starts one that belongs to the project. The worker's `features/fabrication/chat.ts` reads its
+  events into the chat's lines (what was said, each change saved, struck through once undone) and sends through
+  `sessions/`. The page keeps it fresh the shared way, faster while an answer comes, and reads the Build again
+  once a change is saved in it. The Reply box and Talk are `packages/ui`'s; with no Handheld frame, the chat panel
+  is the box's dock (`chat-dock.ts`), and the box's mic listens through `packages/ui/frame/speech.ts`.
+- **Both ways between the apps:** a project step with a Build has Open in Fabrication (`projects/project-view.tsx`),
+  and the Build's page goes back to its project on its workspace's page.
 
 ### The house configs: `packages/house`
 
@@ -814,7 +836,7 @@ on that device, on hearing it's logged out (from another device), or on turning 
 can't be reached, the root route reads it (its context's `reading`) and the pages' loaders answer from it.
 
 **The other settings** set the worker's port (`COURTYARD_PORT`), point at the web app's built files
-(`COURTYARD_WEB_DIR`), name the live copy and its update task (`COURTYARD_LIVE_COPY`, `COURTYARD_UPDATE_TASK`, set by
+(`COURTYARD_WEB_DIR`) and the Fabrication app's, served under `/fabrication` (`COURTYARD_FABRICATION_DIR`), name the live copy and its update task (`COURTYARD_LIVE_COPY`, `COURTYARD_UPDATE_TASK`, set by
 `scripts/live/`), or switch providers on and off. `apps/worker/src/config/settings.ts` lists them all;
 [`.env.example`](../.env.example) explains the ones an owner sets.
 
