@@ -272,7 +272,8 @@ const isSetup = (shown: string, hooks: string | undefined) => {
  * Setup folders and files Allow all for this task (#428) never edits without asking: git's own
  * (which says where the repository is, outside the worktree), `.github` (workflows that run with
  * the repository's secrets), Claude Code's settings (which decide what the model itself may do),
- * and the package managers' settings, which hold registry tokens.
+ * the package managers' settings, which hold registry tokens, and git hook folders and their
+ * configs, whose hooks would go on running on the owner's own commits after the task.
  */
 const ALL_ASKING_SETUP = new Set([
   ".git",
@@ -281,6 +282,13 @@ const ALL_ASKING_SETUP = new Set([
   ".npmrc",
   ".yarnrc",
   ".yarnrc.yml",
+  ".husky",
+  ".githooks",
+  ".lefthook",
+  "lefthook.yml",
+  ".lefthook.yml",
+  ".pre-commit-config.yaml",
+  ".simple-git-hooks.json",
 ]);
 
 /**

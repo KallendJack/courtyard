@@ -169,6 +169,12 @@ const STILL_ASKS: readonly (readonly [{ run: string } | { edit: string }, unknow
   [{ edit: ".github/workflows/ci.yml" }, ".github/workflows/ci.yml"],
   [{ edit: ".claude/settings.json" }, ".claude/settings.json"],
   [{ edit: ".git" }, ".git"],
+  // Git hooks, which would run on the owner's own commits after the task.
+  [{ edit: ".husky/pre-commit" }, ".husky/pre-commit"],
+  [{ edit: ".githooks/pre-push" }, ".githooks/pre-push"],
+  [{ edit: "lefthook.yml" }, "lefthook.yml"],
+  [{ run: "mv -t.husky pre-commit" }, "mv -t.husky pre-commit"],
+  [{ run: "cp pre-commit .husky/pre-commit" }, "cp pre-commit .husky/pre-commit"],
   // Programs that run another command.
   [{ run: "sh -c ls" }, "sh -c ls"],
   [{ run: "pnpm exec sh -c ls" }, "pnpm exec sh -c ls"],
