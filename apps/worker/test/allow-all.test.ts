@@ -224,7 +224,7 @@ describe("Allow all for this task", () => {
       { run: "pnpm add left-pad" },
       { run: "cargo test --release" },
       { edit: "package.json" },
-      { edit: ".husky/pre-commit" },
+      { edit: "pnpm-workspace.yaml" },
       { run: "pnpm exec eslint src" },
     ]);
     const request = await start(provider);
@@ -257,7 +257,7 @@ describe("Allow all for this task", () => {
       { kind: "ran-command", command: "pnpm add left-pad" },
       { kind: "ran-command", command: "cargo test --release" },
       { kind: "edited-file", path: "package.json" },
-      { kind: "edited-file", path: ".husky/pre-commit" },
+      { kind: "edited-file", path: "pnpm-workspace.yaml" },
       { kind: "ran-command", command: "pnpm exec eslint src" },
     ]);
     expect(answers.every((answer) => answer.ok)).toBe(true);
