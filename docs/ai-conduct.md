@@ -378,7 +378,7 @@ kept so it can't come back unseen.
 
 Changed with #697, from the review of #719: giving a caveat once must not swallow a safety step at the moment it
 applies. `planning-safety-step-not-a-repeat` gives a caveat about cables early, then the owner says they're drilling
-the first hole now: the answer includes the scan.
+the first hole now: the answer includes the scan. It hasn't been run against the real models yet.
 
 ## Courtyard's file tools
 
@@ -1819,10 +1819,14 @@ changed ("height: 900 mm → 850 mm"). Later turns are told each earlier answer'
 whether the owner undid it ("- Changed the Build Workbench: height: 900 mm → 850 mm (the owner undid this)"). The fake
 saves one for each line "build: " followed by the tool's input as JSON.
 
-The eval's `build-*` scenarios check the saved Build, not the answer's wording, on both providers: asked for a bench,
-the model uses the tool, and every length, count and total in its answer is one the saved Build derives
-(`build-bench-numbers`); asked to make it 50 mm lower, it changes the height parameter and writes no length of its own
-(`build-change-one-size`).
+The eval's `build-*` scenarios check the saved Build, not the answer's wording, and are to run on both providers:
+asked for a bench, the model uses the tool, and every length, count and total in its answer is one the saved Build
+derives (`build-bench-numbers`); asked to make it 50 mm lower, it changes the height parameter and writes no length of
+its own (`build-change-one-size`). A size or price may be in other units (900 mm as 0.9 m); a whole number under 10
+with no unit is a count ("6 lengths") and must be one the Build counts (a part's count, a buy line's packs, how many
+lengths or sheets), while dates, step numbers and a list's own numbering aren't checked. They haven't been run against
+the real models yet (nor has whether Codex takes the tool's ~4 KB schema): until they pass on both, this rule is
+unproven.
 
 ## The move review
 

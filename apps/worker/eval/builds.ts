@@ -34,9 +34,54 @@ const numbersIn = (value: unknown): number[] =>
         ? Object.values(value).flatMap(numbersIn)
         : [];
 
-/** Every number written in a text, "1,500" read as 1500. */
-const numbersWritten = (text: string) =>
-  [...text.replace(/(\d),(\d{3})/g, "$1$2").matchAll(/\d+(?:\.\d+)?/g)].map(([n]) => Number(n));
+/** What the engine counts by: a part's count, a buy line's packs, what's needed, and so on. */
+const COUNTS = new Set(["count", "packs", "needed", "packOf", "unpriced"]);
+
+/**
+ * Every count in what a Build derives: its count fields and each list's length, so "6 lengths"
+ * (the cut plan's lengths of one stock) is one it gives, but a step's number isn't a count.
+ */
+const countsIn = (value: unknown): number[] =>
+  Array.isArray(value)
+    ? [value.length, ...value.flatMap(countsIn)]
+    : typeof value === "object" && value !== null
+      ? Object.entries(value).flatMap(([key, one]) =>
+          typeof one === "number" ? (COUNTS.has(key) ? [one] : []) : countsIn(one),
+        )
+      : [];
+
+const MONTHS = "jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec";
+
+/**
+ * Where a number places something rather than counts or sizes it: a date, a list's own numbering,
+ * a step by its number ("step 3", "steps 2 and 4"), the first of "1 of 6", a time.
+ */
+const PLACES = [
+  /\d{4}-\d{2}-\d{2}/g,
+  new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:${MONTHS})[a-z]*`, "gi"),
+  new RegExp(`\\b(?:${MONTHS})[a-z]*\\s+\\d{1,2}\\b`, "gi"),
+  /^\s*(?:[-*]\s+)?\d+[.)](?=\s)/gm,
+  /\bsteps?\s+\d+(?:\s*(?:,|&|and|or|to|-|–)\s*\d+)*/gi,
+  /\b\d+(?=\s+of\s+\d)/g,
+  /\b\d{1,2}:\d{2}\b/g,
+];
+
+/**
+ * Every number written in a text, "1,500" read as 1500, and whether it's a count: a whole number
+ * under 10 with no unit or £, as in "6 lengths". Numbers that only place something aren't read.
+ */
+const numbersWritten = (text: string) => {
+  const unplaced = PLACES.reduce(
+    (left, place) => left.replace(place, " "),
+    text.replace(/(\d),(\d{3})/g, "$1$2"),
+  );
+  return [
+    ...unplaced.matchAll(/(?<![A-Za-z0-9.])(£?)(\d+(?:\.\d+)?)(\s*(?:mm|cm|m|metres?|p)\b)?/gi),
+  ].map(([, pounds, digits, unit]) => {
+    const n = Number(digits);
+    return { n, count: pounds === "" && unit === undefined && Number.isInteger(n) && n < 10 };
+  });
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -47,8 +92,10 @@ const at = (value: unknown, path: string) =>
 
 /**
  * A turn's Build check: the Build it should start or change, saved and worked out as expected, and
- * every number of 10 or more in its answer one the Build gives (in mm, cm or m, or pounds), or the
- * owner said. Nothing when the turn doesn't say.
+ * every number in its answer one the Build gives or the owner said: a size or price in mm, cm or m,
+ * or pounds, and a count under 10 ("6 lengths") as the Build counts it, the review of #732 having
+ * found counts went unchecked. Dates, step numbers and a list's own numbering aren't checked.
+ * Nothing when the turn doesn't say.
  */
 export const judgeBuilds = async (judge: {
   /** The scenario, and which of its turns this is. */
@@ -111,13 +158,13 @@ export const judgeBuilds = async (judge: {
     checks.push({ miss: others.length === 0 ? null : `changed ${others.join(", ")} too` });
   }
   const given = [...numbersIn(derived), ...numbersIn(file.parameters)];
-  const allowed = [
-    ...given.flatMap((n) => [n, n / 10, n / 100, n / 1000]),
-    ...said.flatMap(numbersWritten),
-  ];
-  const stray = numbersWritten(answer).filter(
-    (n) => n >= 10 && !allowed.some((one) => Math.abs(one - n) < 0.006),
-  );
+  const ownerSaid = said.flatMap(numbersWritten).map(({ n }) => n);
+  // A size or price may be in other units (900 mm as 0.9 m, 680p as £6.80); a count is as given.
+  const sizes = [...given.flatMap((n) => [n, n / 10, n / 100, n / 1000]), ...ownerSaid];
+  const counts = [...countsIn(derived), ...numbersIn(file.parameters), ...ownerSaid];
+  const stray = numbersWritten(answer)
+    .filter(({ n, count }) => !(count ? counts : sizes).some((one) => Math.abs(one - n) < 0.006))
+    .map(({ n }) => n);
   checks.push({
     miss:
       stray.length === 0
