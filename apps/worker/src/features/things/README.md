@@ -22,6 +22,10 @@ A planning workspace's Things (ADR 0020): one file each, `things/<slug>.md`, rea
 - Reads each file against the contract's schema, listing a file that fails with its problem. A Thing bought from
   the wanted list keeps what was paid as its price and where as its shop (#245).
 - Lists them with each part after its Thing.
+- A Thing has a **kind** (ADR 0037): item (a file that doesn't say), space or tool, set by Edit or the Things tool's
+  `kind`; a tool can carry a `count` (clamps × 2). The first save that records a size gives it a **subject ID**,
+  kept through a rename; a Thing deleted and made again gets a new one. The owner's own tools are Things too, kept
+  at the context folder's top by `fabrication/tools.ts`.
 - A `pin:` line left by Home's photo view, and a `needs:` line (what a Thing needed next, which a project's steps
   hold now), are read past, and go on the Thing's next save (#603).
 - Adds, changes and removes one as one change through `context-folder/`, its photo with it.

@@ -101,6 +101,21 @@ export {
   BuildTemplate,
   BuildView,
 } from "./lib/fabrication/builds.ts";
+export {
+  COMMON_TOOLS,
+  FoundTool,
+  PRINTER_TOOL,
+  TOOLS_MAX,
+  TOOLS_SAID_MAX_CHARACTERS,
+  ToolPick,
+  ToolsChange,
+  ToolsHeard,
+  ToolsSaid,
+  ToolsSaved,
+  ToolsUndo,
+  WorkspaceThing,
+  YourTools,
+} from "./lib/fabrication/tools.ts";
 export { FloorPlan, PlanItem, PlanOpening, PlanWall, wallLength } from "./lib/floor-plan.ts";
 export {
   FRESH_START_WORDS,
@@ -301,6 +316,8 @@ export {
   TaskOutput,
 } from "./lib/tasks.ts";
 export {
+  SubjectId,
+  THING_COUNT_MAX,
   THING_DETAILS,
   THING_FIELD_MAX_CHARACTERS,
   THING_FORM_FIELD,
@@ -308,12 +325,14 @@ export {
   THING_PHOTO_FIELD,
   ThingChange,
   ThingChanged,
+  ThingCount,
   ThingDeleted,
   ThingDetail,
   type ThingDetailName,
   ThingFields,
   ThingForm,
   ThingHistoryEntry,
+  ThingKind,
   ThingList,
   ThingMark,
   ThingProblem,

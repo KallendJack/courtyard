@@ -22,6 +22,12 @@ rest is worked out again.
 - `PATCH /api/fabrication/workspaces/:id/builds/:slug/parameters`: the owner's change to its parameters,
   `BuildParametersChange`, a JSON merge patch (an object merges, `null` takes a value out), worked out before it's
   saved. Answers `BuildChanged`, the change Undo in Recent changes takes back.
+- `GET /api/fabrication/tools`: the owner's tools (#707), whether any are saved yet, and each planning workspace's
+  Thing that looks like one, to come ticked. Answers `YourTools`.
+- `PUT /api/fabrication/tools`: Your tools' Save, `ToolsChange`, every tool the owner has now. Answers `ToolsSaved`.
+- `POST /api/fabrication/tools/undo`: `ToolsUndo`, Undo of that Save.
+- `POST /api/fabrication/tools/heard`: "Or just say it", `ToolsSaid`. Answers `ToolsHeard`, the tools a model ticked,
+  saving nothing; 503 when no model can answer.
 
 A code workspace keeps none (409). A Build save is undone from its note (`POST /api/sessions/:id/builds/:save/undo`)
 or Recent changes.
@@ -39,4 +45,10 @@ or Recent changes.
   label, or a change of nothing, it writes nothing and gives the Build as it is, so a later turn reads its numbers
   rather than working them out. Given a project's label and step, `sessions/` gives that step the Build through the
   project tool (`[build: <slug>]` on the step).
+- **The owner's tools** (`tools.ts`, ADR 0037): Things of kind tool in the context folder's own `things/`, so every
+  workspace and Build sees the same ones; `sessions/` lists them in every planning turn. A Save writes them all as one
+  change: a tool given is written (its count, make and size; a size gives it a subject ID), one not given is removed,
+  and a workspace's Thing a tool moves from goes with it, its history and photo too. A Thing with parts never moves.
+  Undo takes the whole Save back. "Or just say it" is one question to the errand model (`prompts/tools.ts`), each
+  tool by a tile's name or the owner's own, once.
 - **The API** (`routes.ts`): under `/api/fabrication`, mounted by `worker.ts`.

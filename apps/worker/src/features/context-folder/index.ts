@@ -19,7 +19,7 @@ import {
 import { AS_COURTYARD, git, gitBytes, gitFailureReason } from "../../lib/git.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 import { OWNER_FILE } from "../owner-context/index.ts";
-import { ARCHIVED_FOLDER, CONTEXT_FILE } from "../workspaces/index.ts";
+import { ARCHIVED_FOLDER, CONTEXT_FILE, OWNER_THINGS_FOLDER } from "../workspaces/index.ts";
 
 /**
  * What kind of change a commit is, as its `Courtyard-Change` trailer says: the repository's start,
@@ -92,13 +92,11 @@ const PUSH_GIVES_UP_MS = 60 * 1000;
 const placeTrailer = (place: Place) =>
   `Courtyard-Place: ${place.kind === "workspace" ? `workspace/${place.id}` : "owner-context"}`;
 
-/**
- * Where a file in the context folder belongs, by its path from the folder's top: the owner
- * context, a workspace (archived or not), or nowhere in particular.
- */
+/** Where a context folder path belongs: the owner (context or tools), a workspace, or neither. */
 const placeOf = (path: string): Place | undefined => {
   const [first, second] = path.split("/");
-  if (first === OWNER_FILE && second === undefined) return { kind: "owner-context" };
+  const owners = second === undefined ? OWNER_FILE : OWNER_THINGS_FOLDER;
+  if (first === owners) return { kind: "owner-context" };
   if (second === undefined) return undefined;
   const id = WorkspaceId.safeParse(first === ARCHIVED_FOLDER ? second : first);
   return id.success ? { kind: "workspace", id: id.data } : undefined;

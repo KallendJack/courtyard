@@ -9,6 +9,30 @@ import { ChangeId } from "./change-id.ts";
 export const ThingStatus = z.enum(["have", "want", "replace"]);
 export type ThingStatus = z.infer<typeof ThingStatus>;
 
+/**
+ * What kind of Thing it is (ADR 0037): an item of the owner's kit, a space (a garage, a van), or a
+ * tool. A file that doesn't say is an item, as every file before kinds is.
+ */
+export const ThingKind = z.enum(["item", "space", "tool"]);
+export type ThingKind = z.infer<typeof ThingKind>;
+
+/**
+ * A Thing's subject ID (ADR 0037): given by the worker the first time a size is recorded for it,
+ * kept through a rename, and never given again, so a record of its size points at this Thing.
+ */
+export const SubjectId = z.uuid().brand<"SubjectId">();
+export type SubjectId = z.infer<typeof SubjectId>;
+
+/** The most of one tool the owner can have, as a count (clamps × 2). */
+export const THING_COUNT_MAX = 99;
+
+/** How many of a Thing the owner has, when it's more than one (clamps × 2). */
+export const ThingCount = z.coerce
+  .number()
+  .int("Give the count as a whole number.")
+  .min(1, "Give a count of at least 1.")
+  .max(THING_COUNT_MAX, `Keep the count to ${THING_COUNT_MAX}.`);
+
 /** A Thing's file name without `.md`: its name's letters and digits, words joined by dashes. */
 export const ThingSlug = z
   .string()
@@ -79,14 +103,19 @@ export const ThingUpcoming = z.object({
 export type ThingUpcoming = z.infer<typeof ThingUpcoming>;
 
 /**
- * A Thing's fields as its file's front matter holds them: its name and status, then the details
- * it has, the Thing it's part of (by its file's name, one level only), its photo and its upcoming
- * replacement. What's next is a project's step (#603), never a Thing's.
+ * A Thing's fields as its file's front matter holds them: its name and status, its kind and count
+ * (ADR 0037), then the details it has, the Thing it's part of (by its file's name, one level only),
+ * its photo, its subject ID and its upcoming replacement. What's next is a project's step (#603),
+ * never a Thing's.
  */
 export const ThingFields = z
   .object({
     name: oneLine(THING_FIELD_MAX_CHARACTERS, "name"),
     status: ThingStatus,
+    /** Left out for an item. */
+    kind: ThingKind.optional(),
+    /** Left out for one. */
+    count: ThingCount.optional(),
     brand: oneLine(THING_FIELD_MAX_CHARACTERS, "brand").optional(),
     bought: ThingBought.optional(),
     price: oneLine(THING_FIELD_MAX_CHARACTERS, "price").optional(),
@@ -97,6 +126,7 @@ export const ThingFields = z
     where: oneLine(THING_FIELD_MAX_CHARACTERS, "where").optional(),
     partOf: ThingSlug.optional(),
     photo: ThingPhotoPath.optional(),
+    subject: SubjectId.optional(),
     /** Its upcoming replacement's name (#602), and the rest of it: see `ThingUpcoming`. */
     upcoming: ThingUpcoming.shape.name.optional(),
     upcomingPrice: ThingUpcoming.shape.price,
@@ -119,6 +149,8 @@ export const ThingSummary = ThingFields.omit({
   upcomingLink: true,
   upcomingWhy: true,
 }).extend({
+  /** An item when its file doesn't say. */
+  kind: ThingKind,
   upcoming: ThingUpcoming.optional(),
   slug: ThingSlug,
   /** Its path in the workspace's folder: `things/<slug>.md`. */
@@ -176,6 +208,8 @@ export const ThingForm = z.object({
   where: blankable(oneLine(THING_FIELD_MAX_CHARACTERS, "where")),
   /** The Thing it's part of, by its file's name; one that's a part itself can't be. */
   partOf: blankable(ThingSlug).nullable(),
+  /** Its kind; left out, it keeps the one it has (an item, for a new Thing). */
+  kind: ThingKind.optional(),
 });
 export type ThingForm = z.infer<typeof ThingForm>;
 
@@ -216,6 +250,9 @@ export const ThingSave = z.object({
     .object({
       name: z.string(),
       status: ThingStatus,
+      /** Its kind now, `null` once it's an item again. */
+      kind: ThingKind.nullable(),
+      count: z.string().nullable(),
       brand: z.string().nullable(),
       bought: z.string().nullable(),
       price: z.string().nullable(),

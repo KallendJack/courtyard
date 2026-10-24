@@ -624,7 +624,7 @@ export const createWorker = (options: {
   api.route("/", thingRoutes({ contextDir, contextFolder, now }));
   api.route("/", planningHomeRoutes({ contextDir, reviews }));
   api.route("/", projectRoutes({ contextDir, contextFolder, now }));
-  api.route("/fabrication", fabricationRoutes({ contextDir, contextFolder, now }));
+  api.route("/fabrication", fabricationRoutes({ contextDir, contextFolder, now, providers }));
   api.route("/", moveReviewRoutes(reviews));
   api.route("/", statusLineRoutes(statusLines));
   const freshStart = createFreshStart({ contextDir, dataDir, contextFolder, sessions, now });

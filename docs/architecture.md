@@ -518,6 +518,11 @@ Where the rest fits:
   ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)). A Thing's
   **upcoming** one (#602, ADR 0032) is kept in its file the same way: set by the model's tool, or by Pick on an
   answer's `options` block (Find a replacement's answer), and swapped in by "… fitted" or the tool's `fitted`.
+  A Thing has a **kind** (item, space or tool, ADR 0037) and, once a size is recorded for it, a subject ID.
+- **The owner's tools** (#707, ADR 0037): Things of kind tool at the owner's level, so every planning turn lists them
+  and every Build reads them. Fabrication owns them: its API (`fabrication/tools.ts`) reads them, saves them all at
+  once as one change with Undo (moving a workspace's tools there, such as the garage's hand saw, with that Save), and
+  asks a cheap model to tick the tools the owner said, saving nothing.
 - **Projects** (#603, ADR 0032). The model calls the project tool by the labels its turn listed; `projects/` checks
   the call and writes the project's file as a change through `context-folder/`; the session records a
   `project-saved` event and the browser shows a note with Open (the project's place on the workspace's page,
@@ -745,7 +750,10 @@ things live only in the worker's memory and go when it restarts.
   its file by that name.
 - `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter (an upcoming
   replacement among them, its `upcoming …` lines, #602) and a dated history, each file named by the Thing's name when it was added; `<workspace>/things/photos/<slug>.jpg`: a Thing's
-  photo, resized to fit 1600 px and 300 KB, in plain git.
+  photo, resized to fit 1600 px and 300 KB, in plain git. A Thing's `kind` (item when left out), `count` and
+  `subject` ID (ADR 0037) are front matter too.
+- `things/<slug>.md` at the top: the owner's tools (#707, ADR 0037), Things of kind tool kept as a workspace's are
+  (photos in `things/photos/`), so no workspace can be named `things`.
 - `<workspace>/projects/<slug>.md`: a planning workspace's projects (#603, ADR 0032): name, goal and status in front
   matter, then its steps, decisions and a dated history, each file named by the project's name when it was started.
   A step that makes a Build ends `[build: <slug>]`.

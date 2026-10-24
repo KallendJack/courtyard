@@ -4,7 +4,6 @@ import { setTimeout as wait } from "node:timers/promises";
 import {
   type Capabilities,
   Effort,
-  type FailureReason,
   HelperId,
   ModelId,
   ProviderId,
@@ -14,7 +13,7 @@ import {
 import { pngOf } from "../../test/test-files.ts";
 import { pageRead, turnSources } from "../features/sources/index.ts";
 import { writeTextFileIn } from "../lib/files.ts";
-import { err, ok, type Result } from "../lib/result.ts";
+import { err, ok } from "../lib/result.ts";
 import { BUILD_TOOL_NAME } from "../prompts/builds.ts";
 import {
   DOCUMENT_TOOL_NAME,
@@ -27,6 +26,7 @@ import {
   THING_TOOL_NAME,
   USE_SKILL_TOOL_NAME,
 } from "../prompts/index.ts";
+import { scriptedAnswer } from "./fake-answers.ts";
 import type {
   Activity,
   AddedMessage,
@@ -302,101 +302,6 @@ const scriptedWeb = (message: string) => {
   };
 };
 
-/** How many words of the owner's first message a scripted title keeps. */
-const TITLE_WORDS = 5;
-
-/**
- * The title a session's first message scripts: its first few words in title case ("Where should
- * the rack go?" is "Where Should The Rack Go"). "no title please" fails on purpose.
- */
-const scriptedTitle = (message: string): Result<{ title: string }, FailureReason> => {
-  const first = /^Owner: (.*)$/m.exec(message)?.[1] ?? "";
-  if (/no title please/i.test(first)) {
-    return err({
-      kind: "unknown",
-      message: "The fake didn't title it, because it was asked not to.",
-    });
-  }
-  const words = first.match(/[\p{L}\p{N}']+/gu) ?? [];
-  const title = words
-    .slice(0, TITLE_WORDS)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-  return ok({ title });
-};
-
-const NOTE_LINE = /\b(done|decided|next): ([^;\n]+)/gi;
-
-/**
- * The note a session's conversation scripts (#601): each line as the message last names it,
- * "done: …", "decided: …" and "next: …" ending at a semicolon or the line's end, so the
- * conversation's words win over the note it carries on from; empty for one it doesn't name. "no
- * note please" fails on purpose.
- */
-const scriptedNote = (message: string): Result<Record<string, string>, FailureReason> => {
-  if (/no note please/i.test(message)) {
-    return err({
-      kind: "unknown",
-      message: "The fake didn't write a note, because it was asked not to.",
-    });
-  }
-  const note: Record<string, string> = { done: "", decided: "", next: "" };
-  for (const [, line = "", text = ""] of message.matchAll(NOTE_LINE)) {
-    note[line.toLowerCase()] = text.trim();
-  }
-  return ok(note);
-};
-
-const MOVE = /^move: (\{.*\})\s*$/i;
-
-/**
- * The move review a workspace's files script (#603), one move per line anywhere in them: "move: "
- * then the move as JSON, its title and about, and of the rest only what it does (a missing
- * project or field is none, a missing list empty). With none, it proposes nothing, so a workspace's files
- * never move unless a test says so.
- */
-const scriptedMoves = (message: string) => ({
-  moves: message.split("\n").flatMap((line) => {
-    const [, json] = MOVE.exec(line.trim()) ?? [];
-    if (json === undefined) return [];
-    try {
-      const move: Record<string, unknown> = JSON.parse(json);
-      const fields = (value: unknown): Record<string, unknown> =>
-        typeof value === "object" && value !== null ? { ...value } : {};
-      const list = (value: unknown) => (Array.isArray(value) ? value.map(fields) : []);
-      const project =
-        move.project === undefined || move.project === null ? null : fields(move.project);
-      return [
-        {
-          documents: [],
-          archive: [],
-          ...move,
-          project:
-            project === null
-              ? null
-              : {
-                  slug: null,
-                  name: null,
-                  goal: null,
-                  ...project,
-                  steps: list(project.steps).map((step) => ({ detail: null, ...step })),
-                },
-          upcoming: list(move.upcoming).map((part) => ({
-            price: null,
-            shop: null,
-            link: null,
-            why: null,
-            ...part,
-          })),
-          remove: { documents: [], things: [], lines: [], ...fields(move.remove) },
-        },
-      ];
-    } catch {
-      return [];
-    }
-  }),
-});
-
 const READ_SESSION = /^read session: (\S+)$/i;
 
 /**
@@ -416,27 +321,6 @@ const scriptedSessionReads = async (
     said.push(`Session: ${words.join(" ")}\n\n`);
   }
   return said.join("");
-};
-
-const POINT_AT = /point at (\S+) line (\d+)/gi;
-
-/**
- * The answer a quick question about a pull request scripts (#327): "You asked: …", pointing at
- * each line it names as "point at <path> line <n>". "please fail" fails on purpose.
- */
-const scriptedQuickAnswer = (message: string): Result<unknown, FailureReason> => {
-  const question = /The owner's question: (.*)$/s.exec(message)?.[1] ?? "";
-  if (/please fail/i.test(question)) {
-    return err({
-      kind: "unknown",
-      message: "The fake didn't answer, because it was asked not to.",
-    });
-  }
-  const lines = [...question.matchAll(POINT_AT)].map(([, path = "", line = "0"]) => ({
-    path,
-    line: Number(line),
-  }));
-  return ok({ answer: `You asked: ${question}`, lines });
 };
 
 /**
@@ -959,16 +843,7 @@ export const createFakeProvider = (
     answerOnce: async ({ purpose, message, signal }) => {
       if (delayMs > 0) await pause(delayMs * 10, signal);
       if (signal.aborted) return err({ kind: "unknown", message: "Stopped." });
-      switch (purpose) {
-        case "title":
-          return scriptedTitle(message);
-        case "quick-question":
-          return scriptedQuickAnswer(message);
-        case "session-note":
-          return scriptedNote(message);
-        case "move-review":
-          return ok(scriptedMoves(message));
-      }
+      return scriptedAnswer(purpose, message);
     },
   };
 };
