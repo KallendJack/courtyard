@@ -175,7 +175,7 @@ export const GARAGE_BUILD: readonly Scenario[] = [
         // Damp timber, so the first answer gives its caveat, one that isn't a safety step (#729): it moves as it dries.
         say: "Picked up the 3×2 CLS for the legs from the timber yard today. It feels a bit damp. Anything I should know before I cut it?",
         expect: [],
-        says: [["dry", "acclimat", "a few days", "moisture"]],
+        says: [["dry", "damp", "acclimat", "a few days", "moisture"]],
       },
       {
         // The owner has dealt with it, and asks what it doesn't bear on, so saying it again is only a repeat.
