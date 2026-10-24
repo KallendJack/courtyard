@@ -199,7 +199,11 @@ function NeedRow(props: {
         <BlockRow
           label={pullTitle(need.pull)}
           title={prLink(need.pull)}
-          sub="Checks passed · ready to merge"
+          sub={
+            need.session?.byLead === true
+              ? "By Lead · checks passed · ready to merge"
+              : "Checks passed · ready to merge"
+          }
           tone="passed"
           action={<Merge workspaceId={workspaceId} pull={need.pull} onChanged={props.onChanged} />}
         />

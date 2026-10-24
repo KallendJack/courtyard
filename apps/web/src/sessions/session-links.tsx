@@ -8,6 +8,7 @@ import { Link, useRouter } from "@tanstack/react-router";
 import { CheckCheck } from "lucide-react";
 import { Button } from "@/components/button";
 import { FormError } from "@/components/form-error";
+import { ByLead, LeadMark } from "@/components/lead-mark";
 import { CARD, LIST_ROW, SectionTitle } from "@/components/page";
 import { ListedSessionText } from "@/components/session-state";
 import { classes } from "@/lib/classes";
@@ -29,14 +30,20 @@ export const sessionEnded = (session: Listed) =>
  * owner come first, marked for a new reply or an approval, with Mark all read while any new reply
  * waits (#345). In a code workspace, how many code sessions are running across the worker, and any
  * session waiting for one of them to end, which can be removed (#174). A planning workspace's page
- * shows them as a card; a code workspace's, on its Sessions tab (#301).
+ * shows them as a card; a code workspace's, on its Sessions tab (#301), its Lead pinned at the
+ * top with its mark and its builders marked "by Lead" (#347).
  */
 export function SessionLinks(props: { list: CodeSessionList; mode: WorkspaceMode }) {
   const { sessions, running } = props.list;
   if (sessions.length === 0) return null;
   // A session whose pull request was merged or closed has ended: it leaves the sessions for
   // History, so its place is free for a new one (#278).
-  const current = waitingFirst(sessions.filter((session) => !sessionEnded(session)));
+  const open = sessions.filter((session) => !sessionEnded(session));
+  // A code workspace's Lead stays pinned at the top (#347).
+  const current = [
+    ...open.filter((session) => session.lead === true),
+    ...waitingFirst(open.filter((session) => session.lead !== true)),
+  ];
   const history = sessions.filter(sessionEnded);
   const replies = current.some((session) => session.waiting === "reply");
   return (
@@ -84,6 +91,8 @@ function SessionList(props: { sessions: readonly Listed[] }) {
               updatedAt={session.updatedAt}
               when={describeWhen}
             />
+            {session.lead === true && <LeadMark />}
+            {session.byLead === true && <ByLead />}
             {session.waiting !== "nothing" && <WaitingMark on={session.waiting} />}
           </Link>
           {session.queued && <RemoveQueued session={session} />}

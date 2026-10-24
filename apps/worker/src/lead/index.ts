@@ -26,11 +26,7 @@ import {
 import type { ToolReply } from "../providers/index.ts";
 import { err, ok, type Result } from "../result.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
-import {
-  getWorkspace,
-  listCodeWorkspaces,
-  type WorkspaceError,
-} from "../workspaces/index.ts";
+import { getWorkspace, listCodeWorkspaces, type WorkspaceError } from "../workspaces/index.ts";
 
 /**
  * A code workspace's Lead (#347): one long-lived session whose job is the build order, not one
@@ -102,22 +98,14 @@ const standingOf = (listed: Listed | undefined) => {
 const nameOf = (listed: Listed | undefined, issue: number) =>
   listed?.title.replace(/^Build #\d+: /, "") ?? `issue #${issue}`;
 
-const plural = (count: number, one: string, many: string) =>
-  `${count} ${count === 1 ? one : many}`;
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
 export const createLead = (options: {
   contextDir: string;
   dataDir: string;
   sessions: Pick<
     Sessions,
-    | "create"
-    | "get"
-    | "list"
-    | "lastModelOf"
-    | "codeRunning"
-    | "note"
-    | "tellMerged"
-    | "stopTurn"
+    "create" | "get" | "list" | "lastModelOf" | "codeRunning" | "note" | "tellMerged" | "stopTurn"
   >;
   nextUp: Pick<NextUp, "list" | "fresh" | "build" | "release">;
   /** Whether a code workspace's main is red now (#355), by its id. */
@@ -236,14 +224,17 @@ export const createLead = (options: {
           pullRequest: pullRequest.number,
           text: leadMergedMessage({ pullRequest: pullRequest.number, issue, title: name }),
         });
-        if (told.ok) await tellOnce(`merged:${session}`, `${name} merged (#${pullRequest.number}).`);
+        if (told.ok)
+          await tellOnce(`merged:${session}`, `${name} merged (#${pullRequest.number}).`);
       }
     }
     const done = (builder: z.infer<typeof Builder>) => {
       const each = listed.get(builder.session);
       if (standingOf(each) !== "ended") return false;
       // A merged one stays until the Lead has been told.
-      return each?.pullRequest?.state !== "merged" || now.told.includes(`merged:${builder.session}`);
+      return (
+        each?.pullRequest?.state !== "merged" || now.told.includes(`merged:${builder.session}`)
+      );
     };
     return { ...now, built: now.built.filter((builder) => !done(builder)) };
   };
@@ -315,7 +306,10 @@ export const createLead = (options: {
   /** Runs `change` on a code workspace's Lead, one at a time, and keeps what it gives. */
   const changing = (
     rawId: string,
-    change: (workspaceId: WorkspaceId, kept: Kept | undefined) => Promise<Result<Kept, LeadProblem>>,
+    change: (
+      workspaceId: WorkspaceId,
+      kept: Kept | undefined,
+    ) => Promise<Result<Kept, LeadProblem>>,
   ) =>
     oneAtATime(async (): Promise<Result<LeadStatus, LeadProblem>> => {
       const workspaceId = await codeWorkspaceOf(rawId);
@@ -343,8 +337,7 @@ export const createLead = (options: {
   /** Running again: woken, its skips forgotten, and a look straight away. */
   const runAgain = async (workspaceId: WorkspaceId, kept: Kept) => {
     const { why: _, ...rest } = kept;
-    const woken =
-      kept.state === "running" ? rest : await noted(rest, "Running the build order.");
+    const woken = kept.state === "running" ? rest : await noted(rest, "Running the build order.");
     return look(workspaceId, { ...woken, state: "running", skipped: [] });
   };
 
@@ -352,7 +345,10 @@ export const createLead = (options: {
   const paused = async (kept: Kept) => {
     if (kept.state === "paused") return kept;
     const { why: _, ...rest } = kept;
-    return noted({ ...rest, state: "paused" }, "Paused: nothing new starts until you run the order again.");
+    return noted(
+      { ...rest, state: "paused" },
+      "Paused: nothing new starts until you run the order again.",
+    );
   };
 
   /** Skipping an issue for now: its builder stops and its claim is released (#347). */

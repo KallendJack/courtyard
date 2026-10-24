@@ -195,7 +195,8 @@ export const createNotifications = (options: {
       kept.filter(
         ({ device, subscription }) =>
           !forget.some(
-            (gone) => gone.device === device && gone.subscription.endpoint === subscription.endpoint,
+            (gone) =>
+              gone.device === device && gone.subscription.endpoint === subscription.endpoint,
           ),
       ),
     );
@@ -223,7 +224,11 @@ export const createNotifications = (options: {
       changeDevices((devices) => devices.filter((kept) => kept.subscription.endpoint !== endpoint)),
 
     /** Sends a notification when a session's event is one the owner hears about. */
-    sessionEvent: (session: SessionId, event: SessionEvent, pullRequest: PullRequest | undefined) => {
+    sessionEvent: (
+      session: SessionId,
+      event: SessionEvent,
+      pullRequest: PullRequest | undefined,
+    ) => {
       const need = needOf(event, pullRequest);
       return need === undefined ? Promise.resolve() : notice(session, need);
     },
