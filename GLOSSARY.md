@@ -206,6 +206,31 @@ A choice made for a project, as buying a part is made (#603): the options weighe
 project with a decided step for it.
 _Avoid_: plan, verdict, answer
 
+**Build**:
+Something the owner makes, worked out by code (ADR 0036): a template (a framed bench, wall shelving, a printed part)
+and its parameters, from which code derives the parts, the **cut plan**, the **buy list** and the build steps. A
+project step can own one. The model sets and explains its parameters; it never writes a length or a quantity itself.
+_Avoid_: design (that's what it looks like), plan (that's a floor plan or a project), cut list (that's one part of it)
+
+**Cut plan**:
+How a Build's parts come out of the timber lengths and sheets it's cut from, allowing for each saw cut.
+_Avoid_: cutting list, cut sheet
+
+**Buy list**:
+What a Build needs bought: each item, how many, its price and where it's sold, from the Build's parts and fixings.
+_Avoid_: shopping list, BOM, wanted list (that's Things the owner wants)
+
+**Making rules**:
+What holds for every Build, as the house rules hold for every repo (ADR 0036): every size says where it came from,
+cuts allow for the saw, fixings are checked against what they pass through, the tools needed are checked against the
+owner's, and work that needs a pro is said plainly.
+_Avoid_: safety rules, build rules
+
+**Fabrication**:
+The app the owner opens a Build in (`apps/fabrication`, ADR 0036): the chat about it, its 3D view and its build list.
+The engine behind it is `packages/fabrication`.
+_Avoid_: Fabricator, maker mode, workshop
+
 **Carry on (a project)**:
 Starting a session from a project, on Home or its page (#603): its first message the project and what's next, and the
 session **belongs to** the project, so each of its turns is given the project whole. A model can also attach a
