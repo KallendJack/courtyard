@@ -1,5 +1,5 @@
 import { NeedsYou, type NeedYou } from "@courtyard/contract";
-import { createKept, useKept } from "@/components/layout/kept";
+import { createKept, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { fromWorker } from "../../api/worker.ts";
 import { builderName, wantsWords } from "../builders/words.ts";
 

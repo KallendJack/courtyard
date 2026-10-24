@@ -5,14 +5,14 @@ import type {
   MainBuild,
   UpdateWaiting,
 } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { useFresh } from "@courtyard/ui/layout/kept.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { type ReactNode, useEffect, useState } from "react";
-import { Button } from "@/components/buttons/button";
 import { WebButton } from "@/components/buttons/web-link";
 import { BuildGraph, BuildMiniGraph, OpenRow, useTicking } from "@/components/code/build-stages";
 import { CapsLabel } from "@/components/layout/caps-label";
-import { useFresh } from "@/components/layout/kept";
 import { Sheet } from "@/components/sheets/sheet";
-import { classes } from "@/lib/classes";
 import type { FromWorker } from "../../api/worker.ts";
 import { elapsedWords } from "../../lib/when.ts";
 import { loadLive } from "./api.ts";

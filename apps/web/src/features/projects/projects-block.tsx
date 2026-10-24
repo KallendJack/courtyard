@@ -1,7 +1,7 @@
 import { nextStepOf, type Project, type WorkspaceId } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { Link } from "@tanstack/react-router";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
 import { Block, BlockRow, BlockRows } from "@/components/layout/home-block";
 import { projectHash } from "./api.ts";
 import { useCarryOn } from "./carry-on.ts";

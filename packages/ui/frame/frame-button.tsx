@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { classes } from "@/lib/classes";
+import { classes } from "../lib/classes.ts";
 
 /**
  * A model as short as it goes, as the Model button and the model line in the Skills sheet show it:

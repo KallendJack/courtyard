@@ -1,14 +1,12 @@
 {
   "files": {
-    "apps/web/src/components/frame/handheld-frame.tsx": 654,
-    "apps/web/src/components/frame/talk-strip.tsx": 630,
+    "apps/web/src/components/frame/handheld-frame.tsx": 659,
     "apps/web/src/components/rich-blocks/chart.tsx": 407,
     "apps/web/src/components/rich-blocks/floor-plan.tsx": 928,
     "apps/web/src/features/changes/recent-changes.tsx": 435,
     "apps/web/src/features/code-home/needs-you.tsx": 498,
     "apps/web/src/features/code-home/next-up.tsx": 413,
     "apps/web/src/features/pull-requests/review.tsx": 764,
-    "apps/web/src/features/sessions/composer/composer.tsx": 598,
     "apps/web/src/features/sessions/turns/events.ts": 900,
     "apps/web/src/features/sessions/turns/turn-view.tsx": 658,
     "apps/web/src/features/sign-ins/sign-ins.tsx": 535,
@@ -42,7 +40,9 @@
     "apps/worker/src/providers/fake.ts": 974,
     "apps/worker/src/providers/index.ts": 607,
     "apps/worker/src/worker.ts": 933,
-    "packages/contract/lib/session-event.ts": 483
+    "packages/contract/lib/session-event.ts": 483,
+    "packages/ui/frame/talk-strip.tsx": 630,
+    "packages/ui/reply/reply-box.tsx": 598
   },
   "folders": {
     "packages/contract/lib": 44

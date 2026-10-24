@@ -1,5 +1,5 @@
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import type { ReactNode } from "react";
-import { classes } from "@/lib/classes";
 
 /**
  * Something that went wrong or is about to, said plainly, with an optional way to act on it:

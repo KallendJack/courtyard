@@ -1,9 +1,9 @@
 import type { SessionId, TaskOutput, TaskTold } from "@courtyard/contract";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
-import { createKept, PlaceholderRows, useKept } from "@/components/layout/kept";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
+import { createKept, PlaceholderRows, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { Sheet } from "@/components/sheets/sheet";
-import { useAction } from "@/hooks/use-action";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { stopTask, taskOutputOf } from "./api.ts";
 

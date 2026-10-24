@@ -1,6 +1,6 @@
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
-import { classes } from "@/lib/classes";
 
 /**
  * One choice of a list, as a row (Paper, "Tablet · Connect Paper"): a radio, its tick filled violet

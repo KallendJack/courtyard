@@ -7,10 +7,10 @@ import type {
   SessionId,
   WorkspaceSummary,
 } from "@courtyard/contract";
+import { useLayout } from "@courtyard/ui/frame/handheld.ts";
+import { PlaceholderRows } from "@courtyard/ui/layout/kept.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useEffect } from "react";
-import { useLayout } from "@/components/frame/handheld";
-import { PlaceholderRows } from "@/components/layout/kept";
-import { classes } from "@/lib/classes";
 import { describeWhen } from "../../lib/when.ts";
 import { useLead } from "../builders/api.ts";
 import {

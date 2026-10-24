@@ -1,7 +1,7 @@
+import { useLayout } from "@courtyard/ui/frame/handheld.ts";
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { type ReactNode, type TouchEvent, useRef } from "react";
-import { classes } from "@/lib/classes";
-import { useLayout } from "../frame/handheld.ts";
-import { Scroller } from "../layout/scroller.tsx";
 import { useDialog } from "../layout/use-dialog.ts";
 
 /** How far a swipe goes, in pixels, before it closes a sheet. */

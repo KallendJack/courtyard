@@ -7,22 +7,22 @@ import {
   type SessionDetail,
   type SkillSummary,
 } from "@courtyard/contract";
+import { IconButton } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useLayout } from "@courtyard/ui/frame/handheld.ts";
+import { PlaceholderRows } from "@courtyard/ui/layout/kept.tsx";
+import { Page, PageTitle } from "@courtyard/ui/layout/page.tsx";
 import { createFileRoute, getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
 import { Clock, Pencil, Trash2 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { BackLink } from "@/components/buttons/back-link";
-import { IconButton } from "@/components/buttons/button";
 import { OptionsMenu } from "@/components/buttons/options-menu";
 import { JumpToLatest } from "@/components/chat/jump-to-latest";
 import { AllowingAllStrip } from "@/components/code/allowing-all";
 import { BranchStrip } from "@/components/code/branch-strip";
 import { ConfirmStep } from "@/components/forms/confirm-step";
-import { FormError } from "@/components/forms/form-error";
 import { RenameForm } from "@/components/forms/rename-form";
-import { useLayout } from "@/components/frame/handheld";
-import { PlaceholderRows } from "@/components/layout/kept";
 import { Notice, StatusPill } from "@/components/layout/notice";
-import { Page, PageTitle } from "@/components/layout/page";
 import { carryOn, continueTurn, deleteSession, stopTurn } from "../../api/worker.ts";
 import { renameSession } from "../../api/worker-calls.ts";
 import { describeProblem, Problem } from "../../components/layout/problems.tsx";

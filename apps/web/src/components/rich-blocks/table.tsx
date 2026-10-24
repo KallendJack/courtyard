@@ -1,8 +1,8 @@
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Children, type ComponentProps, createContext, use, useState } from "react";
 import type { ExtraProps } from "react-markdown";
 import { SortButton } from "@/components/buttons/sort-button";
-import { Scroller } from "@/components/layout/scroller";
-import { classes } from "@/lib/classes";
 import { childrenNamed, type MarkdownElement, textOf } from "./hast.ts";
 import { RichBlock } from "./rich-block.tsx";
 import { nextSort, type Sort, sortedOrder } from "./sorting.ts";

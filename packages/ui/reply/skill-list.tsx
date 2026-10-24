@@ -4,7 +4,7 @@ import {
   skillTitle,
   type UsableSkillSummary,
 } from "@courtyard/contract";
-import { classes } from "@/lib/classes";
+import { classes } from "../lib/classes.ts";
 
 /**
  * A workspace's skills as rows (ADR 0016): each one's name, what it's for (or why it can't be

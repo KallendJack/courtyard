@@ -7,7 +7,7 @@ count, Home's Needs you and a session's Next pill all read, so they always agree
 **Example:** Build #285 asks to push its branch. The mark shows a gold 1 on every page, Home's Needs you says
 "Approve · Build #285 · Courtyard", and the session you're reading shows "Next · Approve in Build #285".
 
-- **Uses:** `GET /api/needs-you`, and `components/layout/kept.tsx` (kept for the tab's lifetime, fresh the shared
+- **Uses:** `GET /api/needs-you`, and `packages/ui/layout/kept.tsx` (kept for the tab's lifetime, fresh the shared
   way, faster while a turn runs anywhere).
 - **Used by:** the frame (`components/frame/handheld-frame.tsx`, the mark's count), `features/home/needs-you.tsx`
   (Home's block) and the session page (the Next pill).

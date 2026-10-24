@@ -1,5 +1,5 @@
+import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { useState } from "react";
-import { Button } from "@/components/buttons/button";
 import { logOutOthers as logOutOthersOnWorker } from "../../api/worker.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
 

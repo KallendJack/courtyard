@@ -1,6 +1,6 @@
+import { buttonLook } from "@courtyard/ui/buttons/button.tsx";
 import { createLink } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
-import { buttonLook } from "./button";
 
 /** The anchor a ButtonLink renders: a Button's look on a link. */
 function ButtonAnchor({

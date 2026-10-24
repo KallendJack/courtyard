@@ -1,13 +1,13 @@
 import { WorkspaceList } from "@courtyard/contract";
-import { createFileRoute, Outlet, useRouter } from "@tanstack/react-router";
-import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
 import {
   type Dock,
   DockContext,
   type MessageBox,
   type TalkTarget,
   useLayout,
-} from "@/components/frame/handheld";
+} from "@courtyard/ui/frame/handheld.ts";
+import { createFileRoute, Outlet, useRouter } from "@tanstack/react-router";
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
 import { type FromWorker, fromWorker, logOut as logOutOnWorker } from "../api/worker.ts";
 import { Problem } from "../components/layout/problems.tsx";
 import { keepsCopy, useKeepsCopy, wipeCopyHere } from "../features/offline-copy/switch.ts";

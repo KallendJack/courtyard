@@ -1,7 +1,7 @@
 import { type SkillName, skillTitle } from "@courtyard/contract";
 import { Book, X } from "lucide-react";
-import { classes } from "@/lib/classes";
 import { IconButton } from "../buttons/button.tsx";
+import { classes } from "../lib/classes.ts";
 
 const LOOKS = {
   /** On the owner's message in the chat: the skill they started with it. */

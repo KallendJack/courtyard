@@ -1,5 +1,5 @@
+import { Page, PageTitle } from "@courtyard/ui/layout/page.tsx";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Page, PageTitle } from "@/components/layout/page";
 import type { FromWorker } from "../../api/worker.ts";
 import { useWorkerWatch } from "../../api/worker-watch.ts";
 

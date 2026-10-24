@@ -1,5 +1,5 @@
 import { CodeSessionList, type TurnNow } from "@courtyard/contract";
-import { createKept, useFresh, useKept } from "@/components/layout/kept";
+import { createKept, useFresh, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { fromWorker } from "../../api/worker.ts";
 
 /**

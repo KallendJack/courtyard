@@ -1,5 +1,5 @@
 import { type ProviderId, UsageList } from "@courtyard/contract";
-import { createKept, useKept } from "@/components/layout/kept";
+import { createKept, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { fromWorker, sendJson } from "../../api/worker.ts";
 
 // Usage at a glance (#66): each provider's plan meters and the warnings, as the worker decides them.

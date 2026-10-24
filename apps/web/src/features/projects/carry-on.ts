@@ -1,6 +1,6 @@
 import type { Project, WorkspaceId } from "@courtyard/contract";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { useNavigate } from "@tanstack/react-router";
-import { useAction } from "@/hooks/use-action";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { startSession } from "../sessions/composer/messages.ts";
 import { carryOnMessage } from "./api.ts";

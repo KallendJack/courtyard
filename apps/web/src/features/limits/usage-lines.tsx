@@ -1,6 +1,6 @@
+import { useDock } from "@courtyard/ui/frame/handheld.ts";
 import { ChevronRight } from "lucide-react";
 import { OpenRow } from "@/components/code/build-stages";
-import { useDock } from "@/components/frame/handheld";
 import { CapsLabel } from "@/components/layout/caps-label";
 import { useUsage } from "./api.ts";
 import { usageLineWords } from "./words.ts";

@@ -1,10 +1,10 @@
 import type { LeadStatus, WorkspaceId } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { createKept, PlaceholderRows, useKept } from "@courtyard/ui/layout/kept.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Link } from "@tanstack/react-router";
-import { Button } from "@/components/buttons/button";
-import { FormError } from "@/components/forms/form-error";
 import { CapsLabel } from "@/components/layout/caps-label";
-import { createKept, PlaceholderRows, useKept } from "@/components/layout/kept";
-import { classes } from "@/lib/classes";
 import { loadLead } from "../../code-home/api.ts";
 import { useMergeInOrder } from "../../code-home/merge-in-order.ts";
 

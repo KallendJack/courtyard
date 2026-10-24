@@ -1,6 +1,6 @@
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 import type { ReactNode } from "react";
-import { classes } from "@/lib/classes";
-import { FormError } from "../forms/form-error";
 
 /**
  * What a note says: its label ("Saved to Facts"), its line, and the line it replaced, or a few

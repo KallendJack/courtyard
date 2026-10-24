@@ -7,7 +7,7 @@ A planning workspace has none (#600).
 its pull requests and issues.
 
 - **Uses:** the worker's `/api/workspaces/:id/status-line`; `components/workspace/status-line.tsx` (the line),
-  `components/layout/kept.tsx`.
+  `packages/ui/layout/kept.tsx`.
 - **Used by:** `features/code-home/` (under the name), `api/workspace-page.ts` (loaded with a code workspace's page,
   so it never jumps in).
 

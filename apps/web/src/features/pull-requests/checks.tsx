@@ -1,5 +1,5 @@
 import type { PullRequest } from "@courtyard/contract";
-import { classes } from "@/lib/classes";
+import { classes } from "@courtyard/ui/lib/classes.ts";
 
 /**
  * Where a pull request stands, in a few words and its colour (AGENTS.md): checks passed in moss,
