@@ -17,6 +17,7 @@ import {
 } from "./allowlist.ts";
 import { codeWordsOf } from "./inline-code.ts";
 import { outside, reachesOut } from "./paths.ts";
+import { gitHubRepoOf } from "./remote.ts";
 import { afterEnv, withoutEnv } from "./routine.ts";
 
 /**
@@ -58,19 +59,6 @@ export type CommandApproval = {
   readonly always?: AlwaysAllow;
   /** Allow all for this task would cover it (#428): it runs without asking while that's on. */
   readonly all?: true;
-};
-
-/** A repository on GitHub as `owner/name`, from its remote's address in any of git's forms. */
-const GITHUB_REMOTE =
-  /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([A-Za-z0-9-]+\/[A-Za-z0-9._-]+?)(?:\.git)?\/?$/;
-
-/**
- * The repository a code workspace's remote is on GitHub, as `owner/name`, or `undefined` when it
- * isn't on GitHub. Read as configured, before any `insteadOf` takes it elsewhere.
- */
-export const gitHubRepoOf = async (repoPath: string) => {
-  const address = await gitOrNothing(repoPath, ["config", "--get", "remote.origin.url"]);
-  return address === undefined ? undefined : GITHUB_REMOTE.exec(address)?.[1];
 };
 
 /**

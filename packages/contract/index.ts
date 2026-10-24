@@ -195,11 +195,14 @@ export {
   PullRequestSessionStart,
   PullRequestWaiting,
   pullRequestEnded,
+  pullRequestIn,
   QUICK_LINES_MAX,
   QuickAnswer,
   QuickLine,
   QuickQuestion,
   QuickQuestions,
+  WorktreeKeptWhy,
+  worktreeClearedIn,
 } from "./lib/pull-request.ts";
 export {
   AllowingAll,
@@ -238,7 +241,6 @@ export {
   endsTurn,
   FailureReason,
   HelperId,
-  pullRequestIn,
   queuedIn,
   Save,
   SessionEvent,

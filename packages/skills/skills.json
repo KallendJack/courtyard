@@ -2,6 +2,7 @@
   "skills": [
     { "name": "grilling", "workspaces": ["planning", "code"], "icon": "flame" },
     { "name": "get-to-know", "workspaces": ["planning"], "start": "owner", "icon": "person" },
-    { "name": "get-to-know-me", "workspaces": ["planning"], "start": "owner", "icon": "person" }
+    { "name": "get-to-know-me", "workspaces": ["planning"], "start": "owner", "icon": "person" },
+    { "name": "review-use", "workspaces": ["code"], "start": "owner" }
   ]
 }
