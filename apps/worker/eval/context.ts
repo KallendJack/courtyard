@@ -41,6 +41,7 @@ import {
   testWorker,
   writeSkill,
 } from "../test/testing.ts";
+import { judgeBuilds } from "./builds.ts";
 import { planMiss, plansIn } from "./plans.ts";
 import {
   contextFileFor,
@@ -959,9 +960,7 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         replies,
         web,
       });
-      const documents = events.flatMap((event) =>
-        event.type === "document-saved" ? [event.save] : [],
-      );
+      const documents = events.flatMap((e) => (e.type === "document-saved" ? [e.save] : []));
       if (documents.length > 0)
         notes.push(`${prefix}${documents.map(describeDocument).join("; ")}`);
       const reads = events.flatMap((event) =>
@@ -998,9 +997,7 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         notes.push(`${prefix}the answer ends "${answer.trim().replace(/\s+/g, " ").slice(-300)}"`);
       }
       judged.push(...thingChecks);
-      const projects = events.flatMap((event) =>
-        event.type === "project-saved" ? [event.save] : [],
-      );
+      const projects = events.flatMap((e) => (e.type === "project-saved" ? [e.save] : []));
       if (projects.length > 0) notes.push(`${prefix}${projects.map(describeProject).join("; ")}`);
       const projectChecks = await judgeProjects({
         expected: turn.projects,
@@ -1011,6 +1008,9 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
         notes.push(`${prefix}the answer ends "${answer.trim().replace(/\s+/g, " ").slice(-300)}"`);
       }
       judged.push(...projectChecks);
+      const built = await judgeBuilds({ scenario, index, events, answer, folder });
+      notes.push(...built.notes.map((note) => prefix + note));
+      judged.push(...built.checks);
       checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 
       if (turn.undoSaves) {

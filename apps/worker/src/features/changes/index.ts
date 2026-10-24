@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import {
+  type BuildChange,
   type ChangeId,
   type DocumentChange,
   type LinePlace,
@@ -28,15 +29,16 @@ import {
   type Place,
   placeFile,
   stillAsLeft,
-  undoWholeFiles,
   type WholeFile,
   wholeFilesOf,
 } from "../context-folder/index.ts";
-import { documentChangeOf, undoDocumentChange } from "../documents/index.ts";
-import { isProjectChange, projectChangeOf, undoProjectChange } from "../projects/index.ts";
+import { documentChangeOf } from "../documents/index.ts";
+import { buildChangeOf, isBuildChange } from "../fabrication/index.ts";
+import { isProjectChange, projectChangeOf } from "../projects/index.ts";
 import { titleOf } from "../saves/index.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
-import { isThingChange, thingChangeOf, undoThingChange } from "../things/index.ts";
+import { isThingChange, thingChangeOf } from "../things/index.ts";
+import { undoWholeFileChange } from "./whole-files.ts";
 
 /**
  * Recent changes (ADR 0013): what's changed in a workspace's context file or the owner context,
@@ -61,8 +63,9 @@ export type ChangeUndoRefusal =
   | { readonly kind: "document-changed-since" }
   /** A Thing the change wrote or removed has changed since. */
   | { readonly kind: "thing-changed-since" }
-  /** A project the change wrote has changed since (#603). */
+  /** A project (#603) or a Build (#697) the change wrote has changed since. */
   | { readonly kind: "project-changed-since" }
+  | { readonly kind: "build-changed-since" }
   /** A file a move wrote or removed has changed since (#603). */
   | { readonly kind: "move-changed-since" }
   /** A save is undone through its session, which refused. */
@@ -81,6 +84,7 @@ const WHOLE_FILE_KINDS: ReadonlySet<HistoryChange["kind"]> = new Set([
   "document",
   "thing",
   "project",
+  "build",
   "move",
 ]);
 
@@ -234,6 +238,7 @@ export const listChanges = async (
       | { document: DocumentChange; undo: RecentChangeUndo }
       | { thing: ThingChange; undo: RecentChangeUndo }
       | { project: ProjectChange; undo: RecentChangeUndo }
+      | { build: BuildChange; undo: RecentChangeUndo }
       | { move: { title: string }; undo: RecentChangeUndo },
       HistoryError
     >
@@ -251,13 +256,18 @@ export const listChanges = async (
     if (change.kind === "move") {
       return ok({ move: { title: change.title.replace(/^Move: /, "") }, undo });
     }
-    const made = isProjectChange(files)
-      ? projectChangeOf(files)
-      : isThingChange(files)
-        ? thingChangeOf(files)
-        : documentChangeOf(files);
+    const made = isBuildChange(files)
+      ? buildChangeOf(files)
+      : isProjectChange(files)
+        ? projectChangeOf(files)
+        : isThingChange(files)
+          ? thingChangeOf(files)
+          : documentChangeOf(files);
     const there = made.path === null ? undefined : await exists(join(contextDir, made.path));
     if (there !== undefined && !there.ok) return err("storage");
+    if ("build" in made) {
+      return ok({ build: { ...made.build, slug: there?.value ? made.build.slug : null }, undo });
+    }
     if ("project" in made) {
       return ok({
         project: { ...made.project, slug: there?.value ? made.project.slug : null },
@@ -362,62 +372,6 @@ const undoLines = async (
       undoes: change.id,
     }),
   );
-};
-
-/**
- * Undoes a change to a document or a Thing (ADR 0020), or a project (#603): through its session
- * when one made it, so the note there shows it as for a save, or else (the owner's own change, or
- * a session since deleted) file by file.
- */
-const undoWholeFileChange = async (
-  target: ChangesTarget,
-  change: HistoryChange,
-): Promise<Result<null, ChangeUndoRefusal>> => {
-  // A move (#603) is the owner's own, made by no session: its files go back as they were.
-  if (change.kind === "move") {
-    const undone = await undoWholeFiles(target, { id: change.id, kinds: ["move"] });
-    if (undone.ok) return undone;
-    switch (undone.error.kind) {
-      case "not-found":
-      case "storage":
-        return err({ kind: undone.error.kind });
-      case "changed-since":
-        return err({ kind: "move-changed-since" });
-      case "not-undoable":
-      case "already-undone":
-        return err({ kind: "not-undoable" });
-    }
-  }
-  const of = change.kind === "thing" ? "thing" : change.kind === "project" ? "project" : "document";
-  if (change.session !== undefined) {
-    const through = { rawId: change.session, save: change.id };
-    const undone =
-      of === "thing"
-        ? await target.sessions.undoThing(through)
-        : of === "project"
-          ? await target.sessions.undoProject(through)
-          : await target.sessions.undoDocument(through);
-    if (undone.ok) return undone;
-    const gone = undone.error.kind === "not-found" || undone.error.kind === "save-not-found";
-    if (!gone) return err({ kind: "session", error: undone.error });
-  }
-  const undone =
-    of === "thing"
-      ? await undoThingChange(target, change.id)
-      : of === "project"
-        ? await undoProjectChange(target, change.id)
-        : await undoDocumentChange(target, change.id);
-  if (undone.ok) return undone;
-  switch (undone.error.kind) {
-    case "not-found":
-    case "storage":
-      return err({ kind: undone.error.kind });
-    case "changed-since":
-      return err({ kind: `${of}-changed-since` });
-    case "not-undoable":
-    case "already-undone":
-      return err({ kind: "not-undoable" });
-  }
 };
 
 /**

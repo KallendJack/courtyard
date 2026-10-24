@@ -31,6 +31,7 @@ else derived.error; // ["height.source: Invalid input…"]
 ## The rules it keeps
 
 - **Every size has a source** (`measured`, `specified` with its reference, or `assumed`); one without is refused.
+- **Castors left out are none,** so a change that takes them out (a merge patch's `null`) leaves a bench on its legs.
 - **A cut plan never overruns** a length or a sheet, with the kerf counted between pieces; a part bigger than its
   stock is found and left out.
 - **The steps depend on the tools to hand;** the parts and the cut plan don't.
@@ -43,4 +44,6 @@ workbench's hand-checked numbers with invented names, in `bench/fixtures/golden.
 
 ## Used by
 
-Nothing yet: Builds in a planning workspace (#697) and Fabrication (`apps/fabrication`, #698) come next.
+The worker's `features/fabrication/` (#697), which keeps a planning workspace's Builds and works each out with it, and
+its `prompts/builds.ts`, which gives a model the bench's parameters as JSON Schema. Fabrication (`apps/fabrication`,
+#698) comes next.

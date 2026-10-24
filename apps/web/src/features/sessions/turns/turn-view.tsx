@@ -28,8 +28,9 @@ import { TaskEndedLine } from "../../tasks/task-lines.tsx";
 import { Answer } from "../answer/answer.tsx";
 import { SourceList, sourcesAsMarkdown } from "../answer/sources.tsx";
 import { answerApproval, attachmentUrl } from "../composer/messages.ts";
+import { BuildNotes } from "../notes/builds.tsx";
 import { DocumentNoteRow, type DocumentsHere, SaveAsDocument } from "../notes/documents.tsx";
-import { ProjectNoteRow } from "../notes/projects.tsx";
+import { ProjectNotes } from "../notes/projects.tsx";
 import { SaveNote } from "../notes/save-note.tsx";
 import { ThingNoteRow } from "../notes/things.tsx";
 import { CutOffCard } from "./cut-off-card.tsx";
@@ -573,18 +574,8 @@ export const TurnView = memo(function TurnView(props: {
           ))}
         </ul>
       )}
-      {turn.projects.length > 0 && (
-        <ul aria-label="Projects saved" className="space-y-1.5">
-          {turn.projects.map((note) => (
-            <ProjectNoteRow
-              key={note.seq}
-              sessionId={sessionId}
-              workspaceId={workspaceId}
-              note={note}
-            />
-          ))}
-        </ul>
-      )}
+      <ProjectNotes sessionId={sessionId} workspaceId={workspaceId} notes={turn.projects} />
+      <BuildNotes sessionId={sessionId} notes={turn.builds} />
       {/* What the worker did for a code workspace's Lead since, in its words (#347). */}
       {turn.leadNotes.length > 0 && (
         <section aria-label="What the Lead did" className="space-y-2">

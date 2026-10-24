@@ -1,5 +1,6 @@
 import type { OwnerSection, PlacedLine, ThingDetailName } from "@courtyard/contract";
 import { pdfOf, pngOf, type TestFile } from "../test/testing.ts";
+import { BUILDS, type ExpectedBuild } from "./builds.ts";
 import { GARAGE_BUILD } from "./garage-build.ts";
 import { PLANNING } from "./planning.ts";
 
@@ -85,14 +86,10 @@ export type Turn = {
   readonly suggests?: boolean;
   /**
    * Whether the answer should use the web (ADR 0019): search it or read a page, and list sources
-   * under it; or neither, for an ordinary question. Left out, it isn't checked (what it searched,
-   * read and cited is still printed).
+   * under it; or neither. Left out, it isn't checked (what it searched, read and cited is printed).
    */
   readonly searches?: boolean;
-  /**
-   * Whether the answer should hold a Markdown table (ADR 0021), with a sentence of its own before
-   * it, as a comparison of options should; or none. Left out, it isn't checked.
-   */
+  /** Whether the answer should hold a Markdown table after a sentence (ADR 0021); or none. */
   readonly tables?: boolean;
   /**
    * Whether the answer should hold a `chart` block the web app can draw (ADR 0021), with a
@@ -150,6 +147,8 @@ export type Turn = {
    * afterwards; none means it saves none. Left out, they aren't checked (they're still printed).
    */
   readonly projects?: readonly ExpectedProject[];
+  /** The Build it should start or change (#697), judged by the saved Build. */
+  readonly builds?: ExpectedBuild;
 };
 
 /**
@@ -624,6 +623,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   ...PLANNING,
   ...GARAGE_BUILD,
+  ...BUILDS,
   {
     name: "attached-pdf",
     rule: "A PDF the owner attaches is read and its contents used (#78)",

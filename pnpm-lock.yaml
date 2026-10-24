@@ -269,6 +269,9 @@ importers:
       '@courtyard/contract':
         specifier: workspace:*
         version: link:../../packages/contract
+      '@courtyard/fabrication':
+        specifier: workspace:*
+        version: link:../../packages/fabrication
       '@courtyard/skills':
         specifier: workspace:*
         version: link:../../packages/skills
