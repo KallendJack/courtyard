@@ -231,28 +231,28 @@ describe("show me how (#777)", () => {
     expect(walkOf("long-rails")).toEqual([]);
   });
 
-  it("drills a castor's holes through its plate's own, then tightens with the head held against the castor (#783)", () => {
-    const [drill, tighten] = walkOf("fit-castors");
+  it("has nothing to walk through on the castors: the step opens on its four lines (#783)", () => {
+    expect(walkOf("fit-castors")).toEqual([]);
+  });
+});
 
-    expect([drill?.title, tighten?.title]).toEqual(["Drill through the plate", "Tighten"]);
-    expect(drill?.says).toContain("turn the collar behind the chuck to the drill symbol");
-    expect(drill?.says).toContain("or turn the plate 90° and drill fresh holes through it");
-    // The 7 mm bit down through the 4 mm plate and the 45 mm base.
-    const drilled = drill?.closeUp?.pieces ?? [];
-    expect(drilled.map((piece) => piece.label)).toEqual(["castor", "E", "bit"]);
-    expect(drilled[2]?.w).toBe(7);
-    expect(drill?.closeUp?.dimensions.map((line) => line.mm)).toEqual([49]);
+describe("the castors' close-ups (#783)", () => {
+  const closeUpsOf = () =>
+    built(goldenBench).steps.find((step) => step.id === "fit-castors")?.closeUps ?? [];
 
-    expect(tighten?.says).toContain("Start each nut by hand.");
-    expect(tighten?.says).toContain("Lock nuts are stiff all the way");
-    const close = tighten?.closeUp;
-    expect(close?.title).toBe("Tighten");
+  it("tighten with the head held against the castor and the nut turned clockwise, then one bolt apart", () => {
+    const [close, apart] = closeUpsOf();
+
+    expect([close?.title, apart?.title]).toEqual(["Tighten", "One bolt, apart"]);
     expect(close?.labels?.map((label) => label.says)).toEqual([
-      "On top",
-      "rests on castor",
-      "Underneath",
-      "turn the nut",
+      "On top: hold the head",
+      "castor",
+      "handle rests on the castor",
+      "Under: turn the nut",
+      // The golden bench has no spanner to hand: not "your".
+      "a 10 mm spanner, clockwise",
     ]);
+    expect(close?.notes).toEqual(["Stop when the washer bites."]);
     // A spanner's shape on the head, its handle reaching the castor's body; the nut turned
     // clockwise underneath. No tool is a bar.
     const [onHead, head, onNut, nut, turn] = close?.shapes ?? [];
@@ -268,6 +268,17 @@ describe("show me how (#777)", () => {
     expect(reach).toBe(body?.x);
     expect(head?.kind === "hex" && head.across).toBe(10);
     expect(close?.pieces.map((piece) => piece.label)).toEqual(["castor"]);
+  });
+
+  it("draw the castor as one, its plate on the base with its swivel and wheel above", () => {
+    const [, apart] = closeUpsOf();
+    const castor = apart?.shapes?.find((shape) => shape.kind === "castor");
+    const base = apart?.pieces.find((piece) => piece.label === "E");
+
+    expect(castor).toMatchObject({ x: 0, w: 80, plate: 4 });
+    expect(castor !== undefined && "plate" in castor && castor.y + castor.plate).toBeLessThan(
+      base?.y ?? 0,
+    );
   });
 });
 
@@ -323,20 +334,33 @@ describe("the castors' scene", () => {
     expect(pieces(scene)).toEqual([
       "part E lit ×1",
       "tool Folding workbench plain ×4",
-      // The castor's plate and its wheel's housing.
-      "fitted Wheelwright TD60 castors plain ×2",
+      // The castor's plate, its swivel and its wheel.
+      "fitted Wheelwright TD60 castors plain ×3",
       "fitted M6 × 60 bolts plain ×1",
-      // The bit through the plate's hole, and the drill's body.
-      "tool Drill driver plain ×2",
+      // A drill, not a block: the bit, the chuck, the body, the grip and the battery.
+      "tool Drill driver plain ×5",
     ]);
-    // The same gap both sides and a fingernail from the end: no sums.
-    expect(marks(scene, "line").map((line) => line.says)).toEqual(["=", "=", "1 cm"]);
-    expect(marks(scene, "size")).toEqual([]);
-    expect(marks(scene, "arrow").map((arrow) => arrow.says)).toEqual(["through the plate's hole"]);
-    expect(marks(scene, "note").map((note) => note.says)).toEqual([
-      "first bolt, loose",
-      "the Workmate's jaws",
+    // Its words are callouts, off the model with a leader, as the board has them: the owner's
+    // tools and where things go in their colour, the next thing to do in green. Nothing else.
+    expect(scene.marks.every((mark) => mark.kind === "callout")).toBe(true);
+    expect(marks(scene, "callout").map(({ says, more, tone }) => [says, more, tone])).toEqual([
+      ["your drill, 7 mm bit", "straight down through the plate's hole", "yours"],
+      ["1 bolt in", "then drill the next hole", "next"],
+      ["your Workmate's jaws", "hold the base, castor end out", "yours"],
     ]);
+  });
+
+  it("draws the drill straight down, its bit's tip on the plate and its body above", () => {
+    const scene = sceneOf(built(goldenBench), "fit-castors");
+    const [bit, chuck, body] =
+      scene.pieces.find((piece) => piece.kind === "tool" && piece.name === "Drill driver")?.boxes ??
+      [];
+    const plate = scene.pieces.find((piece) => piece.name === "Wheelwright TD60 castors")?.boxes[0];
+
+    expect(bit?.w).toBe(7);
+    expect(bit?.z).toBe((plate?.z ?? 0) + (plate?.h ?? 0));
+    expect(chuck?.z).toBe((bit?.z ?? 0) + (bit?.h ?? 0));
+    expect(body?.z).toBe((chuck?.z ?? 0) + (chuck?.h ?? 0));
   });
 
   it("lays the base on two offcuts with no Workmate, and draws no drill that isn't to hand", () => {
@@ -345,6 +369,11 @@ describe("the castors' scene", () => {
     expect(scene.title).toBe("On two offcuts");
     expect(tools(scene)).toEqual([]);
     expect(pieces(scene)).toContain("offcut Offcuts plain ×2");
+    expect(marks(scene, "callout").map((callout) => callout.says)).toEqual([
+      "drill 7 mm here",
+      "1 bolt in",
+      "two offcuts",
+    ]);
   });
 });
 

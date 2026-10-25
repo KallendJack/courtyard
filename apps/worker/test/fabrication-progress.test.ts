@@ -410,7 +410,7 @@ describe("a Build with what the owner has besides Your tools (#763)", () => {
     const bolts = (await opened(request)).derived.buyList.lines.find(
       (line) => line.item === "M6 × 60 bolts",
     );
-    expect(bolts?.length?.yoursShort).toEqual({ name: "M6 × 50", by: 9.2 });
+    expect(bolts?.length?.yoursShort).toEqual({ name: "M6 × 50", by: 7.6 });
   });
 
   it("keeps a tool chosen to buy, listing it on the buy list until they have it", async () => {

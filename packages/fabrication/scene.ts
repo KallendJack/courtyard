@@ -21,7 +21,9 @@ export type ScenePiece = {
 /**
  * What's drawn over a scene, each from the Build's numbers: a size as a dimension line, a pencil
  * line on a piece, an arrow (where the saw runs, where a screw goes in), a corner-to-corner check,
- * and a note at a place (where the support goes, the waste side).
+ * a note at a place (where the support goes, the waste side), and a callout: words off the model
+ * with a short leader to what they're about, in the owner's colour for their own tools and where
+ * things go, or the next action's (#783).
  */
 export type SceneMark =
   | { readonly kind: "size"; readonly from: At; readonly to: At; readonly mm: number }
@@ -33,6 +35,14 @@ export type SceneMark =
       readonly at: At;
       readonly says: string;
       readonly tone: "plain" | "waste" | "check";
+    }
+  | {
+      readonly kind: "callout";
+      readonly at: At;
+      /** A few words, then a line more under them. */
+      readonly says: string;
+      readonly more?: string;
+      readonly tone: "yours" | "next";
     };
 
 /**

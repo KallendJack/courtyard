@@ -87,7 +87,9 @@ export function AtTheBench(
           sendPhoto={props.sendPhoto}
           big={!cover}
         >
-          {step.closeUp !== null && <CloseUp closeUp={step.closeUp} parts={derived.parts} narrow />}
+          {step.closeUps.map((closeUp) => (
+            <CloseUp key={closeUp.title} closeUp={closeUp} parts={derived.parts} narrow />
+          ))}
         </StepPanel>
       </Scroller>
       <StepFoot

@@ -251,7 +251,8 @@ export type Step = {
   readonly safety: readonly StepTool[];
   readonly fixings: readonly { readonly name: string; readonly count: number }[];
   readonly actions: readonly Action[];
-  readonly closeUp: CloseUp | null;
+  /** Its close-ups: most steps have one, a fixing two (tightening it, and taken apart, #783). */
+  readonly closeUps: readonly CloseUp[];
   /** What "show me how" walks through first, the first time it comes up; none otherwise. */
   readonly walkThrough: readonly WalkStep[];
   /** The step's picture (#754); null where another view shows it, as a printed part's plate. */

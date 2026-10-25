@@ -1,13 +1,14 @@
 import type { BuildPart, BuildStep } from "@courtyard/contract";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { mm } from "./words.ts";
 
 // A step's close-up (#699; Paper, "Fabrication · Build steps v2, teaching · Tablet (#699)"): what
 // the step makes, drawn flat to scale from the engine's numbers, its key sizes as dimension lines
 // and a violet dot where each screw or bolt goes, with the notes beside it.
 
-type BuildCloseUp = NonNullable<BuildStep["closeUp"]>;
+type BuildCloseUp = BuildStep["closeUps"][number];
 
 const FILL: Readonly<Record<BuildPart["material"]["kind"], string>> = {
   timber: "fill-timber",
@@ -15,25 +16,104 @@ const FILL: Readonly<Record<BuildPart["material"]["kind"], string>> = {
   printed: "fill-printed",
 };
 
+/** Where a drawing's mm land in its box once fitted: its scale, in px a mm, and its top left. */
+type Fitted = { scale: number; left: number; top: number };
+
+/** How a drawing of `view` (its viewBox) sits in `host`, kept as the host is resized. */
+const useFitted = (
+  host: RefObject<HTMLDivElement | null>,
+  view: { w: number; h: number },
+): Fitted | undefined => {
+  const [fitted, setFitted] = useState<Fitted>();
+  useEffect(() => {
+    const box = host.current;
+    if (box === null) return;
+    const read = () => {
+      const { clientWidth: width, clientHeight: height } = box;
+      const scale = Math.min(width / view.w, height / view.h);
+      setFitted({ scale, left: (width - view.w * scale) / 2, top: (height - view.h * scale) / 2 });
+    };
+    read();
+    const watch = new ResizeObserver(read);
+    watch.observe(box);
+    return () => watch.disconnect();
+  }, [host, view.w, view.h]);
+  return fitted;
+};
+
 /**
- * The drawing. Its text and dots are sized from the drawing's own size, so a 1500 mm top and a
- * 460 mm end frame read the same; lines stay a hair wide however it's scaled.
+ * The drawing. Its sizes' figures and dots are sized from the drawing's own size, so a 1500 mm
+ * top and a 460 mm end frame read the same; lines stay a hair wide however it's scaled. Its words
+ * (#783) are over it at the type's own sizes, never under 12 px, placed where they belong.
  */
-function Drawing(props: { closeUp: BuildCloseUp; parts: readonly BuildPart[] }) {
+function Drawing(props: {
+  closeUp: BuildCloseUp;
+  parts: readonly BuildPart[];
+  /** As tall as its width makes it, up to a limit, rather than filling its box. */
+  ownHeight?: boolean;
+}) {
   const { closeUp, parts } = props;
   const text = Math.max(closeUp.width, closeUp.height) / 16;
   const gap = text * 0.9;
-  const pad = text * 2.4;
+  // Room round it for the sizes' figures; a drawing with none needs only a little.
+  const pad = text * (closeUp.dimensions.length > 0 ? 2.4 : 0.5);
+  const view = { w: closeUp.width + 2 * pad, h: closeUp.height + 2 * pad };
+  const host = useRef<HTMLDivElement>(null);
+  const fitted = useFitted(host, view);
   const fillOf = (label: string) => {
     const part = parts.find((each) => each.label === label);
     return part === undefined ? "fill-fitted" : FILL[part.material.kind];
   };
   return (
+    <div
+      ref={host}
+      className={classes("relative w-full", props.ownHeight ? "max-h-60" : "h-full")}
+      style={props.ownHeight ? { aspectRatio: view.w / view.h } : undefined}
+    >
+      <Lines closeUp={closeUp} pad={pad} text={text} gap={gap} view={view} fillOf={fillOf} />
+      {(closeUp.labels ?? []).map((label) => (
+        <span
+          key={`${label.says} ${label.x} ${label.y}`}
+          className={classes(
+            "pointer-events-none absolute -translate-y-1/2 whitespace-nowrap",
+            fitted === undefined && "invisible",
+            !label.heading &&
+              (label.key ? "text-label font-semibold text-success" : "text-label text-foreground"),
+          )}
+          style={{
+            left: (fitted?.left ?? 0) + (label.x + pad) * (fitted?.scale ?? 0),
+            top: (fitted?.top ?? 0) + (label.y + pad) * (fitted?.scale ?? 0),
+          }}
+        >
+          {label.heading ? (
+            <CapsLabel tone="primary" inline>
+              {label.says}
+            </CapsLabel>
+          ) : (
+            label.says
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The drawing's lines and shapes, to scale. */
+function Lines(props: {
+  closeUp: BuildCloseUp;
+  pad: number;
+  text: number;
+  gap: number;
+  view: { w: number; h: number };
+  fillOf: (label: string) => string;
+}) {
+  const { closeUp, pad, text, gap, fillOf } = props;
+  return (
     <svg
       role="img"
       aria-label={`${closeUp.title}, with ${closeUp.dimensions.map((line) => `${mm(line.mm)} mm`).join(", ")} marked and ${closeUp.fixings.length} fixings`}
-      viewBox={`${-pad} ${-pad} ${closeUp.width + 2 * pad} ${closeUp.height + 2 * pad}`}
-      className="h-full max-h-full w-full"
+      viewBox={`${-pad} ${-pad} ${props.view.w} ${props.view.h}`}
+      className="absolute inset-0 h-full w-full"
     >
       {closeUp.pieces.map((piece) => (
         <rect
@@ -102,18 +182,6 @@ function Drawing(props: { closeUp: BuildCloseUp; parts: readonly BuildPart[] }) 
       {(closeUp.shapes ?? []).map((shape) => (
         <Shape key={`${shape.kind} ${shape.x} ${shape.y}`} shape={shape} />
       ))}
-      {(closeUp.labels ?? []).map((label) => (
-        <text
-          key={`${label.says} ${label.x} ${label.y}`}
-          x={label.x}
-          y={label.y}
-          fontSize={text * (label.heading ? 0.7 : 0.8)}
-          letterSpacing={label.heading ? "0.08em" : undefined}
-          className={label.heading ? "fill-primary-text font-semibold" : "fill-foreground"}
-        >
-          {label.heading ? label.says.toUpperCase() : label.says}
-        </text>
-      ))}
     </svg>
   );
 }
@@ -141,6 +209,35 @@ function Shape(props: { shape: CloseUpShape }) {
         strokeWidth={1}
         vectorEffect="non-scaling-stroke"
       />
+    );
+  }
+  if (shape.kind === "castor") {
+    // Upside down: its plate, the swivel standing on it, and the wheel on top with its axle.
+    const swivel = { w: shape.w * 0.45, h: Math.max(shape.wheel * 0.3, 6) };
+    const middle = shape.x + shape.w / 2;
+    const r = shape.wheel / 2;
+    const axle = shape.y - swivel.h - r;
+    return (
+      <g
+        className="fill-fitted stroke-background"
+        strokeWidth={1}
+        vectorEffect="non-scaling-stroke"
+      >
+        <rect
+          x={shape.x}
+          y={shape.y}
+          width={shape.w}
+          height={shape.plate}
+          vectorEffect="non-scaling-stroke"
+        />
+        <path
+          d={`M ${middle - swivel.w / 2} ${shape.y} L ${middle - swivel.w / 3} ${shape.y - swivel.h} L ${middle + swivel.w / 3} ${shape.y - swivel.h} L ${middle + swivel.w / 2} ${shape.y} Z`}
+          vectorEffect="non-scaling-stroke"
+        />
+        <circle cx={middle} cy={axle} r={r} vectorEffect="non-scaling-stroke" />
+        <circle cx={middle} cy={axle} r={r * 0.6} className="fill-muted" />
+        <circle cx={middle} cy={axle} r={r * 0.18} vectorEffect="non-scaling-stroke" />
+      </g>
     );
   }
   if (shape.kind === "clockwise") {
@@ -238,6 +335,8 @@ export function CloseUp(props: {
   narrow?: boolean;
 }) {
   const { closeUp } = props;
+  // A drawing with words on it is as tall as it needs to be for them, when narrow (#783).
+  const ownHeight = props.narrow === true && (closeUp.labels ?? []).length > 0;
   return (
     <section
       aria-label="Close-up"
@@ -246,8 +345,13 @@ export function CloseUp(props: {
         props.narrow ? "flex-col" : "min-h-0 items-center",
       )}
     >
-      <div className={classes("min-w-0", props.narrow ? "h-44" : "h-full max-h-56 flex-1")}>
-        <Drawing closeUp={closeUp} parts={props.parts} />
+      <div
+        className={classes(
+          "min-w-0",
+          props.narrow ? !ownHeight && "h-44" : "h-full max-h-56 flex-1",
+        )}
+      >
+        <Drawing closeUp={closeUp} parts={props.parts} ownHeight={ownHeight} />
       </div>
       <div className={classes("flex flex-col gap-2", !props.narrow && "w-2/5 shrink-0")}>
         <CapsLabel tone="muted" heading={{ level: 3 }}>

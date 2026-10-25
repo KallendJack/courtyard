@@ -1,16 +1,18 @@
 import type { KeptWay } from "../build.ts";
 import type { SpannerKit, Tool } from "../tools.ts";
-import { baseCloseUp, boltApartCloseUp, CASTOR_INSET, type Holder } from "./close-ups.ts";
+import { boltApartCloseUp, type Holder, tightenCloseUp } from "./castor-pictures.ts";
+import { baseCloseUp, CASTOR_INSET } from "./close-ups.ts";
 import type { Shape } from "./frame.ts";
 import { type Castors, castorFixingNames, spannerFor } from "./parameters.ts";
 import { act, type Draft, type DraftTool } from "./preparing.ts";
-import { castorWalk } from "./walk-throughs.ts";
 
 // Fitting the castors to their bases, after the frames, so a spanner still to get doesn't hold up
 // the day (#783; Paper, 2 · Agreed, "Fabrication · Castors in 3D, your kit · Fold (#783)"). Each
 // hole is drilled through the plate's own hole, one at a time, and bolted loosely before the
-// next, so the holes can't be off. Four short lines; the rest (the drill's clutch, a hole that's
-// off, how tight) is in "show me how".
+// next, so the holes can't be off. It opens on four short lines and nothing else (packages/
+// fabrication/README.md, "How a step reads"); its two close-ups show tightening and one bolt
+// apart. The tips (the drill's clutch, a hole that's off, starting the nut by hand, the quarter
+// turn) wait for the steps' Tips (#789).
 
 /** What the castor step's lines are, kept with a step started on them (#783). */
 export const CASTOR_LINES = "through-plate";
@@ -140,8 +142,15 @@ export const castorsDraft = (options: {
         "Head held against the castor; turn the nut.",
       ),
     ],
-    closeUp: boltApartCloseUp(s, castors, size),
-    walkThrough: castorWalk(s, castors, { head: tools.head, nut: tools.nut, size }),
+    closeUps: [
+      tightenCloseUp(castors, {
+        head: tools.head ?? "open-spanner",
+        nut: tools.nut ?? "open-spanner",
+        size,
+        yours: tools.nut !== undefined,
+      }),
+      boltApartCloseUp(s, castors, size),
+    ],
     check: {
       says: "Each castor turns and swivels freely, and every nut is tight.",
       photo: "Both bases from below, castors on.",

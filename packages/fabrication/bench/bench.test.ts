@@ -144,7 +144,7 @@ describe("the golden bench's buy list", () => {
       ["5 × 80 screws", 32, 1, 520],
       // The M6 × 50s given are too short: the 60s to use have no price yet.
       ["M6 × 60 bolts", 16, 16, undefined],
-      ["M6 washers", 32, 1, 365],
+      ["M6 washers", 16, 1, 365],
       ["M6 lock nuts", 16, 1, 350],
       ["40 mm angle brackets", 12, 12, 1068],
       ["4 × 30 screws", 48, 1, 380],
@@ -169,7 +169,10 @@ describe("the golden bench's buy list", () => {
   });
 });
 
-/** The golden bench with its castor bolts this long, and its washers this thick. */
+/**
+ * The golden bench with its castor bolts this long, and its washers this thick: two a bolt, so
+ * the lengths below have a washer of each kind to add up.
+ */
 const withBolts = (length: number, washer = goldenBench.castors.washer.thickness.value) => ({
   ...goldenBench,
   castors: {
@@ -180,6 +183,7 @@ const withBolts = (length: number, washer = goldenBench.castors.washer.thickness
     },
     washer: {
       ...goldenBench.castors.washer,
+      perBolt: 2,
       thickness: { ...goldenBench.castors.washer.thickness, value: washer },
     },
   },
@@ -686,8 +690,8 @@ describe("the golden bench's steps", () => {
 
     expect(step?.fixings).toEqual([{ name: "5 × 80 screws", count: 16 }]);
     expect(step?.safety.map((tool) => tool.tool)).toEqual(["safety-glasses"]);
-    expect(step?.closeUp?.dimensions.map((line) => line.mm)).toEqual([460, 750, 250]);
-    expect(step?.closeUp?.fixings).toHaveLength(8);
+    expect(step?.closeUps[0]?.dimensions.map((line) => line.mm)).toEqual([460, 750, 250]);
+    expect(step?.closeUps[0]?.fixings).toHaveLength(8);
     expect(step?.check.says).toBe(
       "Measure corner to corner both ways. The same within 2 mm means it's square.",
     );
@@ -819,16 +823,12 @@ describe("the golden bench's steps, at the bench (#699)", () => {
       "Each next hole through the plate; bolt it.",
       "Head held against the castor; turn the nut.",
     ]);
-    // The rest is in "show me how", never in the lines.
-    const said = fitting?.walkThrough.map((move) => move.says).join(" ");
-    for (const tip of [
-      "turn the collar behind the chuck to the drill symbol",
-      "widen it sideways with the same bit",
-      "Start each nut by hand",
-      "then about a quarter turn more",
-    ]) {
-      expect(said).toContain(tip);
-      expect(fitting?.actions.some((action) => action.howTo.includes(tip))).toBe(false);
+    // Nothing else shows by default: no walk-through, and no tips in the close-ups (the clutch,
+    // a hole that's off, starting the nut by hand, the quarter turn wait for Tips, #789).
+    expect(fitting?.walkThrough).toEqual([]);
+    const said = JSON.stringify([fitting?.actions, fitting?.closeUps]);
+    for (const tip of ["clutch", "is off", "by hand", "quarter turn"]) {
+      expect(said).not.toContain(tip);
     }
   });
 
@@ -842,16 +842,17 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     expect(fitting?.scene?.title).toBe("On two offcuts");
   });
 
-  it("show one bolt apart, its washer only under the nut when the Build has one a bolt (#783)", () => {
-    const one = built({
-      ...goldenBench,
-      castors: { ...goldenBench.castors, washer: { ...goldenBench.castors.washer, perBolt: 1 } },
-    });
-    const apart = stepOf(one, "fit-castors")?.closeUp;
+  it("show one bolt apart, its one washer under the nut, against the wood (#783)", () => {
+    const build = built(goldenBench);
+    const fitting = stepOf(build, "fit-castors");
+    const apart = fitting?.closeUps[1];
 
+    // The bench is costed with one washer a bolt: the drawing, its note and the fixings agree.
+    expect(fitting?.fixings).toContainEqual({ name: "M6 washers", count: 16 });
     expect(apart?.title).toBe("One bolt, apart");
     expect(apart?.labels?.map((label) => label.says)).toEqual([
       "Top · castor side",
+      "castor",
       "bolt head",
       "plate",
       "base",
@@ -859,21 +860,41 @@ describe("the golden bench's steps, at the bench (#699)", () => {
       "washer",
       "nut",
     ]);
-    expect(apart?.notes).toEqual(["The washer only under the nut, against the wood."]);
-    // Top to bottom: the head, the plate, the base, then the washer and the nut underneath.
+    expect(apart?.labels?.find((label) => label.key)?.says).toBe("washer");
+    expect(apart?.notes).toEqual(["Washer only under the nut, against the wood."]);
+    // Top to bottom: the head, the base, then the washer and the nut underneath.
     const y = (label: string) => apart?.pieces.find((piece) => piece.label === label)?.y ?? 0;
     const head = apart?.pieces.filter((piece) => piece.label === "bolt").at(-1)?.y ?? 0;
     expect([head, y("E"), y("washer"), y("nut")]).toEqual(
       [head, y("E"), y("washer"), y("nut")].sort((a, b) => a - b),
     );
     expect(apart?.pieces.filter((piece) => piece.label === "washer")).toHaveLength(1);
+    // Each word a line of its own: none closer than 16 mm to the next, drawn spaced for them.
+    const ys = (apart?.labels ?? []).map((label) => label.y);
+    for (const [at, each] of ys.slice(1).entries()) {
+      expect(each - (ys[at] ?? 0)).toBeGreaterThanOrEqual(16);
+    }
+  });
+
+  it("put every washer under the nut, never under the head, when the Build has two a bolt", () => {
+    const two = built({
+      ...goldenBench,
+      castors: { ...goldenBench.castors, washer: { ...goldenBench.castors.washer, perBolt: 2 } },
+    });
+    const apart = stepOf(two, "fit-castors")?.closeUps[1];
+    const base = apart?.pieces.find((piece) => piece.label === "E");
+    const washers = apart?.pieces.filter((piece) => piece.label === "washer") ?? [];
+
+    expect(washers).toHaveLength(2);
+    expect(washers.every((washer) => washer.y > (base?.y ?? 0))).toBe(true);
+    expect(apart?.labels?.find((label) => label.key)?.says).toBe("2 washers");
   });
 
   it("say every size to the whole mm, though the bench is 899.6 high on its castors", () => {
     const build = built(goldenBench);
     const said = build.steps.flatMap((step) => [
       ...step.actions.flatMap((action) => [action.howTo, action.numbers]),
-      ...(step.closeUp?.notes ?? []),
+      ...step.closeUps.flatMap((closeUp) => closeUp.notes),
     ]);
 
     expect(build.size.height).toBe(899.6);

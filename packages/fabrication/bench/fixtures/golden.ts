@@ -57,7 +57,7 @@ export const goldenBench = {
     },
     washer: {
       thickness: specified(1.6, "M6 washer"),
-      perBolt: 2,
+      perBolt: 1,
       price: { pence: 365, packOf: 100, shop: "Fixings Direct" },
     },
     nut: {

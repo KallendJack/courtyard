@@ -3,7 +3,9 @@
 /**
  * What a close-up draws as its shape rather than a block (#783): a nut or a bolt's head (a hex,
  * `across` its flats); a tool on one, its jaw at `x`, `y` and its handle `length` out at `turn`
- * degrees (0 to the right, clockwise); or a clockwise arrow round one.
+ * degrees (0 to the right, clockwise); a clockwise arrow round one; or a castor upside down from
+ * the side, its plate `w` long from `x`, `y` (its top left), its swivel and its wheel (`wheel`
+ * across) standing up from it.
  */
 export type CloseUpShape =
   | { readonly kind: "hex"; readonly x: number; readonly y: number; readonly across: number }
@@ -15,7 +17,15 @@ export type CloseUpShape =
       readonly length: number;
       readonly turn: number;
     }
-  | { readonly kind: "clockwise"; readonly x: number; readonly y: number; readonly r: number };
+  | { readonly kind: "clockwise"; readonly x: number; readonly y: number; readonly r: number }
+  | {
+      readonly kind: "castor";
+      readonly x: number;
+      readonly y: number;
+      readonly w: number;
+      readonly plate: number;
+      readonly wheel: number;
+    };
 
 /**
  * A step's close-up: a flat view of what it makes, in mm from the view's top left corner (`y`
@@ -39,13 +49,18 @@ export type CloseUp = {
   }[];
   readonly fixings: readonly { readonly x: number; readonly y: number }[];
   readonly notes: readonly string[];
-  /** Tools and nuts drawn as their shape (#783). */
+  /** Tools, nuts and castors drawn as their shape (#783). */
   readonly shapes?: readonly CloseUpShape[];
-  /** Words on the drawing, a few each (#783): a heading ("Underneath") or a label ("washer"). */
+  /**
+   * Words on the drawing, a few each (#783), each starting at its point and centred on it up and
+   * down, at a size to read whatever the drawing's scale: a heading ("Underneath"), a label
+   * ("washer"), or what the drawing is about, picked out (`key`).
+   */
   readonly labels?: readonly {
     readonly x: number;
     readonly y: number;
     readonly says: string;
     readonly heading?: boolean;
+    readonly key?: boolean;
   }[];
 };

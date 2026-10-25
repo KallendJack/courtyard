@@ -36,6 +36,8 @@ export type Draft = {
   fixings?: readonly { name: string; count: number }[];
   actions: readonly Action[];
   closeUp?: CloseUp;
+  /** Its close-ups when it has more than one: a fixing tightened, and taken apart (#783). */
+  closeUps?: readonly CloseUp[];
   walkThrough?: readonly WalkStep[];
   check: { says: string; photo: string };
   words?: readonly Word[];

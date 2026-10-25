@@ -218,9 +218,11 @@ describe("the castor step with Your tools (#783)", () => {
     castors(tools)?.tools.map((tool) => [tool.name, tool.toHand]);
   const holders = (tools: readonly string[]) =>
     castors(tools)
-      ?.walkThrough.flatMap((move) => move.closeUp?.shapes ?? [])
+      ?.closeUps.flatMap((closeUp) => closeUp.shapes ?? [])
       .map((shape) => shape.kind)
-      .filter((kind) => kind !== "hex" && kind !== "clockwise");
+      .filter((kind) => kind !== "hex" && kind !== "clockwise" && kind !== "castor");
+  const turning = (tools: readonly string[]) =>
+    castors(tools)?.closeUps[0]?.labels?.find((label) => label.key)?.says;
 
   it("hold the head with pliers and turn the nut with the adjustable, naming no spanner as theirs", () => {
     const kit = [...theirs, "Adjustable spanner", "Pliers"];
@@ -235,7 +237,7 @@ describe("the castor step with Your tools (#783)", () => {
     );
     // Drawn as they are: pliers on the head, the adjustable on the nut.
     expect(holders(kit)).toEqual(["pliers", "adjustable"]);
-    expect(castors(kit)?.walkThrough.at(-1)?.says).not.toContain("10 mm socket");
+    expect(turning(kit)).toBe("your adjustable, clockwise");
   });
 
   it("never count one adjustable as two spanners", () => {
@@ -252,7 +254,7 @@ describe("the castor step with Your tools (#783)", () => {
     );
   });
 
-  it("use a spanner on each with two spanners, and say the size is stamped on them", () => {
+  it("use a spanner on each with two spanners", () => {
     const kit = [...theirs, "Spanner set"];
 
     expect(chips(kit)).toEqual([
@@ -263,7 +265,7 @@ describe("the castor step with Your tools (#783)", () => {
       "Tighten each: spanner on the head, its handle against the castor. Turn the nut underneath.",
     );
     expect(holders(kit)).toEqual(["open-spanner", "open-spanner"]);
-    expect(castors(kit)?.walkThrough.at(-1)?.says).toContain("look for 10");
+    expect(turning(kit)).toBe("your 10 mm spanner, clockwise");
   });
 
   it("turn the nut with the socket and hold the head with a spanner, with a socket set", () => {

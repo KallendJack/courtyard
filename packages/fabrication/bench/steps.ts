@@ -385,7 +385,7 @@ export const benchSteps = (options: {
     safety: (draft.safety ?? []).map(stepTool(draft)),
     fixings: draft.fixings ?? [],
     actions: draft.actions,
-    closeUp: draft.closeUp ?? null,
+    closeUps: draft.closeUps ?? (draft.closeUp === undefined ? [] : [draft.closeUp]),
     walkThrough: draft.walkThrough ?? [],
     scene: stepScene(setting, {
       id: draft.id,
