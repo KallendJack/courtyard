@@ -92,56 +92,100 @@ export type SizeToolDone = (
 /** Millimetres in each length unit; the other units aren't converted. */
 const MM: Readonly<Record<string, number>> = { mm: 1, cm: 10, m: 1000 };
 
-/** A number as a message writes it, and the unit after it, if any. */
-const NUMBER = /(\d+(?:\.\d+)?)(\s*(?:mm|cm|metres?|m|kg|litres?|l|°)(?![a-z]))?/gi;
+/**
+ * A number as a message writes it, and the unit after it, if any. Not one inside a word or a
+ * label ("M8", "T1"), but one after an "x" ("4260x2614").
+ */
+const NUMBER =
+  /(?<![a-wyz\d_.])(\d+(?:\.\d+)?)(\s*(?:millimetres?|mm|centimetres?|cm|metres?|meters?|m|kilos?|kg|litres?|l|degrees?|°)(?![a-z]))?/gi;
 
-/** A word by a number saying it's rough: "about 140", "I reckon 140", "140-ish", "140 or so". */
+/**
+ * A word saying a number is rough, a few words before it in the same clause: "about 140",
+ * "I reckon it's 140", "about roughly 140". After it: "140-ish", "140 or so".
+ */
 const ROUGH_BEFORE =
-  /(?:about|around|roughly|approx\w*|circa|nearly|almost|maybe|perhaps|guess|reckon|~)\W*(?:\w+\W+)?$/i;
+  /(?:\b(?:about|around|roughly|approx\w*|circa|nearly|almost|maybe|perhaps|guess\w*|reckon\w*)\b|~)(?:[^\w.!?\n,:;]+\w+){0,4}[^\w.!?\n,:;]*$/i;
 const ROUGH_AFTER = /^\s*(?:-?ish\b|or so\b)/i;
+
+/** Part of a date, a time or a range ("2026-10-24", "10:30", "10-12"), or a price ("£140"). */
+const NOT_A_SIZE_BEFORE = /(?:\d[-/:]|[£$€]\s*)$/;
+const NOT_A_SIZE_AFTER = /^[-/:]\d/;
+
+/**
+ * The words a bare number may come before and still be a size ("2614 wide", "4260 by 2614"):
+ * any other word makes it a count ("2 clamps").
+ */
+const SIZE_WORDS = new Set([
+  ...["x", "by", "and", "or", "to", "across", "along", "inside", "internally", "thick"],
+  ...["wide", "width", "long", "length", "high", "height", "deep", "depth", "tall"],
+]);
 
 /** A unit as a message writes it, as a record's: `metres` is `m`, `°` is `deg`. */
 const unitOf = (written: string) => {
   const word = written.trim().toLowerCase();
-  return word.startsWith("metre")
+  return /^met(?:re|er)/.test(word)
     ? "m"
-    : word.startsWith("litre")
-      ? "l"
-      : word === "°"
-        ? "deg"
-        : word;
+    : word.startsWith("millimetre")
+      ? "mm"
+      : word.startsWith("centimetre")
+        ? "cm"
+        : word.startsWith("kilo")
+          ? "kg"
+          : word.startsWith("litre")
+            ? "l"
+            : word === "°" || word.startsWith("degree")
+              ? "deg"
+              : word;
 };
 
+/** A text's words, lowercase, one space between, for finding one text in another. */
+const wordsOf = (text: string) =>
+  ` ${text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()} `;
+
+/** Whether the words before a place in a message say the value there is rough. */
+const roughAt = (text: string, start: number, end: number) =>
+  ROUGH_BEFORE.test(text.slice(Math.max(0, start - 48), start)) ||
+  ROUGH_AFTER.test(text.slice(end, end + 10));
+
 /**
- * How a message gives a quantity: exactly, only roughly, or not at all. A number with a length
- * unit counts in any length unit (5.137 m is 5137 mm); one with none counts in the record's unit,
- * or, for a length, as millimetres, centimetres or metres of it ("71.5 by 62" is 715 mm).
+ * How a message gives a size: exactly, only roughly, or not at all. A number with a length unit
+ * counts in any length unit (4.26 m is 4260 mm); a bare one only in the size's own unit, and never
+ * one in a date, a time, a price or a count ("2 clamps"). A text counts when the message has its
+ * words, and yes or no when it has that word.
  */
-export const givenIn = (
-  text: string,
-  value: SizeValue & { kind: "quantity" },
-): "exactly" | "roughly" | "not" => {
+export const givenIn = (text: string, value: SizeValue): "exactly" | "roughly" | "not" => {
+  if (value.kind !== "quantity") {
+    const words = wordsOf(text);
+    const wanted = wordsOf(value.kind === "text" ? value.text : value.yes ? "yes" : "no");
+    const at = words.indexOf(wanted);
+    if (wanted.trim() === "" || at === -1) return "not";
+    return roughAt(words, at, at + wanted.length) ? "roughly" : "exactly";
+  }
   const plain = text.replace(/(\d),(\d{3})\b/g, "$1$2");
   const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(Math.abs(b) * 1e-6, 1e-9);
   const own = MM[value.unit];
   let rough = false;
   for (const match of plain.matchAll(NUMBER)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
     const n = Number(match[1]);
     const theirs = match[2] === undefined ? undefined : unitOf(match[2]);
     const scale = theirs === undefined ? undefined : MM[theirs];
+    if (NOT_A_SIZE_BEFORE.test(plain.slice(0, start)) || NOT_A_SIZE_AFTER.test(plain.slice(end))) {
+      continue;
+    }
+    const next = /^\s*([a-z]+)/i.exec(plain.slice(end))?.[1]?.toLowerCase();
     const same =
-      near(n, value.value) && (theirs === undefined || theirs === value.unit)
-        ? true
-        : own === undefined
-          ? false
-          : theirs === undefined
-            ? [1, 10, 1000].some((k) => near((n * k) / own, value.value))
-            : scale !== undefined && near((n * scale) / own, value.value);
+      theirs === undefined
+        ? near(n, value.value) && (next === undefined || SIZE_WORDS.has(next))
+        : theirs === value.unit
+          ? near(n, value.value)
+          : own !== undefined && scale !== undefined && near((n * scale) / own, value.value);
     if (!same) continue;
-    const start = match.index ?? 0;
-    const end = start + match[0].length;
-    if (ROUGH_BEFORE.test(plain.slice(Math.max(0, start - 24), start))) rough = true;
-    else if (ROUGH_AFTER.test(plain.slice(end, end + 10))) rough = true;
+    if (roughAt(plain, start, end)) rough = true;
     else return "exactly";
   }
   return rough ? "roughly" : "not";
@@ -203,11 +247,7 @@ export const createTurnSizes = (
       source = { kind: "specified", reference };
     } else if (sent.source === "measured") {
       const messages = [...(await target.ownerMessages())].reverse();
-      const quantity = value.kind === "quantity" ? value : undefined;
-      const heard = messages.map((message) => ({
-        message,
-        given: quantity === undefined ? "exactly" : givenIn(message.text, quantity),
-      }));
+      const heard = messages.map((message) => ({ message, given: givenIn(message.text, value) }));
       const said = heard.find(({ given }) => given === "exactly")?.message;
       if (said === undefined) {
         return err({ kind: "not-said", roughly: heard.some(({ given }) => given === "roughly") });

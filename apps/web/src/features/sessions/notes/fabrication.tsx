@@ -50,7 +50,7 @@ function BuildNotes(props: { sessionId: SessionId; notes: readonly BuildNote[] }
 /**
  * The sizes the model recorded or corrected, as notes under its answer (#708): "Recorded size" or
  * "Corrected size", the Thing and what it's of, and in grey its value and where it came from
- * ("5137 mm · measured"), with Undo.
+ * ("4260 mm · measured"), with Undo.
  */
 function SizeNotes(props: { sessionId: SessionId; notes: readonly SizeNote[] }) {
   const { sessionId, notes } = props;

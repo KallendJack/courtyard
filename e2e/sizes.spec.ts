@@ -21,7 +21,7 @@ test("a size save's note offers Undo, and Recent changes lists the size", async 
       recordSize({
         thing: "garage",
         property: "floor length",
-        amount: 5137,
+        amount: 4260,
         unit: "mm",
         source: "measured",
       }),
@@ -30,7 +30,7 @@ test("a size save's note offers Undo, and Recent changes lists the size", async 
   const note = page.getByRole("list", { name: "Sizes saved" });
   await expect(note).toContainText("Recorded size");
   await expect(note).toContainText("Garage: floor length");
-  await expect(note).toContainText("5137 mm · measured");
+  await expect(note).toContainText("4260 mm · measured");
   await note.getByRole("button", { name: "Undo" }).click();
   await expect(note).toContainText("Undone");
 

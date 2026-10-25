@@ -1916,6 +1916,8 @@ describe("Builds (#697, ADR 0036)", () => {
     // Every template's JSON Schema is in it (#732), so it grows with each: past this, choose to.
     // 17,144 with each recipe feature's fields and the printed templates' shared parameters said once.
     expect(tool?.description.length).toBeLessThan(18_000);
+    // A Build's size points at a size record only once records take over (#711).
+    expect(tool?.description).not.toContain('"record"');
     expect(inputsOf(tool)).toBe(await quotedInGuide("- build: To change a Build"));
   });
 
@@ -1995,7 +1997,7 @@ describe("sizes (#708, ADR 0037)", () => {
         id: RECORD,
         subject: SUBJECT,
         property: "floor length",
-        value: { kind: "quantity", value: 5137, unit: "mm" },
+        value: { kind: "quantity", value: 4260, unit: "mm" },
         source: {
           kind: "measured",
           said: { session: "9a3e1f20-4b6c-4d8e-a1f2-3c4d5e6f7a8b", seq: 1 },
@@ -2010,7 +2012,7 @@ describe("sizes (#708, ADR 0037)", () => {
     const framing = saver.framings[0];
 
     expect(framing?.instructions).toContain(
-      `${await quotedInGuide("The workspace's recorded sizes are below")}\n\n<sizes>\n[Z1] [T1] Garage: floor length 5137 mm, measured, 2026-10-24, revision 1 (sizes/${RECORD}.json)\n- sizes/notes.json can't be read as a size: It isn't JSON.\n</sizes>`,
+      `${await quotedInGuide("The workspace's recorded sizes are below")}\n\n<sizes>\n[Z1] [T1] Garage: floor length 4260 mm, measured, 2026-10-24, revision 1 (sizes/${RECORD}.json)\n- sizes/notes.json can't be read as a size: It isn't JSON.\n</sizes>`,
     );
     expect(framing?.instructions).toContain(
       `${await quotedInGuide("Anything the owner will make")}\n\n${await quotedInGuide("A size the owner gives of a space")}`,

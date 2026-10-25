@@ -28,7 +28,7 @@ export type ExpectedSizes = {
   readonly never?: readonly RecordSourceKind[];
 };
 
-/** Millimetres in each length unit, so 5.137 m matches 5137 mm. */
+/** Millimetres in each length unit, so 4.26 m matches 4260 mm. */
 const MM: Readonly<Record<string, number>> = { mm: 1, cm: 10, m: 1000 };
 
 const sameAmount = (record: SizeRecord, amount: NonNullable<ExpectedSize["amount"]>) => {
@@ -40,7 +40,7 @@ const sameAmount = (record: SizeRecord, amount: NonNullable<ExpectedSize["amount
     : Math.abs(record.value.value * theirs - amount.value * ours) < 0.5;
 };
 
-/** A record as the report prints it: `floor length 5137 mm, measured`. */
+/** A record as the report prints it: `floor length 4260 mm, measured`. */
 const describe = (record: SizeRecord) =>
   `${record.property} ${valueText(record.value)}, ${record.source.kind}`;
 
@@ -127,7 +127,7 @@ const MEASURED_GARAGE: Pick<Scenario, "workspace" | "context" | "files"> = {
         id: "0b9d4c62-5a1e-4f3b-8d27-c4e6a1f0b3d5",
         subject: GARAGE_SUBJECT,
         property: "floor length",
-        value: { kind: "quantity", value: 5137, unit: "mm" },
+        value: { kind: "quantity", value: 4260, unit: "mm" },
         source: { kind: "reported" },
         observed: "2026-10-20",
         recorded: "2026-10-20T18:00:00.000Z",
@@ -146,13 +146,13 @@ export const SIZES: readonly Scenario[] = [
     ...GARAGE,
     turns: [
       {
-        say: "I've just measured the garage floor with a tape: 5137 mm long and 2614 mm wide.",
+        say: "I've just measured the garage floor with a tape: 4260 mm long and 2614 mm wide.",
         expect: [],
         sizes: {
           records: [
             {
               property: [["length", "long"]],
-              amount: { value: 5137, unit: "mm" },
+              amount: { value: 4260, unit: "mm" },
               source: "measured",
             },
             {
@@ -216,7 +216,7 @@ export const SIZES: readonly Scenario[] = [
           records: [
             {
               property: [["length", "long"]],
-              amount: { value: 5137, unit: "mm" },
+              amount: { value: 4260, unit: "mm" },
               source: "reported",
             },
             {
@@ -227,7 +227,7 @@ export const SIZES: readonly Scenario[] = [
           ],
           count: 2,
         },
-        says: [["5137", "5,137", "5.137", "5.14"]],
+        says: [["4260", "4,260", "4.26"]],
       },
     ],
   },

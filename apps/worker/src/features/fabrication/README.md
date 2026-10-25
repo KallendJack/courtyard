@@ -103,11 +103,12 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   (written in the same change). A correction is a new record, the next revision, and the one it corrects says so
   (`supersededBy`); a correction of a revision that isn't the one standing is refused. Two different values for the
   same thing are both kept, each listing the other as a conflict. Undo (`undoSizeChange`) puts each file back whole,
-  unless it's changed since. A Build's size can point at the record it comes from (`SourcedSize.record`).
+  unless it's changed since. A Build's sizes point at records only once they take over (#711).
 - **The size tool** (`size-tool.ts`): one turn's `save_size`, by the labels the turn was shown (`Z1`, and `T1` for
   Things). The model says a size is measured; the worker ties it to the owner's newest message in the session that
-  gives that value exactly (`givenIn`: any length unit, a bare number in mm, cm or m of it), and refuses it when none
-  does or one gives it only roughly ("about 140"). It's offered only in planning workspaces.
+  gives that value exactly (`givenIn`: a number with any length unit, or a bare one in the size's own unit that isn't
+  a date, a price or a count; a text's words, or yes or no), and refuses it when none does or one gives it only
+  roughly ("about 140", "I reckon it's 140"). It's offered only in planning workspaces.
 - **The chat** (`chat.ts`): which session is the Build's, and its events read as the chat's lines, through
   `sessions/`.
 - **The API** (`routes.ts`, a printed part's in `print-routes.ts`, sizes in `size-routes.ts`): under

@@ -1907,8 +1907,7 @@ only what they follow before then, and a tool the reply finds not to hand is one
 template's parameters as JSON Schema, `framed-bench: {…}` from `BenchParameters`, then each printed template's own
 from `PRINTED_PARAMETERS` (a recipe's features with each kind's fields, `PartRecipeShown`), then `and every printed
 template also: {…}` from `PRINTED_COMMON`, said once, separated by spaces, without `$schema` or Zod's
-largest-safe-integer maximums, or a UUID's pattern beside its `"format": "uuid"` (a size's `record`, #708):
-`TEMPLATE_SCHEMAS`). The parameters' shape is in the tool's own description, not the input's: Codex's tool
+largest-safe-integer maximums: `TEMPLATE_SCHEMAS`). The parameters' shape is in the tool's own description, not the input's: Codex's tool
 format keeps no description of an input that's an object, so there it never reached the model, and Codex sent `{}`
 (#732):
 
@@ -2005,13 +2004,15 @@ source (`measured`, `specified` with the maker's page, `reported` or `estimated`
 recorded, its revision, and the record that corrected it, once one has. A correction is a record of its own, the next
 revision; a different value for the same thing that isn't a correction stands beside it, and nothing wins until the
 owner says. **Measured is the worker's to give:** the model says a size is measured, and the worker ties it to the
-owner's newest message in the session that gives that value exactly ("5.137 m" for 5137 mm, or "71.5 by 62" in a
-length's own unit or mm, cm or m of it), refusing it when none does, or when one gives it only roughly ("about 140",
-"140-ish"). Every write is one change with Undo in Recent changes, and the chat shows each save as a note with Undo.
-Code workspaces have none, and their sessions no size tool. A Build's size can point at the record it comes from.
+owner's newest message in the session that gives that value exactly ("4.26 m" for 4260 mm, or "71.5 by 62" for
+71.5 cm: a bare number only in the size's own unit, never a date, a price or a count such as "2 clamps"; a text's
+words, or yes or no, as they're written), refusing it when none does, or when one gives it only roughly ("about 140",
+"I reckon it's 140", "140-ish"). Every write is one change with Undo in Recent changes, and the chat shows each save
+as a note with Undo. Code workspaces have none, and their sessions no size tool. A Build's sizes point at records only
+once records take over (#711).
 
 What a model is told (Every turn, item 8), on every turn in a planning workspace, after the Builds: the standing
-records, one per line between `<sizes>` markers (`[Z1] [T1] Garage: floor length 5137 mm, measured, 2026-10-24,
+records, one per line between `<sizes>` markers (`[Z1] [T1] Garage: floor length 4260 mm, measured, 2026-10-24,
 revision 1 (sizes/<id>.json)`: its label, its Thing by label and name, what it's of, its value, source (a specified
 one with its page), day, revision, `differs from [Z2]` for each standing record of the same thing with another
 value, then its file), and each file that isn't a record as written (`- sizes/<file> can't be read as a size:
@@ -2051,7 +2052,7 @@ With none yet:
 > - revision: The revision of that size you were shown, such as 1.
 > - thing: A new size's Thing: its label, such as T1, or its file, such as things/garage.md.
 > - property: What a new size is of the Thing, in a few words, such as floor length or back wall height.
-> - amount: The size as a number, such as 5137, given with unit.
+> - amount: The size as a number, such as 4260, given with unit.
 > - unit: Its unit: mm, cm, m, kg, l or deg.
 > - text: A size that's words, such as stud partition.
 > - yes: A size that's yes or no, such as true for has a socket.
@@ -2060,7 +2061,7 @@ With none yet:
 > - reference: For specified: the maker's page it's from.
 > - observed: The day it was measured or read, such as 2026-10-24, when it wasn't today.
 
-One it takes is answered "Recorded [Z1] floor length 5137 mm, measured, revision 1 (sizes/<id>.json)." or
+One it takes is answered "Recorded [Z1] floor length 4260 mm, measured, revision 1 (sizes/<id>.json)." or
 "Corrected …", and, when it differs from a standing record, "It differs from [Z2] 5200 mm, reported: both are kept
 until the owner says which is right, so say they differ." One already recorded with that value and source writes
 nothing: "… is recorded already: nothing changed." A correction takes the label of the record it corrected. The
@@ -2070,8 +2071,8 @@ owner never gave in the session ("The owner hasn't given that value in this conv
 record it as reported or estimated, or ask them to measure it.") or gave only roughly ("The owner gave that value only
 roughly, so it's reported, not measured."); and a size corrected since it was shown, with the sizes as they are now,
 labelled afresh. As with saves, a refused size can be put right once. The chat shows "Recorded size" or "Corrected
-size" with its Thing and what it's of, and in grey its value and source ("5137 mm · measured"). Later turns are told
-each earlier answer's size saves and whether the owner undid them ("- Recorded the size Garage: floor length 5137 mm,
+size" with its Thing and what it's of, and in grey its value and source ("4260 mm · measured"). Later turns are told
+each earlier answer's size saves and whether the owner undid them ("- Recorded the size Garage: floor length 4260 mm,
 measured (kept)"). The fake saves one for each line "size: " followed by the tool's input as JSON.
 
 The eval's `size-*` scenarios check the records saved, not the answer's wording, and are to run on both providers: an

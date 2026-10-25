@@ -52,7 +52,7 @@ export const SIZE_TOOL: TurnTool = {
       .describe(
         "What a new size is of the Thing, in a few words, such as floor length or back wall height.",
       ),
-    amount: z.number().optional().describe("The size as a number, such as 5137, given with unit."),
+    amount: z.number().optional().describe("The size as a number, such as 4260, given with unit."),
     unit: RecordUnit.optional().describe("Its unit: mm, cm, m, kg, l or deg."),
     text: z.string().optional().describe("A size that's words, such as stud partition."),
     yes: z.boolean().optional().describe("A size that's yes or no, such as true for has a socket."),

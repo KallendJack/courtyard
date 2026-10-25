@@ -60,7 +60,7 @@ export const readSizeText = (text: string): Result<SizeRecord, string> => {
   return err(`It isn't a size record: ${issue?.path.join(".") || "its file"}: ${issue?.message}`);
 };
 
-/** A value as the owner reads it: `5137 mm`, `30°`, `stud partition`, `yes`. */
+/** A value as the owner reads it: `4260 mm`, `30°`, `stud partition`, `yes`. */
 export const valueText = (value: SizeValue) =>
   value.kind === "quantity"
     ? value.unit === "deg"

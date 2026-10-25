@@ -101,7 +101,7 @@ export type Sizes = z.infer<typeof Sizes>;
 
 /**
  * What one size save did, for its note: recorded a size or corrected one, the Thing and property
- * it's of, the value as the owner reads it ("5137 mm") and its source's kind.
+ * it's of, the value as the owner reads it ("4260 mm") and its source's kind.
  */
 export const SizeSave = z.object({
   action: z.enum(["add", "correct"]),
