@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { BuildOpened } from "../packages/contract/index.ts";
 import { goldenBench } from "../packages/fabrication/bench/fixtures/golden.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
 
@@ -134,6 +135,150 @@ test.describe("on the unfolded Fold", () => {
     await chat.getByRole("button", { name: "Send" }).click();
     await expect(chat.getByRole("list", { name: "Messages" })).toContainText(
       "You said: Do the washers come with them?",
+    );
+  });
+});
+
+// The instruction manual (#699; Paper, 2 · Agreed, "Fabrication · Build steps v2, teaching ·
+// Tablet (#699)", "· Build steps, cutting by your tools · Tablet (#699)" and "· Build steps ·
+// Cover (#699)"): one step at a time, the 3D view built up to it.
+
+/** The 3D panel's letter for a part, as the bench at a step shows it. */
+const letter = (page: Page, name: string) =>
+  page.getByRole("region", { name: "In 3D" }).getByRole("button", { name, exact: true });
+
+test.describe("the steps, on the unfolded Fold", () => {
+  test.use({ viewport: { width: 933, height: 645 }, hasTouch: true, isMobile: true });
+
+  test("stepping through shows each step's parts, tools and fixings, and the 3D view builds up to it", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await page.getByRole("tab", { name: "Steps" }).click();
+    const steps = page.getByRole("region", { name: "Steps" });
+    const done = page.getByRole("button", { name: "Done, next step" });
+
+    // Nothing's put on yet: the whole bench shows.
+    await expect(steps).toContainText("Step 1 of 12 · about 10 min");
+    await expect(steps.getByRole("heading", { name: "Check what's arrived" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Back" })).toBeDisabled();
+    await expect(letter(page, "G, Top")).toBeVisible();
+
+    // Cutting goes by the tools to hand: the hand saw, the circular saw not yet.
+    await done.click();
+    await done.click();
+    await expect(steps.getByRole("heading", { name: "Cut and label the timber" })).toBeVisible();
+    const ways = steps.getByRole("region", { name: "How you'll do it" });
+    await expect(ways.getByRole("listitem")).toHaveText(["Hand saw", "Circular saw · not yet"]);
+
+    // The castors: the bases alone in 3D, lit; the spanner to check; the bolts.
+    await done.click();
+    await expect(
+      steps.getByRole("heading", { name: "Fit the castors to the bases" }),
+    ).toBeVisible();
+    await expect(letter(page, "E, Castor bases")).toHaveAttribute("aria-current", "step");
+    await expect(letter(page, "A, Legs")).toHaveCount(0);
+    await expect(steps).toContainText(
+      "Fixings: M6 × 50 bolts (16), M6 washers (32) and M6 lock nuts (16)",
+    );
+    const tools = steps.getByRole("region", { name: "Tools for this step" });
+    await tools.getByRole("button", { name: /tools ready/ }).click();
+    await expect(tools).toContainText("Spanner? Check");
+    await expect(tools).toContainText("Drill driver");
+
+    // The end frames: lit, on top of the bases now faint; a checklist with words to tap.
+    await done.click();
+    await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "In 3D" })).toContainText(
+      "Step 5 · Make the two end frames",
+    );
+    await expect(letter(page, "A, Legs")).toHaveAttribute("aria-current", "step");
+    await expect(letter(page, "C, End rails")).toHaveAttribute("aria-current", "step");
+    await expect(letter(page, "E, Castor bases")).not.toHaveAttribute("aria-current", "step");
+    await expect(letter(page, "B, Long rails")).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Close-up" })).toContainText(
+      "Close-up · One end frame",
+    );
+    await expect(steps).toContainText("Fixings: 5 × 80 screws (16)");
+    const checklist = steps.getByRole("list", { name: "Checklist" });
+    await checklist.getByRole("checkbox", { name: "Line 1 done" }).click();
+    await expect(checklist.getByRole("checkbox", { name: "Line 1 done" })).toBeChecked();
+    await checklist.getByRole("button", { name: "flush" }).click();
+    await expect(steps.getByRole("status")).toContainText(
+      "flush: Level with the next piece's face or edge",
+    );
+    await expect(steps.getByRole("region", { name: "Before you move on" })).toContainText(
+      "Measure corner to corner both ways.",
+    );
+
+    // Kept on the Build: opened again, it's where the owner left off.
+    const buildApi = new URL(page.url()).pathname.replace(/^\/fabrication/, "/api/fabrication");
+    await expect
+      .poll(async () => {
+        const { progress } = BuildOpened.parse(await (await page.request.get(buildApi)).json());
+        return [progress.step, progress.ticked.find((each) => each.step === 5)?.lines];
+      })
+      .toEqual([5, [0]]);
+    await page.reload();
+    await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
+    await expect(checklist.getByRole("checkbox", { name: "Line 1 done" })).toBeChecked();
+    await expect(checklist.getByRole("checkbox", { name: "Line 2 done" })).not.toBeChecked();
+  });
+});
+
+test.describe("the steps, on the cover screen", () => {
+  test.use({ viewport: { width: 933, height: 645 }, hasTouch: true, isMobile: true });
+
+  test("a step is chosen from the strip, and the 3D view moves to it", async ({ page }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    // Folded, with the Build open.
+    await page.setViewportSize({ width: 476, height: 695 });
+    await page.getByRole("tablist", { name: "Show" }).getByRole("tab", { name: "Steps" }).click();
+
+    await page.getByRole("button", { name: "Step 9, Fit the shelf" }).click();
+    const steps = page.getByRole("region", { name: "Steps" });
+    await expect(steps.getByRole("heading", { name: "Fit the shelf" })).toBeVisible();
+    await expect(letter(page, "H, Shelf")).toHaveAttribute("aria-current", "step");
+    await expect(letter(page, "G, Top")).toHaveCount(0);
+    await expect(steps).toContainText("Fixings: 4 × 40 screws");
+
+    await page.getByRole("button", { name: "Back" }).click();
+    await expect(steps.getByRole("heading", { name: "Fit the supports" })).toBeVisible();
+    await expect(letter(page, "F, Top support")).toHaveAttribute("aria-current", "step");
+    await expect(page.getByRole("button", { name: "Done, next step" })).toBeInViewport();
+  });
+});
+
+test.describe("the steps, on a desktop", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("just the numbers, and a photo to check goes in the chat to send", async ({ page }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await page.getByRole("tab", { name: "Steps" }).click();
+    await page.getByRole("button", { name: "Step 5, Make the two end frames" }).click();
+    const steps = page.getByRole("region", { name: "Steps" });
+    const checklist = steps.getByRole("list", { name: "Checklist" });
+    await expect(checklist).toContainText("Lay two legs (A) flat, 460 apart outside to outside.");
+
+    await steps.getByRole("button", { name: "Just the numbers" }).click();
+    await expect(checklist).toContainText("A × 2, 460 outside.");
+    await expect(letter(page, "C, End rails")).toHaveAttribute("aria-current", "step");
+
+    await steps.getByLabel("Photo to check").setInputFiles({
+      name: "frames.png",
+      mimeType: "image/png",
+      // One grey pixel.
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNoAAAAggCBd81ytgAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    });
+    const chat = page.getByRole("region", { name: "Chat" });
+    await expect(chat.getByLabel("Message", { exact: true })).toHaveValue(
+      "Step 5, Make the two end frames: Both end frames, flat, from above. Measure corner to corner both ways. The same within 2 mm means it's square. Does it look right?",
     );
   });
 });

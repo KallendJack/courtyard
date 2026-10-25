@@ -160,6 +160,8 @@ export const benchSteps = (options: {
             minutes: 20,
             helper: true,
             parts: ["E"],
+            // The bases went on with their castors; this joins them to the frame.
+            adds: [],
             tools: ["drill-driver", "drill-bits", "square"],
             safety: ["safety-glasses"],
             fixings: [fixing(brackets, 4)],
@@ -318,6 +320,8 @@ export const benchSteps = (options: {
       minutes: draft.minutes,
       helper: draft.helper ?? false,
       parts: draft.parts,
+      adds: draft.adds ?? draft.parts,
+      ways: draft.ways ?? [],
       tools: draft.tools.map(stepTool),
       safety: (draft.safety ?? []).map(stepTool),
       fixings: draft.fixings ?? [],

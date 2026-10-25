@@ -20,8 +20,11 @@ rest is worked out again.
 
 - `GET /api/fabrication/workspaces/:id/builds`: the workspace's Builds by name, and each file that can't be read as
   one with what's wrong. Answers `Builds`.
-- `GET /api/fabrication/workspaces/:id/builds/:slug`: one Build with everything derived, and where it is: its
-  workspace and the project whose step makes it (#698). Answers `BuildOpened`.
+- `GET /api/fabrication/workspaces/:id/builds/:slug`: one Build with everything derived, where it is (its workspace
+  and the project whose step makes it, #698), and how far the owner has got with its steps (#699). Answers
+  `BuildOpened`.
+- `PUT /api/fabrication/workspaces/:id/builds/:slug/progress`: `BuildProgress`, the step reached and the lines
+  ticked (#699); a step the Build doesn't have is refused (400). Answers it as kept.
 - `GET /api/fabrication/workspaces/:id/builds/:slug/chat`: its chat (#698), from its project's latest session, or
   else the latest that saved it: what was said and each change saved, and whether an answer is coming. Answers
   `BuildChat`.
@@ -50,6 +53,10 @@ or Recent changes.
   into the Build's (`parameters.ts`). The engine works them out first, and parameters it refuses save nothing. Each
   save is one change through `context-folder/`, its note listing each parameter changed ("height: 900 mm → 850
   mm"); Undo (`undoBuildChange`) puts the file back whole, unless it's changed since.
+- **Progress** (`progress.ts`, #699): `builds/progress/<slug>.json`, the step reached and the lines ticked, read with
+  the Build. It sits beside the Build's file, so ticking a line never stands in the way of undoing a change to the
+  Build. Each write is a `build-progress` change: backed up, never listed in Recent changes. The model's list of
+  Builds says the step reached once building has started, so a new session carries on there.
 - **The tool** (`tool.ts`): one turn's `save_build`, by the labels the turn was shown (`B1`), keeping each file as
   shown or last saved, so a change to one edited since is refused with the Builds as they are now. Given only a
   label, or a change of nothing, it writes nothing and gives the Build as it is, so a later turn reads its numbers

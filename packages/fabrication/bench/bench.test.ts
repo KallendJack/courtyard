@@ -312,6 +312,43 @@ describe("the golden bench's steps", () => {
     ]);
   });
 
+  it("say which parts each puts on the bench, so the 3D view can build it up step by step (#699)", () => {
+    expect(built(goldenBench).steps.map((step) => [step.number, step.adds])).toEqual([
+      [1, []],
+      [2, []],
+      [3, []],
+      [4, ["E"]],
+      [5, ["A", "C"]],
+      [6, ["B"]],
+      [7, []],
+      [8, ["F", "D"]],
+      [9, ["H"]],
+      [10, ["J"]],
+      [11, ["G"]],
+      [12, []],
+    ]);
+  });
+
+  it("fit the castors to the bases, so they come with them in the 3D view (#699)", () => {
+    expect(built(goldenBench).fitted.map((each) => [each.name, each.on])).toEqual([
+      ["Wheelwright TD60 castors", "E"],
+    ]);
+  });
+
+  it("say how a step can be done, the way in use and the others not yet to hand (#699)", () => {
+    const ways = (build: Build) => build.steps.find((step) => step.title.startsWith("Cut"))?.ways;
+
+    expect(ways(built(goldenBench))).toEqual([
+      { name: "Hand saw", using: true, toHand: true },
+      { name: "Circular saw", using: false, toHand: false },
+    ]);
+    expect(ways(built({ ...goldenBench, tools: [...goldenBench.tools, "circular-saw"] }))).toEqual([
+      { name: "Hand saw", using: false, toHand: true },
+      { name: "Circular saw", using: true, toHand: true },
+    ]);
+    expect(built(goldenBench).steps.find((step) => step.number === 5)?.ways).toEqual([]);
+  });
+
   it("cut with the hand saw on the folding workbench, until a circular saw is to hand", () => {
     const cutStep = (build: Build) => build.steps.find((step) => step.title.startsWith("Cut"));
     const handSaw = cutStep(built(goldenBench));

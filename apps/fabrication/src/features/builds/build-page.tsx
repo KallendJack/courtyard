@@ -5,13 +5,16 @@ import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useRouter } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
-import { type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { BenchPanel } from "./bench-panel.tsx";
 import { BuildChat } from "./build-chat.tsx";
 import { BuyList } from "./buy-list.tsx";
+import { CloseUp } from "./close-up.tsx";
 import { CutPlan } from "./cut-plan.tsx";
 import { FINDINGS_ID, Findings } from "./findings.tsx";
-import { StepsList, ToolsList } from "./tools-steps.tsx";
+import { inView, useProgress } from "./progress.ts";
+import { StepFoot, StepPanel } from "./step-panel.tsx";
+import { ToolsList } from "./tools-list.tsx";
 import { sizeLine, toCheck } from "./words.ts";
 
 /** The side panel's tabs, as the board has them; on the cover screen, the 3D view and chat too. */
@@ -70,19 +73,46 @@ export function BuildPage(props: { build: BuildOpened }) {
   const router = useRouter();
   const cover = useLayout() === "cover";
   const [lit, setLit] = useState<string>();
-  const [side, setSide] = useState<(typeof SIDE_TABS)[number]>("Cut plan");
-  const [coverTab, setCoverTab] = useState<Tab>("Bench");
+  // Once building has started, the Build opens on the steps, where the owner left off (#699).
+  const started = build.progress.step > 1 || build.progress.ticked.length > 0;
+  const [side, setSide] = useState<(typeof SIDE_TABS)[number]>(started ? "Steps" : "Cut plan");
+  const [coverTab, setCoverTab] = useState<Tab>(started ? "Steps" : "Bench");
+  const [draft, setDraft] = useState<{ text: string; files: File[]; key: number }>();
   const pick = (label: string) => setLit((now) => (now === label ? undefined : label));
   const reread = useCallback(() => void router.invalidate(), [router]);
   // The Build may change from Courtyard too: it's read again the shared way.
   useFresh({ ask: () => router.invalidate() });
+  const progress = useProgress(build, reread);
+  const { step } = progress;
+  const view = useMemo(
+    () => (step === undefined ? undefined : inView(derived, step)),
+    [derived, step],
+  );
+  const stepsShowing = cover ? coverTab === "Steps" : side === "Steps";
+  const atStep =
+    stepsShowing && step !== undefined && view !== undefined ? { step, view, progress } : undefined;
 
   const checks = toCheck(derived.findings).length;
   const back = courtyardPlace(place);
 
   const showFindings = () => {
-    if (cover && !(SIDE_TABS as readonly string[]).includes(coverTab)) setCoverTab("Cut plan");
+    if (cover && (coverTab === "Bench" || coverTab === "Chat" || coverTab === "Steps")) {
+      setCoverTab("Cut plan");
+    }
+    if (!cover && side === "Steps") setSide("Cut plan");
     requestAnimationFrame(() => document.getElementById(FINDINGS_ID)?.focus());
+  };
+
+  // "Send a photo to check" (#699): the photo and what it's for go in the chat's Reply box, for
+  // the owner to see and send with one tap.
+  const sendPhoto = (photo: File) => {
+    if (step === undefined) return;
+    setDraft({
+      text: `Step ${step.number}, ${step.title}: ${step.check.photo} ${step.check.says} Does it look right?`,
+      files: [photo],
+      key: Date.now(),
+    });
+    if (cover) setCoverTab("Chat");
   };
 
   const sideContent = (tab: (typeof SIDE_TABS)[number]): ReactNode => {
@@ -99,24 +129,52 @@ export function BuildPage(props: { build: BuildOpened }) {
           />
         );
       case "Steps":
-        return <StepsList derived={derived} lit={lit} pick={pick} />;
+        return null;
     }
   };
-  const sidePanel = (tab: (typeof SIDE_TABS)[number]) => (
-    <Scroller className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-col gap-4 pb-2">
-        <Findings findings={derived.findings} />
-        {sideContent(tab)}
-      </div>
-    </Scroller>
+  /** The steps, one at a time, with Back and Done pinned at the foot. */
+  const steps = (withCloseUp: boolean) =>
+    step === undefined ? null : (
+      <>
+        <Scroller className="flex min-h-0 flex-1 flex-col">
+          <div className="flex flex-col gap-4">
+            <StepPanel derived={derived} step={step} progress={progress} sendPhoto={sendPhoto} />
+            {withCloseUp && step.closeUp !== null && (
+              <CloseUp closeUp={step.closeUp} parts={derived.parts} narrow />
+            )}
+          </div>
+        </Scroller>
+        <StepFoot derived={derived} step={step} progress={progress} />
+      </>
+    );
+  const sidePanel = (tab: (typeof SIDE_TABS)[number]) =>
+    tab === "Steps" ? (
+      steps(false)
+    ) : (
+      <Scroller className="flex min-h-0 flex-1 flex-col">
+        <div className="flex flex-col gap-4 pb-2">
+          <Findings findings={derived.findings} />
+          {sideContent(tab)}
+        </div>
+      </Scroller>
+    );
+  const chat = (
+    <BuildChat
+      workspaceId={place.workspace.id}
+      slug={build.slug}
+      onChanged={reread}
+      placeholder={stepsShowing ? "Ask about this step…" : "Change something…"}
+      draft={draft}
+      onDrafted={() => setDraft(undefined)}
+    />
   );
-  const chat = <BuildChat workspaceId={place.workspace.id} slug={build.slug} onChanged={reread} />;
   const bench = (
     <BenchPanel
       name={`The ${derived.template.split("-").at(-1)}`}
       derived={derived}
       lit={lit}
       pick={pick}
+      atStep={atStep}
     />
   );
 
@@ -165,7 +223,28 @@ export function BuildPage(props: { build: BuildOpened }) {
         <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pt-3 pb-4">
           <Tabs tabs={COVER_TABS} showing={coverTab} show={setCoverTab} />
           <div className={classes(PANEL, "flex-1")}>
-            {coverTab === "Bench" ? bench : coverTab === "Chat" ? chat : sidePanel(coverTab)}
+            {coverTab === "Bench" ? (
+              bench
+            ) : coverTab === "Chat" ? (
+              chat
+            ) : coverTab === "Steps" ? (
+              // As the cover board has it: the step in 3D above, its words below.
+              <>
+                <div className="flex h-56 shrink-0 flex-col pb-3">
+                  <BenchPanel
+                    name={`The ${derived.template.split("-").at(-1)}`}
+                    derived={derived}
+                    lit={lit}
+                    pick={pick}
+                    atStep={atStep}
+                    closeUp={false}
+                  />
+                </div>
+                {steps(true)}
+              </>
+            ) : (
+              sidePanel(coverTab)
+            )}
           </div>
         </div>
       </div>

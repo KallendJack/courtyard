@@ -34,7 +34,10 @@ else derived.error; // ["height.source: Invalid input…"]
 - **Castors left out are none,** so a change that takes them out (a merge patch's `null`) leaves a bench on its legs.
 - **A cut plan never overruns** a length or a sheet, with the kerf counted between pieces; a part bigger than its
   stock is found and left out.
-- **The steps depend on the tools to hand;** the parts and the cut plan don't.
+- **The steps depend on the tools to hand;** the parts and the cut plan don't. A step that can be done more than one
+  way lists its ways, the one in use and the others not yet to hand (a hand saw until there's a circular saw).
+- **Each step says which parts it puts on the Build** (none for checking, marking and cutting), and something fitted
+  (a castor) says the part it's fitted to, so the 3D view can build the Build up step by step (#699).
 - **Parts are cut to the whole mm below.**
 
 ## Tests
@@ -45,5 +48,5 @@ workbench's hand-checked numbers with invented names, in `bench/fixtures/golden.
 ## Used by
 
 The worker's `features/fabrication/` (#697), which keeps a planning workspace's Builds and works each out with it, and
-its `prompts/builds.ts`, which gives a model the bench's parameters as JSON Schema. Fabrication (`apps/fabrication`,
-#698) comes next.
+its `prompts/builds.ts`, which gives a model the bench's parameters as JSON Schema; and Fabrication
+(`apps/fabrication`, #698, #699), which shows all it works out, the steps as an instruction manual.

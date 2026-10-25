@@ -255,6 +255,7 @@ export const benchFitted = (parameters: BenchParameters, shape: Shape): Fitted[]
   return [
     {
       name: castors.name,
+      on: "E",
       boxes: [s.left, s.right - s.wideWidth].flatMap((x) =>
         [s.front + CASTOR_INSET, s.back - CASTOR_INSET - plateLength].map((y) =>
           box(x + (s.wideWidth - plateWidth) / 2, y, 0, plateWidth, plateLength, s.castor),

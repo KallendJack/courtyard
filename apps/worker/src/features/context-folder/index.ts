@@ -22,12 +22,11 @@ import { OWNER_FILE } from "../owner-context/index.ts";
 import { ARCHIVED_FOLDER, CONTEXT_FILE, OWNER_THINGS_FOLDER } from "../workspaces/index.ts";
 
 /**
- * What kind of change a commit is, as its `Courtyard-Change` trailer says: the repository's start,
- * the owner's own edits, a workspace made, renamed, given an icon or archived in the app (or the
- * workspaces arranged), the owner context started from the app, a model's save and the owner
- * undoing or editing one, a tidy the owner ticked, a document or a Thing saved (ADR 0020), a
- * project started or changed or a move the owner ticked (#603), a Build started or changed (#697),
- * or a fresh start clearing the whole folder.
+ * What kind of change a commit is, as its `Courtyard-Change` trailer says: the repo's start, the
+ * owner's own edits, a workspace made, renamed, given an icon or archived (or the workspaces
+ * arranged), the owner context started, a model's save and the owner undoing or editing one, a
+ * tidy, a document or Thing saved (ADR 0020), a project changed or a move ticked (#603), a Build
+ * changed (#697), progress on its steps (#699, never in Recent changes), or a fresh start.
  */
 export const ChangeKind = z.enum([
   "setup",
@@ -42,6 +41,7 @@ export const ChangeKind = z.enum([
   "thing",
   "project",
   "build",
+  "build-progress",
   "move",
   "fresh-start",
 ]);

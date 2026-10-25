@@ -1,6 +1,6 @@
-import type { Action, CloseUp, CutPlan } from "../build.ts";
+import type { Action, CloseUp, CutPlan, Way } from "../build.ts";
 import type { Word } from "../glossary.ts";
-import type { Tool } from "../tools.ts";
+import { TOOL_NAMES, type Tool } from "../tools.ts";
 
 // The bench's first steps, before anything is joined: check the stock, mark it and cut it. They
 // read the cut plan, and the cutting step reads the tools to hand: a hand saw on a folding
@@ -13,6 +13,9 @@ export type Draft = {
   minutes: number;
   helper?: boolean;
   parts: readonly string[];
+  /** The parts it puts on the Build: its parts, unless it only prepares or checks them. */
+  adds?: readonly string[];
+  ways?: readonly Way[];
   tools: readonly Tool[];
   safety?: readonly Tool[];
   fixings?: readonly { name: string; count: number }[];
@@ -35,6 +38,21 @@ const lengthGroups = (cutPlan: CutPlan) =>
     }
     return [...groups].map(([cuts, count]) => ({ stock: plan.stock, cuts, count }));
   });
+
+/** The saws the timber can be cut with, best first: the first to hand is the one in use. */
+const SAWS = ["circular-saw", "hand-saw"] as const satisfies readonly Tool[];
+
+const sawInUse = (toHand: ReadonlySet<Tool>) => SAWS.find((saw) => toHand.has(saw)) ?? "hand-saw";
+
+const sawWays = (toHand: ReadonlySet<Tool>): Way[] => {
+  const using = sawInUse(toHand);
+  // As the board has them: the simplest first.
+  return [...SAWS].reverse().map((saw) => ({
+    name: TOOL_NAMES[saw],
+    using: saw === using,
+    toHand: toHand.has(saw),
+  }));
+};
 
 const cutting = (hasCircularSaw: boolean): Pick<Draft, "tools" | "safety" | "actions"> =>
   hasCircularSaw
@@ -78,6 +96,7 @@ export const preparingSteps = (cutPlan: CutPlan, toHand: ReadonlySet<Tool>): Dra
       title: "Check what's arrived",
       minutes: 10,
       parts: [],
+      adds: [],
       tools: ["tape-measure"],
       actions: [
         ...cutPlan.timber.map((plan) =>
@@ -105,6 +124,7 @@ export const preparingSteps = (cutPlan: CutPlan, toHand: ReadonlySet<Tool>): Dra
       title: "Mark the lengths",
       minutes: 20,
       parts: timberLabels,
+      adds: [],
       tools: ["tape-measure", "pencil", "square"],
       actions: lengthGroups(cutPlan).map((group) =>
         act(
@@ -123,7 +143,9 @@ export const preparingSteps = (cutPlan: CutPlan, toHand: ReadonlySet<Tool>): Dra
       title: "Cut and label the timber",
       minutes: 40,
       parts: timberLabels,
-      ...cutting(toHand.has("circular-saw")),
+      adds: [],
+      ways: sawWays(toHand),
+      ...cutting(sawInUse(toHand) === "circular-saw"),
       check: {
         says: "Each piece within 1 mm of its length, and its letter on it.",
         photo: "The pieces in rows by letter.",

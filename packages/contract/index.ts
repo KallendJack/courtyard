@@ -91,7 +91,7 @@ export {
   BuildChatEntry,
   BuildChatSent,
   BuildOpened,
-  BuildPlace,
+  BuildProgress,
 } from "./lib/fabrication/app.ts";
 export {
   BUILD_NAME_MAX_CHARACTERS,

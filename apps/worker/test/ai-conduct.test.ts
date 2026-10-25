@@ -1915,6 +1915,23 @@ describe("Builds (#697, ADR 0036)", () => {
     expect(inputsOf(tool)).toBe(await quotedInGuide("- build: To change a Build"));
   });
 
+  it("says which step the owner has reached in a Build they've started, so a new session carries on there (#699)", async () => {
+    await mkdir(join(builds(), "progress"), { recursive: true });
+    await writeFile(
+      join(builds(), "workbench.json"),
+      JSON.stringify({ name: "Workbench", template: "framed-bench", parameters: goldenBench }),
+    );
+    await writeFile(
+      join(builds(), "progress", "workbench.json"),
+      JSON.stringify({ step: 5, ticked: [{ step: 5, lines: [0, 1] }] }),
+    );
+    const saver = await savingTurns([[]]);
+
+    expect(saver.framings[0]?.instructions).toContain(
+      "<builds>\n[B1] Workbench, framed-bench, 1500 × 600 × 899.6 mm, on step 5 of 12: Make the two end frames (builds/workbench.json)\n</builds>",
+    );
+  });
+
   it("says when there are none yet, and keeps the numbers to the tool's reply", async () => {
     const { framing } = await firstTurn();
 

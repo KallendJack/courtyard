@@ -48,8 +48,11 @@ export type Part = {
   readonly boxes: readonly Box[];
 };
 
-/** Something bought and fitted whole (a castor), drawn in the 3D view but never cut. */
-export type Fitted = { readonly name: string; readonly boxes: readonly Box[] };
+/**
+ * Something bought and fitted whole (a castor), drawn in the 3D view but never cut, and the part
+ * it's fitted to, which it comes with as the steps build the Build up.
+ */
+export type Fitted = { readonly name: string; readonly on: string; readonly boxes: readonly Box[] };
 
 export type Cut = { readonly label: string; readonly length: number };
 
@@ -136,6 +139,12 @@ export type CloseUp = {
   readonly notes: readonly string[];
 };
 
+/**
+ * A way a step can be done (a hand saw, or a circular saw): the one in use, and whether its tool is
+ * to hand. The steps use the best way whose tools are to hand.
+ */
+export type Way = { readonly name: string; readonly using: boolean; readonly toHand: boolean };
+
 export type Step = {
   readonly number: number;
   readonly title: string;
@@ -143,6 +152,10 @@ export type Step = {
   /** Whether it needs a second pair of hands (standing the bench up). */
   readonly helper: boolean;
   readonly parts: readonly string[];
+  /** The parts it puts on the Build; none for a step that prepares or checks. */
+  readonly adds: readonly string[];
+  /** The ways it can be done, when there's more than one; none otherwise. */
+  readonly ways: readonly Way[];
   readonly tools: readonly StepTool[];
   readonly safety: readonly StepTool[];
   readonly fixings: readonly { readonly name: string; readonly count: number }[];
