@@ -36,11 +36,11 @@ if (recipe) {
 | `catalog.ts` | The stock options (#704): each timber's and sheet's sizes, what it's like, and the jobs it suits, and what each is like for the slots it would fill, judged by the strictest |
 | `options.ts` | A template's slots offered those options, each costed by working the Build out again with it, the stock in use as it is; a pick swapped in, keeping the old one's price and size; and the making rule that flags stock wrong for its slot |
 | `cut-plan.ts` | Packing: timber pieces into lengths and sheet pieces into sheets, the kerf between every two, each sheet's first cut along it or across it, whichever needs fewer sheets |
-| `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed |
-| `findings.ts` | The making rules code checks: a bolt long enough for what it passes through plus two threads, tools needed and not to hand, sizes assumed |
+| `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed; and the tools the owner chose to buy, while they're missing, a set's missing bits by size (#763) |
+| `findings.ts` | The making rules code checks: a bolt's length to use, long enough for what it passes through plus two threads, and the owner's own that are short (`boltLength`), tools needed and not to hand, sizes assumed |
 | `capacity.ts` | What a mitre or circular saw cuts (#780): its width at 90° and depth, read from its size in Your tools, assumed until given, and whether a timber fits it |
-| `tools.ts`, `glossary.ts` | The tools and kit a step can need, which of them each of Your tools is by the words in its name, one tool or several ("Drill and drill bits", `toolsFrom`), and the words a beginner may not know |
-| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `walk-throughs.ts` (marking as tape, tick, square and line, and a pilot hole's depth, #777), `close-ups.ts`, `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
+| `tools.ts`, `glossary.ts` | The tools and kit a step can need, which of them each of Your tools, or something else the owner has, is by the words in its name, one tool or several ("Drill and drill bits", `toolsFrom`; a step stool for the long end, and only that, `standInFor`), a bit set's sizes and whether it has a bit (`bitSetsFrom`, `bitInSets`), and the words a beginner may not know |
+| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `step-tools.ts` (a step's tools against the owner's: a stand-in, bits by size, #763), `walk-throughs.ts` (marking as tape, tick, square and line, and a pilot hole's depth, #777), `close-ups.ts`, `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
 | `print/` | Printed parts (#702): `templates.ts` (the holster, shim and bracket, each made into a part recipe, and `printed-part`, a recipe as written), `recipe.ts` (each face's frame, and the checks that refuse a recipe before it's made), `index.ts` (a printed part's Build: its part, buy list, steps and findings), `make.ts` (the solid, with manifold-3d), `lettering.ts` (text as outlines, with opentype.js), `files.ts` (3MF, zipped with fflate, and STL) |
 | `print/font/` | Figtree Bold, for lettering: `figtree-bold.ttf` from Fontsource (`@fontsource/figtree` 5.2.10, latin 700), under the SIL Open Font License in `OFL.txt`, from github.com/erikdkennedy/figtree |
 
@@ -56,6 +56,9 @@ if (recipe) {
   its ways, the one in use and the others not yet to hand: a hand saw, then a circular saw, then a mitre saw, the best
   to hand in use. A step started keeps the way it was started (`kept`), and one not started whose way differs from the one
   the parameters' own tools would use says so (`wayChanged`). A new tool changes only the steps it does better.
+  Something else the owner has (`have`, their Things' names) stands in for a tool they haven't, named (`standIn`: a
+  step stool for the long end, and only that: a mitre saw in the garage counts once it's in Your tools), and drill bits come with the bit each step drills with, and whether the owner's set
+  has it (from the size it's kept with, in `sizes`), left out while that isn't known (#763).
 - **A saw cuts only what fits it** (#780): a timber wider or deeper than the saw in use cuts (its **cutting capacity**,
   from the size line on the owner's tool, `sizes`) goes to the next best saw to hand that takes it, the hand saw taking anything,
   and the step says why in one line ("The 145 castor bases and top support are too wide for your mitre saw: hand saw
@@ -76,8 +79,10 @@ if (recipe) {
   the kerf between pieces. Show me how walks through the first length's tape, tick, square and line, with close-ups
   of the tape's hook over the end and the square's stock against the edge; the first step that drills shows a pilot
   hole's depth, a mark on the bit at the screw's length (#777).
-- **A fixing found too short is never fitted:** the steps and the buy list use the length to use instead, unpriced
-  until it's given a price, and the finding names the steps that fit it.
+- **A bolt given too short is never fitted, nor said:** the steps and the buy list use the length to use instead,
+  unpriced until it's given a price. Its buy-list line carries what it passes through and their sum, and, when the
+  owner has bolts of its thread that are too short, by how much (#763). It's no finding: the old length means nothing
+  to the owner.
 - **Parts are cut to the whole mm below,** and the steps say every size to the whole mm; the Build keeps it exact.
 - **A part recipe is checked before it's made:** a feature of a kind no recipe knows, a hole or slot off its face, or
   a pocket running out of the part where it isn't open is refused with a finding, and nothing is made. Holes, slots
@@ -124,8 +129,9 @@ are always there, and the essays never are.
 `cut-plan.test.ts` (packing, whatever the pieces), `bench/bench.test.ts` (the golden bench, the garage workbench's
 hand-checked numbers with invented names, in `bench/fixtures/golden.ts`), `bench/scenes.test.ts` (each step's picture
 for the golden bench, by the tools to hand, and the walk-throughs), `bench/your-tools.test.ts` (the steps following
-the owner's tools, a step started kept as it was started, tools found by the words in their names),
-`bench/saw-capacity.test.ts` (cuts too big for a saw going to one that takes them, given or assumed), `print/print.test.ts` (the golden holster and shim, `print/fixtures/golden.ts`:
+the owner's tools, a step started kept as it was started, tools found by the words in their names, a stand-in, bits by
+size, tools chosen to buy), `bench/saw-capacity.test.ts` (cuts too big for a saw going to one that takes them, given
+or assumed), `print/print.test.ts` (the golden holster and shim, `print/fixtures/golden.ts`:
 their size and volume worked out by hand, closed all round, the pocket allowing the clearance), `print/recipe.test.ts`
 (what a recipe is refused for) and `print/make.test.ts` (what a checked recipe still can't be made into).
 

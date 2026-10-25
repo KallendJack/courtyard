@@ -7,14 +7,14 @@ import {
   ok,
   type Result,
 } from "../build.ts";
-import { buyLine, buyListOf, stockLines } from "../buy-list.ts";
+import { buyLine, buyListOf, stockLines, toolsToBuy } from "../buy-list.ts";
 import { type Capacities, capacitiesFrom } from "../capacity.ts";
 import { cutPlanOf } from "../cut-plan.ts";
-import { assumedSizes, boltCheck, toolsMissing } from "../findings.ts";
+import { assumedSizes, boltLength, toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
 import { stockOptions, wrongStock } from "../options.ts";
 import type { Price } from "../stock.ts";
-import { type Tool, toolsFrom } from "../tools.ts";
+import { bitSetsFrom, standInFor, Tool, toolsFrom } from "../tools.ts";
 import { benchFitted, benchParts, shapeOf, shapeProblems } from "./frame.ts";
 import { BenchParameters, castorFixingNames } from "./parameters.ts";
 import { benchSteps } from "./steps.ts";
@@ -39,9 +39,21 @@ export const deriveBench = (
     );
   }
   const parameters = parsed.data;
-  const toHand = new Set(setting.tools === undefined ? parameters.tools : toolsFrom(setting.tools));
+  const own = new Set(setting.tools === undefined ? parameters.tools : toolsFrom(setting.tools));
+  // What the owner has besides Your tools stands in for a tool they haven't: a step stool (#763).
+  const have = setting.have ?? [];
+  const standIns = new Map(
+    Tool.options.flatMap((tool) => {
+      const thing = own.has(tool) ? undefined : standInFor(tool, have);
+      return thing === undefined ? [] : [[tool, thing] as const];
+    }),
+  );
   const benchOf = benchWith({
-    toHand,
+    toHand: new Set([...own, ...standIns.keys()]),
+    standIns,
+    have,
+    bitSets: bitSetsFrom(setting.sizes ?? []),
+    buying: setting.buying ?? [],
     kept: setting.kept ?? [],
     capacities: capacitiesFrom(setting.sizes ?? []),
   });
@@ -60,20 +72,23 @@ export const deriveBench = (
   });
 };
 
+/** What the bench is worked out with besides its parameters, as `deriveBench` reads its setting. */
+type Setting = {
+  readonly toHand: ReadonlySet<Tool>;
+  readonly standIns: ReadonlyMap<Tool, string>;
+  readonly have: readonly string[];
+  readonly bitSets: readonly string[];
+  readonly buying: readonly Tool[];
+  readonly kept: readonly KeptWay[];
+  readonly capacities: Capacities;
+};
+
 /**
  * Everything but the options, which each work the bench out again with one swapped in, with the
  * tools to hand and the ways kept.
  */
 const benchWith =
-  ({
-    toHand,
-    kept,
-    capacities,
-  }: {
-    toHand: ReadonlySet<Tool>;
-    kept: readonly KeptWay[];
-    capacities: Capacities;
-  }) =>
+  ({ toHand, standIns, have, bitSets, buying, kept, capacities }: Setting) =>
   (parameters: BenchParameters): Result<Omit<Build, "options">, string[]> => {
     const shape = shapeOf(parameters);
     const problems = shapeProblems(shape);
@@ -85,11 +100,12 @@ const benchWith =
     const planned = cutPlanOf({ parts, timbers, sheets, kerf: parameters.kerf.value });
     const castors = parameters.castors;
     const thread = castors ? `M${castors.bolt.diameter.value}` : "";
-    const tooShort = castors
-      ? boltCheck({
-          name: `${thread} × ${castors.bolt.length.value} bolts`,
+    const bolts = castors
+      ? boltLength({
+          thread: castors.bolt.diameter.value,
           length: castors.bolt.length.value,
           pitch: castors.bolt.pitch.value,
+          have,
           through: [
             { what: "castor plate", mm: castors.plate.thickness.value },
             { what: "castor base", mm: shape.wideThick },
@@ -102,16 +118,19 @@ const benchWith =
         })
       : null;
     // Bolts too short are never what the steps fit or the buy list buys: the length to use is.
-    const boltLength = tooShort?.use ?? castors?.bolt.length.value ?? 0;
+    const use = bolts?.use ?? 0;
+    const corrected = castors ? use !== castors.bolt.length.value : false;
     const fitted = benchFitted(parameters, shape);
     const steps = benchSteps({
       parameters,
       shape,
       cutPlan: planned.cutPlan,
-      boltLength,
+      boltLength: use,
       parts,
       fitted,
       toHand,
+      standIns,
+      bitSets,
       kept,
       capacities,
     });
@@ -123,10 +142,11 @@ const benchWith =
       [brackets.name, brackets.price],
       ...(bracketScrews ? [[bracketScrews.name, bracketScrews.price] as const] : []),
     ]);
+    const boltNames = castors && castorFixingNames(castors, use).bolts;
     if (castors) {
-      const names = castorFixingNames(castors, boltLength);
+      const names = castorFixingNames(castors, use);
       // The price given is for the bolts given, so the longer ones to use have none yet.
-      fixingPrices.set(names.bolts, tooShort ? undefined : castors.bolt.price);
+      fixingPrices.set(names.bolts, corrected ? undefined : castors.bolt.price);
       fixingPrices.set(names.washers, castors.washer.price);
       fixingPrices.set(names.nuts, castors.nut.price);
     }
@@ -159,30 +179,23 @@ const benchWith =
             }),
           ]
         : []),
-      ...[...fixingCounts].map(([name, counted]) =>
-        buyLine({
+      ...[...fixingCounts].map(([name, counted]) => {
+        const line = buyLine({
           item: name,
           kind: "fixing",
           for: counted.steps.join(", "),
           needed: counted.count,
           price: fixingPrices.get(name),
-        }),
-      ),
+        });
+        return name === boltNames && bolts ? { ...line, length: bolts.length } : line;
+      }),
+      ...toolsToBuy(steps, buying),
     ]);
 
     const findings: Finding[] = [
       ...planned.findings,
       ...wrongStock({ parameters, slots: BENCH_SLOTS, damp: parameters.damp, build: { parts } }),
     ];
-    if (castors && tooShort) {
-      const bolts = castorFixingNames(castors, boltLength).bolts;
-      findings.push({
-        ...tooShort,
-        steps: steps
-          .filter((step) => step.fixings.some((fixing) => fixing.name === bolts))
-          .map((step) => step.number),
-      });
-    }
     const missing = toolsMissing(steps);
     if (missing) findings.push(missing);
     const assumed = assumedSizes(parameters);

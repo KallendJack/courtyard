@@ -1,7 +1,9 @@
 import type { BuildBuyLine, DerivedBuild } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { ChevronRight } from "lucide-react";
-import { pounds } from "./words.ts";
+import { useState } from "react";
+import { pounds, tenths } from "./words.ts";
 
 /** How many to buy: "× 5" of what's sold one at a time, "1 pack" of what's sold in packs. */
 const howMany = (line: BuildBuyLine) =>
@@ -10,6 +12,43 @@ const howMany = (line: BuildBuyLine) =>
 /** Its second line: the shop, then what it's for. */
 const shopAndFor = (line: BuildBuyLine) =>
   [line.price?.shop, line.for].filter((part) => part !== undefined).join(" · ");
+
+/** A bolt's length, as the length its line buys: "65" of "M6 × 65 bolts". */
+const lengthBought = (line: BuildBuyLine) => /× (\d+)/.exec(line.item)?.[1];
+
+/**
+ * A bolt's length worked out (#763), under its line: the owner's own bolts that are too short, in
+ * gold, and what it passes through, a tap away for the curious.
+ */
+function BoltLength(props: { line: BuildBuyLine; length: NonNullable<BuildBuyLine["length"]> }) {
+  const { line, length } = props;
+  const [open, setOpen] = useState(false);
+  const bought = lengthBought(line);
+  return (
+    <div className="flex flex-col items-start gap-1 pb-2.5">
+      {length.yoursShort && (
+        <p className="text-meta text-warning">
+          Your {length.yoursShort.name}s are {tenths(length.yoursShort.by)} mm short: you need{" "}
+          {bought}s.
+        </p>
+      )}
+      <Button
+        variant="quietPrimary"
+        size="words"
+        aria-expanded={open}
+        onClick={() => setOpen((now) => !now)}
+      >
+        Why {bought} mm?
+      </Button>
+      {open && (
+        <p className="font-mono text-meta text-muted-foreground">
+          {length.through.map(({ what, mm }) => `${what} ${tenths(mm)}`).join(" + ")} ={" "}
+          {tenths(length.needed)} mm
+        </p>
+      )}
+    </div>
+  );
+}
 
 function Line(props: { line: BuildBuyLine; open: (() => void) | undefined }) {
   const { line, open } = props;
@@ -25,12 +64,12 @@ function Line(props: { line: BuildBuyLine; open: (() => void) | undefined }) {
       </span>
     </>
   );
-  const row = "flex items-center gap-3 border-b border-border py-2.5";
+  const row = "flex items-center gap-3 py-2.5";
   const link = line.price?.link;
-  // A timber or sheet with options opens them (#704); its shop's link is there.
-  if (open !== undefined) {
-    return (
-      <li>
+  return (
+    <li className="border-b border-border">
+      {open !== undefined ? (
+        // A timber or sheet with options opens them (#704); its shop's link is there.
         <button
           type="button"
           onClick={open}
@@ -39,20 +78,19 @@ function Line(props: { line: BuildBuyLine; open: (() => void) | undefined }) {
           {body}
           <ChevronRight aria-hidden className="size-4 shrink-0 text-primary-text" />
         </button>
-      </li>
-    );
-  }
-  return link === undefined ? (
-    <li className={row}>
-      {body}
-      <span aria-hidden className="w-4 shrink-0" />
-    </li>
-  ) : (
-    <li>
-      <a href={link} target="_blank" rel="noreferrer" className={`${row} hover:bg-muted/40`}>
-        {body}
-        <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-      </a>
+      ) : link === undefined ? (
+        <div className={row}>
+          {body}
+          <span aria-hidden className="w-4 shrink-0" />
+        </div>
+      ) : (
+        <a href={link} target="_blank" rel="noreferrer" className={`${row} hover:bg-muted/40`}>
+          {body}
+          <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+        </a>
+      )}
+      {/* A bolt's length sits under its row. */}
+      {line.length && <BoltLength line={line} length={line.length} />}
     </li>
   );
 }

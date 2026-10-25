@@ -75,7 +75,8 @@ export type BuildCutPlan = z.infer<typeof BuildCutPlan>;
 
 export const BuildBuyLine = z.object({
   item: z.string(),
-  kind: z.enum(["timber", "sheet", "fitted", "fixing", "filament"]),
+  /** A tool is one the owner chose to buy, from the Tools tab (#763). */
+  kind: z.enum(["timber", "sheet", "fitted", "fixing", "filament", "tool"]),
   /** The timber or sheet it buys, whose options its row opens (#704). */
   stock: z.string().optional(),
   for: z.string(),
@@ -86,10 +87,35 @@ export const BuildBuyLine = z.object({
     .object({ pence: z.number(), shop: z.string().optional(), link: z.string().optional() })
     .optional(),
   total: z.number().optional(),
+  /**
+   * A bolt's length worked out (#763): what it passes through and their sum, a tap away, and the
+   * owner's own of its thread that are too short, by how much, when they have some.
+   */
+  length: z
+    .object({
+      needed: z.number(),
+      through: list(z.object({ what: z.string(), mm: z.number() })),
+      yoursShort: z.object({ name: z.string(), by: z.number() }).optional(),
+    })
+    .optional(),
 });
 export type BuildBuyLine = z.infer<typeof BuildBuyLine>;
 
-const StepTool = z.object({ tool: z.string(), name: z.string(), toHand: z.boolean() });
+/**
+ * A tool a step needs, and whether it's to hand: as something else the owner has that will do
+ * (`standIn`, "Step stool", #763), and for drill bits, each bit it drills with and whether the
+ * owner's set has it (left out while the set's sizes aren't known).
+ */
+export const BuildStepTool = z.object({
+  tool: z.string(),
+  name: z.string(),
+  toHand: z.boolean(),
+  standIn: z.string().optional(),
+  bits: list(
+    z.object({ mm: z.number(), for: z.string(), have: z.boolean().optional() }),
+  ).optional(),
+});
+export type BuildStepTool = z.infer<typeof BuildStepTool>;
 
 const Point = z.object({ x: z.number(), y: z.number() });
 
@@ -179,8 +205,8 @@ export const BuildStep = z.object({
   ),
   /** The way the Build's own tools would do it, and the owner's now, when they differ (#777). */
   wayChanged: z.object({ was: z.string(), now: z.string() }).nullable(),
-  tools: list(StepTool),
-  safety: list(StepTool),
+  tools: list(BuildStepTool),
+  safety: list(BuildStepTool),
   fixings: list(z.object({ name: z.string(), count: z.number() })),
   actions: list(
     z.object({ howTo: z.string(), numbers: z.string(), length: BuildMarkedLength.optional() }),
@@ -196,19 +222,11 @@ export const BuildStep = z.object({
 });
 export type BuildStep = z.infer<typeof BuildStep>;
 
-/** What the making rules found (ADR 0036). */
+/**
+ * What the making rules found (ADR 0036). A bolt too short isn't one: its buy-list line says what
+ * to buy, and how the owner's own fall short (#763).
+ */
 export const BuildFinding = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("fixing-too-short"),
-    fixing: z.string(),
-    length: z.number(),
-    needed: z.number(),
-    through: list(z.object({ what: z.string(), mm: z.number() })),
-    /** The length to use, which the steps fit and the buy list buys instead. */
-    use: z.number(),
-    /** The steps that fit it, by number. */
-    steps: list(z.number().int()),
-  }),
   z.object({
     kind: z.literal("tools-missing"),
     tools: list(z.object({ tool: z.string(), name: z.string(), steps: list(z.number().int()) })),

@@ -76,7 +76,7 @@ describe("a Build's steps with Your tools", () => {
       "drill-driver",
     ]);
     expect(
-      toolsFrom(["Countersink", "Socket set", "Safety specs", "Ear muffs", "Step stool"]),
+      toolsFrom(["Countersink", "Socket set", "Safety specs", "Ear muffs", "Step ladder"]),
     ).toEqual([
       "long-end-support",
       "countersink-bit",
@@ -95,6 +95,97 @@ describe("a Build's steps with Your tools", () => {
 
     expect(missing(theirs)).toBeDefined();
     expect(missing(all)).toBeUndefined();
+  });
+
+  it("take both tools from a Thing that names two (#763)", () => {
+    const tools = [
+      ...theirs.filter((tool) => tool !== "Drill / driver" && tool !== "Drill bits"),
+      "Electric drill and drill bits",
+    ];
+    const drilling = stepOf(built({ tools }), "end-frames")?.tools.filter(
+      (tool) => tool.tool === "drill-driver" || tool.tool === "drill-bits",
+    );
+
+    expect(drilling?.map((tool) => [tool.tool, tool.toHand])).toEqual([
+      ["drill-driver", true],
+      ["drill-bits", true],
+    ]);
+  });
+
+  it("find a step stool the owner has elsewhere for the long end, saying it will do", () => {
+    const support = (have: readonly string[]) =>
+      stepOf(built({ tools: theirs, have }), "cut-timber")?.tools.find(
+        (tool) => tool.tool === "long-end-support",
+      );
+    const missing = (have: readonly string[]) =>
+      built({ tools: theirs, have }).findings.flatMap((finding) =>
+        finding.kind === "tools-missing" ? finding.tools.map((tool) => tool.tool) : [],
+      );
+
+    expect(support(["Step stool"])).toMatchObject({ toHand: true, standIn: "Step stool" });
+    expect(support(["Folding step ladder"])).toMatchObject({ toHand: true });
+    expect(missing(["Step stool"])).not.toContain("long-end-support");
+    expect(support(["Bin"])).toMatchObject({ toHand: false });
+    expect(support(["Bin"])?.standIn).toBeUndefined();
+  });
+
+  it("take only stand-ins from elsewhere: any other tool counts once it's in Your tools (#777)", () => {
+    // A mitre saw or a level in the garage changes nothing, not the saw a cut uses nor what's missing.
+    expect(built({ tools: theirs, have: ["Mitre saw", "Spirit level"] }).steps).toEqual(
+      built({ tools: theirs }).steps,
+    );
+  });
+
+  it("name the bit each step drills with, and whether the owner's set has it", () => {
+    const bits = (setting: BuildSetting, id: string) =>
+      stepOf(built({ tools: theirs, ...setting }), id)?.tools.find(
+        (tool) => tool.tool === "drill-bits",
+      )?.bits;
+
+    expect(bits({}, "end-frames")).toEqual([{ mm: 3, for: "pilot holes" }]);
+    expect(bits({}, "fit-castors")).toEqual([{ mm: 7, for: "the M6 bolts" }]);
+    // A set's sizes as kept on its Thing: listed, or a range.
+    const set = (size: string) => ({ sizes: [{ name: "Drill bits", size }] });
+    expect(bits(set("3, 5, 7 mm"), "fit-castors")).toEqual([
+      { mm: 7, for: "the M6 bolts", have: true },
+    ]);
+    expect(bits(set("1–6 mm"), "end-frames")).toEqual([{ mm: 3, for: "pilot holes", have: true }]);
+    expect(bits(set("1-6mm"), "fit-castors")).toEqual([
+      { mm: 7, for: "the M6 bolts", have: false },
+    ]);
+    // A size added from the Tools tab, after the range it was kept with.
+    expect(bits(set("1–6 mm, 7 mm"), "fit-castors")).toEqual([
+      { mm: 7, for: "the M6 bolts", have: true },
+    ]);
+    // Another tool's size is no bit set's.
+    expect(bits({ sizes: [{ name: "Mitre saw", size: "305 × 90 mm" }] }, "end-frames")).toEqual([
+      { mm: 3, for: "pilot holes" },
+    ]);
+  });
+
+  it("put the tools the owner chose to buy on the buy list", () => {
+    const line = built({ tools: theirs, buying: ["countersink-bit"] }).buyList.lines.find(
+      (each) => each.kind === "tool",
+    );
+
+    expect(line).toMatchObject({ item: "Countersink bit", needed: 1, packs: 1, for: "step 11" });
+    expect(line?.total).toBeUndefined();
+    // Once the owner has it, it's bought.
+    const had = built({ tools: [...theirs, "Countersink"], buying: ["countersink-bit"] });
+    expect(had.buyList.lines.filter((each) => each.kind === "tool")).toEqual([]);
+  });
+
+  it("put the bits a set hasn't got on the buy list, by size", () => {
+    const toBuy = (size: string) =>
+      built({
+        tools: theirs,
+        sizes: [{ name: "Drill bits", size }],
+        buying: ["drill-bits"],
+      }).buyList.lines.filter((each) => each.kind === "tool");
+
+    expect(toBuy("1–6 mm")).toMatchObject([{ item: "7 mm drill bit", needed: 1, for: "step 4" }]);
+    // Once the set has it, it's bought.
+    expect(toBuy("1–6 mm, 7 mm")).toEqual([]);
   });
 
   it("keep a step already done as it was done", () => {

@@ -20,6 +20,9 @@ export const castorsDraft = (options: {
     minutes: 30,
     parts: ["E"],
     tools: ["tape-measure", "pencil", "drill-driver", "drill-bits", "spanner"],
+    bits: [
+      { mm: castors.bolt.diameter.value + 1, for: `the M${castors.bolt.diameter.value} bolts` },
+    ],
     safety: ["safety-glasses"],
     fixings: [
       { name: names.bolts, count: 4 * castors.boltsEach },

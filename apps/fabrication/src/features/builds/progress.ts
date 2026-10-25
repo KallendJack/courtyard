@@ -99,6 +99,14 @@ export const useProgress = (
         ),
       );
     },
+    /** A tool the owner chose to buy, from the Tools tab (#763): on the buy list until they have it. */
+    buy: (tool: string) => {
+      if (!progress.buying.includes(tool))
+        change({ ...progress, buying: [...progress.buying, tool] });
+    },
+    /** Its Undo: off the buy list again. */
+    unbuy: (tool: string) =>
+      change({ ...progress, buying: progress.buying.filter((each) => each !== tool) }),
     /** "Done, next step": every line of this step ticked, and on to the next. */
     done: () => {
       if (step === undefined) return;

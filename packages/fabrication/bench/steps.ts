@@ -14,6 +14,7 @@ import type { BenchParameters } from "./parameters.ts";
 import { act, CUT_STEP, type Draft, handedOn, preparingSteps, sawInUse } from "./preparing.ts";
 import { nameOf, type SceneSetting, sectionOf } from "./scene-pieces.ts";
 import { stepScene } from "./scenes.ts";
+import { stepToolsOf } from "./step-tools.ts";
 import { pilotWalk } from "./walk-throughs.ts";
 
 // The framed bench's steps, in the order it's built, each said twice: "show me how" for a
@@ -43,6 +44,10 @@ export const benchSteps = (options: {
   fitted: readonly Fitted[];
   /** The tools to hand: the owner's, from Your tools, or else the parameters' own (#777). */
   toHand: ReadonlySet<Tool>;
+  /** The tools to hand only as something else the owner has, by its name (#763). */
+  standIns: ReadonlyMap<Tool, string>;
+  /** The sizes the owner's drill bit sets are kept with. */
+  bitSets: readonly string[];
   /** The ways the steps already started were done, which they keep. */
   kept: readonly KeptWay[];
   /** What the owner's powered saws can cut (#780). */
@@ -358,7 +363,7 @@ export const benchSteps = (options: {
     },
   ];
 
-  const stepTool = (tool: Tool) => ({ tool, name: TOOL_NAMES[tool], toHand: toHand.has(tool) });
+  const stepTool = stepToolsOf(options);
   const on = drafts.filter((draft) => draft.on);
   return on.map((draft, at) => ({
     id: draft.id,
@@ -370,8 +375,8 @@ export const benchSteps = (options: {
     adds: draft.adds ?? draft.parts,
     ways: draft.ways ?? [],
     wayChanged: draft.id === CUT_STEP ? sawChanged : null,
-    tools: draft.tools.map(stepTool),
-    safety: (draft.safety ?? []).map(stepTool),
+    tools: draft.tools.map(stepTool(draft)),
+    safety: (draft.safety ?? []).map(stepTool(draft)),
     fixings: draft.fixings ?? [],
     actions: draft.actions,
     closeUp: draft.closeUp ?? null,

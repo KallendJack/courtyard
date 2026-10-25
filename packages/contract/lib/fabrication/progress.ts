@@ -33,6 +33,11 @@ export const BuildProgress = z.object({
     .array(z.object({ step: BuildStepId, tool: z.string().max(60) }))
     .max(MOST_STEPS)
     .default([]),
+  /**
+   * The tools the owner chose to buy for this Build, from its Tools tab (#763), by the steps' name
+   * for them ("countersink-bit"), which its buy list lists until they have one.
+   */
+  buying: z.array(z.string().max(60)).max(MOST_STEPS).default([]),
 });
 export type BuildProgress = z.infer<typeof BuildProgress>;
 
