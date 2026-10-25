@@ -1,10 +1,11 @@
-import type { CutPlan, Fitted, KeptWay, Part, Step } from "../build.ts";
-import { TOOL_NAMES, type Tool } from "../tools.ts";
+import type { CutPlan, Fitted, KeptWay, Part, Step, StepTool } from "../build.ts";
+import { bitInSets, TOOL_NAMES, type Tool } from "../tools.ts";
 import { castorsDraft } from "./castor-steps.ts";
 import {
   braceCloseUp,
   endFrameCloseUp,
   longSideCloseUp,
+  PILOT,
   SHEET_SCREWS_PER_BRACE,
   sheetCloseUp,
 } from "./close-ups.ts";
@@ -42,6 +43,10 @@ export const benchSteps = (options: {
   fitted: readonly Fitted[];
   /** The tools to hand: the owner's, from Your tools, or else the parameters' own (#777). */
   toHand: ReadonlySet<Tool>;
+  /** The tools to hand only as something else the owner has, by its name (#763). */
+  standIns: ReadonlyMap<Tool, string>;
+  /** The sizes the owner's drill bit sets are kept with. */
+  bitSets: readonly string[];
   /** The ways the steps already started were done, which they keep. */
   kept: readonly KeptWay[];
 }): Step[] => {
@@ -347,7 +352,25 @@ export const benchSteps = (options: {
     },
   ];
 
-  const stepTool = (tool: Tool) => ({ tool, name: TOOL_NAMES[tool], toHand: toHand.has(tool) });
+  const stepTool =
+    (draft: Draft) =>
+    (tool: Tool): StepTool => {
+      const standIn = options.standIns.get(tool);
+      const bits =
+        tool === "drill-bits"
+          ? (draft.bits ?? [{ mm: PILOT, for: "pilot holes" }]).map((bit) => {
+              const have = bitInSets(options.bitSets, bit.mm);
+              return have === undefined ? bit : { ...bit, have };
+            })
+          : undefined;
+      return {
+        tool,
+        name: TOOL_NAMES[tool],
+        toHand: toHand.has(tool),
+        ...(standIn === undefined ? {} : { standIn }),
+        ...(bits === undefined ? {} : { bits }),
+      };
+    };
   const on = drafts.filter((draft) => draft.on);
   return on.map((draft, at) => ({
     id: draft.id,
@@ -359,8 +382,8 @@ export const benchSteps = (options: {
     adds: draft.adds ?? draft.parts,
     ways: draft.ways ?? [],
     wayChanged: draft.id === CUT_STEP ? sawChanged : null,
-    tools: draft.tools.map(stepTool),
-    safety: (draft.safety ?? []).map(stepTool),
+    tools: draft.tools.map(stepTool(draft)),
+    safety: (draft.safety ?? []).map(stepTool(draft)),
     fixings: draft.fixings ?? [],
     actions: draft.actions,
     closeUp: draft.closeUp ?? null,

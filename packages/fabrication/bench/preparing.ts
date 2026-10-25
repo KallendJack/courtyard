@@ -20,6 +20,8 @@ export type Draft = {
   adds?: readonly string[];
   ways?: readonly Way[];
   tools: readonly Tool[];
+  /** The bits it drills with, when its tools have drill bits: 3 mm pilots unless it says. */
+  bits?: readonly { mm: number; for: string }[];
   safety?: readonly Tool[];
   fixings?: readonly { name: string; count: number }[];
   actions: readonly Action[];

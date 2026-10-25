@@ -1,4 +1,4 @@
-import type { Finding, Step, TooShort } from "./build.ts";
+import type { BoltLength, Finding, Step } from "./build.ts";
 import { TOOL_NAMES, type Tool } from "./tools.ts";
 
 // The making rules code can check, for every template (ADR 0036). The rest are in
@@ -11,21 +11,48 @@ const THREADS_PAST = 2;
 
 const tenth = (mm: number) => Math.round(mm * 10) / 10;
 
+/** Bolts as a Thing's name says them: "Castor bolts M6 × 60", "M6x60 bolts". */
+const BOLT_NAMED = /\bm(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i;
+
 /**
- * A bolt checked against what it passes through: long enough for every layer and the nut, with
- * two threads past it. `null` when it is.
+ * A bolt worked out against what it passes through: long enough for every layer and the nut,
+ * with two threads past it. The length to use is the one given when that's enough, else the
+ * shortest usual length that is, which the steps fit and the buy list buys (#699); the old one is
+ * never said (#763). The owner's own bolts of its thread that are too short (`have`, their Things'
+ * names) are said, with by how much, so they don't fit them.
  */
-export const boltCheck = (bolt: {
-  name: string;
+export const boltLength = (bolt: {
+  thread: number;
   length: number;
   pitch: number;
   through: readonly { what: string; mm: number }[];
-}): TooShort | null => {
+  have: readonly string[];
+}): { use: number; length: BoltLength } => {
   const through = [...bolt.through, { what: "two threads", mm: THREADS_PAST * bolt.pitch }];
   const needed = tenth(through.reduce((sum, layer) => sum + layer.mm, 0));
-  if (bolt.length >= needed) return null;
-  const use = BOLT_LENGTHS.find((length) => length >= needed) ?? Math.ceil(needed / 10) * 10;
-  return { kind: "fixing-too-short", fixing: bolt.name, length: bolt.length, needed, through, use };
+  const use =
+    bolt.length >= needed
+      ? bolt.length
+      : (BOLT_LENGTHS.find((length) => length >= needed) ?? Math.ceil(needed / 10) * 10);
+  const short = bolt.have
+    .map((name) => BOLT_NAMED.exec(name))
+    .map((named) => named && { thread: Number(named[1]), length: Number(named[2]) })
+    .find((held) => held && held.thread === bolt.thread && held.length < needed);
+  return {
+    use,
+    length: {
+      needed,
+      through,
+      ...(short
+        ? {
+            yoursShort: {
+              name: `M${short.thread} × ${short.length}`,
+              by: tenth(needed - short.length),
+            },
+          }
+        : {}),
+    },
+  };
 };
 
 /** The tools and kit the steps need that aren't to hand, each with the steps that need it. */

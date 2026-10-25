@@ -1901,6 +1901,13 @@ With none yet:
 Changed with #777: a Build's steps follow the owner's tools once they've saved Your tools, so its `tools` parameter is
 only what they follow before then, and a tool the reply finds not to hand is one missing from Your tools.
 
+Changed with #763: a bolt given too short is no finding. The buy list just buys the length to use, and its line ends
+with what the bolt passes through (`- M6 × 65 bolts: … ; long enough for 60.2 mm, through the castor plate 4 + castor
+base 45 + M6 washer 2.1 + M6 washer 2.1 + M6 lock nut 5 + two threads 2`), then, when the owner has bolts of its thread
+that are too short among their Things, `; the owner's M6 × 60s are 0.2 mm short`. The length given before is never
+said, since it means nothing to the owner. A tool counts as to hand when something the owner has will do (a step stool
+for the long end), and a tool the owner chose to buy from the Tools tab is a buy-list line of its own.
+
 **The save_build tool,** offered beside the project tool, as a model reads it, and its inputs (`<schemas>` is each
 template's parameters as JSON Schema, `framed-bench: {…}` from `BenchParameters`, then each printed template's own
 from `PRINTED_PARAMETERS` (a recipe's features with each kind's fields, `PartRecipeShown`), then `and every printed

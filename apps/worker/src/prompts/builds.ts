@@ -3,6 +3,7 @@ import {
   BenchParameters,
   type Build,
   type BuildPrint,
+  type BuyLine,
   type Finding,
   PRINTED_COMMON,
   PRINTED_PARAMETERS,
@@ -174,10 +175,15 @@ export const STEP_BUILD = {
 
 const pounds = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 
+/**
+ * A bolt's line's end (#763): what it passes through, and the owner's own that are too short. The
+ * length the Build used before is never said: it means nothing to the owner.
+ */
+const boltLine = ({ needed, through, yoursShort }: NonNullable<BuyLine["length"]>) =>
+  `; long enough for ${needed} mm, through the ${through.map(({ what, mm }) => `${what} ${mm}`).join(" + ")}${yoursShort === undefined ? "" : `; the owner's ${yoursShort.name}s are ${yoursShort.by} mm short`}`;
+
 const findingLine = (finding: Finding) => {
   switch (finding.kind) {
-    case "fixing-too-short":
-      return `${finding.fixing} are too short: they need ${Math.round(finding.needed)} mm, through the ${[...new Set(finding.through.map(({ what }) => what))].join(", ")}. The steps and buy list use ${finding.use} mm ones instead (step ${finding.steps.join(", ")}).`;
     case "tools-missing":
       return `Tools needed and not to hand: ${finding.tools.map(({ name, steps }) => `${name} (step ${steps.join(", ")})`).join("; ")}.`;
     case "too-big-for-stock":
@@ -257,7 +263,7 @@ const numbersOf = (build: Build) => {
     "Buy list:",
     ...buyList.lines.map(
       (line) =>
-        `- ${line.item}: ${line.packs} × ${line.packOf === 1 ? "1" : `pack of ${line.packOf}`} (${line.needed} used, ${line.for})${line.total === undefined ? ", no price yet" : `, ${pounds(line.total)}${line.price?.shop === undefined ? "" : ` at ${line.price.shop}`}`}`,
+        `- ${line.item}: ${line.packs} × ${line.packOf === 1 ? "1" : `pack of ${line.packOf}`} (${line.needed} used, ${line.for})${line.total === undefined ? ", no price yet" : `, ${pounds(line.total)}${line.price?.shop === undefined ? "" : ` at ${line.price.shop}`}`}${line.length === undefined ? "" : boltLine(line.length)}`,
     ),
     `Total: ${pounds(buyList.total)}${buyList.unpriced === 0 ? "" : `, leaving out ${buyList.unpriced} ${buyList.unpriced === 1 ? "line" : "lines"} with no price`}`,
     `Steps: ${build.steps.map((step) => `${step.number}. ${step.title}`).join(" · ")}`,

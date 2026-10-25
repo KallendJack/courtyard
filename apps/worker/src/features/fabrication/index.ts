@@ -30,7 +30,7 @@ import {
   slugFor,
 } from "../planning-files/index.ts";
 import { derive, merged, parameterChanges, pickStockIn } from "./parameters.ts";
-import { NOT_STARTED, progressIn, toolsToHand } from "./setting.ts";
+import { NOT_STARTED, type OwnerSetting, ownerSetting, progressIn, settingOf } from "./setting.ts";
 
 /**
  * Fabrication's Builds, hosted in a planning workspace (ADRs 0036, 0037; #697): a JSON file each in
@@ -125,10 +125,10 @@ export type BuildRefusal =
   | { readonly kind: "stale" }
   | { readonly kind: "storage" };
 
-/** The Builds in a planning folder, their steps following the owner's tools when they have any. */
+/** The Builds in a planning folder, worked out with the owner's tools and things (#763). */
 const readBuildsIn = async (
   folder: string,
-  tools: readonly string[] | undefined,
+  owner: OwnerSetting,
 ): Promise<Result<ReadBuilds, BuildRefusal>> => {
   const names = await listFolder(join(folder, BUILDS_FOLDER));
   if (!names.ok) return err({ kind: "storage" });
@@ -149,7 +149,7 @@ const readBuildsIn = async (
     const kept = await readTextFile(join(folder, progressPath(slug.data)));
     if (!kept.ok) return err({ kind: "storage" });
     const progress = progressIn(kept.value, () => readBuildText(build));
-    const read = readBuildText(build, { tools, kept: progress.ways });
+    const read = readBuildText(build, settingOf(owner, progress));
     if (!read.ok) {
       problems.push({ path, problem: read.error });
       continue;
@@ -178,7 +178,7 @@ export const readBuilds = async (
   target: Pick<PlanningFilesTarget, "contextDir" | "workspaceId">,
 ): Promise<Result<ReadBuilds, BuildRefusal>> => {
   const folder = await planningFolder(target);
-  return folder.ok ? readBuildsIn(folder.value, await toolsToHand(target.contextDir)) : folder;
+  return folder.ok ? readBuildsIn(folder.value, await ownerSetting(target.contextDir)) : folder;
 };
 
 /** One of a planning workspace's Builds, or why it can't be read. */
@@ -238,8 +238,8 @@ export const saveBuild = async (
     async (): Promise<Result<Omit<BuildSaved, "change">, BuildRefusal>> => {
       const folder = await planningFolder(target);
       if (!folder.ok) return folder;
-      const tools = await toolsToHand(target.contextDir);
-      const read = await readBuildsIn(folder.value, tools);
+      const owner = await ownerSetting(target.contextDir);
+      const read = await readBuildsIn(folder.value, owner);
       if (!read.ok) return read;
       const { builds, problems } = read.value;
       const editing = edit.slug;
@@ -278,7 +278,7 @@ export const saveBuild = async (
         return err({ kind: "invalid", problem: issue?.message ?? "" });
       }
       const progress = current?.progress ?? NOT_STARTED;
-      const derived = derive(template, file.data.parameters, { tools, kept: progress.ways });
+      const derived = derive(template, file.data.parameters, settingOf(owner, progress));
       if (!derived.ok) return err({ kind: "parameters", problems: derived.error });
 
       const slug =

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Build } from "../build.ts";
+import type { Build, BuildSetting } from "../build.ts";
 import { goldenBench } from "./fixtures/golden.ts";
 import { deriveBench } from "./index.ts";
 import { pickBenchStock } from "./stock-slots.ts";
@@ -7,8 +7,8 @@ import { pickBenchStock } from "./stock-slots.ts";
 // The framed bench, through the one function a caller has: parameters in, a Build out. The
 // expected numbers are the ones worked out by hand for the real bench (#696), not recomputed.
 
-const built = (parameters: unknown): Build => {
-  const derived = deriveBench(parameters);
+const built = (parameters: unknown, setting?: BuildSetting): Build => {
+  const derived = deriveBench(parameters, setting);
   if (!derived.ok) throw new Error(derived.error.join("\n"));
   return derived.value;
 };
@@ -169,23 +169,24 @@ describe("the golden bench's buy list", () => {
   });
 });
 
-describe("the making rules", () => {
-  it("flag the M6 × 50 castor bolts as too short for what they pass through", () => {
-    const found = built(goldenBench).findings.find(
-      (finding) => finding.kind === "fixing-too-short",
-    );
+/** The golden bench with its castor bolts this long, and its washers this thick. */
+const withBolts = (length: number, washer = goldenBench.castors.washer.thickness.value) => ({
+  ...goldenBench,
+  castors: {
+    ...goldenBench.castors,
+    bolt: {
+      ...goldenBench.castors.bolt,
+      length: { ...goldenBench.castors.bolt.length, value: length },
+    },
+    washer: {
+      ...goldenBench.castors.washer,
+      thickness: { ...goldenBench.castors.washer.thickness, value: washer },
+    },
+  },
+});
 
-    // 4 plate + 45 base + 2 × 1.6 washers + 5 nut + 2 threads at 1 mm.
-    expect(found).toMatchObject({
-      fixing: "M6 × 50 bolts",
-      length: 50,
-      needed: 59.2,
-      use: 60,
-      steps: [4],
-    });
-  });
-
-  it("fit and buy the length to use, so the steps never fit bolts too short (#699)", () => {
+describe("the castor bolts", () => {
+  it("are fitted and bought at the length to use, never the one given too short (#699)", () => {
     const build = built(goldenBench);
     const fitting = build.steps.find((step) => step.id === "fit-castors");
 
@@ -197,21 +198,54 @@ describe("the making rules", () => {
     ).toBeUndefined();
   });
 
-  it("pass a bolt long enough", () => {
-    const longer = {
-      ...goldenBench,
-      castors: {
-        ...goldenBench.castors,
-        bolt: {
-          ...goldenBench.castors.bolt,
-          length: { ...goldenBench.castors.bolt.length, value: 60 },
-        },
-      },
-    };
+  it("show only as the size to buy, with what they pass through a tap away (#763)", () => {
+    const build = built(withBolts(60, 2.1));
+    const bolts = build.buyList.lines.find(
+      (line) => line.kind === "fixing" && /bolts/.test(line.item),
+    );
 
-    expect(built(longer).findings.map((finding) => finding.kind)).not.toContain("fixing-too-short");
+    // 4 plate + 45 base + 2 × 2.1 washers + 5 nut + 2 threads at 1 mm: 60.2, so 65s.
+    expect(bolts?.item).toBe("M6 × 65 bolts");
+    expect(bolts?.length).toEqual({
+      needed: 60.2,
+      through: [
+        { what: "castor plate", mm: 4 },
+        { what: "castor base", mm: 45 },
+        { what: "M6 washer", mm: 2.1 },
+        { what: "M6 washer", mm: 2.1 },
+        { what: "M6 lock nut", mm: 5 },
+        { what: "two threads", mm: 2 },
+      ],
+    });
+    // The old plan's 60 means nothing to the owner: nothing says it.
+    expect(JSON.stringify(build)).not.toMatch(/M6 × 60/);
+    expect(build.findings.map((finding) => finding.kind)).not.toContain("fixing-too-short");
   });
 
+  it("say the owner's own are short, and by how much, when they have the wrong ones", () => {
+    const short = (have: readonly string[]) =>
+      built(withBolts(60, 2.1), { have }).buyList.lines.find(
+        (line) => line.item === "M6 × 65 bolts",
+      )?.length?.yoursShort;
+
+    expect(short(["Castor bolts M6 × 60", "Step stool"])).toEqual({ name: "M6 × 60", by: 0.2 });
+    expect(short(["M6x60 bolts"])).toEqual({ name: "M6 × 60", by: 0.2 });
+    // Long enough, another thread, or none: nothing to say.
+    expect(short(["M6 × 65 bolts"])).toBeUndefined();
+    expect(short(["M8 × 60 bolts"])).toBeUndefined();
+    expect(short([])).toBeUndefined();
+  });
+
+  it("pass a bolt long enough, saying what it passes through all the same", () => {
+    const build = built(withBolts(60));
+
+    expect(build.buyList.lines.find((line) => line.item === "M6 × 60 bolts")?.length?.needed).toBe(
+      59.2,
+    );
+  });
+});
+
+describe("the making rules", () => {
   it("list the tools the steps need that aren't to hand, with their steps", () => {
     const found = built(goldenBench).findings.find((finding) => finding.kind === "tools-missing");
 

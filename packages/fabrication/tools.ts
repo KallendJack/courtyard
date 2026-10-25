@@ -58,8 +58,9 @@ const TOOL_WORDS: Readonly<Record<Tool, RegExp>> = {
   "circular-saw": /\bcircular saw/,
   "mitre-saw": /\b(mitre|miter|chop) saw/,
   "folding-workbench": /\b(workmate|folding (work)?bench)/,
-  // A sawhorse, a trestle or a stool: anything that holds a length's far end level.
-  "long-end-support": /\b(saw ?horse|trestle|stool|support for the long end)/,
+  // A sawhorse, a trestle, a stool or a step: anything that holds a length's far end level.
+  "long-end-support":
+    /\b(saw ?horse|trestle|stool|step ?ladder|kick ?step|support for the long end)/,
   clamps: /\bclamp/,
   // A drill, but not "drill bits" on their own.
   "drill-driver": /\bdrill\b(?! bits?\b)/,
@@ -71,13 +72,34 @@ const TOOL_WORDS: Readonly<Record<Tool, RegExp>> = {
   "ear-defenders": /\bear ?(defenders|muffs|protectors?|protection|plugs)\b/,
 };
 
+/** A name as its words are read: lower case, anything but letters and digits a space. */
+const wordsOf = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
 /** The steps' tools among the owner's, as Your tools saves them: each its tile's name or theirs. */
 export const toolsFrom = (names: readonly string[]): Tool[] => {
-  const said = names.map((name) =>
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim(),
-  );
+  const said = names.map(wordsOf);
   return Tool.options.filter((tool) => said.some((name) => TOOL_WORDS[tool].test(name)));
+};
+
+/** The first of the owner's Things, by name, that is a tool, or will do for it (#763). */
+export const thingFor = (tool: Tool, names: readonly string[]): string | undefined =>
+  names.find((name) => TOOL_WORDS[tool].test(wordsOf(name)));
+
+/**
+ * Whether the owner's drill bit sets have a bit, by the sizes each is kept with: listed ("3, 5,
+ * 7 mm"), a range ("1–10 mm") or both ("1–6 mm, 7 mm"). Left out when no set's sizes are known.
+ */
+export const bitInSets = (sets: readonly string[], mm: number): boolean | undefined => {
+  if (sets.length === 0) return undefined;
+  return sets.some((size) =>
+    size.split(",").some((part) => {
+      const range = /(\d+(?:\.\d+)?)\s*(?:–|-|to)\s*(\d+(?:\.\d+)?)/.exec(part);
+      if (range) return mm >= Number(range[1]) && mm <= Number(range[2]);
+      return (part.match(/\d+(?:\.\d+)?/g) ?? []).map(Number).includes(mm);
+    }),
+  );
 };

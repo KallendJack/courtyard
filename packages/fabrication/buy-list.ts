@@ -1,5 +1,6 @@
-import type { BuyLine, BuyList, CutPlan } from "./build.ts";
+import type { BuyLine, BuyList, CutPlan, Step } from "./build.ts";
 import type { Price, Sheet, Timber } from "./stock.ts";
+import { TOOL_NAMES, type Tool } from "./tools.ts";
 
 // A Build's buy list: how many of each thing to buy, in whole packs, at the prices the parameters
 // give. A line with no price is listed and counted, never guessed.
@@ -65,6 +66,28 @@ export const stockLines = (options: {
     ),
   ];
 };
+
+/**
+ * The tools the owner chose to buy from the Tools tab (#763), a line each with the steps it's
+ * for, while the steps need one and none is to hand: once they have it, it's bought.
+ */
+export const toolsToBuy = (steps: readonly Step[], buying: readonly Tool[]): BuyLine[] =>
+  buying.flatMap((tool) => {
+    const needing = steps.filter((step) =>
+      [...step.tools, ...step.safety].some((each) => each.tool === tool && !each.toHand),
+    );
+    if (needing.length === 0) return [];
+    const numbers = needing.map((step) => step.number);
+    return [
+      buyLine({
+        item: TOOL_NAMES[tool],
+        kind: "tool",
+        for: `${numbers.length === 1 ? "step" : "steps"} ${numbers.join(", ")}`,
+        needed: 1,
+        price: undefined,
+      }),
+    ];
+  });
 
 /** The list, with the priced lines' total; lines needing none are left off. */
 export const buyListOf = (lines: readonly BuyLine[]): BuyList => {

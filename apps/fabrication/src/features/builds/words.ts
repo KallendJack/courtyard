@@ -1,4 +1,10 @@
-import type { BuildFinding, BuildPart, BuildStep, DerivedBuild } from "@courtyard/contract";
+import type {
+  BuildFinding,
+  BuildPart,
+  BuildStep,
+  BuildStepTool,
+  DerivedBuild,
+} from "@courtyard/contract";
 
 // How a Build's numbers read (#698): money, stock, findings and a part's details, worked out from
 // what the engine derived, never by the page itself.
@@ -35,14 +41,16 @@ type Card = { readonly title: string; readonly detail: string };
 
 /**
  * What the making rules found that needs the owner, each as its card says it: for a bench, all
- * but the sizes assumed, which its cut plan says; for a printed part (#702), each size assumed
- * too, since nothing else shows it before it's printed.
+ * but the sizes assumed, which its cut plan says, and the tools missing, which its Tools tab says
+ * once with what to do (#763); for a printed part (#702), each size assumed too, since nothing
+ * else shows it before it's printed.
  */
 export const checkCards = (
   findings: readonly BuildFinding[],
   print: DerivedBuild["print"],
 ): Card[] =>
   findings.flatMap((finding) => {
+    if (finding.kind === "tools-missing" && print === null) return [];
     if (finding.kind !== "assumed") return [findingWords(finding)];
     if (print === null) return [];
     return finding.sizes.map((name) => {
@@ -56,13 +64,6 @@ export const checkCards = (
 
 const findingWords = (finding: Exclude<BuildFinding, { kind: "assumed" }>): Card => {
   switch (finding.kind) {
-    case "fixing-too-short": {
-      const through = [...new Set(finding.through.map((layer) => layer.what))];
-      return {
-        title: `${finding.fixing} too short`,
-        detail: `They need ${mm(finding.needed)} mm, through the ${listed(through)}. The steps and buy list use ones ${finding.use} mm long.`,
-      };
-    }
     case "tools-missing":
       return {
         title: `${listed(finding.tools.map((tool) => tool.name))} not to hand`,
@@ -100,14 +101,12 @@ export const clearanceLine = (print: NonNullable<DerivedBuild["print"]>) =>
   `holes allow ${tenths(print.clearance.value)} mm${print.clearance.source.kind === "assumed" ? " (assumed until the printer's calibrated)" : ""}`;
 
 /**
- * What the making rules found about one step, for its gold card: a fixing it fits too short, or a
- * part it uses too big for its stock. Its tools not to hand are marked in its tools.
+ * What the making rules found about one step, for its gold card: a part it uses too big for its
+ * stock. Its tools not to hand are marked in its tools.
  */
 export const stepFindings = (derived: DerivedBuild, step: BuildStep) =>
   derived.findings.filter(
-    (finding) =>
-      (finding.kind === "fixing-too-short" && finding.steps.includes(step.number)) ||
-      (finding.kind === "too-big-for-stock" && step.parts.includes(finding.label)),
+    (finding) => finding.kind === "too-big-for-stock" && step.parts.includes(finding.label),
   );
 
 /**
@@ -151,16 +150,65 @@ export const stepsUsing = (derived: DerivedBuild, label: string) =>
 export const partSize = (part: BuildPart) =>
   `${mm(part.length)} × ${mm(part.width)} × ${mm(part.thickness)} mm`;
 
+/** A drill bit a step needs, as the engine gives it. */
+type Bit = NonNullable<BuildStepTool["bits"]>[number];
+
+/** A tool the steps use, once: whether it's to hand, the steps it's for, and its bits. */
+export type ToolNeeded = {
+  readonly tool: string;
+  readonly name: string;
+  readonly toHand: boolean;
+  readonly standIn?: string;
+  /** The first step it's for, by title, and each step by number. */
+  readonly firstStep: string;
+  readonly steps: readonly number[];
+  /** Drill bits' sizes, each once, the largest first. */
+  readonly bits: readonly Bit[];
+};
+
 /** Every tool the steps use, once each, in the order they're first needed, with those steps. */
-export const toolsNeeded = (derived: DerivedBuild) => {
-  const tools = new Map<string, { name: string; toHand: boolean; steps: number[] }>();
+export const toolsNeeded = (derived: DerivedBuild): ToolNeeded[] => {
+  const tools = new Map<string, ToolNeeded & { steps: number[]; bits: Bit[] }>();
   for (const step of derived.steps) {
     for (const tool of [...step.tools, ...step.safety]) {
-      const known = tools.get(tool.tool);
+      let known = tools.get(tool.tool);
       if (known === undefined) {
-        tools.set(tool.tool, { name: tool.name, toHand: tool.toHand, steps: [step.number] });
-      } else if (!known.steps.includes(step.number)) known.steps.push(step.number);
+        known = {
+          tool: tool.tool,
+          name: tool.name,
+          toHand: tool.toHand,
+          ...(tool.standIn === undefined ? {} : { standIn: tool.standIn }),
+          firstStep: step.title,
+          steps: [],
+          bits: [],
+        };
+        tools.set(tool.tool, known);
+      }
+      if (!known.steps.includes(step.number)) known.steps.push(step.number);
+      for (const bit of tool.bits ?? []) {
+        if (!known.bits.some((each) => each.mm === bit.mm)) known.bits.push(bit);
+      }
     }
   }
-  return [...tools.entries()].map(([tool, known]) => ({ tool, ...known }));
+  return [...tools.values()].map((tool) => ({
+    ...tool,
+    bits: [...tool.bits].sort((a, b) => b.mm - a.mm),
+  }));
 };
+
+/**
+ * Whether a tool needs the owner (#763): one not to hand, or drill bits whose sizes their set
+ * isn't known to have.
+ */
+export const toSort = (tool: ToolNeeded) =>
+  !tool.toHand || tool.bits.some((bit) => bit.have !== true);
+
+/** Drill bits' sizes as said: "7 mm and 3 mm". */
+export const bitSizes = (bits: readonly Bit[]) => listed(bits.map((bit) => `${bit.mm} mm`));
+
+/**
+ * A step's bit as its chip says it, when the owner's set isn't known to have it: "a 7 mm bit:
+ * check your set", or "7 mm bit?" when it's known not to.
+ */
+export const bitToCheck = (bit: Bit) =>
+  bit.have === undefined ? `a ${bit.mm} mm bit: check your set` : `${bit.mm} mm bit?`;

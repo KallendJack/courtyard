@@ -412,8 +412,9 @@ the worker's.
 `@courtyard/fabrication` works out a Build from its template and parameters (ADR 0036): the parts, each with a box
 for the 3D view; the cut plan, timber packed into lengths and sheets cut up with the saw's kerf between every two
 pieces; the buy list in whole lengths, sheets and packs; the steps, each action said for a beginner and in just the
-numbers, with its tools, kit, fixings, close-up and check; and the making-rule findings (a bolt too short for what it
-passes through, tools needed and not to hand, sizes assumed). A size without a source is refused. It's plain
+numbers, with its tools, kit, fixings, close-up and check; and the making-rule findings (tools needed and not to hand,
+sizes assumed). A bolt too short for what it passes through is bought at the length to use, its line saying why and
+when the owner's own are short (#763). A size without a source is refused. It's plain
 functions with no worker, web app, file system or model in it, so it could ship on its own; its Courtyard imports
 are the contract's `SourcedSize` and part recipe. The first template is the framed bench (`bench/`). Printed parts
 (`print/`, #702) are the holster, shim and bracket templates and a part recipe as written: each becomes a recipe

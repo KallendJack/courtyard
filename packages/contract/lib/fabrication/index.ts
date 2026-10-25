@@ -31,6 +31,7 @@ export {
   BuildPart,
   BuildPrint,
   BuildStep,
+  BuildStepTool,
   DerivedBuild,
   MadePart,
 } from "./derived.ts";

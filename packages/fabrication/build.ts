@@ -89,9 +89,21 @@ export type CutPlan = {
   }[];
 };
 
+/**
+ * A bolt's length worked out (#763): what it passes through, each with its thickness, then the two
+ * threads past the nut, and their sum, for the curious.
+ */
+export type BoltLength = {
+  readonly needed: number;
+  readonly through: readonly { readonly what: string; readonly mm: number }[];
+  /** The owner's own bolts of its thread that are too short, and by how much, when they have some. */
+  readonly yoursShort?: { readonly name: string; readonly by: number };
+};
+
 export type BuyLine = {
   readonly item: string;
-  readonly kind: "timber" | "sheet" | "fitted" | "fixing" | "filament";
+  /** A tool is one the owner chose to buy, from the Tools tab (#763). */
+  readonly kind: "timber" | "sheet" | "fitted" | "fixing" | "filament" | "tool";
   /** The timber or sheet it buys, by name, so its row can open that stock's options (#704). */
   readonly stock?: string;
   /** What it's for, in a few words. */
@@ -105,6 +117,8 @@ export type BuyLine = {
   readonly price?: { readonly pence: number; readonly shop?: string; readonly link?: string };
   /** The packs' total in pence, when the price is known. */
   readonly total?: number;
+  /** A bolt's, how its length was worked out. */
+  readonly length?: BoltLength;
 };
 
 export type BuyList = {
@@ -115,7 +129,24 @@ export type BuyList = {
   readonly unpriced: number;
 };
 
-export type StepTool = { readonly tool: Tool; readonly name: string; readonly toHand: boolean };
+/** A drill bit a step needs: its size, what it drills, and whether the owner's set has it. */
+export type Bit = {
+  readonly mm: number;
+  /** "pilot holes", "the M6 bolts". */
+  readonly for: string;
+  /** Left out while the set's sizes aren't known: "a 7 mm bit: check your set". */
+  readonly have?: boolean;
+};
+
+export type StepTool = {
+  readonly tool: Tool;
+  readonly name: string;
+  readonly toHand: boolean;
+  /** Something the owner has besides Your tools that will do, by its name: "Step stool" (#763). */
+  readonly standIn?: string;
+  /** Drill bits' sizes, each the step drills with. */
+  readonly bits?: readonly Bit[];
+};
 
 /**
  * A length of timber as it's marked: its cuts end to end from its square end, a saw cut between
@@ -189,6 +220,12 @@ export type BuildSetting = {
   /** Left out, or undefined, when the owner has saved none: the steps follow the Build's own. */
   readonly tools?: readonly string[] | undefined;
   readonly kept?: readonly KeptWay[];
+  /** What else the owner has, by name (#763): a step stool for the long end, bolts too short. */
+  readonly have?: readonly string[];
+  /** The sizes the owner's drill bit sets are kept with: "3, 5, 7 mm", "1–10 mm". */
+  readonly bitSets?: readonly string[];
+  /** The tools the owner chose to buy for this Build, which its buy list lists until they have them. */
+  readonly buying?: readonly Tool[];
 };
 
 /**
@@ -239,24 +276,11 @@ export type Step = {
 
 export type GlossaryWord = { readonly word: string; readonly means: string };
 
-/** A fixing found too short, as its parameters give it. */
-export type TooShort = {
-  readonly kind: "fixing-too-short";
-  readonly fixing: string;
-  readonly length: number;
-  readonly needed: number;
-  /** What it passes through, each with its thickness, then the two threads past the nut. */
-  readonly through: readonly { readonly what: string; readonly mm: number }[];
-  /** The shortest usual length that's long enough, which the steps and buy list use instead. */
-  readonly use: number;
-};
-
-/** What the making rules found (ADR 0036). */
+/**
+ * What the making rules found (ADR 0036). A bolt too short isn't one: the steps and buy list use
+ * the length to use, and its line says so only when the owner has the short ones (#763).
+ */
 export type Finding =
-  | (TooShort & {
-      /** The steps that fit it, by number, so each step shows what was found about it. */
-      readonly steps: readonly number[];
-    })
   | {
       readonly kind: "tools-missing";
       readonly tools: readonly {

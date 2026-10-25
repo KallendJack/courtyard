@@ -1,12 +1,15 @@
+import { join } from "node:path";
 import { BuildProgress, type BuildStep, tickedIn } from "@courtyard/contract";
-import type { Build } from "@courtyard/fabrication";
+import { type Build, type BuildSetting, Tool, toolsFrom } from "@courtyard/fabrication";
 import { err, ok, type Result } from "../../lib/result.ts";
 import { readThingsIn } from "../things/index.ts";
+import { listWorkspaces } from "../workspaces/index.ts";
 import type { ToolsRefusal } from "./tools.ts";
 
-// What a Build is worked out with besides its parameters (#777): the owner's tools, which its
-// steps follow, and its progress as read from its file (#699), with the ways its steps started
-// were done, which `index.ts` works the Build out with and `progress.ts` keeps.
+// What a Build is worked out with besides its parameters (#777, #763): the owner's tools and
+// things, which its steps and buy list follow, and its progress as read from its file (#699), with
+// the ways its steps started were done and the tools chosen to buy, which `index.ts` works the
+// Build out with and `progress.ts` keeps.
 
 /**
  * The owner's tools, in order of name, and the files there that can't be read as a Thing. Here
@@ -22,21 +25,64 @@ export const readTools = async (contextDir: string) => {
   });
 };
 
+/** What every Build is worked out with from the owner's things, before its own progress. */
+export type OwnerSetting = Pick<BuildSetting, "tools" | "have" | "bitSets">;
+
 /**
- * The owner's tools as a Build's steps follow them: each by its name and its tile's, or none when
- * they've saved none (or they can't be read just now), so a Build follows its own.
+ * What a Build's steps and buy list follow from the owner's things (#777, #763): Your tools, each
+ * by its name and its tile's, or none when they've saved none (or they can't be read just now), so
+ * a Build follows its own; the sizes their drill bit sets are kept with; and what they have in
+ * their planning workspaces, by name, which can stand in for a tool (a step stool) or be bolts too
+ * short.
  */
-export const toolsToHand = async (contextDir: string): Promise<string[] | undefined> => {
+export const ownerSetting = async (contextDir: string): Promise<OwnerSetting> => {
   const read = await readTools(contextDir);
-  if (!read.ok || read.value.tools.length === 0) return undefined;
-  return read.value.tools.flatMap(({ summary }) => [
-    summary.name,
-    ...(summary.tile === undefined ? [] : [summary.tile]),
-  ]);
+  const saved = read.ok ? read.value.tools.map(({ summary }) => summary) : [];
+  const namesOf = (tool: (typeof saved)[number]) => [
+    tool.name,
+    ...(tool.tile === undefined ? [] : [tool.tile]),
+  ];
+  const bitSets = saved.flatMap((tool) =>
+    tool.size !== undefined && toolsFrom(namesOf(tool)).includes("drill-bits") ? [tool.size] : [],
+  );
+  return {
+    tools: saved.length === 0 ? undefined : saved.flatMap(namesOf),
+    have: await thingsHad(contextDir),
+    bitSets,
+  };
+};
+
+/** The names of the Things the owner has in their planning workspaces; none when unreadable. */
+const thingsHad = async (contextDir: string): Promise<string[]> => {
+  const workspaces = await listWorkspaces(contextDir);
+  if (!workspaces.ok) return [];
+  const names: string[] = [];
+  for (const workspace of workspaces.value) {
+    if (workspace.mode !== "planning") continue;
+    const read = await readThingsIn(join(contextDir, workspace.id));
+    if (!read.ok) continue;
+    for (const { summary } of read.value.things) {
+      if (summary.status === "have") names.push(summary.name);
+    }
+  }
+  return names;
 };
 
 /** Where a Build's steps start. */
-export const NOT_STARTED: BuildProgress = { step: null, ticked: [], ways: [] };
+export const NOT_STARTED: BuildProgress = { step: null, ticked: [], ways: [], buying: [] };
+
+/**
+ * What a Build is worked out with: the owner's things, the ways its steps were done, and the tools
+ * its progress keeps to buy, as its steps name them (any other is dropped).
+ */
+export const settingOf = (owner: OwnerSetting, progress: BuildProgress): BuildSetting => ({
+  ...owner,
+  kept: progress.ways,
+  buying: progress.buying.flatMap((tool) => {
+    const named = Tool.safeParse(tool);
+    return named.success ? [named.data] : [];
+  }),
+});
 
 /**
  * A Build's progress as kept: where it starts when there's none, or its file can't be read as
