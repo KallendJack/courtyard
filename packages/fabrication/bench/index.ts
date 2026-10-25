@@ -3,10 +3,12 @@ import { buyLine, buyListOf, stockLines } from "../buy-list.ts";
 import { cutPlanOf } from "../cut-plan.ts";
 import { assumedSizes, boltCheck, toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
+import { stockOptions, wrongStock } from "../options.ts";
 import type { Price } from "../stock.ts";
 import { benchFitted, benchParts, shapeOf, shapeProblems } from "./frame.ts";
 import { BenchParameters, castorFixingNames } from "./parameters.ts";
 import { benchSteps } from "./steps.ts";
+import { BENCH_SLOTS } from "./stock-slots.ts";
 
 /**
  * The framed bench: its parameters in, everything its Build shows out. Parameters that aren't a
@@ -22,6 +24,23 @@ export const deriveBench = (input: unknown): Result<Build, string[]> => {
     );
   }
   const parameters = parsed.data;
+  const build = benchOf(parameters);
+  if (!build.ok) return build;
+  return ok({
+    ...build.value,
+    options: stockOptions({
+      parameters,
+      slots: BENCH_SLOTS,
+      prices: parameters.prices,
+      damp: parameters.damp,
+      build: build.value,
+      derive: benchOf,
+    }),
+  });
+};
+
+/** Everything but the options, which each work the bench out again with one swapped in. */
+const benchOf = (parameters: BenchParameters): Result<Omit<Build, "options">, string[]> => {
   const shape = shapeOf(parameters);
   const problems = shapeProblems(shape);
   if (problems.length > 0) return err(problems);
@@ -114,7 +133,10 @@ export const deriveBench = (input: unknown): Result<Build, string[]> => {
     ),
   ]);
 
-  const findings: Finding[] = [...planned.findings];
+  const findings: Finding[] = [
+    ...planned.findings,
+    ...wrongStock({ parameters, slots: BENCH_SLOTS, damp: parameters.damp, build: { parts } }),
+  ];
   if (castors && tooShort) {
     const bolts = castorFixingNames(castors, boltLength).bolts;
     findings.push({

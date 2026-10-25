@@ -61,6 +61,57 @@ const openInFabrication = async (page: Page) => {
   await expect(built).toBeVisible();
 };
 
+/**
+ * The frame timber's options, opened from its buy-list row (#704; Paper, 2 · Agreed, "Fabrication
+ * · Choose materials · Tablet (#704)"): the recommended first, each costed, with its shop. Picking
+ * CLS works the Build out again, and Undo puts it back.
+ */
+const pickTheFrameTimber = async (page: Page) => {
+  await page.getByRole("tab", { name: "Buy list" }).click();
+  await page
+    .getByRole("region", { name: "Buy list" })
+    .getByRole("button", { name: /45 × 95 C16, 2\.4 m/ })
+    .click();
+  const options = page.getByRole("region", { name: "Frame timber options" });
+  await expect(options).toContainText("Legs, long rails, end rails and shelf support");
+  const choices = options.getByRole("listitem");
+  await expect(choices).toHaveCount(3);
+  await expect(choices.first()).toContainText("Sawn C16, 45 × 95£34.00");
+  await expect(choices.first()).toContainText("Picked · recommended");
+  await expect(choices.first().getByRole("link", { name: "Woodstore" })).toHaveAttribute(
+    "href",
+    "https://shop.example/c16-45x95",
+  );
+  await expect(choices.nth(2)).toContainText("Not needed indoors");
+
+  await options.getByRole("button", { name: "Pick CLS, 38 × 89" }).click();
+  await expect(choices.nth(1)).toContainText("Picked");
+  await expect(options).toContainText("Picked CLS, 38 × 89");
+
+  // The Build follows: the buy list's line and total, and the end rails cut 474 long.
+  await options.getByRole("button", { name: "Buy list" }).click();
+  const buyList = page.getByRole("region", { name: "Buy list" });
+  await expect(buyList).toContainText("38 × 89 CLS, 2.4 m");
+  await expect(buyList).toContainText("Total £174.52");
+  await page.getByRole("tab", { name: "Cut plan" }).click();
+  await expect(
+    page.getByRole("region", { name: "Cut plan" }).getByRole("button", { name: "C, 474 mm" }),
+  ).toHaveCount(4);
+
+  // Undo, from the options, puts the frame back as it was.
+  await page
+    .getByRole("region", { name: "Cut plan" })
+    .getByRole("button", { name: "Options for 38 × 89 CLS" })
+    .click();
+  await options.getByRole("button", { name: "Undo" }).click();
+  await expect(choices.first()).toContainText("Picked · recommended");
+  // Back goes where they were opened from.
+  await options.getByRole("button", { name: "Cut plan" }).click();
+  await expect(page.getByRole("region", { name: "Cut plan" })).toBeVisible();
+  await page.getByRole("tab", { name: "Buy list" }).click();
+  await expect(page.getByRole("region", { name: "Buy list" })).toContainText("Total £177.02");
+};
+
 test.describe("on the unfolded Fold", () => {
   test.use({ viewport: { width: 933, height: 645 }, hasTouch: true, isMobile: true });
 
@@ -112,14 +163,22 @@ test.describe("on the unfolded Fold", () => {
     await page.getByRole("tab", { name: "Buy list" }).click();
     const buyList = page.getByRole("region", { name: "Buy list" });
     await expect(buyList).toContainText("To buy · 11");
-    await expect(buyList.getByRole("link", { name: /45 × 95 C16, 2\.4 m/ })).toHaveAttribute(
+    await expect(buyList.getByRole("link", { name: /Wheelwright TD60 castors/ })).toHaveAttribute(
       "href",
-      "https://shop.example/c16-45x95",
+      "https://shop.example/td60",
     );
     await expect(buyList).toContainText("Total £177.02");
 
     await page.getByRole("tab", { name: "Tools" }).click();
     await expect(page.getByRole("region", { name: "Tools" })).toContainText("4 not to hand");
+  });
+
+  test("a buy-list row opens its stock's options, and a pick changes the Build, with Undo", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await pickTheFrameTimber(page);
   });
 
   test("its chat goes to the Build's session, and the answer comes back in it", async ({
@@ -447,6 +506,14 @@ test.describe("on a desktop", () => {
     for (const panel of ["Chat", "In 3D", "Cut plan"]) {
       await expect(page.getByRole("region", { name: panel })).toBeVisible();
     }
+  });
+
+  test("a buy-list row opens its stock's options, and a pick changes the Build, with Undo", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await pickTheFrameTimber(page);
   });
 
   test("the bench stays as the owner turned it when the Build is asked for again", async ({

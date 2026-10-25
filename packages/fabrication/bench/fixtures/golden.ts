@@ -80,6 +80,17 @@ export const goldenBench = {
       price: { pence: 380, packOf: 200, shop: "Woodstore" },
     },
   },
+  /** The other stock options' prices, each from its shop's page (#704). */
+  prices: {
+    "cls-38x89": { pence: 630, shop: "Woodstore", link: "https://shop.example/cls-38x89" },
+    "treated-47x100": {
+      pence: 820,
+      shop: "Woodstore",
+      link: "https://shop.example/treated-47x100",
+    },
+    "osb-18": { pence: 3200, shop: "Panel Cutters", link: "https://shop.example/osb-18" },
+    "mdf-18": { pence: 2800, shop: "Panel Cutters", link: "https://shop.example/mdf-18" },
+  },
   tools: [
     "tape-measure",
     "pencil",

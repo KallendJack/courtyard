@@ -1869,21 +1869,26 @@ With none yet:
 
 **The rule** (Every turn, item 11), after the projects':
 
-> Anything the owner will make, such as a workbench, is a Build, which you keep with the save_build tool: you choose
-> its template and set its parameters (its sizes, each with where it came from, the stock it's cut from, the fixings
-> and the tools to hand), and code works out its parts, cut plan, buy list, steps and findings. Start one once the
-> owner wants to make something a template fits, and change it, one parameter at a time, as they decide. Never write a
-> length, a quantity, a price or a total yourself, nor work one out: every one you give comes from the tool's reply, as
-> it says it, and for a Build's numbers without changing it, such as how many screws, call the tool with only its
-> label. To change one, change the parameter it comes from, and the Build works the rest out again. A size the
-> owner measured is measured; one from a maker's page is specified, with the page; any other is assumed, and the reply
-> lists those to check before cutting. Tell the owner what the reply finds: a fixing too short, a tool needed that
-> isn't to hand, a size assumed. Some making rules code can't check, so say them: test-fit one piece before cutting or
-> fixing the rest, measure before buying, and say plainly when a step needs a pro. When a project has a step for
-> making it, give that step with the Build, so the step owns it. A Build's materials live in its buy list, never as
-> wanted Things: offer to remove the wanted Things its buy list now holds, and remove them once the owner agrees. A
-> material becomes a Thing only once the owner has it and it isn't used up in the Build, such as its castors, not its
-> screws. The owner sees each change as a note under your answer, so leave saves unmentioned.
+> Anything the owner will make, such as a workbench, is a Build, which you keep with the save_build tool: you choose its
+> template and set its parameters (its sizes, each with where it came from, the stock it's cut from, the fixings and the
+> tools to hand), and code works out its parts, cut plan, buy list, steps and findings. Start one once the owner wants
+> to make something a template fits, and change it, one parameter at a time, as they decide. Never write a length, a
+> quantity, a price or a total yourself, nor work one out: every one you give comes from the tool's reply, as it says
+> it, and for a Build's numbers without changing it, such as how many screws, call the tool with only its label. To
+> change one, change the parameter it comes from, and the Build works the rest out again. A Build's timbers and sheets
+> each come with their options in the reply, the recommended first, each costed for this Build: when the owner is
+> choosing, say what each is like as the reply says it. Write every price you give as a link to its shop's page, where
+> you give it ("MDF, [£28.00 at Panel Cutters](https://…)"), and one the reply gives with no shop or link as it says it
+> ("£28.00, no shop given"); never give one from memory. A question never changes a Build: offer prices you find on the
+> web, with a suggested reply such as "Save these prices", and put them in its prices, each with its shop and link, only
+> once the owner asks. A size the owner measured is measured; one from a maker's page is specified, with the page; any
+> other is assumed, and the reply lists those to check before cutting. Tell the owner what the reply finds: a fixing too
+> short, a tool needed that isn't to hand, a size assumed. Some making rules code can't check, so say them: test-fit one
+> piece before cutting or fixing the rest, measure before buying, and say plainly when a step needs a pro. When a
+> project has a step for making it, give that step with the Build, so the step owns it. A Build's materials live in its
+> buy list, never as wanted Things: offer to remove the wanted Things its buy list now holds, and remove them once the
+> owner agrees. A material becomes a Thing only once the owner has it and it isn't used up in the Build, such as its
+> castors, not its screws. The owner sees each change as a note under your answer, so leave saves unmentioned.
 
 **The save_build tool,** offered beside the project tool, as a model reads it, and its inputs (`<schema>` is the
 template's parameters as JSON Schema, from `BenchParameters`). The parameters' shape is in the tool's own
@@ -1910,20 +1915,27 @@ never reached the model, and Codex sent `{}` (#732):
 One it takes is answered "Started [B1] Workbench (builds/workbench.json)." or "Changed …", then everything worked out,
 one line each: the finished size, each part with its count, size and stock, the cut plan length by length and sheet by
 sheet, the buy list with each line's packs and price and its total (counting the lines with no price), the steps by
-title, and the findings; it ends "Give these numbers as they are; to change one, change a parameter." Given a project
-and step, the step is given the Build through the project tool, its own change and note, and the reply ends with how
-that went ("Its project step: Changed [P1] Split the garage."). Given only a label (with a project and step, or not),
-or a change that changes nothing, it writes nothing: the reply is "[B1] Workbench (builds/workbench.json) is as it
-was: nothing changed. Its numbers as they are now:" and the same numbers, so a later session can answer "how many
-screws?" without working it out (from the review of #732), and a project step can be given a Build that's there
-already. The worker keeps each Build as the model was shown it, or last saved it (or last gave it as it is), and
-refuses, saying why: input it doesn't take; a new Build without a name, template and every parameter; parameters
-code can't work out, each problem on its own line (`- height: Invalid input…`); a project without a step or a step
-without a project; a label no Build has; a Build changed since it was shown, with the Builds as they are now; and a
-name another Build's file has. As with saves, a refused Build can be put right once. The chat shows "Started Build" or "Updated Build" with its name and, in grey, each parameter
-changed ("height: 900 mm → 850 mm"). Later turns are told each earlier answer's Build saves, what each changed and
-whether the owner undid it ("- Changed the Build Workbench: height: 900 mm → 850 mm (the owner undid this)"). The fake
-saves one for each line "build: " followed by the tool's input as JSON.
+title, the findings, and (#704) "Stock options, the recommended first:", each timber and sheet with its options, one
+line each with what this Build would buy of it and its cost, where the price is from (its shop and page, or "no shop
+given"), why, and its chips (`  - CLS, 38 × 89: 5 lengths of 2.4 m, £31.50 at Woodstore
+(https://shop.example/cls-38x89). Smooth, with rounded edges, but 7 mm slimmer than C16, so each screw has less to grip.
+Less wood for screws.`). The stock in use is costed as it is, at its own length and price, and stock that's no option is
+its own first line, picked; an option is judged for every slot its stock fills, so one made for only one of them says
+"Not made for the frame". It ends "Give these numbers as they are; to change one, change a parameter." A stock wrong for
+its parts is a finding ("18 mm MDF is wrong for Top, Shelf, Braces: It swells in a damp garage."). Given a project and
+step, the step is given the Build through the project tool, its own change and note, and the reply ends with how that
+went ("Its project step: Changed [P1] Split the garage."). Given only a label (with a project and step, or not), or a
+change that changes nothing, it writes nothing: the reply is "[B1] Workbench (builds/workbench.json) is as it was:
+nothing changed. Its numbers as they are now:" and the same numbers, so a later session can answer "how many screws?"
+without working it out (from the review of #732), and a project step can be given a Build that's there already. The
+worker keeps each Build as the model was shown it, or last saved it (or last gave it as it is), and refuses, saying why:
+input it doesn't take; a new Build without a name, template and every parameter; parameters code can't work out, each
+problem on its own line (`- height: Invalid input…`); a project without a step or a step without a project; a label no
+Build has; a Build changed since it was shown, with the Builds as they are now; and a name another Build's file has. As
+with saves, a refused Build can be put right once. The chat shows "Started Build" or "Updated Build" with its name and,
+in grey, each parameter changed ("height: 900 mm → 850 mm"). Later turns are told each earlier answer's Build saves,
+what each changed and whether the owner undid it ("- Changed the Build Workbench: height: 900 mm → 850 mm (the owner
+undid this)"). The fake saves one for each line "build: " followed by the tool's input as JSON.
 
 The eval's `build-*` scenarios check the saved Build, not the answer's wording, and are to run on both providers:
 asked for a bench, the model uses the tool, and every length, count and total in its answer is one the saved Build
@@ -1938,6 +1950,10 @@ of 3 and the bench 0 of 3, sending `{}` as parameters, until their shape moved i
 3. Run again on 2026-10-25 (#752), once steps had IDs, sizes were told to the whole mm and brackets had their screws:
 Codex passed both 3 of 3; Claude passed the change 3 of 3 and the bench 2 of 3 (one run saved no Build), then 3 of 3
 run again, each run guessing at keys for the screws' pack size before finding `price.packOf`.
+
+`build-option-price-from-shop` (#704) checks the answer instead: asked which sheet is cheapest for the bench's top, it
+gives each option's price only with its shop and link, from the tool's reply or the web, never one from memory, so
+every priced line has a link, and it saves no Build: a question changes nothing (`builds: { action: "none" }`).
 
 ## The move review
 

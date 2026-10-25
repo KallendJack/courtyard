@@ -6,7 +6,10 @@ import {
   BuildParametersChange,
   BuildProgress,
   BuildSlug,
+  BuildStockPick,
   type Builds,
+  type BuildView,
+  ChangeId,
   NewMessage,
   type ProviderList,
   ToolsChange,
@@ -33,7 +36,14 @@ import type { Sessions } from "../sessions/index.ts";
 import { readMessageWithAttachments, sessionError } from "../sessions/routes.ts";
 import { getWorkspace } from "../workspaces/index.ts";
 import { chatOf, chatSessionOf } from "./chat.ts";
-import { type BuildRefusal, readBuild, readBuilds, saveBuild, viewOf } from "./index.ts";
+import {
+  type BuildRefusal,
+  readBuild,
+  readBuilds,
+  saveBuild,
+  undoChangeToBuild,
+  viewOf,
+} from "./index.ts";
 import { keepProgress } from "./progress.ts";
 import { hearTools, saveTools, type ToolsRefusal, undoToolsSave, yourTools } from "./tools.ts";
 
@@ -324,6 +334,39 @@ export const fabricationRoutes = (
       change: saved.value.change ?? null,
       build: viewOf(saved.value.build),
     } satisfies BuildChanged);
+  });
+
+  // The owner's pick of one of a stock's options (#704): every part cut from it follows, worked
+  // out again.
+  routes.post("/workspaces/:id/builds/:slug/stock", async (c) => {
+    const named = fileIn(c, where, BuildSlug);
+    if (named === undefined) return sharedFileError(c, { kind: "not-found" }, BUILDS);
+    const body = await readBody(c, BuildStockPick);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const saved = await saveBuild(
+      named.workspace,
+      { slug: named.slug, pick: body.value },
+      { now: now() },
+    );
+    if (!saved.ok) return buildError(c, saved.error);
+    return c.json({
+      change: saved.value.change ?? null,
+      build: viewOf(saved.value.build),
+    } satisfies BuildChanged);
+  });
+
+  // Undo of one of its changes, from Fabrication: the Build as it is again.
+  routes.post("/workspaces/:id/builds/:slug/changes/:change/undo", async (c) => {
+    const named = fileIn(c, where, BuildSlug);
+    const id = ChangeId.safeParse(c.req.param("change"));
+    if (named === undefined || !id.success) {
+      return sharedFileError(c, { kind: "not-found" }, BUILDS);
+    }
+    const undone = await undoChangeToBuild(named.workspace, { slug: named.slug, id: id.data });
+    if (!undone.ok) return buildUndoError(c, undone.error);
+    const read = await readBuild(named.workspace, named.slug);
+    if (!read.ok) return buildError(c, read.error);
+    return c.json(viewOf(read.value) satisfies BuildView);
   });
 
   return routes;

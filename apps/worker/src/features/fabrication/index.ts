@@ -6,6 +6,7 @@ import {
   BuildProgress,
   type BuildSave,
   BuildSlug,
+  type BuildStockPick,
   type BuildSummary,
   type BuildTemplate,
   type BuildView,
@@ -14,16 +15,21 @@ import {
 import type { Build } from "@courtyard/fabrication";
 import { listFolder, readTextFile, writeTextFileIn } from "../../lib/files.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
-import { undoWholeFiles, type WholeFile } from "../context-folder/index.ts";
+import {
+  undoWholeFiles,
+  type WholeFile,
+  type WholeFilesUndoRefusal,
+} from "../context-folder/index.ts";
 import {
   type PlanningFilesTarget,
   type PlanningFolderRefusal,
+  pathInFolder,
   pathInWorkspace,
   planningChange,
   planningFolder,
   slugFor,
 } from "../planning-files/index.ts";
-import { derive, merged, parameterChanges } from "./parameters.ts";
+import { derive, merged, parameterChanges, pickStockIn } from "./parameters.ts";
 
 /**
  * Fabrication's Builds, hosted in a planning workspace (ADRs 0036, 0037; #697): a JSON file each in
@@ -198,7 +204,8 @@ export const readBuild = async (
 
 /**
  * A change to one Build: a new one (its name, template and every parameter), or one that's there,
- * by its file's name, with a new name or its parameters changed by a merge patch.
+ * by its file's name, with a new name, its parameters changed by a merge patch, or one of its
+ * stocks swapped for an option (#704).
  */
 export type BuildEdit =
   | {
@@ -207,7 +214,12 @@ export type BuildEdit =
       readonly template?: BuildTemplate;
       readonly parameters?: BuildParameters;
     }
-  | { readonly slug: BuildSlug; readonly name?: string; readonly parameters?: BuildParameters };
+  | {
+      readonly slug: BuildSlug;
+      readonly name?: string;
+      readonly parameters?: BuildParameters;
+      readonly pick?: BuildStockPick;
+    };
 
 /** A saved Build, the change it was committed as (if git kept it), and it as read now. */
 export type BuildSaved = {
@@ -251,10 +263,17 @@ export const saveBuild = async (
       const template =
         current?.file.template ?? (edit.slug === undefined ? edit.template : undefined);
       const name = edit.name ?? current?.file.name;
-      const parameters =
+      const patched =
         current === undefined
           ? edit.parameters
           : merged(current.file.parameters, edit.parameters ?? {});
+      const pick = edit.slug === undefined ? undefined : edit.pick;
+      const picked =
+        pick === undefined || template === undefined
+          ? undefined
+          : pickStockIn(template, patched, pick);
+      if (picked?.ok === false) return err({ kind: "invalid", problem: picked.error.join(" ") });
+      const parameters = picked?.ok ? picked.value : patched;
       if (template === undefined || name === undefined || parameters === undefined) {
         return err({ kind: "incomplete" });
       }
@@ -331,6 +350,23 @@ export const undoBuildChange = (
   target: Pick<PlanningFilesTarget, "contextDir" | "contextFolder" | "sessionId">,
   id: ChangeId,
 ) => undoWholeFiles(target, { id, kinds: ["build"] });
+
+/**
+ * Undoes a change to one Build, from Fabrication (#704): refused as not found when the change
+ * isn't to that Build's file.
+ */
+export const undoChangeToBuild = async (
+  target: Pick<PlanningFilesTarget, "contextDir" | "contextFolder" | "workspaceId">,
+  undo: { readonly slug: BuildSlug; readonly id: ChangeId },
+): Promise<Result<null, WholeFilesUndoRefusal>> => {
+  const found = await target.contextFolder.changeOf(undo.id);
+  if (!found.ok) return err({ kind: "storage" });
+  const path = pathInFolder(target.workspaceId, buildPath(undo.slug));
+  if (found.value === undefined || !found.value.files.includes(path)) {
+    return err({ kind: "not-found" });
+  }
+  return undoBuildChange(target, undo.id);
+};
 
 /** The Build a path in the workspace's folder names (`builds/<slug>.json`), if it names one. */
 const slugOfPath = (path: string): BuildSlug | undefined => {

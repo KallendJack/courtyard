@@ -1,6 +1,6 @@
 import { SourcedSize } from "@courtyard/contract";
 import { z } from "zod";
-import { Fixing, Price, Sheet, Timber, Words } from "../stock.ts";
+import { Fixing, OptionPrices, Price, Sheet, Timber, Words } from "../stock.ts";
 import { Tool } from "../tools.ts";
 
 // The framed bench's parameters (ADR 0036): what the owner and model choose. Every size carries
@@ -66,6 +66,10 @@ export const BenchParameters = z.object({
     /** The screws through the brackets' holes; the sheet screws when left out. */
     bracketScrews: Fixing.optional(),
   }),
+  /** Whether where it stands gets damp, as an unheated garage can, so stock that swells is flagged. */
+  damp: z.boolean().default(false),
+  /** The other stock options' prices, each from its shop's page, to cost each option (#704). */
+  prices: OptionPrices.default({}),
   /** The tools and kit the owner has to hand. */
   tools: z.array(Tool),
 });
