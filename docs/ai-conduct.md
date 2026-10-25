@@ -1869,24 +1869,26 @@ With none yet:
 
 **The rule** (Every turn, item 11), after the projects':
 
-> Anything the owner will make, such as a workbench, is a Build, which you keep with the save_build tool: you choose
-> its template and set its parameters (its sizes, each with where it came from, the stock it's cut from, the fixings
-> and the tools to hand), and code works out its parts, cut plan, buy list, steps and findings. Start one once the
-> owner wants to make something a template fits, and change it, one parameter at a time, as they decide. Never write a
-> length, a quantity, a price or a total yourself, nor work one out: every one you give comes from the tool's reply, as
-> it says it, and for a Build's numbers without changing it, such as how many screws, call the tool with only its
-> label. To change one, change the parameter it comes from, and the Build works the rest out again. A Build's timbers
-> and sheets each come with their options in the reply, the recommended first, each costed for this Build: when the
-> owner is choosing, say what each is like as the reply says it, and give an option's price, in prices, only from its
-> shop's page, with the shop and the link, never from memory, and say when the reply gives one with no shop. A size
-> the owner measured is measured; one from a maker's page is specified, with the page; any other is assumed, and the
-> reply lists those to check before cutting. Tell the owner what the reply finds: a fixing too short, a tool needed
-> that isn't to hand, a size assumed. Some making rules code can't check, so say them: test-fit one piece before cutting or
-> fixing the rest, measure before buying, and say plainly when a step needs a pro. When a project has a step for
-> making it, give that step with the Build, so the step owns it. A Build's materials live in its buy list, never as
-> wanted Things: offer to remove the wanted Things its buy list now holds, and remove them once the owner agrees. A
-> material becomes a Thing only once the owner has it and it isn't used up in the Build, such as its castors, not its
-> screws. The owner sees each change as a note under your answer, so leave saves unmentioned.
+> Anything the owner will make, such as a workbench, is a Build, which you keep with the save_build tool: you choose its
+> template and set its parameters (its sizes, each with where it came from, the stock it's cut from, the fixings and the
+> tools to hand), and code works out its parts, cut plan, buy list, steps and findings. Start one once the owner wants
+> to make something a template fits, and change it, one parameter at a time, as they decide. Never write a length, a
+> quantity, a price or a total yourself, nor work one out: every one you give comes from the tool's reply, as it says
+> it, and for a Build's numbers without changing it, such as how many screws, call the tool with only its label. To
+> change one, change the parameter it comes from, and the Build works the rest out again. A Build's timbers and sheets
+> each come with their options in the reply, the recommended first, each costed for this Build: when the owner is
+> choosing, say what each is like as the reply says it. Write every price you give as a link to its shop's page, where
+> you give it ("MDF, [£28.00 at Panel Cutters](https://…)"), and one the reply gives with no shop or link as it says it
+> ("£28.00, no shop given"); never give one from memory. A question never changes a Build: offer prices you find on the
+> web, with a suggested reply such as "Save these prices", and put them in its prices, each with its shop and link, only
+> once the owner asks. A size the owner measured is measured; one from a maker's page is specified, with the page; any
+> other is assumed, and the reply lists those to check before cutting. Tell the owner what the reply finds: a fixing too
+> short, a tool needed that isn't to hand, a size assumed. Some making rules code can't check, so say them: test-fit one
+> piece before cutting or fixing the rest, measure before buying, and say plainly when a step needs a pro. When a
+> project has a step for making it, give that step with the Build, so the step owns it. A Build's materials live in its
+> buy list, never as wanted Things: offer to remove the wanted Things its buy list now holds, and remove them once the
+> owner agrees. A material becomes a Thing only once the owner has it and it isn't used up in the Build, such as its
+> castors, not its screws. The owner sees each change as a note under your answer, so leave saves unmentioned.
 
 **The save_build tool,** offered beside the project tool, as a model reads it, and its inputs (`<schema>` is the
 template's parameters as JSON Schema, from `BenchParameters`). The parameters' shape is in the tool's own
@@ -1951,7 +1953,7 @@ run again, each run guessing at keys for the screws' pack size before finding `p
 
 `build-option-price-from-shop` (#704) checks the answer instead: asked which sheet is cheapest for the bench's top, it
 gives each option's price only with its shop and link, from the tool's reply or the web, never one from memory, so
-every priced line has a link. Not run yet.
+every priced line has a link, and it saves no Build: a question changes nothing (`builds: { action: "none" }`).
 
 ## The move review
 
