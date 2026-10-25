@@ -12,11 +12,9 @@ import {
 import { classes } from "../lib/classes.ts";
 import { FrameButton } from "./frame-button.tsx";
 import { type Dictation, type TalkTarget, typingIn, useFinePointer } from "./handheld.ts";
+import { usePress } from "./press.ts";
 import { canListen, feel, type Listening, listen } from "./speech.ts";
 import { useWakeLock } from "./wake-lock.ts";
-
-/** How long a finger stays on the strip or the key before it's a hold (push to talk) rather than a tap. */
-const HOLD_MS = 300;
 
 /**
  * What talking is doing: waiting (with why it last couldn't listen, if it couldn't), or
@@ -72,8 +70,13 @@ function useTalk(props: {
   const listening = useRef<Listening>(undefined);
   /** Where what's heard now goes: the message box, opened for it. */
   const dictation = useRef<Dictation>(undefined);
-  /** The finger that started listening, until it lifts, and whether it has become a hold. */
-  const press = useRef<{ pointer: number; timer: number; held: boolean }>(undefined);
+  /** The finger that started listening, until it lifts: held, it's push to talk. */
+  const press = usePress({
+    held: () => {
+      feel("thump");
+      setTalk((was) => (was.kind === "listening" ? { ...was, held: true } : was));
+    },
+  });
   /** What a let-go key sends, once the browser has settled its last words. */
   const sending = useRef<Dictation>(undefined);
 
@@ -90,8 +93,7 @@ function useTalk(props: {
    * it, or because the box sent it.
    */
   const stop = (how: "keep" | "drop" | "sent" | "send") => {
-    if (press.current !== undefined) window.clearTimeout(press.current.timer);
-    press.current = undefined;
+    press.cancel();
     if (how === "send") sending.current = dictation.current;
     if (how === "keep" || how === "send") listening.current?.finish();
     else listening.current?.cancel();
@@ -145,8 +147,7 @@ function useTalk(props: {
       },
       failed: (problem, words) => {
         over = true;
-        if (press.current !== undefined) window.clearTimeout(press.current.timer);
-        press.current = undefined;
+        press.cancel();
         listening.current = undefined;
         if (dictation.current === into) dictation.current = undefined;
         setTalk({ kind: "idle", problem });
@@ -160,21 +161,13 @@ function useTalk(props: {
 
   const down = (event: PointerEvent<HTMLButtonElement>) => {
     if (!canListen() || talk.kind !== "idle" || event.button !== 0) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
     feel("tick");
-    const pointer = event.pointerId;
-    const timer = window.setTimeout(() => {
-      if (press.current?.pointer !== pointer) return;
-      press.current.held = true;
-      feel("thump");
-      setTalk((was) => (was.kind === "listening" ? { ...was, held: true } : was));
-    }, HOLD_MS);
-    press.current = { pointer, timer, held: false };
+    press.begin(event);
     begin();
   };
 
   const move = (event: PointerEvent<HTMLButtonElement>) => {
-    if (!press.current?.held || press.current.pointer !== event.pointerId) return;
+    if (press.now(event.pointerId)?.held !== true) return;
     const key = props.cancelKey?.current?.getBoundingClientRect();
     const overCancel =
       key !== undefined &&
@@ -188,8 +181,7 @@ function useTalk(props: {
   };
 
   const up = (event: PointerEvent<HTMLButtonElement>) => {
-    const pressed = press.current;
-    if (pressed === undefined) {
+    if (press.now() === undefined) {
       // A second tap, while it listens hands-free: it stops, with the same feel as letting go.
       if (talk.kind === "listening" && event.button === 0) {
         feel("doubleTick");
@@ -197,10 +189,9 @@ function useTalk(props: {
       }
       return;
     }
-    if (pressed.pointer !== event.pointerId) return;
-    window.clearTimeout(pressed.timer);
-    press.current = undefined;
-    if (!pressed.held) {
+    const how = press.end(event);
+    if (how === undefined) return;
+    if (how === "tap") {
       // A tap: it carries on listening, hands-free.
       feel("thump");
       return;
@@ -212,7 +203,7 @@ function useTalk(props: {
 
   // A browser that took the finger away (to scroll, say) drops a hold rather than keeping it.
   const lost = (event: PointerEvent<HTMLButtonElement>) => {
-    if (press.current?.pointer === event.pointerId) stop("drop");
+    if (press.now(event.pointerId) !== undefined) stop("drop");
   };
 
   const click = (event: MouseEvent<HTMLButtonElement>) => {

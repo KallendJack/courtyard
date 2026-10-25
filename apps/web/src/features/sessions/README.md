@@ -23,7 +23,8 @@ The session page (`routes/_app/workspaces.$workspaceId.sessions.$sessionId.tsx`)
   (`session-turns.tsx`, which follows the end only while the owner is at it, never moving them while they read back,
   and offers Jump to latest, #168); each turn (`turn-view.tsx`); the cut-off card; the usage-limit notice with Carry
   on (`limit-notice.tsx`); what the page has shown (`seen.ts`); and the Lead's strip (`lead-strip.tsx`).
-- **`answer/`:** formatting answers (`answer.tsx`, `blocks.ts`; tables and fenced blocks Courtyard draws come from
+- **`answer/`:** formatting answers (`answer.tsx`, `blocks.ts`; how Markdown looks and its tables come from
+  `packages/ui/answer/`, shared with Fabrication's chat, and fenced blocks Courtyard draws from
   `components/rich-blocks/`), revealing text at an even pace (`reveal.ts`), code blocks with their language and Copy
   (`code-block.tsx`), coloured by lowlight (`highlight.tsx`, loaded with the first code block, each language's
   grammar from `code-languages.ts` only when used), formulas drawn by KaTeX (`maths.ts` finds and rewrites them,

@@ -3,7 +3,7 @@ import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { createKept, PlaceholderRows, useKept } from "@courtyard/ui/layout/kept.tsx";
-import { Sheet } from "@/components/sheets/sheet";
+import { Sheet } from "@courtyard/ui/layout/sheet.tsx";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { stopTask, taskOutputOf } from "./api.ts";
 

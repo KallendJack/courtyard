@@ -5,7 +5,7 @@ The setup card (#181, #323). The worker's side is [`matt-setup/`](../../../../wo
 **Example:** Needs you says "Set up this repo". The card lists each line with what was found and its choice; one Set
 up does them all, then links its pull request.
 
-- **Uses:** `components/layout/card-dialog.tsx`, `components/forms/segmented-choice.tsx`.
+- **Uses:** `components/layout/card-dialog.tsx`, `@courtyard/ui/forms/segmented-choice.tsx`.
 - **Used by:** `features/code-home/` (its row in Needs you, #301).
 
 ## Screens

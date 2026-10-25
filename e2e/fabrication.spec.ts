@@ -1,15 +1,22 @@
-import { expect, type Page, test } from "@playwright/test";
-import { BuildOpened } from "../packages/contract/index.ts";
+import { expect, type Locator, type Page, test } from "@playwright/test";
+import { BuildChat, BuildOpened } from "../packages/contract/index.ts";
 import { goldenBench } from "../packages/fabrication/bench/fixtures/golden.ts";
 import { goldenHolster } from "../packages/fabrication/print/fixtures/golden.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
+import { hear, standInSpeechRecognition } from "./speech-recognition.ts";
 
-// Fabrication (#698, ADR 0036; Paper, 2 · Agreed, "Fabrication · A Build · Tablet (#698)",
-// "· Desktop 1440×900 (#698)" and "· A Build, buy list · Cover (#698)"): a project step's Build
-// opens in Fabrication, served under /fabrication behind Courtyard's login, with its 3D view, cut
-// plan, buy list and a chat in its session. The worker's side is in fabrication-chat.test.ts.
+// Fabrication (#698, ADR 0036): a project step's Build opens in Fabrication, served under
+// /fabrication behind Courtyard's login, with a chat in its session. On the Fold (#753; Paper,
+// 2 · Agreed, "Fabrication · At the bench · Fold 933×645", "· At the bench · Cover 476×695" and
+// "· Plan · Fold 933×645"), one job at a time: At the bench, or Plan; on a computer, the three
+// panels ("Fabrication · A Build · Desktop 1440×900 (#698)"). The worker's side is in
+// fabrication-chat.test.ts.
 
 const STEP = "Build the workbench";
+
+/** The Fold's two screens, in CSS pixels. */
+const UNFOLDED = { width: 933, height: 645 };
+const FOLDED = { width: 476, height: 695 };
 
 /** The golden bench, as its step's Build. Not "Workbench": its tile on Home would then match home.spec's seeded Workbench tile. */
 const SPLIT_BENCH = { name: "Split bench", template: "framed-bench", parameters: goldenBench };
@@ -119,41 +126,215 @@ const pickTheFrameTimber = async (page: Page) => {
   await expect(page.getByRole("region", { name: "Buy list" })).toContainText("Total £177.02");
 };
 
-test.describe("on the unfolded Fold", () => {
-  test.use({ viewport: { width: 933, height: 645 }, hasTouch: true, isMobile: true });
+/** At the bench / Plan, in the top bar on the unfolded Fold: to Plan. */
+const toPlan = (page: Page) =>
+  page.locator("label", { has: page.getByRole("radio", { name: "Plan" }) }).click();
 
-  test("a step's Build opens in Fabrication: in 3D, its cut plan, buy list, and a part's card", async ({
+/** The 3D panel's letter for a part. */
+const letter = (page: Page, name: string) =>
+  page.getByRole("region", { name: "In 3D" }).getByRole("button", { name, exact: true });
+
+/** The Build's chat as the worker has it, once its first answer (to starting it) has come. */
+const chatSettled = async (page: Page) => {
+  const api = `${new URL(page.url()).pathname.replace(/^\/fabrication/, "/api/fabrication")}/chat`;
+  await expect
+    .poll(async () => BuildChat.parse(await (await page.request.get(api)).json()).answering, {
+      timeout: 90_000,
+    })
+    .toBe(false);
+};
+
+const boxOf = async (locator: Locator) => {
+  const box = await locator.boundingBox();
+  if (box === null) throw new Error("It isn't on screen.");
+  return box;
+};
+
+/** The letters on the parts, over the 3D view. */
+const lettersOn = (page: Page) =>
+  page.getByRole("region", { name: "In 3D" }).locator("canvas ~ button");
+
+/** Each pair of the 3D view's letters that overlap, by their names. */
+const overlappingLetters = async (page: Page) => {
+  const boxes = await Promise.all(
+    (await lettersOn(page).all()).map(async (each) => ({
+      name: await each.getAttribute("aria-label"),
+      box: await boxOf(each),
+    })),
+  );
+  return boxes.flatMap((a, i) =>
+    boxes
+      .slice(i + 1)
+      .filter(
+        (b) =>
+          a.box.x < b.box.x + b.box.width &&
+          b.box.x < a.box.x + a.box.width &&
+          a.box.y < b.box.y + b.box.height &&
+          b.box.y < a.box.y + a.box.height,
+      )
+      .map((b) => `${a.name} on ${b.name}`),
+  );
+};
+
+/**
+ * How much of the 3D view's width and height the Build itself spans, from 0 to 1: the view as
+ * drawn, with what sits over it hidden, read pixel by pixel for anything brighter than the panel.
+ */
+const buildFills = async (page: Page) => {
+  const view = page.getByRole("region", { name: "In 3D" }).locator("canvas");
+  const shot = await view.screenshot({
+    style: '[aria-label="In 3D"] .absolute { visibility: hidden !important; }',
+  });
+  return page.evaluate(async (png) => {
+    const picture = await createImageBitmap(
+      await (await fetch(`data:image/png;base64,${png}`)).blob(),
+    );
+    const canvas = new OffscreenCanvas(picture.width, picture.height);
+    const drawing = canvas.getContext("2d");
+    if (drawing === null) throw new Error("No 2D canvas.");
+    drawing.drawImage(picture, 0, 0);
+    const { data, width, height } = drawing.getImageData(0, 0, picture.width, picture.height);
+    let [left, right, top, bottom] = [width, -1, height, -1];
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const at = (y * width + x) * 4;
+        const bright = ((data[at] ?? 0) + (data[at + 1] ?? 0) + (data[at + 2] ?? 0)) / 3;
+        if (bright < 60) continue;
+        [left, right] = [Math.min(left, x), Math.max(right, x)];
+        [top, bottom] = [Math.min(top, y), Math.max(bottom, y)];
+      }
+    }
+    return { width: (right - left) / width, height: (bottom - top) / height };
+  }, shot.toString("base64"));
+};
+
+/** A finger swiped across `locator`, to the left or the right. */
+const swipe = async (locator: Locator, way: "left" | "right") => {
+  const box = await boxOf(locator);
+  const y = box.y + box.height / 2;
+  const [from, to] =
+    way === "left"
+      ? [box.x + box.width * 0.8, box.x + box.width * 0.2]
+      : [box.x + box.width * 0.2, box.x + box.width * 0.8];
+  const at = (x: number) => ({ pointerType: "touch", isPrimary: true, clientX: x, clientY: y });
+  await locator.dispatchEvent("pointerdown", at(from));
+  await locator.dispatchEvent("pointerup", at(to));
+};
+
+test.describe("on the unfolded Fold", () => {
+  test.use({ viewport: UNFOLDED, hasTouch: true, isMobile: true });
+
+  test("it opens at the bench: the step big, its tools, Back and Done, and the dots only show how far", async ({
     page,
   }) => {
     const name = await workspaceWithBuild(page);
     await openInFabrication(page);
 
-    // The top bar: back to its project, its size, and what the making rules found.
     await expect(
       page.getByRole("link", { name: `Back to ${name} · Split the garage` }),
     ).toBeVisible();
-    await expect(page.getByText("1500 × 600 × 900 mm · framed bench")).toBeVisible();
-    await expect(page.getByRole("button", { name: "2 to check" })).toBeVisible();
+    const views = page.getByRole("group", { name: "Way of working" });
+    await expect(views.getByRole("radio", { name: "At the bench" })).toBeChecked();
+    const dots = page.getByRole("progressbar", { name: "Steps" });
+    await expect(dots).toHaveAttribute("aria-valuetext", "Step 1 of 12");
+    await expect(dots.getByRole("button")).toHaveCount(0);
+
+    const steps = page.getByRole("region", { name: "Steps" });
+    await expect(steps).toContainText("Step 1 of 12 · about 10 min");
+    await expect(steps.getByRole("heading", { name: "Check what's arrived" })).toBeVisible();
+    await expect(
+      page.getByText("Swipe for the next step · Tools, cut plan and buy list in Plan"),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Back" })).toBeDisabled();
+    for (const each of ["Done, next step", "Hold to ask", "Reset view"]) {
+      await expect(page.getByRole("button", { name: each })).toBeInViewport();
+    }
+    // The step's lines are read at arm's length: bigger than an answer's.
+    const line = steps.getByRole("list", { name: "Checklist" }).locator("p").first();
+    expect(Number.parseFloat(await line.evaluate((p) => getComputedStyle(p).fontSize))).toBe(20);
+    // Nothing's put on yet: the whole bench shows, fitted to the view, its letters apart.
+    await expect(letter(page, "G, Top")).toBeVisible();
+    expect(await overlappingLetters(page)).toEqual([]);
+    const fills = await buildFills(page);
+    expect(Math.max(fills.width, fills.height)).toBeGreaterThan(0.75);
+
+    // A swipe to the left is the next step; to the right, the one before.
+    await swipe(steps, "left");
+    await expect(dots).toHaveAttribute("aria-valuetext", "Step 2 of 12");
+    await swipe(steps, "right");
+    await expect(dots).toHaveAttribute("aria-valuetext", "Step 1 of 12");
+
+    // Cutting goes by the tools to hand: the support for the long end, to check, in gold.
+    const done = page.getByRole("button", { name: "Done, next step" });
+    await done.click();
+    await done.click();
+    await expect(steps.getByRole("heading", { name: "Cut and label the timber" })).toBeVisible();
+    await expect(steps.getByRole("list", { name: "Tools for this step" })).toContainText(
+      "Support for the long end?",
+    );
+    const ways = steps.getByRole("region", { name: "How you'll do it" });
+    await expect(ways.getByRole("listitem")).toHaveText(["Hand saw", "Circular saw · not yet"]);
+  });
+
+  test("Plan: the Build big in 3D, fitted, letters apart, its cut plan with each offcut, buy list and a part's card", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await toPlan(page);
+
+    await expect(page.getByText("1500 × 600 × 900 mm")).toBeVisible();
+    await page.getByRole("button", { name: "2 to check" }).click();
     const toCheck = page.getByRole("list", { name: "To check" });
     await expect(toCheck).toContainText("M6 × 50 bolts too short");
     await expect(toCheck).toContainText(
       "Support for the long end, Spanner, Countersink bit and Spirit level not to hand",
     );
 
-    // Three panels: the chat, the bench in 3D, and the cut plan.
-    await expect(page.getByRole("region", { name: "Chat" })).toContainText("Started the Build");
     const bench = page.getByRole("region", { name: "In 3D" });
     await expect(bench.getByRole("heading", { name: "The bench" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Chat", exact: true })).toBeVisible();
+    await expect(letter(page, "B, Long rails")).toBeVisible();
+    expect(await overlappingLetters(page)).toEqual([]);
+    const fills = await buildFills(page);
+    expect(Math.max(fills.width, fills.height)).toBeGreaterThan(0.75);
+
+    // The cut plan, each bar's offcut by its length: in the bar, or on its line when too short.
     const cutPlan = page.getByRole("region", { name: "Cut plan" });
     await expect(cutPlan).toContainText("Each saw cut takes 3 mm · assumed");
     await expect(cutPlan.getByRole("button", { name: "B, 1450 mm" })).toHaveCount(1);
-    await expect(cutPlan).toContainText("45 × 95 C16, 2.4 m× 4");
+    await expect(cutPlan).toContainText("45 × 95 C16, 2.4 m× 4 · offcut 197");
+    await expect(cutPlan).toContainText("× 1 · offcut 88");
+    await expect(cutPlan.getByText("offcut 834", { exact: true })).toBeVisible();
 
-    // A part tapped in the key lights it in the cut plan too, and opens its card.
-    await bench
-      .getByRole("list", { name: "Parts" })
-      .getByRole("button", { name: "B Long rails" })
-      .click();
+    // Every sheet piece shows its size, the narrowest too: on a line of its own, or turned.
+    const { derived } = BuildOpened.parse(
+      await (
+        await page.request.get(
+          new URL(page.url()).pathname.replace(/^\/fabrication/, "/api/fabrication"),
+        )
+      ).json(),
+    );
+    const [narrowest] = derived.cutPlan.sheets
+      .flatMap((sheet) =>
+        sheet.sheets.flatMap((each) =>
+          each.pieces.map((piece) => ({ ...piece, share: piece.along / sheet.sheetLength })),
+        ),
+      )
+      .sort((a, b) => a.share - b.share);
+    if (narrowest === undefined) throw new Error("The bench has no sheet pieces.");
+    const size = `${narrowest.along} × ${narrowest.across}`;
+    const narrow = cutPlan.getByRole("button", { name: `${narrowest.label}, ${size} mm` }).first();
+    expect(narrowest.share).toBeLessThan(0.3);
+    expect((await narrow.innerText()).replace(/\s+/g, " ")).toContain(size);
+    for (const line of await narrow.locator("span span").all()) {
+      const [piece, words] = [await boxOf(narrow), await boxOf(line)];
+      expect(words.x).toBeGreaterThanOrEqual(piece.x - 0.5);
+      expect(words.x + words.width).toBeLessThanOrEqual(piece.x + piece.width + 0.5);
+    }
+
+    // A part's letter lights it in the cut plan too, and opens its card.
+    await letter(page, "B, Long rails").click();
     const card = bench.getByRole("region", { name: "B, Long rails" });
     await expect(card).toContainText("Long rails × 4");
     await expect(card).toContainText("Front and back, top and bottom.");
@@ -166,7 +347,6 @@ test.describe("on the unfolded Fold", () => {
     await card.getByRole("button", { name: "Close" }).click();
     await expect(card).toBeHidden();
 
-    // The buy list, with its total.
     await page.getByRole("tab", { name: "Buy list" }).click();
     const buyList = page.getByRole("region", { name: "Buy list" });
     await expect(buyList).toContainText("To buy · 11");
@@ -180,12 +360,13 @@ test.describe("on the unfolded Fold", () => {
     await expect(page.getByRole("region", { name: "Tools" })).toContainText("4 not to hand");
   });
 
-  test("a printed part shows on the plate with its size, its sources and its file (#702)", async ({
+  test("a printed part shows in Plan on the plate with its size, its sources and its file (#702)", async ({
     page,
   }) => {
     await holsterOpen(page);
+    if (await page.getByRole("group", { name: "Way of working" }).isVisible()) await toPlan(page);
 
-    await expect(page.getByText("84.4 × 119.2 × 70.2 mm · printed part")).toBeVisible();
+    await expect(page.getByText("84.4 × 119.2 × 70.2 mm")).toBeVisible();
     await expect(page.getByRole("button", { name: "1 to check" })).toBeVisible();
     await expect(page.getByRole("list", { name: "To check" })).toContainText(
       "Battery width assumed76 mm isn't measured.",
@@ -201,7 +382,6 @@ test.describe("on the unfolded Fold", () => {
     await expect(page.getByRole("tablist", { name: "Show" }).getByRole("tab")).toHaveText([
       "Print",
       "Buy list",
-      "Steps",
     ]);
     const print = page.getByRole("region", { name: "Print" });
     await expect(print).toContainText("Battery width76 mm · assumed");
@@ -226,74 +406,25 @@ test.describe("on the unfolded Fold", () => {
     );
   });
 
-  test("a buy-list row opens its stock's options, and a pick changes the Build, with Undo", async ({
+  test("a buy-list row opens its stock's options in Plan, and a pick changes the Build, with Undo", async ({
     page,
   }) => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
+    await toPlan(page);
     await pickTheFrameTimber(page);
   });
 
-  test("its chat goes to the Build's session, and the answer comes back in it", async ({
-    page,
-  }) => {
-    // The fake echoes the Build's parameters a word at a time before it's free.
-    test.slow();
-    await workspaceWithBuild(page);
-    await openInFabrication(page);
-
-    const chat = page.getByRole("region", { name: "Chat" });
-    await expect(chat).toContainText("Started the Build");
-    await expect(chat.getByText("Answering…")).toBeHidden({ timeout: 90_000 });
-    await chat.getByLabel("Message", { exact: true }).fill("Do the washers come with them?");
-    await chat.getByRole("button", { name: "Send" }).click();
-    await expect(chat.getByRole("list", { name: "Messages" })).toContainText(
-      "You said: Do the washers come with them?",
-    );
-  });
-});
-
-// The instruction manual (#699; Paper, 2 · Agreed, "Fabrication · Build steps v2, teaching ·
-// Tablet (#699)", "· Build steps, cutting by your tools · Tablet (#699)" and "· Build steps ·
-// Cover (#699)"): one step at a time, the 3D view built up to it.
-
-/** The 3D panel's letter for a part, as the bench at a step shows it. */
-const letter = (page: Page, name: string) =>
-  page.getByRole("region", { name: "In 3D" }).getByRole("button", { name, exact: true });
-
-test.describe("the steps, on the unfolded Fold", () => {
-  test.use({ viewport: { width: 933, height: 645 }, hasTouch: true, isMobile: true });
-
-  test("stepping through shows each step's parts, tools and fixings, and the 3D view builds up to it", async ({
+  test("the steps build the Build up in 3D, and where the owner got to is kept", async ({
     page,
   }) => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
-    await page.getByRole("tab", { name: "Steps" }).click();
     const steps = page.getByRole("region", { name: "Steps" });
     const done = page.getByRole("button", { name: "Done, next step" });
+    for (let step = 1; step < 4; step += 1) await done.click();
 
-    // Nothing's put on yet: the whole bench shows.
-    await expect(steps).toContainText("Step 1 of 12 · about 10 min");
-    await expect(steps.getByRole("heading", { name: "Check what's arrived" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Back" })).toBeDisabled();
-    await expect(letter(page, "G, Top")).toBeVisible();
-
-    // Cutting goes by the tools to hand: the hand saw, the circular saw not yet.
-    await done.click();
-    await done.click();
-    await expect(steps.getByRole("heading", { name: "Cut and label the timber" })).toBeVisible();
-    const ways = steps.getByRole("region", { name: "How you'll do it" });
-    await expect(ways.getByRole("listitem")).toHaveText(["Hand saw", "Circular saw · not yet"]);
-    // As the board has it: something to rest the long end on, to check.
-    const cutTools = steps.getByRole("region", { name: "Tools for this step" });
-    await cutTools.getByRole("button", { name: /tools ready/ }).click();
-    await expect(cutTools).toContainText("Support for the long end? Check");
-    await cutTools.getByRole("button", { name: /tools ready/ }).click();
-
-    // The castors: the bases alone in 3D, lit; the spanner to check; the bolts at the length to
-    // use, with why in gold.
-    await done.click();
+    // The castors: the bases alone in 3D, lit; the bolts at the length to use, with why in gold.
     await expect(
       steps.getByRole("heading", { name: "Fit the castors to the bases" }),
     ).toBeVisible();
@@ -305,10 +436,9 @@ test.describe("the steps, on the unfolded Fold", () => {
     const found = steps.getByRole("list", { name: "To check in this step" });
     await expect(found).toContainText("M6 × 50 bolts too short");
     await expect(found).toContainText("The steps and buy list use ones 60 mm long.");
-    const tools = steps.getByRole("region", { name: "Tools for this step" });
-    await tools.getByRole("button", { name: /tools ready/ }).click();
-    await expect(tools).toContainText("Spanner? Check");
-    await expect(tools).toContainText("Drill driver");
+    await expect(steps.getByRole("list", { name: "Tools for this step" })).toContainText(
+      "Spanner?",
+    );
 
     // The end frames: one laid flat on the floor, lit; a checklist with words to tap.
     await done.click();
@@ -323,6 +453,7 @@ test.describe("the steps, on the unfolded Fold", () => {
     await expect(letter(page, "C, End rails")).toHaveAttribute("aria-current", "step");
     await expect(letter(page, "E, Castor bases")).toHaveCount(0);
     await expect(letter(page, "B, Long rails")).toHaveCount(0);
+    expect(await overlappingLetters(page)).toEqual([]);
     await expect(page.getByRole("region", { name: "Close-up" })).toContainText(
       "Close-up · One end frame",
     );
@@ -351,6 +482,64 @@ test.describe("the steps, on the unfolded Fold", () => {
     await expect(checklist.getByRole("checkbox", { name: "Line 1 done" })).toBeChecked();
     await expect(checklist.getByRole("checkbox", { name: "Line 2 done" })).not.toBeChecked();
   });
+
+  test("hold to ask: what's said goes to the Build's chat about the step, and its answer shows over the picture", async ({
+    page,
+  }) => {
+    test.slow();
+    await standInSpeechRecognition(page);
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await chatSettled(page);
+
+    const ask = page.getByRole("button", { name: "Hold to ask" });
+    const { x, y, width, height } = await boxOf(ask);
+    await page.mouse.move(x + width / 2, y + height / 2);
+    await page.mouse.down();
+    await expect(page.getByRole("button", { name: "Let go to ask" })).toBeVisible();
+    await hear(page, "Is the floor level enough?");
+    await expect(page.getByRole("status").filter({ hasText: "Is the floor" })).toHaveText(
+      "Step 1, Check what's arrived: Is the floor level enough?",
+    );
+    await page.mouse.up();
+
+    const answer = page.getByRole("region", { name: "Answer" });
+    await expect(answer).toContainText(
+      "You said: Step 1, Check what's arrived: Is the floor level enough?",
+      { timeout: 60_000 },
+    );
+    await answer.getByRole("button", { name: "Open chat" }).click();
+    const chat = page.getByRole("dialog", { name: "Chat" });
+    await expect(chat.getByRole("list", { name: "Messages" })).toContainText(
+      "Step 1, Check what's arrived: Is the floor level enough?",
+    );
+    await chat.getByRole("button", { name: "Close" }).click();
+    await expect(chat).toBeHidden();
+  });
+
+  test("hold to ask: an answer that fails says so, with Try again, until it's closed", async ({
+    page,
+  }) => {
+    test.slow();
+    await standInSpeechRecognition(page);
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await chatSettled(page);
+
+    const ask = page.getByRole("button", { name: "Hold to ask" });
+    const { x, y, width, height } = await boxOf(ask);
+    await page.mouse.move(x + width / 2, y + height / 2);
+    await page.mouse.down();
+    await hear(page, "please fail");
+    await page.mouse.up();
+
+    const answer = page.getByRole("region", { name: "Answer" });
+    await expect(answer.getByRole("alert")).toHaveText("It didn't answer.", { timeout: 60_000 });
+    await expect(answer.getByText("Answering…")).toHaveCount(0);
+    await expect(answer.getByRole("button", { name: "Try again" })).toBeVisible();
+    await answer.getByRole("button", { name: "Close" }).click();
+    await expect(answer).toBeHidden();
+  });
 });
 
 // Each step's picture (#754; Paper, 2 · Agreed, "Fabrication · At the bench · Fold 933×645"): the
@@ -365,6 +554,15 @@ const camera = async (page: Page) => {
   };
 };
 
+/** On to step `number` from the first, at the bench: Done, next step, until it's there. */
+const toStep = async (page: Page, number: number) => {
+  const dots = page.getByRole("progressbar", { name: "Steps" });
+  for (let at = 1; at < number; at += 1) {
+    await page.getByRole("button", { name: "Done, next step" }).click();
+    await expect(dots).toHaveAttribute("aria-valuetext", new RegExp(`^Step ${at + 1} of`));
+  }
+};
+
 /** A drag across the picture, from its left edge, clear of the letters, by so many pixels. */
 const drag = async (page: Page, by: { x: number; y: number }) => {
   const box = await page.getByRole("region", { name: "In 3D" }).locator("canvas").boundingBox();
@@ -377,15 +575,14 @@ const drag = async (page: Page, by: { x: number; y: number }) => {
 };
 
 test.describe("each step's picture, on the unfolded Fold", () => {
-  test.use({ viewport: { width: 933, height: 645 }, hasTouch: true, isMobile: true });
+  test.use({ viewport: UNFOLDED, hasTouch: true, isMobile: true });
 
   test("the cut step shows the length in the Workmate as the board does, and a part's card closes at the next step", async ({
     page,
   }) => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
-    await page.getByRole("tab", { name: "Steps" }).click();
-    await page.getByRole("button", { name: "Step 3, Cut and label the timber" }).click();
+    await toStep(page, 3);
 
     const picture = page.getByRole("figure", { name: "In the Workmate, in 3D" });
     await expect(picture).toContainText("In the Workmate");
@@ -396,7 +593,9 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await expect(picture).toContainText("offcut · waste side");
     await expect(picture).toContainText("support the long end here");
     await expect(picture).toContainText("clamped in the jaws");
-    await expect(picture.getByRole("button", { name: "Reset view" })).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "In 3D" }).getByRole("button", { name: "Reset view" }),
+    ).toBeVisible();
     await expect(letter(page, "B, Long rails")).toHaveAttribute("aria-current", "step");
 
     // The part's card covers the picture, so the next step closes it.
@@ -415,8 +614,7 @@ test.describe("each step's picture, on the unfolded Fold", () => {
   }) => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
-    await page.getByRole("tab", { name: "Steps" }).click();
-    await page.getByRole("button", { name: "Step 2, Mark the lengths" }).click();
+    await toStep(page, 2);
 
     const picture = page.getByRole("figure", { name: "On the Workmate, in 3D" });
     await expect(picture).toContainText("B 1450");
@@ -440,8 +638,7 @@ test.describe("each step's picture, on the unfolded Fold", () => {
   }) => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
-    await page.getByRole("tab", { name: "Steps" }).click();
-    await page.getByRole("button", { name: "Step 3, Cut and label the timber" }).click();
+    await toStep(page, 3);
     await expect(page.getByRole("figure", { name: "In the Workmate, in 3D" })).toBeVisible();
 
     // It opens where the step's scene says: from the side and above.
@@ -460,23 +657,96 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await expect.poll(async () => (await camera(page)).tilt).toBe(60);
 
     // Another step opens at its own angle: the end frame from above.
-    await page.getByRole("button", { name: "Step 5, Make the two end frames" }).click();
+    await page.getByRole("button", { name: "Done, next step" }).click();
+    await page.getByRole("button", { name: "Done, next step" }).click();
+    await expect(
+      page.getByRole("figure", { name: "One end frame, flat on the floor, in 3D" }),
+    ).toBeVisible();
     await expect.poll(() => camera(page)).toEqual({ turn: -20, tilt: 60 });
   });
 });
 
-test.describe("the steps, on the cover screen", () => {
-  test.use({ viewport: { width: 933, height: 645 }, hasTouch: true, isMobile: true });
+for (const [screen, viewport] of [
+  ["unfolded", UNFOLDED],
+  ["folded", FOLDED],
+] as const) {
+  test.describe(`the chat, ${screen}`, () => {
+    test.use({ viewport: UNFOLDED, hasTouch: true, isMobile: true });
 
-  test("a step is chosen from the strip, and the 3D view moves to it", async ({ page }) => {
+    test("an answer's table is a table, and nothing in the chat is cut off or scrolls sideways", async ({
+      page,
+    }) => {
+      test.slow();
+      await standInSpeechRecognition(page);
+      await workspaceWithBuild(page);
+      await openInFabrication(page);
+      await page.setViewportSize(viewport);
+      await chatSettled(page);
+
+      // A tap on Hold to ask opens the chat to type in.
+      await page.getByRole("button", { name: "Hold to ask" }).click();
+      const chat = page.getByRole("dialog", { name: "Chat" });
+      await expect(chat).toBeVisible();
+      await chat
+        .getByLabel("Message", { exact: true })
+        .fill(
+          [
+            "The rack moves:",
+            "",
+            "| Was | Now |",
+            "| --- | --- |",
+            "| 120 cm off the floor | 150 cm off the floor, clear of the bench top |",
+            "",
+            `A long one: ${"workbench".repeat(12)}`,
+          ].join("\n"),
+        );
+      await chat.getByRole("button", { name: "Send" }).click();
+
+      const messages = chat.getByRole("list", { name: "Messages" });
+      const table = messages.getByRole("table");
+      await expect(table).toBeVisible({ timeout: 60_000 });
+      await expect(table.getByRole("columnheader", { name: "Was" })).toBeVisible();
+      await expect(table.getByRole("cell", { name: "120 cm off the floor" })).toBeVisible();
+
+      // Every message sits inside the chat, and its column never scrolls sideways.
+      const sheet = await boxOf(chat);
+      for (const each of await messages.getByRole("listitem").all()) {
+        const box = await boxOf(each);
+        expect(box.x).toBeGreaterThanOrEqual(sheet.x);
+        expect(box.x + box.width).toBeLessThanOrEqual(sheet.x + sheet.width + 1);
+      }
+      const column = messages.locator("xpath=..");
+      expect(
+        await column.evaluate((element) => element.scrollWidth - element.clientWidth),
+      ).toBeLessThanOrEqual(0);
+    });
+  });
+}
+
+test.describe("folded", () => {
+  test.use({ viewport: UNFOLDED, hasTouch: true, isMobile: true });
+
+  test("it's At the bench alone, stacked: the step in 3D above, the step below, a swipe or Back and Done between them", async ({
+    page,
+  }) => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
     // Folded, with the Build open.
-    await page.setViewportSize({ width: 476, height: 695 });
-    await page.getByRole("tablist", { name: "Show" }).getByRole("tab", { name: "Steps" }).click();
+    await page.setViewportSize(FOLDED);
 
-    await page.getByRole("button", { name: "Step 9, Fit the shelf" }).click();
+    await expect(page.getByRole("group", { name: "Way of working" })).toHaveCount(0);
+    await expect(page.getByRole("tablist")).toHaveCount(0);
+    await expect(
+      page.getByText("Swipe for the next step · open it on the Fold for Plan"),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Hold to ask" })).toBeInViewport();
+    expect(await overlappingLetters(page)).toEqual([]);
+    const fills = await buildFills(page);
+    expect(Math.max(fills.width, fills.height)).toBeGreaterThan(0.75);
+
     const steps = page.getByRole("region", { name: "Steps" });
+    const done = page.getByRole("button", { name: "Done, next step" });
+    for (let step = 1; step < 9; step += 1) await done.click();
     await expect(steps.getByRole("heading", { name: "Fit the shelf" })).toBeVisible();
     await expect(letter(page, "H, Shelf")).toHaveAttribute("aria-current", "step");
     await expect(letter(page, "G, Top")).toHaveCount(0);
@@ -485,18 +755,61 @@ test.describe("the steps, on the cover screen", () => {
     await page.getByRole("button", { name: "Back" }).click();
     await expect(steps.getByRole("heading", { name: "Fit the supports" })).toBeVisible();
     await expect(letter(page, "F, Top support")).toHaveAttribute("aria-current", "step");
+    await swipe(steps, "left");
+    await expect(steps.getByRole("heading", { name: "Fit the shelf" })).toBeVisible();
+    await expect(done).toBeInViewport();
+  });
+
+  test("a printed part, folded: its step, with the part on its plate above it (#702)", async ({
+    page,
+  }) => {
+    await holsterOpen(page);
+    await page.setViewportSize(FOLDED);
+
+    await expect(page.getByRole("region", { name: "In 3D" }).locator("canvas")).toHaveCount(1);
+    await expect(page.getByRole("region", { name: "Steps" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Hold to ask" })).toBeInViewport();
     await expect(page.getByRole("button", { name: "Done, next step" })).toBeInViewport();
   });
 });
 
-test.describe("the steps, on a desktop", () => {
+test.describe("on a desktop", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("the three panels, as the desktop board has them", async ({ page }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+
+    await expect(page.getByText("1500 × 600 × 900 mm · framed bench")).toBeVisible();
+    for (const panel of ["Chat", "In 3D", "Cut plan"]) {
+      await expect(page.getByRole("region", { name: panel })).toBeVisible();
+    }
+    await expect(page.getByRole("group", { name: "Way of working" })).toHaveCount(0);
+  });
+
+  test("its chat goes to the Build's session, and the answer comes back in it", async ({
+    page,
+  }) => {
+    test.slow();
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+
+    const chat = page.getByRole("region", { name: "Chat" });
+    await expect(chat).toContainText("Started the Build");
+    await chatSettled(page);
+    await chat.getByLabel("Message", { exact: true }).fill("Do the washers come with them?");
+    await chat.getByRole("button", { name: "Send" }).click();
+    await expect(chat.getByRole("list", { name: "Messages" })).toContainText(
+      "You said: Do the washers come with them?",
+    );
+  });
 
   test("just the numbers, and a photo to check goes in the chat to send", async ({ page }) => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
     await page.getByRole("tab", { name: "Steps" }).click();
-    await page.getByRole("button", { name: "Step 5, Make the two end frames" }).click();
+    const done = page.getByRole("button", { name: "Done, next step" });
+    for (let step = 1; step < 5; step += 1) await done.click();
     const steps = page.getByRole("region", { name: "Steps" });
     const checklist = steps.getByRole("list", { name: "Checklist" });
     await expect(checklist).toContainText("Lay two legs (A) flat, 460 apart outside to outside.");
@@ -518,62 +831,6 @@ test.describe("the steps, on a desktop", () => {
     await expect(chat.getByLabel("Message", { exact: true })).toHaveValue(
       "Step 5, Make the two end frames: Both end frames, flat, from above. Measure corner to corner both ways. The same within 2 mm means it's square. Does it look right?",
     );
-  });
-});
-
-test.describe("on the cover screen", () => {
-  test.use({ viewport: { width: 933, height: 645 }, hasTouch: true, isMobile: true });
-
-  test("the panels are tabs", async ({ page }) => {
-    await workspaceWithBuild(page);
-    await openInFabrication(page);
-    // Folded, with the Build open.
-    await page.setViewportSize({ width: 476, height: 695 });
-
-    const tabs = page.getByRole("tablist", { name: "Show" });
-    await expect(tabs.getByRole("tab")).toHaveText([
-      "Bench",
-      "Chat",
-      "Cut plan",
-      "Buy list",
-      "Tools",
-      "Steps",
-    ]);
-    await expect(page.getByRole("region", { name: "In 3D" })).toBeVisible();
-    await expect(page.getByRole("region", { name: "Cut plan" })).toBeHidden();
-
-    await tabs.getByRole("tab", { name: "Buy list" }).click();
-    await expect(page.getByRole("region", { name: "Buy list" })).toContainText("Total £177.02");
-    await tabs.getByRole("tab", { name: "Chat" }).click();
-    await expect(page.getByRole("region", { name: "Chat" })).toContainText("Started the Build");
-  });
-
-  test("a printed part's panels are tabs too: the part first, then its Print tab", async ({
-    page,
-  }) => {
-    await holsterOpen(page);
-    await page.setViewportSize({ width: 476, height: 695 });
-
-    const tabs = page.getByRole("tablist", { name: "Show" });
-    await expect(tabs.getByRole("tab")).toHaveText(["Part", "Chat", "Print", "Buy list", "Steps"]);
-    await expect(page.getByRole("region", { name: "In 3D" }).locator("canvas")).toHaveCount(1);
-    await tabs.getByRole("tab", { name: "Print" }).click();
-    await expect(page.getByRole("region", { name: "Print" })).toContainText(
-      "battery-holster.3mfready",
-    );
-  });
-});
-
-test.describe("on a desktop", () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
-
-  test("the three panels, as the desktop board has them", async ({ page }) => {
-    await workspaceWithBuild(page);
-    await openInFabrication(page);
-
-    for (const panel of ["Chat", "In 3D", "Cut plan"]) {
-      await expect(page.getByRole("region", { name: panel })).toBeVisible();
-    }
   });
 
   test("a printed part shows its size, and its file downloads, ready for Bambu Studio", async ({

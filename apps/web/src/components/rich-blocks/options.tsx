@@ -7,6 +7,7 @@ import {
   WorkspaceId,
 } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { WebLink } from "@courtyard/ui/buttons/web-link.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { createKept, useKept } from "@courtyard/ui/layout/kept.tsx";
@@ -15,7 +16,6 @@ import { useParams } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
 import { fromWorker } from "@/api/worker";
-import { WebLink } from "@/components/buttons/web-link";
 import { KEPT_HOME, loadKeptHome } from "../../features/planning-home/api.ts";
 import { pickDecision } from "../../features/projects/api.ts";
 import {

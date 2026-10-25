@@ -1,5 +1,6 @@
 import type { ChangeId, ThingSummary, WorkspaceId } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { WebLink } from "@courtyard/ui/buttons/web-link.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
@@ -7,7 +8,6 @@ import { useRouter } from "@tanstack/react-router";
 import { Check, Search } from "lucide-react";
 import { useState } from "react";
 import { ButtonLink } from "@/components/buttons/button-link";
-import { WebLink } from "@/components/buttons/web-link";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { JustDeleted } from "../changes/just-deleted.tsx";
 import { fitUpcoming } from "./api.ts";

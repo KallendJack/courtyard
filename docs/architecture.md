@@ -262,13 +262,13 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
 - **`api/workspace-page.ts`** asks for everything a workspace's page shows; its route's loader imports it, so that
   code and its schemas aren't on the first load. What to show when the worker gives no data is
   `components/layout/problems.tsx`, and how dates read is `lib/when.ts`.
-- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, web links, text fields, file pickers, sheets, notices, Connections' cards and so on), used
+- **`components/`:** Courtyard's shared pieces (buttons, copy buttons, text fields, file pickers, sheets, notices, Connections' cards and so on), used
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)), in groups by kind
   (#459; [its README](../apps/web/src/components/README.md) lists them): `layout/`, `buttons/`, `forms/`, `sheets/`,
   `frame/`, `chat/`, `code/`, `workspace/`, `drawings/` (what Courtyard draws itself, the mountain bike, #603) and
-  `rich-blocks/`. One, a table
-  heading's sort button (`buttons/sort-button.tsx`), only a rich block uses, so its classes are in `rich-blocks.css` with
-  the folder's, and it's styled only inside a `RichBlock`. The pieces that keep a session's flow (#179, #177,
+  `rich-blocks/`. An answer's table and its headings' sort button are `packages/ui/answer/`'s (#753), which only a
+  rich block draws, so their classes are in `rich-blocks.css` with the folder's (`styles.css` leaves the two files
+  out), and they're styled only inside a `RichBlock`. The pieces that keep a session's flow (#179, #177,
   #168) have a stylesheet of their own too (`chat/chat-flow.css`), added when one first shows and applying only inside a
   `ChatFlowScope`: whose turn it is in a session (`chat/session-state.tsx`, in the chat, a workspace's sessions and the
   recent sessions sheet's, which ask again every few seconds while one is working), the Working line and the Your turn
@@ -327,13 +327,15 @@ into the field the page offers instead (`offerField`, New workspace's What's it 
   whatever the device's setting, #210), and which files' classes load later; the stylesheets loaded later `@reference` it. The app loads it through `lib/app.css`, which adds `packages/ui`'s classes, kept out of `styles.css` so they don't land in every later sheet.
 - **`packages/ui`** ([its README](../packages/ui/README.md), #703): the theme and the pieces both apps use, so
   Fabrication (ADR 0036) looks and behaves as the web app does: the page layout, the `Scroller`, the loading piece,
-  the buttons and the busy button, the error line, `useAction`, `classes`, the label in capitals (`CapsLabel`), what
-  the frame offers a page and Talk, and the Reply box with its chips. The app imports each by its path (`@courtyard/ui/layout/page.tsx`) and adds the package
-  to its stylesheet's sources, leaving out what loads later (the talk strip, the frame's buttons).
+  the buttons and the busy button, web links, the error line, `useAction`, `classes`, the label in capitals
+  (`CapsLabel`), what the frame offers a page and Talk, the Reply box with its chips, and how an answer's Markdown
+  looks (`answer/markdown.tsx`, #753: its headings, lists, links and sortable tables), which the web app's answer
+  renderer adds its fences and maths to and Fabrication's chat uses as it is. The app imports each by its path (`@courtyard/ui/layout/page.tsx`) and adds the package
+  to its stylesheet's sources, leaving out what loads later (the talk strip, the frame's buttons, an answer's table).
 - **`components/rich-blocks/`:** the blocks Courtyard draws in answers and documents
   ([ADR 0021](adr/0021-rich-answers-are-blocks-courtyard-draws-itself.md)), through the answer renderer, so a
-  document's page gets them too. Every table sorts by its columns (`table.tsx`, with `sorting.ts` saying how dates,
-  prices and text sort), keeping its sort as rows stream in. **The seam for fenced blocks** is `fenced.tsx`: in
+  document's page gets them too. Every table sorts by its columns (`packages/ui/answer/table.tsx`, with `sorting.ts`
+  beside it saying how dates, prices and text sort), keeping its sort as rows stream in. **The seam for fenced blocks** is `fenced.tsx`: in
   `answer.tsx`, a fence whose language is a kind in its `FENCED_KINDS` (a `chart`, a `mermaid`) becomes a
   `FencedBlock`, which loads that kind's drawing (a module whose default export takes `DrawingProps`: the source,
   whether it's still `arriving`, and the `fallback`) the first time one is needed, never on the first load. The
@@ -432,12 +434,18 @@ goes to Courtyard's login. It holds no state and does no model work, and calls o
 (`/api/fabrication`, ADR 0037), never Courtyard's own routes. Its folders are the web app's
 (`scripts/folders/check.ts` keeps them so, and `scripts/theme/check.ts` reads it with the rest).
 
-- [`features/builds/`](../apps/fabrication/src/features/builds/README.md): a Build's page, three panels on the PC and
-  the unfolded Fold and tabs on the cover screen: its chat, the Build in 3D and its cut plan, buy list, tools and
-  steps, under the making-rule findings. A part tapped anywhere lights everywhere and opens its card. The steps are an
-  instruction manual (#699): one step at a time, the 3D view built up to it, and the step reached and lines ticked
-  kept through `/api/fabrication`, so every device opens where the owner left off. The 3D view is `three` in a file
-  of its own, loaded only by this page, so nothing of it reaches the web app's first load.
+- [`features/builds/`](../apps/fabrication/src/features/builds/README.md): a Build's page. On a computer (from the
+  frame's wide width, `useWide`), three panels: its chat, the Build in 3D and its cut plan, buy list, tools and steps,
+  under the making-rule findings. On the unfolded Fold, one job at a time (#753): **At the bench**, the step reached
+  in big type beside it in 3D, or **Plan**, the Build in 3D beside its cut plan, buy list and tools as tabs, switched
+  in the top bar; folded, At the bench alone, stacked. There the chat is the shared sheet (`packages/ui`'s `layout/sheet.tsx`), opened
+  from Chat or a tap on **Hold to ask** (`chat/hold-to-ask.tsx`), which listens while held (told from a tap as
+  Courtyard's Talk is, `frame/press.ts`) and asks about the step when let go, its answer showing over the 3D view, or
+  that it didn't answer, with Try again. The cut plan's every piece shows its size, laid out to fit it. The 3D view is fitted to its panel and its letters kept apart. A part tapped
+  anywhere lights everywhere and opens its card. The steps are an instruction manual (#699): one step at a time, the
+  3D view built up to it, and the step reached and lines ticked kept through `/api/fabrication`, so every device opens
+  where the owner left off. The 3D view is `three` in a file of its own, loaded only by this page, so nothing of it
+  reaches the web app's first load.
 - [`features/tools/`](../apps/fabrication/src/features/tools/README.md): Your tools (#707), the owner's tools as
   tiles to tick, saved at the owner's level through `/api/fabrication/tools` with Undo. A Build's route sends the owner
   there first until some are saved or it's skipped on this visit (kept in the tab's session storage, so nothing is kept
@@ -446,8 +454,10 @@ goes to Courtyard's login. It holds no state and does no model work, and calls o
   sending with none starts one that belongs to the project. The worker's `features/fabrication/chat.ts` reads its
   events into the chat's lines (what was said, each change saved, struck through once undone) and sends through
   `sessions/`. The page keeps it fresh the shared way, faster while an answer comes, and reads the Build again
-  once a change is saved in it. The Reply box and Talk are `packages/ui`'s; with no Handheld frame, the chat panel
-  is the box's dock (`chat-dock.ts`), and the box's mic listens through `packages/ui/frame/speech.ts`.
+  once a change is saved in it (`chat/build-chat.tsx`, once for the page, which the chat and Hold to ask share).
+  Answers are formatted with Courtyard's own pieces, `packages/ui/answer/` (#753). The Reply box and Talk are
+  `packages/ui`'s; with no Handheld frame, the chat panel or sheet is the box's dock (`chat/chat-dock.ts`), and the
+  box's mic and Hold to ask listen through `packages/ui/frame/speech.ts`.
 - **Both ways between the apps:** a project step with a Build has Open in Fabrication (`projects/project-view.tsx`),
   and the Build's page goes back to its project on its workspace's page.
 

@@ -1,9 +1,19 @@
-import type { BuildStockChoice, BuildStockOptions } from "@courtyard/contract";
+import type {
+  BuildSlug,
+  BuildStockChoice,
+  BuildStockOptions,
+  ChangeId,
+  DerivedBuild,
+  WorkspaceId,
+} from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { Chip } from "@courtyard/ui/buttons/chip.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { ChevronLeft } from "lucide-react";
+import { useState } from "react";
+import { type Answer, pickStock, undoBuildChange } from "../../api/fabrication.ts";
 import { pounds } from "./words.ts";
 
 /** The pick just made, while Undo can take it back. */
@@ -171,3 +181,73 @@ export function StockOptionsPanel(props: {
     </section>
   );
 }
+
+/** Why a pick or its Undo didn't happen, as the options say it. */
+const problemOf = (answer: Exclude<Answer<unknown>, { kind: "loaded" }>) =>
+  answer.kind === "failed" ? answer.message : "Can't reach Courtyard's worker. Try again.";
+
+/**
+ * A Build's stock options on its page (#704): the stock whose options are open, in the side panel
+ * in place of its tab, and the pick just made, with its Undo. `reread` reads the Build again once
+ * a pick or an Undo has changed it.
+ */
+export const useStockOptions = (props: {
+  where: { workspaceId: WorkspaceId; slug: BuildSlug };
+  derived: DerivedBuild;
+  reread: () => Promise<void>;
+}) => {
+  const { where, reread } = props;
+  const [choosing, setChoosing] = useState<string>();
+  const [justPicked, setJustPicked] = useState<
+    JustPicked & { readonly change: ChangeId; readonly before: string }
+  >();
+  const picking = useAction(async (stock: string, choice: Pickable) => {
+    const done = await pickStock(where, { stock, option: choice.option });
+    if (done.kind !== "loaded") return problemOf(done);
+    const { change } = done.data;
+    setJustPicked(
+      change === null
+        ? undefined
+        : { stock: choice.stock, title: choice.title, change, before: stock },
+    );
+    setChoosing(choice.stock);
+    await reread();
+    return undefined;
+  });
+  const undoing = useAction(async () => {
+    if (justPicked === undefined) return undefined;
+    const done = await undoBuildChange(where, justPicked.change);
+    if (done.kind !== "loaded") return problemOf(done);
+    setChoosing(justPicked.before);
+    setJustPicked(undefined);
+    await reread();
+    return undefined;
+  });
+  const options = props.derived.options.find((each) => each.stock === choosing);
+  const close = () => setChoosing(undefined);
+  return {
+    open: (stock: string) => {
+      picking.setError(undefined);
+      undoing.setError(undefined);
+      setChoosing(stock);
+    },
+    close,
+    /** Whether a stock's options are open. */
+    showing: options !== undefined,
+    /** The options open, back to the tab `backTo`; or nothing while none are. */
+    panel: (backTo: string) =>
+      options === undefined ? null : (
+        <StockOptionsPanel
+          options={options}
+          backTo={backTo}
+          back={close}
+          pick={(choice) => void picking.run(options.stock, choice)}
+          picking={picking.running?.[1].option}
+          justPicked={justPicked?.stock === options.stock ? justPicked : undefined}
+          undo={() => void undoing.run()}
+          undoing={undoing.busy}
+          error={picking.error ?? undoing.error}
+        />
+      ),
+  };
+};

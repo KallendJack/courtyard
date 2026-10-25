@@ -4,7 +4,7 @@
 
 /*
  * The rich blocks' and Things' classes go in their own stylesheets, off the first load
- * (rich-blocks.css, things.css), and so do those of the one shared piece only a rich block uses,
+ * (rich-blocks.css, things.css), and so do those of an answer's table and its sort button,
  * of the approval card (approval-card.css), which only a session page shows, of a pull request's
  * review (review.css), of the shared pieces only those use, and of the pieces that keep a
  * session's flow (chat-flow.css), and the Handheld frame's, its talk strip's and its sheets'
@@ -17,7 +17,8 @@
 @source not "./components/rich-blocks";
 @source not "./features/things";
 @source not "./features/pull-requests";
-@source not "./components/buttons/sort-button.tsx";
+@source not "../../../packages/ui/answer/table.tsx";
+@source not "../../../packages/ui/answer/sort-button.tsx";
 @source not "./components/chat/approval-card.tsx";
 @source not "./components/buttons/thumb-button.tsx";
 @source not "./components/code/file-tree.tsx";

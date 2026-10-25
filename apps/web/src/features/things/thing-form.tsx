@@ -7,11 +7,11 @@ import {
 } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { SegmentedChoice } from "@courtyard/ui/forms/segmented-choice.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { preparePhoto } from "@courtyard/ui/reply/attaching.ts";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { FileField } from "@/components/forms/file-picker";
-import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { Select } from "@/components/forms/select";
 import { TextField } from "@/components/forms/text-field";
 import { boughtFromWords, boughtInWords, STATUS_CHOICES } from "./words.ts";

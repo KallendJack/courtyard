@@ -19,7 +19,7 @@ is the short version: what the parts are, where their code lives, and what each 
 | Part | Its job |
 |---|---|
 | 📱 **Web app** | Shows things and asks the worker. Keeps nothing itself but a read-only copy to read offline, on a device that turns it on. |
-| 🪚 **Fabrication** | A second web app, served under `/fabrication` (ADR 0036): a Build's 3D view, cut plan, buy list and chat. Like the web app, it keeps nothing, and asks only Fabrication's API. |
+| 🪚 **Fabrication** | A second web app, served under `/fabrication` (ADR 0036): a Build's 3D view, cut plan, buy list, steps and chat, a step at a time at the bench on the Fold. Like the web app, it keeps nothing, and asks only Fabrication's API. |
 | 🎨 **ui** | The theme and the shared pieces the apps use (the page layout, buttons, the Reply box), so they look and behave the same. |
 | 📜 **Contract** | The shapes of everything the web app and worker send each other, checked on both sides. |
 | 🖥️ **Worker** | Does all the work: your login, your workspaces, sessions with the models. |
@@ -77,9 +77,10 @@ it. Its [`README.md`](../packages/ui/README.md) lists them.
 |---|---|
 | `theme.css` | The one theme, Handheld |
 | `layout/` | The page layout, the `Scroller`, the loading piece (`kept.tsx`), the label in capitals |
-| `buttons/`, `forms/`, `hooks/`, `lib/` | Buttons and the busy button, the error line, `useAction`, joining classes |
+| `buttons/`, `forms/`, `hooks/`, `lib/` | Buttons and the busy button, web links, the error line, `useAction`, joining classes |
 | `frame/` | What the Handheld frame offers a page, and Talk |
 | `reply/` | The Reply box, its chips, model choice and attachments |
+| `answer/` | How an answer's Markdown looks: headings, lists, links and tables that sort |
 
 **Packages, `packages/`**
 

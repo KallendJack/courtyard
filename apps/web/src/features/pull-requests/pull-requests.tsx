@@ -7,6 +7,7 @@ import type {
 } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { SegmentedChoice } from "@courtyard/ui/forms/segmented-choice.tsx";
 import { useWide } from "@courtyard/ui/frame/handheld.ts";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
@@ -15,7 +16,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { RefreshCw } from "lucide-react";
 import { type ComponentProps, lazy, Suspense, useState } from "react";
 import { ButtonLink } from "@/components/buttons/button-link";
-import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { addStylesheet } from "@/lib/stylesheet";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { bringUpToDate } from "./api.ts";

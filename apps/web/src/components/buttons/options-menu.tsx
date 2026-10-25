@@ -1,8 +1,8 @@
 import { IconButton } from "@courtyard/ui/buttons/button.tsx";
+import { useDialog } from "@courtyard/ui/hooks/use-dialog.ts";
 import { Ellipsis } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { placeUnder, useAnchorName } from "../layout/place-under.ts";
-import { useDialog } from "../layout/use-dialog.ts";
 
 /** One of a ⋯ menu's choices: its icon, its name, and a few words under it when there's more to say. */
 export type MenuChoice = {

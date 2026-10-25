@@ -1,8 +1,6 @@
 import type { DerivedBuild } from "@courtyard/contract";
-import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
-import { RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -32,11 +30,48 @@ const KIND_COLOUR: Readonly<Record<"timber" | "sheet" | "printed", string>> = {
 
 /** How far a press may move and still be a tap on a part, not a turn, in pixels. */
 const TAP_SLOP = 6;
+
+/** How much of the view's shorter half the scene reaches, from its middle, once fitted (#753). */
+const FILL = 0.9;
+
+/** The room a part's letter takes, its 32 px and a gap, so no two overlap (#753). */
+const LETTER_ROOM = 36;
+
+/** Where a letter may move to make room, nearest first: a little way each side, then further. */
+const NUDGES = [1, 2, 3, 4, 5, 6].flatMap((far) =>
+  [
+    [0, 1],
+    [0, -1],
+    [1, 0],
+    [-1, 0],
+    [1, 1],
+    [-1, 1],
+    [1, -1],
+    [-1, -1],
+  ].map(([across = 0, down = 0]) => ({
+    x: (across * far * LETTER_ROOM) / 2,
+    y: (down * far * LETTER_ROOM) / 2,
+  })),
+);
+
 /**
- * How far the camera starts from what it turns about, in the scene's reach: the whole Build, or
- * closer for a step's scene, whose long lengths would otherwise sit small in the middle.
+ * Where each letter goes, in order: on its part, or the nearest spot clear of those placed before
+ * it, so G never sits on H.
  */
-const DISTANCE = { whole: 2.3, step: 1.8 } as const;
+const spread = (wanted: readonly { x: number; y: number }[]) => {
+  const placed: { x: number; y: number }[] = [];
+  const clear = (x: number, y: number) =>
+    placed.every(
+      (other) => Math.abs(other.x - x) >= LETTER_ROOM || Math.abs(other.y - y) >= LETTER_ROOM,
+    );
+  for (const { x, y } of wanted) {
+    const nudge = clear(x, y)
+      ? { x: 0, y: 0 }
+      : NUDGES.find((each) => clear(x + each.x, y + each.y));
+    placed.push(nudge === undefined ? { x, y } : { x: x + nudge.x, y: y + nudge.y });
+  }
+  return placed;
+};
 
 /**
  * The parts with a letter over them: those lit at the step, or every part when none is, one
@@ -65,8 +100,10 @@ export default function BenchView(props: {
   /** Which picture it is (a step's ID): the camera is kept only while it's the same. */
   sceneId: string;
   pick: (label: string) => void;
+  /** Changes when Reset view is tapped. */
+  reset: number;
 }) {
-  const { derived, lit } = props;
+  const { derived, lit, reset } = props;
   const host = useRef<HTMLElement>(null);
   const labels = useRef(new Map<string, HTMLElement>());
   const scene = useRef<{ light: (label: string | undefined) => void; reset: () => void }>(
@@ -79,12 +116,11 @@ export default function BenchView(props: {
   const [cantDraw, setCantDraw] = useState(false);
   const wanted = props.scene ?? wholeScene(derived);
   const shape = `${props.sceneId} ${JSON.stringify(wanted)}`;
-  const atStep = props.scene !== undefined;
-  const [drawn, setDrawn] = useState({ scene: wanted, id: props.sceneId, atStep, shape });
-  if (drawn.shape !== shape) setDrawn({ scene: wanted, id: props.sceneId, atStep, shape });
-  const { scene: built, id: builtId, atStep: builtAtStep } = drawn;
-  // Where the camera was, in the scene's reach, and for which picture.
-  const kept = useRef<{ id: string; offset: THREE.Vector3 }>(undefined);
+  const [drawn, setDrawn] = useState({ scene: wanted, id: props.sceneId, shape });
+  if (drawn.shape !== shape) setDrawn({ scene: wanted, id: props.sceneId, shape });
+  const { scene: built, id: builtId } = drawn;
+  // Which way the camera looked, and at which picture: kept only while it's the same.
+  const kept = useRef<{ id: string; from: THREE.Vector3 }>(undefined);
 
   // The parts' materials, read when the scene is built: the Build is read again every 30 seconds
   // as a new object, and only new numbers build the scene again.
@@ -109,11 +145,9 @@ export default function BenchView(props: {
     const { point, centreOf, reach } = placing(built);
     const world = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, 1, reach / 20, reach * 20);
-    const distance = builtAtStep ? DISTANCE.step : DISTANCE.whole;
-    const start = () => viewFrom(built.view, reach * distance);
-    camera.position.copy(
-      kept.current?.id === builtId ? kept.current.offset.clone().multiplyScalar(reach) : start(),
-    );
+    // The way the scene looks best, at first and after Reset view; how far away is fitted.
+    const start = () => viewFrom(built.view, 1).normalize();
+    camera.position.copy(kept.current?.id === builtId ? kept.current.from : start());
     // Every face lit, so no side turns black: an even fill, the sky and floor, and a key light.
     world.add(new THREE.AmbientLight(0xffffff, 1.1));
     world.add(new THREE.HemisphereLight(0xffffff, 0x404040, 1.4));
@@ -158,41 +192,93 @@ export default function BenchView(props: {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
-    controls.minDistance = reach * 1.1;
-    controls.maxDistance = reach * 4;
     // Polar angles run down from straight above: never flat on top, never under the floor.
     controls.minPolarAngle = ((90 - TILT.most) * Math.PI) / 180;
     controls.maxPolarAngle = ((90 - TILT.least) * Math.PI) / 180;
 
-    const anchors = [
-      ...letteredOf(built).map(({ label }) => {
-        const box = built.pieces.find((piece) => piece.label === label)?.boxes[0];
-        return { key: `part ${label}`, at: box === undefined ? undefined : centreOf(box) };
-      }),
-      ...built.marks.map((mark, at) => ({ key: `mark ${at}`, at: point(anchorOf(mark)) })),
-    ];
+    const letters = letteredOf(built).map(({ label }) => {
+      const box = built.pieces.find((piece) => piece.label === label)?.boxes[0];
+      return { key: `part ${label}`, at: box === undefined ? undefined : centreOf(box) };
+    });
+    const marks = built.marks.map((mark, at) => ({
+      key: `mark ${at}`,
+      at: point(anchorOf(mark)),
+    }));
     const draw = () => {
       renderer.render(world, camera);
       const { clientWidth: width, clientHeight: height } = element;
       const view = viewOf(camera.position.clone().sub(controls.target));
       element.dataset.turn = String(view.turn);
       element.dataset.tilt = String(view.tilt);
-      for (const { key, at } of anchors) {
+      const onScreen = (at: THREE.Vector3) => {
+        const projected = at.clone().project(camera);
+        return { x: ((projected.x + 1) / 2) * width, y: ((1 - projected.y) / 2) * height };
+      };
+      for (const { key, at } of marks) {
         const label = labels.current.get(key);
-        if (label === undefined || at === undefined) continue;
-        const onScreen = at.clone().project(camera);
+        if (label === undefined) continue;
+        const { x, y } = onScreen(at);
         // Kept inside the picture, so words near its edge aren't cut off.
         const half = label.offsetWidth / 2;
-        const x = Math.min(Math.max(((onScreen.x + 1) / 2) * width, half), width - half);
-        label.style.transform = `translate(${x}px, ${((1 - onScreen.y) / 2) * height}px) translate(-50%, -50%)`;
+        label.style.transform = `translate(${Math.min(Math.max(x, half), width - half)}px, ${y}px) translate(-50%, -50%)`;
       }
+      // The parts' letters, apart.
+      const shown = letters.flatMap(({ key, at }) => {
+        const button = labels.current.get(key);
+        return button === undefined || at === undefined ? [] : [{ button, ...onScreen(at) }];
+      });
+      spread(shown).forEach(({ x, y }, at) => {
+        const button = shown[at]?.button;
+        if (button !== undefined)
+          button.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+      });
     };
+    /**
+     * Turns the camera to look from `from` (else as it looks now) at the scene, near enough that
+     * it fills the view: moved in or out until its farthest corner is at `FILL`.
+     */
+    const fit = (from?: THREE.Vector3) => {
+      const shown = new THREE.Box3();
+      for (const { mesh } of meshes) shown.expandByObject(mesh);
+      if (shown.isEmpty()) return;
+      const direction = (from ?? camera.position.clone().sub(controls.target)).normalize();
+      const centre = shown.getCenter(new THREE.Vector3());
+      const corners = [0, 1, 2, 3, 4, 5, 6, 7].map(
+        (corner) =>
+          new THREE.Vector3(
+            corner & 1 ? shown.max.x : shown.min.x,
+            corner & 2 ? shown.max.y : shown.min.y,
+            corner & 4 ? shown.max.z : shown.min.z,
+          ),
+      );
+      let distance = shown.getSize(new THREE.Vector3()).length() * 1.5;
+      // Nearly in proportion, so a few rounds settle it.
+      for (let round = 0; round < 5; round += 1) {
+        camera.position.copy(direction).multiplyScalar(distance).add(centre);
+        camera.lookAt(centre);
+        camera.updateMatrixWorld();
+        const reaches = Math.max(
+          ...corners.map((corner) => {
+            const onScreen = corner.clone().project(camera);
+            return Math.max(Math.abs(onScreen.x), Math.abs(onScreen.y));
+          }),
+        );
+        if (reaches > 0) distance *= reaches / FILL;
+      }
+      controls.target.copy(centre);
+      camera.position.copy(direction).multiplyScalar(distance).add(centre);
+      controls.minDistance = distance * 0.4;
+      controls.maxDistance = distance * 3;
+      controls.update();
+    };
+
     const resize = () => {
       const { clientWidth: width, clientHeight: height } = element;
       if (width === 0 || height === 0) return;
       renderer.setSize(width, height);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      fit();
       draw();
     };
     controls.addEventListener("change", draw);
@@ -244,8 +330,8 @@ export default function BenchView(props: {
         draw();
       },
       reset: () => {
-        camera.position.copy(start());
-        controls.update();
+        fit(start());
+        draw();
       },
     };
     scene.current.light(litNow.current);
@@ -254,7 +340,7 @@ export default function BenchView(props: {
       scene.current = undefined;
       kept.current = {
         id: builtId,
-        offset: camera.position.clone().sub(controls.target).divideScalar(reach),
+        from: camera.position.clone().sub(controls.target).normalize(),
       };
       watch.disconnect();
       controls.dispose();
@@ -268,9 +354,12 @@ export default function BenchView(props: {
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [built, builtId, builtAtStep]);
+  }, [built, builtId]);
 
   useEffect(() => scene.current?.light(lit), [lit]);
+  useEffect(() => {
+    if (reset > 0) scene.current?.reset();
+  }, [reset]);
 
   const place = (key: string) => (element: HTMLElement | null) => {
     if (element === null) labels.current.delete(key);
@@ -328,7 +417,7 @@ export default function BenchView(props: {
           aria-current={part.lit ? "step" : undefined}
           onClick={() => props.pick(part.label)}
           className={classes(
-            "absolute top-0 left-0 flex size-6 items-center justify-center rounded-full border-2 font-mono text-caption font-bold",
+            "absolute top-0 left-0 flex size-8 items-center justify-center rounded-full border-2 font-mono text-meta font-bold",
             lit === part.label || part.lit
               ? "border-primary-text bg-primary text-primary-foreground"
               : "border-primary bg-background text-foreground",
@@ -337,12 +426,6 @@ export default function BenchView(props: {
           {part.label}
         </button>
       ))}
-      <div className="absolute right-0 bottom-0">
-        <Button variant="outline" size="md" onClick={() => scene.current?.reset()}>
-          <RotateCcw aria-hidden />
-          Reset view
-        </Button>
-      </div>
     </figure>
   );
 }
