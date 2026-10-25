@@ -8,7 +8,6 @@ import {
   DocumentSlug,
   type DocumentSummary,
 } from "@courtyard/contract";
-import { z } from "zod";
 import { listFolder, readTextFile, removeFile, writeTextFileIn } from "../../lib/files.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 import {
@@ -35,8 +34,14 @@ import {
 /** The folder in a workspace's folder that holds its documents. */
 export const DOCS_FOLDER = "docs";
 
+/** The folder in `docs` an archived document goes to, out of the list and out of the way. */
+export const ARCHIVE_FOLDER = "archive";
+
 /** A document's path in its workspace's folder. */
 export const documentPath = (slug: DocumentSlug) => `${DOCS_FOLDER}/${slug}.md`;
+
+/** Where a document goes once it's archived, in its workspace's folder. */
+export const archivedPath = (slug: DocumentSlug) => `${DOCS_FOLDER}/${ARCHIVE_FOLDER}/${slug}.md`;
 
 /** The heading that names a document: `# Name`, outside any fenced code. */
 const HEADING = /^#[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/;
@@ -78,6 +83,8 @@ export type DocumentRefusal =
   | { readonly kind: "unread"; readonly path: string }
   /** It has changed since the model read it. */
   | { readonly kind: "stale"; readonly path: string }
+  /** The archive has one of its file's name already (#786). */
+  | { readonly kind: "archived-already"; readonly path: string; readonly slug: DocumentSlug }
   | { readonly kind: "storage" };
 
 /** Why a change to documents wasn't undone. */
@@ -96,7 +103,7 @@ export const undoDocumentChange = (
 const fileOf = (folder: string, slug: DocumentSlug) => join(folder, DOCS_FOLDER, `${slug}.md`);
 
 /** A document's text, `undefined` when it isn't there. */
-const readDocumentText = async (folder: string, slug: DocumentSlug) => {
+export const readDocumentText = async (folder: string, slug: DocumentSlug) => {
   const read = await readTextFile(fileOf(folder, slug));
   return read.ok ? ok(read.value) : err<DocumentRefusal>({ kind: "storage" });
 };
@@ -159,7 +166,7 @@ const writeDocument = (folder: string, slug: DocumentSlug, markdown: string) =>
   writeTextFileIn(fileOf(folder, slug), markdown);
 
 /** Text as a document keeps it: ending in one line break. */
-const asFile = (markdown: string) => `${markdown.trimEnd()}\n`;
+export const asFile = (markdown: string) => `${markdown.trimEnd()}\n`;
 
 /** A saved document and the change it was committed as, if git kept it. */
 export type DocumentSaved = { readonly save: DocumentSave; readonly change: ChangeId | undefined };
@@ -206,7 +213,7 @@ export const saveNewDocument = async (
  * name renames it. `check` is given its text now, and refuses the change by returning a refusal
  * (one the model hasn't seen as it is, say).
  */
-const replaceDocument = async (
+export const replaceDocument = async (
   target: PlanningFilesTarget,
   replace: {
     slug: DocumentSlug;
@@ -330,6 +337,43 @@ export const renameDocument = async (
   });
 };
 
+/**
+ * Archives a document (#786), as one change that Undo brings back: whole, into `docs/archive/`,
+ * out of the documents every turn lists. Refused when the archive has one of its name already.
+ */
+export const archiveDocument = async (
+  target: PlanningFilesTarget,
+  slug: DocumentSlug,
+): Promise<Result<DocumentSaved, DocumentRefusal>> => {
+  let name: string = slug;
+  const archived = await target.contextFolder.changeWithId(
+    async (): Promise<Result<DocumentSave, DocumentRefusal>> => {
+      const folder = await planningFolder(target);
+      if (!folder.ok) return folder;
+      const text = await readDocumentText(folder.value, slug);
+      if (!text.ok) return text;
+      if (text.value === undefined) return err({ kind: "not-found", path: documentPath(slug) });
+      name = nameOf(text.value) ?? slug;
+      const to = join(folder.value, archivedPath(slug));
+      const there = await readTextFile(to);
+      if (!there.ok) return err({ kind: "storage" });
+      if (there.value !== undefined) {
+        return err({ kind: "archived-already", path: documentPath(slug), slug });
+      }
+      const moved =
+        (await writeTextFileIn(to, text.value)) && (await removeFile(fileOf(folder.value, slug)));
+      return moved ? ok({ action: "archive", document: { slug, name } }) : err({ kind: "storage" });
+    },
+    () =>
+      planningChange(target, {
+        kind: "document",
+        title: `Archive document: ${name}`,
+        paths: [documentPath(slug), archivedPath(slug)],
+      }),
+  );
+  return archived.ok ? ok({ save: archived.value.value, change: archived.value.id }) : archived;
+};
+
 /** Deletes a document, as one change that Undo brings back. */
 export const deleteDocument = async (
   target: PlanningFilesTarget,
@@ -368,6 +412,15 @@ export const documentChangeOf = (
   const kept = files.find((file) => file.before !== null && file.after !== null);
   const slugAt = (path: string) => slugOfPath(pathInWorkspace(path)) ?? null;
   const named = (text: string | null, path: string) => nameOf(text ?? "") ?? slugAt(path) ?? path;
+  const archived =
+    made !== undefined &&
+    pathInWorkspace(made.path).startsWith(`${DOCS_FOLDER}/${ARCHIVE_FOLDER}/`);
+  if (archived && gone !== undefined) {
+    return {
+      document: { did: "archived", name: named(gone.before, gone.path), slug: null },
+      path: null,
+    };
+  }
   if (made !== undefined && gone !== undefined) {
     const sameBody = bodyOf(made.after ?? "") === bodyOf(gone.before ?? "");
     return {
@@ -404,72 +457,6 @@ export const slugOfPath = (path: string): DocumentSlug | undefined => {
   const [, name] = /^(?:\.\/)?docs\/([^/]+)\.md$/i.exec(path.trim().replace(/\\/g, "/")) ?? [];
   const slug = DocumentSlug.safeParse(name?.toLowerCase());
   return slug.success ? slug.data : undefined;
-};
-
-/** What a model sends the document tool, checked like anything else a model sends. */
-const DocumentRequest = z.object({
-  path: z.string().optional(),
-  text: z.string(),
-  change: z.string().optional(),
-});
-
-/** Why the document tool didn't save: the input doesn't fit, or the document was refused. */
-export type DocumentToolRefusal =
-  | DocumentRefusal
-  | { readonly kind: "malformed" }
-  /** The owner stopped the turn, so nothing more is saved. */
-  | { readonly kind: "stopped" };
-
-/**
- * One turn's document tool (docs/ai-conduct.md, Documents): saves a new document, or replaces one
- * the model has read in this turn with its whole new text. It keeps each document's text as the
- * model last read or saved it, so an update is refused for a document it hasn't read in this
- * answer, or one changed since.
- */
-export const createTurnDocuments = (target: PlanningFilesTarget) => {
-  /** Each document as the model last saw it in this turn, by its file's name. */
-  const seen = new Map<DocumentSlug, string>();
-  return {
-    /** Notes a file the model read: a document's text as it is now is what it has seen. */
-    read: async (path: string) => {
-      const slug = slugOfPath(path);
-      if (slug === undefined) return;
-      const folder = await planningFolder(target);
-      const text = folder.ok ? await readDocumentText(folder.value, slug) : undefined;
-      if (text?.ok && text.value !== undefined) seen.set(slug, text.value);
-    },
-    save: async (raw: unknown): Promise<Result<DocumentSaved, DocumentToolRefusal>> => {
-      const request = DocumentRequest.safeParse(raw);
-      if (!request.success) return err({ kind: "malformed" });
-      const { path, text, change } = request.data;
-      if (path === undefined || path.trim() === "") {
-        const saved = await saveNewDocument(target, text);
-        if (saved.ok) seen.set(saved.value.save.document.slug, asFile(text));
-        return saved;
-      }
-      const slug = slugOfPath(path);
-      if (slug === undefined) return err({ kind: "not-found", path: path.trim() });
-      const shown = documentPath(slug);
-      const summary = change?.replace(/\s+/g, " ").trim();
-      const saved = await replaceDocument(target, {
-        slug,
-        markdown: text,
-        title: (_, now) => `Update document: ${now.name}`,
-        check: (now) => {
-          const last = seen.get(slug);
-          if (last === undefined) return { kind: "unread", path: shown };
-          return sameFileText(now, last) ? undefined : { kind: "stale", path: shown };
-        },
-      });
-      if (!saved.ok) return saved;
-      seen.delete(slug);
-      seen.set(saved.value.save.document.slug, asFile(text));
-      return ok({
-        ...saved.value,
-        save: { ...saved.value.save, ...(summary ? { summary } : {}) },
-      });
-    },
-  };
 };
 
 /**

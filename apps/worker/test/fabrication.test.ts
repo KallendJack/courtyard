@@ -158,6 +158,47 @@ describe("the Build tool", () => {
     );
   });
 
+  it("marks the documents a Build supersedes, so later turns never take sizes from them (#786)", async () => {
+    await mkdir(join(contextDir, "garage", "docs"), { recursive: true });
+    await writeFile(
+      join(contextDir, "garage", "docs", "workbench-shopping-list.md"),
+      "# Workbench shopping list\n\n- 45 × 95, for legs 950 high\n",
+    );
+    await writeFile(
+      join(contextDir, "garage", "docs", "garage-layout.md"),
+      "# Garage layout\n\nThe bench goes on the back wall.\n",
+    );
+    const { saver, events } = await sessionWith([
+      [START_BENCH],
+      [buildTool({ build: "B1", supersedes: ["docs/workbench-shopping-list.md"] })],
+      [],
+    ]);
+
+    expect(await buildFile("workbench")).toMatchObject({
+      name: "Workbench",
+      supersedes: ["workbench-shopping-list"],
+    });
+    expect(buildSaves(events)[1]?.save.changes).toEqual([
+      "Supersedes: Workbench shopping list (docs/workbench-shopping-list.md)",
+    ]);
+    const told = saver.framings[2]?.instructions ?? "";
+    expect(told).toContain(
+      "- Workbench shopping list: docs/workbench-shopping-list.md (56 characters), superseded by the Build [B1] Workbench, which is the source of truth: never take a size, count or price from it",
+    );
+    expect(told).toContain("- Garage layout: docs/garage-layout.md (50 characters)\n");
+  });
+
+  it("refuses to supersede a document that isn't there", async () => {
+    const { saver } = await sessionWith([
+      [START_BENCH, buildTool({ build: "B1", supersedes: ["docs/old-plan.md"] })],
+    ]);
+
+    expect(saver.replies[0]?.[1]).toEqual({
+      ok: false,
+      reply: expect.stringMatching(/^There's no document at docs\/old-plan\.md/),
+    });
+  });
+
   it("marks an option's price with no shop, or no link, so the model never gives it as sourced (#704)", async () => {
     const { saver } = await sessionWith([
       [

@@ -10,6 +10,7 @@ import {
   attachmentType,
   type PhotoAttachment,
   PhotoMediaType,
+  type PhotoTakenAt,
   type SessionEvent,
   TOO_MANY_ATTACHMENTS,
 } from "@courtyard/contract";
@@ -30,7 +31,7 @@ export type PreparedAttachment = {
  * PDF's text for the message.
  */
 export type TurnAttachment =
-  | Extract<FramedAttachment, { kind: "photo" }>
+  | (Extract<FramedAttachment, { kind: "photo" }> & { readonly takenAt?: PhotoTakenAt })
   | (Extract<FramedAttachment, { kind: "pdf" }> & { readonly text: string });
 
 /** How each kind of file starts, so a file is what its type says before it's kept or served. */
@@ -208,8 +209,17 @@ export const carriedAttachments = async (
       if (attachment.kind === "photo") {
         const path = attachmentPath(sessionFolder, attachment);
         const there = await entryAt(path);
+        const { name, mediaType, takenAt } = attachment;
         return there.ok && there.value?.kind === "file"
-          ? [{ kind: "photo", name: attachment.name, path, mediaType: attachment.mediaType }]
+          ? [
+              {
+                kind: "photo",
+                name,
+                path,
+                mediaType,
+                ...(takenAt === undefined ? {} : { takenAt }),
+              },
+            ]
           : [];
       }
       const text = await readTextFile(textPath(sessionFolder, attachment));

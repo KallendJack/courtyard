@@ -51,6 +51,10 @@ if (recipe) {
 - **Castors left out are none,** so a change that takes them out (a merge patch's `null`) leaves a bench on its legs.
 - **A cut plan never overruns** a length or a sheet, with the kerf counted between pieces; a part bigger than its
   stock is found and left out.
+- **One material, one sheet** (#786): slots cut from the same sheet material (its option, or the sheet option of its
+  thickness its name says, whatever size it's given in) are cut from the first one's sheet, so their parts are packed
+  together and the sheet is bought, and costed, once. Braces given as the strips a shop cut from the top's plywood
+  come from that sheet, never a second one.
 - **The steps depend on the tools to hand;** the parts and the cut plan don't. The tools to hand are the owner's, as
   Your tools saves them, when given, else the parameters' own (#777). A step that can be done more than one way lists
   its ways, the one in use and the others not yet to hand: a hand saw, then a circular saw, then a mitre saw, the best

@@ -1,5 +1,5 @@
 import { err, ok, type Result } from "../build.ts";
-import { pickStock, type Slot } from "../options.ts";
+import { oneSheetEach, pickStock, type Slot } from "../options.ts";
 import { BenchParameters } from "./parameters.ts";
 
 // The framed bench's slots (#704): the stock each job is cut from, which can be swapped for one of
@@ -65,7 +65,7 @@ export const pickBenchStock = (
   const parsed = BenchParameters.safeParse(input);
   if (!parsed.success) return err(parsed.error.issues.map((issue) => issue.message));
   const picked = pickStock({
-    parameters: parsed.data,
+    parameters: oneSheetEach(parsed.data, BENCH_SLOTS),
     slots: BENCH_SLOTS,
     prices: (parameters) => parameters.prices,
     setPrices: (parameters, prices) => ({ ...parameters, prices }),

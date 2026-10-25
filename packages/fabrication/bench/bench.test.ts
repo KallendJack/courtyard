@@ -167,6 +167,32 @@ describe("the golden bench's buy list", () => {
     expect(list.total).toBe(17702 - 1068);
     expect(list.unpriced).toBe(2);
   });
+
+  it("buys a sheet once when the braces are the shop's strips of the same plywood (#786)", () => {
+    // The owner's first build: the shop cut the sheet, and the braces were given as its 500-wide
+    // strips, priced as the sheet, while 249 mm up the shelf makes them 501 wide.
+    const strips = {
+      ...goldenBench.braces.sheet,
+      name: "18 mm plywood strips, cut by the shop",
+      width: { ...goldenBench.braces.sheet.width, value: 500 },
+    };
+    const build = built({
+      ...goldenBench,
+      shelf: { ...goldenBench.shelf, height: { ...goldenBench.shelf.height, value: 249 } },
+      braces: { ...goldenBench.braces, sheet: strips },
+    });
+
+    expect(build.parts.find((part) => part.label === "J")).toMatchObject({
+      width: 501,
+      material: { stock: "18 mm plywood" },
+    });
+    expect(
+      build.buyList.lines
+        .filter((line) => line.kind === "sheet")
+        .map((line) => [line.item, line.packs, line.total]),
+    ).toEqual([["18 mm plywood, 2440 × 1220", 1, 5000]]);
+    expect(build.buyList.total).toBe(17702);
+  });
 });
 
 /** The golden bench with its castor bolts this long, and its washers this thick. */

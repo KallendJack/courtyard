@@ -159,7 +159,6 @@ import {
 } from "../context-folder/index.ts";
 import {
   answerAsDocument,
-  createTurnDocuments,
   type DocumentRefusal,
   type DocumentSaved,
   type DocumentUndoRefusal,
@@ -167,6 +166,7 @@ import {
   saveNewDocument,
   undoDocumentChange,
 } from "../documents/index.ts";
+import { createTurnDocuments } from "../documents/tool.ts";
 import { readBuilds, undoBuildChange } from "../fabrication/index.ts";
 import { readTools } from "../fabrication/setting.ts";
 import { readSizes, undoSizeChange } from "../fabrication/sizes.ts";

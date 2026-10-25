@@ -799,7 +799,8 @@ things live only in the worker's memory and go when it restarts.
   `<workspace>/workspace.json`: its name, mode and icon (and a code workspace's repo, its one line as
   `description`, allowlist changes and Paper connection, with the file's name once connected from its page).
 - `<workspace>/docs/<slug>.md`: a planning workspace's documents (ADR 0020), each named by its first `#` heading and
-  its file by that name.
+  its file by that name. `<workspace>/docs/archive/<slug>.md` holds those archived, by the move review or the
+  document tool (#786), out of the list every turn reads.
 - `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter (an upcoming
   replacement among them, its `upcoming …` lines, #602) and a dated history, each file named by the Thing's name when it was added; `<workspace>/things/photos/<slug>.jpg`: a Thing's
   photo, resized to fit 1600 px and 300 KB, in plain git. A Thing's `kind` (item when left out), `count` and
@@ -810,8 +811,8 @@ things live only in the worker's memory and go when it restarts.
   matter, then its steps, decisions and a dated history, each file named by the project's name when it was started.
   A step that makes a Build ends `[build: <slug>]`.
 - `<workspace>/builds/<slug>.json`: a planning workspace's Builds (#697, ADRs 0036, 0037): name, template and
-  parameters only, every size with its source; the parts, cut plan, buy list, steps and findings are worked out on
-  read, never stored. Each file is named by the Build's name when it was started.
+  parameters only, every size with its source, and the documents it supersedes (`supersedes`, by file name, #786);
+  the parts, cut plan, buy list, steps and findings are worked out on read, never stored. Each file is named by the Build's name when it was started.
   `<workspace>/builds/progress/<slug>.json` is how far the owner has got with its steps (#699): the step reached and
   the lines ticked, each step by its ID (a file kept by step number reads as not started), beside the Build so
   ticking never stands in the way of undoing a change to it, and the tool each step started was done with (#777), which

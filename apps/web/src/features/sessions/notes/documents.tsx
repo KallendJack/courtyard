@@ -113,10 +113,17 @@ function NameForm(props: {
   );
 }
 
+/** What a note says a document save did. */
+const SAVED = {
+  save: "Saved document",
+  update: "Updated document",
+  archive: "Archived document",
+} as const;
+
 /**
- * A document saved from an answer, as a note under it (ADR 0020): "Saved document" or "Updated
- * document", its name, what changed, with Open and Undo. It follows the session, so an Undo from
- * any device shows here too.
+ * A document saved from an answer, as a note under it (ADR 0020): "Saved document", "Updated
+ * document" or "Archived document" (#786), its name, what changed, with Open (none once it's
+ * archived) and Undo. It follows the session, so an Undo from any device shows here too.
  */
 export function DocumentNoteRow(props: {
   sessionId: SessionId;
@@ -128,13 +135,17 @@ export function DocumentNoteRow(props: {
   return (
     <FileSaveNote
       icon={<FileCheck />}
-      label={action === "save" ? "Saved document" : "Updated document"}
+      label={SAVED[action]}
       name={document.name}
       aside={summary}
-      open={{
-        to: "/workspaces/$workspaceId/documents/$slug",
-        params: { workspaceId, slug: document.slug },
-      }}
+      open={
+        action === "archive"
+          ? undefined
+          : {
+              to: "/workspaces/$workspaceId/documents/$slug",
+              params: { workspaceId, slug: document.slug },
+            }
+      }
       undone={note.undone}
       undo={() => undoDocumentSave(sessionId, note.seq)}
     />

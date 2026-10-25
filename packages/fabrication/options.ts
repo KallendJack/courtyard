@@ -52,6 +52,42 @@ const optionOf = (stock: Timber | Sheet, kind: StockOption["kind"]) =>
 
 const kindOf = (role: Role) => (role === "sheet" ? "sheet" : "timber");
 
+/**
+ * What a sheet is made of, whatever size it's given in: its option, or the sheet option of its
+ * thickness its name says; else its name and thickness.
+ */
+const sheetMaterialOf = (sheet: Sheet) =>
+  sheet.option ??
+  IDS.find((id) => {
+    const option = STOCK_OPTIONS[id];
+    return (
+      option.kind === "sheet" &&
+      option.thickness === sheet.thickness.value &&
+      option.known.test(sheet.name)
+    );
+  }) ??
+  `${sheet.name}\n${sheet.thickness.value}`;
+
+/**
+ * The slots cut from sheet of one material cut from one stock (#786): the first slot's, so its
+ * parts are packed together and the sheet bought, and costed, once. A slot given the pieces a shop
+ * cut from that sheet (its strips) is cut from the sheet itself.
+ */
+export const oneSheetEach = <P>(parameters: P, slots: readonly Slot<P>[]): P => {
+  const first = new Map<string, Sheet>();
+  return slots.reduce((now, slot) => {
+    if (slot.role !== "sheet" || !slot.inUse(now)) return now;
+    const sheet = slot.stock(now) as Sheet;
+    const material = sheetMaterialOf(sheet);
+    const earlier = first.get(material);
+    if (earlier === undefined) {
+      first.set(material, sheet);
+      return now;
+    }
+    return earlier === sheet ? now : slot.set(now, earlier);
+  }, parameters);
+};
+
 /** An option's price as a stock's: what it costs, without the size it's sold in. */
 const paidOf = (price: OptionPrice): Price => ({
   pence: price.pence,

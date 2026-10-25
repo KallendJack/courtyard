@@ -12,7 +12,8 @@ Undo, and the tool's reply gives the model those numbers to report. "Make it 850
 rest is worked out again.
 
 - **Uses:** `@courtyard/fabrication` (the engine, and the part maker), `@courtyard/builds` (the machine's builds
-  lock, for making a printed part), `context-folder/` (each change), `planning-files/`.
+  lock, for making a printed part), `context-folder/` (each change), `planning-files/`, `documents/` (those a Build
+  supersedes).
 - **Used by:** `sessions/` (the Build and size tools, Undo from their notes), `prompts/` (the lists, the rules, the
   tools and their replies, `prompts/builds.ts` and `prompts/sizes.ts`), `changes/` (Recent changes and Undo); in the
   web app, `features/fabrication/`; and the Fabrication app (`apps/fabrication`).
@@ -65,7 +66,11 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
 
 ## How it works
 
-- **The file** (`index.ts`): `{ name, template, parameters }`, nothing derived. A file that isn't JSON, isn't a Build,
+- **The file** (`index.ts`): `{ name, template, parameters }`, nothing derived, and `supersedes` (#786) once it has
+  any: the workspace's documents it replaces (an old shopping list or plan), by file name, which the documents list
+  every turn reads marks, so a model never takes sizes from them. A save checks each is a document there
+  (`documents/superseded.ts`), and its note says what it supersedes now. What a change did to a Build, for Recent
+  changes, is `changes.ts`. A file that isn't JSON, isn't a Build,
   or whose parameters the engine refuses is listed with its problem, never breaking a turn or a list.
 - **Saves** (`saveBuild`): a new Build needs its name, template and every parameter; a change merges its parameters
   into the Build's (`parameters.ts`), and a pick swaps a stock through its template's picker. The engine works them
@@ -114,6 +119,7 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   a date, a price or a count; a text's words, or yes or no), and refuses it when none does or one gives it only
   roughly ("about 140", "I reckon it's 140"). It's offered only in planning workspaces.
 - **The chat** (`chat.ts`): which session is the Build's, and its events read as the chat's lines, through
-  `sessions/`.
+  `sessions/`. A photo sent once building has started keeps the step the owner is on (`takenAt`, #786), so a later
+  turn is told it shows the Build as it was then.
 - **The API** (`routes.ts`, a printed part's in `print-routes.ts`, sizes in `size-routes.ts`): under
   `/api/fabrication`, mounted by `worker.ts`, which also serves the Fabrication app's files under `/fabrication`.

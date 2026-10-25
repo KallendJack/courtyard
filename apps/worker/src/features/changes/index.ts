@@ -29,7 +29,7 @@ import {
   wholeFilesOf,
 } from "../context-folder/index.ts";
 import { documentChangeOf } from "../documents/index.ts";
-import { buildChangeOf, isBuildChange } from "../fabrication/index.ts";
+import { buildChangeOf, isBuildChange } from "../fabrication/changes.ts";
 import { isSizeChange, sizeChangeOf } from "../fabrication/sizes.ts";
 import { isProjectChange, projectChangeOf } from "../projects/index.ts";
 import { titleOf } from "../saves/index.ts";

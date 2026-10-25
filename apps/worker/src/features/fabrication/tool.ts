@@ -2,6 +2,7 @@ import { BuildParameters, BuildTemplate } from "@courtyard/contract";
 import { z } from "zod";
 import { err, ok, type Result } from "../../lib/result.ts";
 import { sameFileText } from "../context-folder/index.ts";
+import { slugOfPath } from "../documents/index.ts";
 import type { PlanningFilesTarget } from "../planning-files/index.ts";
 import {
   type BuildEdit,
@@ -36,6 +37,8 @@ const BuildRequest = z.strictObject({
   project: z.string().optional(),
   /** The project's step that makes it, by its ID (#710). */
   step: z.string().optional(),
+  /** The documents it supersedes, by their paths (#786). */
+  supersedes: z.array(z.string()).optional(),
 });
 
 /** An input left as `null` is one not given, as some models send them. */
@@ -122,13 +125,24 @@ export const createTurnBuilds = (
       seen.set(slug, read.value.text);
       return ok({ kind: "unchanged", build: read.value, label, ...step });
     };
+    const paths = sent.supersedes?.map((path) => ({ path, slug: slugOfPath(path) }));
+    const notADocument = paths?.find(({ slug }) => slug === undefined);
+    if (notADocument !== undefined) {
+      return err({ kind: "no-document", path: notADocument.path.trim() });
+    }
+    const supersedes = paths?.flatMap(({ slug }) => (slug === undefined ? [] : [slug]));
     // Only its label (and a step to give it to) reads it, with nothing to write.
-    if (slug !== undefined && sent.name === undefined && sent.parameters === undefined) {
+    if (
+      slug !== undefined &&
+      sent.name === undefined &&
+      sent.parameters === undefined &&
+      supersedes === undefined
+    ) {
       return asItIs();
     }
 
-    const edit: BuildEdit =
-      slug === undefined
+    const edit: BuildEdit = {
+      ...(slug === undefined
         ? {
             ...(sent.name === undefined ? {} : { name: sent.name }),
             ...(sent.template === undefined ? {} : { template: sent.template }),
@@ -138,7 +152,9 @@ export const createTurnBuilds = (
             slug,
             ...(sent.name === undefined ? {} : { name: sent.name }),
             ...(sent.parameters === undefined ? {} : { parameters: sent.parameters }),
-          };
+          }),
+      ...(supersedes === undefined ? {} : { supersedes }),
+    };
     const saved = await saveBuild(target, edit, {
       now: target.now,
       check: (now) =>

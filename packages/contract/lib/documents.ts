@@ -69,7 +69,7 @@ export type DocumentRenamed = z.infer<typeof DocumentRenamed>;
  * rename, its name before), and its file's name while it's still there to open.
  */
 export const DocumentChange = z.object({
-  did: z.enum(["saved", "updated", "renamed", "deleted"]),
+  did: z.enum(["saved", "updated", "renamed", "deleted", "archived"]),
   name: z.string(),
   was: z.string().optional(),
   slug: DocumentSlug.nullable(),

@@ -25,6 +25,8 @@ None.
   to help there (brief, one step at a time, asking, real products, what's saved, a pro, diagrams only when asked,
   going ahead when asked, a caveat once, another AI's plan as ideas; #700); a
   code turn gets diagrams and the house process.
+- **Documents** (`documents.ts`, ADR 0020): the documents list, each a Build supersedes marked (#786), the rule for
+  the document tool, the tool, its replies and its refusals.
 - **Builds** (`builds.ts`, #697): the Builds list, the rule for the Build tool, the tool, and its reply, every
   number the engine worked out for the model to report.
 - **Sizes** (`sizes.ts`, #708): the recorded sizes list, the rule for the size tool, the tool, its reply and its

@@ -1,14 +1,18 @@
-import type {
-  BuildChat,
-  BuildChatEntry,
-  BuildSlug,
-  ProjectSlug,
-  SessionEvent,
-  SessionSummary,
-  WorkspaceId,
+import {
+  type BuildChat,
+  type BuildChatEntry,
+  type BuildSlug,
+  buildStarted,
+  type ProjectSlug,
+  type SessionEvent,
+  type SessionSummary,
+  stepReached,
+  type WorkspaceId,
 } from "@courtyard/contract";
 import { ok, type Result } from "../../lib/result.ts";
+import type { PreparedAttachment } from "../attachments/index.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
+import type { ReadBuild } from "./index.ts";
 
 // A Build's chat in Fabrication (#698, ADR 0037): Courtyard backs it with a session in the Build's
 // workspace. Fabrication's API reads it as Fabrication's own shape, so the app never reads a
@@ -41,6 +45,31 @@ export const chatSessionOf = async (
     if (saved) return ok(session);
   }
   return ok(undefined);
+};
+
+/**
+ * The photos sent in a Build's chat, each with the step the owner is on once they've started
+ * building it (#786), so a later turn is told it shows the Build as it was then.
+ */
+export const takenAt = (
+  build: ReadBuild,
+  attachments: readonly PreparedAttachment[],
+): PreparedAttachment[] => {
+  const { derived, progress, summary } = build;
+  const step = buildStarted(derived.steps, progress)
+    ? stepReached(derived.steps, progress)
+    : undefined;
+  return attachments.map((prepared) =>
+    prepared.attachment.kind === "photo" && step !== undefined
+      ? {
+          ...prepared,
+          attachment: {
+            ...prepared.attachment,
+            takenAt: { build: summary.slug, step: step.id, number: step.number, title: step.title },
+          },
+        }
+      : prepared,
+  );
 };
 
 /** A changed parameter's name, from its line in a save ("height: 900 mm → 850 mm"). */
