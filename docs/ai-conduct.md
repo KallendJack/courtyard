@@ -1907,7 +1907,8 @@ only what they follow before then, and a tool the reply finds not to hand is one
 template's parameters as JSON Schema, `framed-bench: {…}` from `BenchParameters`, then each printed template's own
 from `PRINTED_PARAMETERS` (a recipe's features with each kind's fields, `PartRecipeShown`), then `and every printed
 template also: {…}` from `PRINTED_COMMON`, said once, separated by spaces, without `$schema` or Zod's
-largest-safe-integer maximums: `TEMPLATE_SCHEMAS`). The parameters' shape is in the tool's own description, not the input's: Codex's tool
+largest-safe-integer maximums, or a UUID's pattern beside its `"format": "uuid"` (a size's `record`, #708):
+`TEMPLATE_SCHEMAS`). The parameters' shape is in the tool's own description, not the input's: Codex's tool
 format keeps no description of an input that's an object, so there it never reached the model, and Codex sent `{}`
 (#732):
 
