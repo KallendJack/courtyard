@@ -10,7 +10,8 @@ parameters; the engine works out its parts, cut plan and buy list (total £177.0
 Undo, and the tool's reply gives the model those numbers to report. "Make it 850 high" changes `height` alone, and the
 rest is worked out again.
 
-- **Uses:** `@courtyard/fabrication` (the engine), `context-folder/` (each change), `planning-files/`.
+- **Uses:** `@courtyard/fabrication` (the engine, and the part maker), `@courtyard/builds` (the machine's builds
+  lock, for making a printed part), `context-folder/` (each change), `planning-files/`.
 - **Used by:** `sessions/` (the Build tool, Undo from its note), `prompts/` (the list, the rule, the tool and its
   reply, `prompts/builds.ts`), `changes/` (Recent changes and Undo); in the web app, `features/fabrication/`; and the
   Fabrication app (`apps/fabrication`).
@@ -31,6 +32,12 @@ rest is worked out again.
 - `POST /api/fabrication/workspaces/:id/builds/:slug/chat`: the owner's next message, a `NewMessage` (with photos or
   PDFs, as a form, as a session's take them), into that session, or a new one that belongs to the project. Answers
   `BuildChatSent`, 202.
+- `GET /api/fabrication/workspaces/:id/builds/:slug/print`: a printed part made (#702): its size and volume from the
+  solid, whether it's watertight, the filament it takes, its triangles for the 3D view and its files' names. Answers
+  `MadePart`; 404 for a Build that isn't printed, 422 with each reason when its recipe can't be made, 503 when making
+  it runs past its time limit.
+- `GET /api/fabrication/workspaces/:id/builds/:slug/print/:file`: its 3MF (`model/3mf`, which Bambu Studio opens) or
+  STL (`model/stl`), by the names `MadePart` gives, as a download.
 - `GET /api/fabrication/models`: the models the chat can answer with, for its Reply box. Answers `ProviderList`.
 - `PATCH /api/fabrication/workspaces/:id/builds/:slug/parameters`: the owner's change to its parameters,
   `BuildParametersChange`, a JSON merge patch (an object merges, `null` takes a value out), worked out before it's
@@ -75,7 +82,13 @@ or Recent changes.
   a name that isn't the tile's: F-clamps are Clamps). A Thing with parts never moves.
   Undo takes the whole Save back. "Or just say it" is one question to the errand model (`prompts/tools.ts`), each
   tool by a tile's name or the owner's own, once.
+- **Printed parts** (`print.ts`, `make-thread.ts`, #702): a printed part's checked recipe is made in a worker thread
+  once it has a place in the machine's builds lock (`@courtyard/builds`), and the thread is stopped at
+  `COURTYARD_PRINT_TIME_LIMIT_MS` (a minute unless set), or when its JavaScript heap passes
+  `COURTYARD_PRINT_MEMORY_LIMIT_MB` (512 unless set), freeing the place. What's made, its 3MF and STL too, is kept
+  by the Build's file text, so the page asking again and a download after it make nothing twice; why a recipe
+  couldn't be made is kept by the recipe, so asking again is answered at once, without the lock.
 - **The chat** (`chat.ts`): which session is the Build's, and its events read as the chat's lines, through
   `sessions/`.
-- **The API** (`routes.ts`): under `/api/fabrication`, mounted by `worker.ts`, which also serves the Fabrication
+- **The API** (`routes.ts`, and a printed part's in `print-routes.ts`): under `/api/fabrication`, mounted by `worker.ts`, which also serves the Fabrication
   app's files under `/fabrication`.

@@ -1,3 +1,5 @@
+import type { BuildTemplate, SizeSource, SourcedSize } from "@courtyard/contract";
+import type { CheckedRecipe } from "./print/recipe.ts";
 import type { Tool } from "./tools.ts";
 
 // What any template derives from its parameters (ADR 0036): everything a Build shows. Code works
@@ -88,7 +90,7 @@ export type CutPlan = {
 
 export type BuyLine = {
   readonly item: string;
-  readonly kind: "timber" | "sheet" | "fitted" | "fixing";
+  readonly kind: "timber" | "sheet" | "fitted" | "fixing" | "filament";
   /** The timber or sheet it buys, by name, so its row can open that stock's options (#704). */
   readonly stock?: string;
   /** What it's for, in a few words. */
@@ -215,7 +217,45 @@ export type Finding =
       readonly kind: "assumed";
       /** The sizes nobody measured or read from a maker: check these before cutting. */
       readonly sizes: readonly string[];
+    }
+  /** A printed part's recipe can't be made as it is, so it isn't: each reason. */
+  | { readonly kind: "cannot-make"; readonly problems: readonly string[] }
+  | {
+      readonly kind: "too-big-for-plate";
+      readonly size: Build["size"];
+      readonly plate: PrintSize;
+    }
+  /** A wall thinner than the nozzle prints well: where, how thick, and the least. */
+  | {
+      readonly kind: "wall-too-thin";
+      readonly where: string;
+      readonly mm: number;
+      readonly least: number;
     };
+
+/** A printer's plate, or how far it reaches up, mm. */
+export type PrintSize = { readonly width: number; readonly depth: number; readonly height: number };
+
+/** A size the Print tab lists: its name, as it says it, and its source when it's an object's. */
+export type PrintLine = {
+  readonly name: string;
+  readonly says: string;
+  readonly source: SizeSource | null;
+};
+
+/**
+ * A printed part's own (#702): the plate it's for and whether it fits, its clearance and nozzle,
+ * the sizes to list, and the recipe it's made from, checked, which the worker makes into a solid.
+ */
+export type BuildPrint = {
+  readonly plate: PrintSize;
+  readonly fits: boolean;
+  readonly clearance: SourcedSize;
+  readonly nozzle: SourcedSize;
+  readonly sizes: readonly PrintLine[];
+  /** `null` when it can't be made (a `cannot-make` finding says why). */
+  readonly recipe: CheckedRecipe | null;
+};
 
 /** What an option is like, as a chip says it: fine, or something to know. */
 export type Said = { readonly text: string; readonly tone: "fine" | "warn" };
@@ -257,7 +297,7 @@ export type StockOptions = {
 };
 
 export type Build = {
-  readonly template: "framed-bench";
+  readonly template: BuildTemplate;
   /** The finished size, mm. */
   readonly size: { readonly length: number; readonly depth: number; readonly height: number };
   readonly parts: readonly Part[];
@@ -269,4 +309,6 @@ export type Build = {
   readonly findings: readonly Finding[];
   /** Each timber and sheet with more than one option, to pick from. */
   readonly options: readonly StockOptions[];
+  /** A printed part's own; `null` for a Build cut from timber and sheets. */
+  readonly print: BuildPrint | null;
 };

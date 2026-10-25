@@ -70,8 +70,11 @@ export const BenchParameters = z.object({
   damp: z.boolean().default(false),
   /** The other stock options' prices, each from its shop's page, to cost each option (#704). */
   prices: OptionPrices.default({}),
-  /** The tools and kit the owner has to hand. */
-  tools: z.array(Tool),
+  /**
+   * The tools and kit the owner has to hand: none until they say, as a printed part's, so a Build
+   * starts before they're asked and its findings say which a step needs (#702).
+   */
+  tools: z.array(Tool).default([]),
 });
 export type BenchParameters = z.infer<typeof BenchParameters>;
 

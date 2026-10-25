@@ -15,8 +15,17 @@ export const BuildSlug = z
   .brand<"BuildSlug">();
 export type BuildSlug = z.infer<typeof BuildSlug>;
 
-/** What a Build is made from: the templates `packages/fabrication` derives. */
-export const BuildTemplate = z.enum(["framed-bench"]);
+/**
+ * What a Build is made from: the templates `packages/fabrication` derives. A framed bench is cut
+ * from timber; the rest are printed parts (#702), the last a part recipe as it's written.
+ */
+export const BuildTemplate = z.enum([
+  "framed-bench",
+  "battery-holster",
+  "castor-shim",
+  "bracket",
+  "printed-part",
+]);
 export type BuildTemplate = z.infer<typeof BuildTemplate>;
 
 /** The longest a Build's name gets. */

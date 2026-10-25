@@ -215,6 +215,12 @@ and its parameters, from which code derives the parts, the **cut plan**, the **b
 project step can own one. The model sets and explains its parameters; it never writes a length or a quantity itself.
 _Avoid_: design (that's what it looks like), plan (that's a floor plan or a project), cut list (that's one part of it)
 
+**Part recipe**:
+A printed part as data (#702): a base (box, plate, cylinder or L-bracket) and the features cut into it or raised on it
+(holes, slots, pockets sized from an object, fillets, chamfers, lettering). A model fills one; code checks it and makes
+the solid. A new shape is a new recipe, never new code.
+_Avoid_: model (that's who fills it in, or the 3D file), script, CAD
+
 **Cut plan**:
 How a Build's parts come out of the timber lengths and sheets it's cut from, allowing for each saw cut.
 _Avoid_: cutting list, cut sheet

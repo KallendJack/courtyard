@@ -44,6 +44,8 @@ import {
   undoChangeToBuild,
   viewOf,
 } from "./index.ts";
+import type { createPrints } from "./print.ts";
+import { printRoutes } from "./print-routes.ts";
 import { keepProgress } from "./progress.ts";
 import { hearTools, saveTools, type ToolsRefusal, undoToolsSave, yourTools } from "./tools.ts";
 
@@ -158,10 +160,12 @@ export const fabricationRoutes = (
      */
     sessions: Pick<Sessions, "list" | "events" | "create" | "send">;
     providers: readonly Provider[];
+    /** How a printed part's solid and files are made (#702): the builds lock, and a time limit. */
+    printing: Parameters<typeof createPrints>[0];
   },
 ) => {
   const routes = new Hono();
-  const { now, sessions, providers, ...where } = target;
+  const { now, sessions, providers, printing, ...where } = target;
 
   // The owner's tools (#707): every Build's and every workspace's, with what to move.
   routes.get("/tools", async (c) => {
@@ -317,6 +321,9 @@ export const fabricationRoutes = (
     if (!started.ok) return sessionError(c, started.error);
     return c.json({ session: started.value.id } satisfies BuildChatSent, 202);
   });
+
+  // A printed part made, and its files (#702).
+  printRoutes(routes, { opened, printing });
 
   // The owner's own change to a Build's parameters, as a merge patch, worked out again.
   routes.patch("/workspaces/:id/builds/:slug/parameters", async (c) => {

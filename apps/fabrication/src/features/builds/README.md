@@ -9,7 +9,7 @@ turning in 3D, its cut plan, "M6 × 50 bolts too short" in gold, and the chat th
 850 high", the session saves the change, and every number on the page moves with it.
 
 - **Uses:** Fabrication's API through `api/fabrication.ts` (the Build and where it is, its progress, a stock picked
-  and its Undo, its chat, the models),
+  and its Undo, its chat, the models, a printed part made and its files),
   `packages/ui` (the Reply box, Talk, `Scroller`, `useKept`, `CapsLabel`) and `three` for the 3D view.
 - **Used by:** the route `routes/workspaces.$id.builds.$slug.tsx`.
 
@@ -27,7 +27,9 @@ turning in 3D, its cut plan, "M6 × 50 bolts too short" in gold, and the chat th
 | `step-panel.tsx` | The steps as an instruction manual (#699): one step, its checklist, Back and Done, the step strip |
 | `close-up.tsx` | A step's close-up, drawn to scale: its sizes and where each fixing goes |
 | `progress.ts` | The step reached and the lines ticked, kept for every device; what the 3D view shows at a step |
-| `findings.tsx` | What the making rules found that needs the owner, in gold |
+| `print/print-panel.tsx` | A printed part's own (#702; "Fabrication · Text to print · Tablet (#702)"): the part on the plate, and the Print tab with its sizes and sources, its file, Open in Bambu Studio (its 3MF) and Send to printer, waiting for one |
+| `print/print-view.tsx` | The printed part's scene, `three`, on the printer's plate, loaded lazily as the bench's is |
+| `findings.tsx` | What the making rules found that needs the owner, in gold; for a printed part, each size assumed too |
 | `words.ts` | How the numbers read: money, sizes, stock, the findings' words |
 
 **Screens:** a part tapped in the 3D view, its letter in the key or a piece in the cut plan is lit in all of them and
