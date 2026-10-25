@@ -1897,9 +1897,10 @@ With none yet:
 
 **The save_build tool,** offered beside the project tool, as a model reads it, and its inputs (`<schemas>` is each
 template's parameters as JSON Schema, `framed-bench: {…}` from `BenchParameters` and then each printed template's from
-`PRINTED_PARAMETERS`, separated by spaces). The parameters' shape is in the tool's own
-description, not the input's: Codex's tool format keeps no description of an input that's an object, so there it
-never reached the model, and Codex sent `{}` (#732):
+`PRINTED_PARAMETERS`, separated by spaces, without `$schema` or Zod's largest-safe-integer maximums:
+`TEMPLATE_SCHEMAS`). The parameters' shape is in the tool's own description, not the input's: Codex's tool
+format keeps no description of an input that's an object, so there it never reached the model, and Codex sent `{}`
+(#732):
 
 > Starts or changes one of this workspace's Builds, and replies with everything code works out from it: its parts, cut
 > plan, buy list with its total, steps and findings. Given a Build's label, it renames it or changes the parameters

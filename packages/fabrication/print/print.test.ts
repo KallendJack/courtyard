@@ -1,3 +1,4 @@
+import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import type { Build } from "../build.ts";
 import { to3mf, toStl } from "./files.ts";
@@ -157,11 +158,15 @@ describe("a bracket", () => {
 describe("the files to print", () => {
   it("are a 3MF, a zip with the model in it, and a binary STL with every triangle", async () => {
     const part = await made(built("castor-shim", goldenShim));
-    const threeMf = to3mf(part, "Shim");
-    const text = Array.from(threeMf, (byte) => String.fromCharCode(byte)).join("");
-    expect(text.slice(0, 2)).toBe("PK");
-    expect(text).toContain("3D/3dmodel.model");
-    expect(text).toContain('unit="millimeter"');
+    const threeMf = unzipSync(to3mf(part, "Shim"));
+    expect(Object.keys(threeMf)).toEqual([
+      "[Content_Types].xml",
+      "_rels/.rels",
+      "3D/3dmodel.model",
+    ]);
+    const model = strFromU8(threeMf["3D/3dmodel.model"] ?? new Uint8Array());
+    expect(model).toContain('unit="millimeter"');
+    expect(model.match(/<triangle /g)).toHaveLength(part.triangles.length / 3);
     const stl = toStl(part, "Shim");
     expect(stl.length).toBe(84 + 50 * (part.triangles.length / 3));
   });

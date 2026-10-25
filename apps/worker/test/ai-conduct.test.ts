@@ -10,11 +10,10 @@ import {
   type SessionEvent,
   SessionSummary,
 } from "@courtyard/contract";
-import { BenchParameters, PRINTED_PARAMETERS } from "@courtyard/fabrication";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { z } from "zod";
 import { goldenBench } from "../../../packages/fabrication/bench/fixtures/golden.ts";
 import { err, ok } from "../src/lib/result.ts";
+import { TEMPLATE_SCHEMAS } from "../src/prompts/builds.ts";
 import { PAGE_NOT_ALLOWED } from "../src/prompts/index.ts";
 import { createFakeProvider } from "../src/providers/fake.ts";
 import type { CourtyardTool, OneOffInput, Provider, TurnInput } from "../src/providers/index.ts";
@@ -1908,18 +1907,14 @@ describe("Builds (#697, ADR 0036)", () => {
       `${await quotedInGuide("What the owner carries on over days")}\n\n${await quotedInGuide("Anything the owner will make")}`,
     );
     const tool = framing?.tools.find((offered) => offered.name === "save_build");
-    const schemas = [
-      ["framed-bench", BenchParameters] as const,
-      ...Object.entries(PRINTED_PARAMETERS),
-    ]
-      .map(
-        ([template, schema]) =>
-          `${template}: ${JSON.stringify(z.toJSONSchema(schema, { io: "input", reused: "ref" }))}`,
-      )
-      .join(" ");
     expect(tool?.description).toBe(
-      await quotedInGuide("Starts or changes one of this workspace's Builds", { schemas }),
+      await quotedInGuide("Starts or changes one of this workspace's Builds", {
+        schemas: TEMPLATE_SCHEMAS,
+      }),
     );
+    // Every template's JSON Schema is in it (#732), so it grows with each: past this, choose to.
+    // 19,000 since the bench's prices (#704) took it just past 18,000.
+    expect(tool?.description.length).toBeLessThan(19_000);
     expect(inputsOf(tool)).toBe(await quotedInGuide("- build: To change a Build"));
   });
 

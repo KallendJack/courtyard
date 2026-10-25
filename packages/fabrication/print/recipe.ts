@@ -310,9 +310,10 @@ export const checkRecipe = (recipe: PartRecipe, printer: PrinterSpec): Checked =
         const mm = feature.kind === "fillet" ? feature.radius : feature.size;
         if (base.kind === "cylinder") {
           problems.push(`${name} rounds a base's upright corners, and a cylinder has none.`);
-        } else if (mm * 2 > Math.min(box.w, box.d)) {
+        } else if (mm * 2 >= Math.min(box.w, box.d)) {
+          // At exactly half, the rounded outline closes up to nothing, and so does the part.
           problems.push(
-            `${name} of ${mm} mm is more than half the part's ${round(Math.min(box.w, box.d))} mm: make it smaller.`,
+            `${name} of ${mm} mm is half the part's ${round(Math.min(box.w, box.d))} mm or more: make it smaller.`,
           );
         }
         return;

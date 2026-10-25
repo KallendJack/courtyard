@@ -417,10 +417,11 @@ are the contract's `SourcedSize` and part recipe. The first template is the fram
 (`print/`, #702) are the holster, shim and bracket templates and a part recipe as written: each becomes a recipe
 (a base and its features), checked by the making rules (on the plate, holes on their faces, walls the nozzle prints),
 and made into a solid with manifold-3d (WebAssembly) and its lettering with opentype.js and the bundled Figtree font,
-then into 3MF and STL; nothing a model writes is run. [Its README](../packages/fabrication/README.md) has the files.
+then into 3MF (zipped with fflate) and STL; nothing a model writes is run. [Its README](../packages/fabrication/README.md) has the files.
 The worker's `features/fabrication/` keeps Builds and works them out with it (#697), and makes a printed part in a
-thread of its own, in its turn in the machine's builds lock and stopped at its time limit
-(`COURTYARD_PRINT_TIME_LIMIT_MS`), keeping what it made while the Build is unchanged.
+thread of its own, in its turn in the machine's builds lock and stopped at its time and memory limits
+(`COURTYARD_PRINT_TIME_LIMIT_MS`, `COURTYARD_PRINT_MEMORY_LIMIT_MB`), keeping what it made while the Build is
+unchanged, and why a recipe couldn't be made until the recipe changes.
 
 ### Fabrication's app: `apps/fabrication`
 

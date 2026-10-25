@@ -22,6 +22,11 @@ import {
 const PAST = 1;
 /** How many sides a hole's circle has: fine enough that a screw meets no flats. */
 const ROUND = 48;
+/**
+ * How much of a pocket or a line of lettering must have the part under it, by volume: all of it
+ * on a flat face, less a little where a fillet rounds a corner it comes near.
+ */
+const ON_PART_LEAST = 0.9;
 
 /** A part as made: its size and volume, whether it's closed all round, and its triangles. */
 export type Made = {
@@ -78,7 +83,9 @@ const AXIS: Readonly<Record<Face, { readonly index: 0 | 1 | 2; readonly sign: 1 
 
 /**
  * Makes a checked recipe into a solid. `font` is needed only for lettering. What can't be made as
- * written (lettering wider than its face, a hole that misses the part) comes back as reasons.
+ * written (lettering wider than its face, a hole that misses the part, a pocket or lettering
+ * without the part under it, a part in pieces or of nothing) comes back as reasons, as does a
+ * part manifold fails on, so only one closed solid is ever made.
  */
 export const makePart = async (
   recipe: CheckedRecipe,
@@ -105,6 +112,18 @@ export const makePart = async (
           placeOn(faceFrame(base, face)),
         ),
       );
+
+    /**
+     * Whether a flat shape on a face has the part under it, `depth` mm in: a face is its box's
+     * side, which is the part all over only on a box or a plate, so a pocket on a cylinder's
+     * curved side or lettering on the empty part of an L-bracket's top would cut nothing, or float.
+     */
+    const onPart = (face: Face, shape: CrossSection, depth: number) =>
+      kept(solid.intersect(onFace(face, shape, -depth, 0))).volume() >=
+      ON_PART_LEAST * shape.area() * depth;
+
+    /** How many separate bodies the part is now. */
+    const bodies = () => solid.decompose().map(kept).length;
 
     const corners = (feature: PartFeature & { kind: "fillet" | "chamfer" }) => {
       const { w, d } = box;
@@ -158,6 +177,13 @@ export const makePart = async (
       const v0 = open.has("down") ? -PAST : at.v - size.height / 2;
       const v1 = open.has("up") ? frame.V + PAST : at.v + size.height / 2;
       const rect = kept(kept(CrossSection.square([u1 - u0, v1 - v0])).translate([u0, v0]));
+      const onItsFace = kept(rect.intersect(kept(CrossSection.square([frame.U, frame.V]))));
+      if (!onPart(feature.face, onItsFace, size.depth)) {
+        problems.push(
+          `The pocket for the ${feature.object.name} isn't all in the part there: ${elsewhere(base, feature.face)}.`,
+        );
+        continue;
+      }
       solid = kept(solid.subtract(onFace(feature.face, rect, -size.depth, PAST)));
     }
     for (const feature of features) {
@@ -169,7 +195,12 @@ export const makePart = async (
         kept(kept(CrossSection.circle(radius, ROUND)).translate([feature.at.u + u, feature.at.v])),
       );
       const outline = kept(CrossSection.hull(ends));
-      solid = kept(solid.subtract(onFace(feature.face, outline, -frame.D - PAST, PAST)));
+      const cut = onFace(feature.face, outline, -frame.D - PAST, PAST);
+      if (kept(solid.intersect(cut)).isEmpty()) {
+        problems.push(`The slot for the ${feature.screw.name} misses the part: move it onto it.`);
+        continue;
+      }
+      solid = kept(solid.subtract(cut));
     }
     for (const feature of features) {
       if (feature.kind !== "hole") continue;
@@ -228,12 +259,38 @@ export const makePart = async (
       const letters = kept(
         kept(CrossSection.ofPolygons(outlines.contours, "NonZero")).translate([at.u, at.v]),
       );
-      solid =
-        feature.style === "raised"
-          ? kept(solid.add(onFace(feature.face, letters, -PAST / 10, feature.depth)))
-          : kept(solid.subtract(onFace(feature.face, letters, -feature.depth, PAST)));
+      // Raised lettering needs the part just under it; cut lettering, all the way in.
+      if (feature.style === "cut") {
+        if (!onPart(feature.face, letters, feature.depth)) {
+          problems.push(
+            `The lettering "${feature.text}" isn't all on the part there: ${elsewhere(base, feature.face)}.`,
+          );
+          continue;
+        }
+        solid = kept(solid.subtract(onFace(feature.face, letters, -feature.depth, PAST)));
+        continue;
+      }
+      const under = onPart(feature.face, letters, PAST / 10);
+      const before = bodies();
+      solid = kept(solid.add(onFace(feature.face, letters, -PAST / 10, feature.depth)));
+      // A letter off the part's edge, or over a curve, stands in the air: a body of its own.
+      if (!under || bodies() > before) {
+        problems.push(
+          `The lettering "${feature.text}" isn't all on the part there: ${elsewhere(base, feature.face)}.`,
+        );
+      }
     }
     if (problems.length > 0) return err(problems);
+    // What's served is one closed solid, or nothing: never an empty or broken file.
+    if (solid.isEmpty() || solid.status() !== "NoError") {
+      return err(["It comes out as nothing to print: check its sizes."]);
+    }
+    const pieces = bodies();
+    if (pieces > 1) {
+      return err([
+        `It comes out in ${pieces} separate pieces: join them up, or make each its own part.`,
+      ]);
+    }
 
     const bounds = solid.boundingBox();
     const placed = kept(solid.translate([-bounds.min[0], -bounds.min[1], -bounds.min[2]]));
@@ -256,9 +313,33 @@ export const makePart = async (
       positions,
       triangles: new Uint32Array(mesh.triVerts),
     });
+  } catch (error) {
+    // manifold's WebAssembly can fail outright on a part it can't make: a trap, or its C++
+    // throwing a bare number. That's a refusal, and the next part gets a fresh copy of it, since
+    // this one's memory may be broken (and nothing in it is freed). Anything else is a bug.
+    const failed =
+      typeof error === "number" || (error instanceof Error && error.name === "RuntimeError");
+    if (!failed) throw error;
+    loaded = undefined;
+    made.length = 0;
+    return err([MODELLER_FAILED]);
   } finally {
     for (const one of made) one.delete();
   }
+};
+
+const MODELLER_FAILED =
+  "It couldn't be made: making its solid failed. Make it simpler, with fewer features or less lettering.";
+
+/** Where a feature that isn't all on the part could go instead, for its finding. */
+const elsewhere = (base: PartBase, face: Face) => {
+  if (base.kind === "cylinder" && face !== "top" && face !== "bottom") {
+    return "a cylinder's side is curved, so put it on its top or bottom";
+  }
+  if (base.kind === "l-bracket" && face !== "bottom" && face !== "back") {
+    return "an L-bracket is solid right across only on its bottom and back, so put it there";
+  }
+  return "move it in, onto the part";
 };
 
 /** The base as a solid, its front left bottom corner at the origin. */

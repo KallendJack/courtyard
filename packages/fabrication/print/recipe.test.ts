@@ -126,6 +126,55 @@ describe("a part recipe", () => {
     });
   });
 
+  it("refuses a fillet or chamfer of half the part or more, which would leave nothing", () => {
+    for (const feature of [
+      { kind: "fillet", radius: 20 },
+      { kind: "chamfer", size: 20 },
+    ]) {
+      const build = part({ base: PLATE, features: [feature] });
+      expect(build.print?.recipe).toBeNull();
+      expect(refusal(build)?.problems[0]).toMatch(/of 20 mm is half the part's 40 mm or more/);
+    }
+    expect(
+      refusal(part({ base: PLATE, features: [{ kind: "fillet", radius: 19.9 }] })),
+    ).toBeUndefined();
+  });
+
+  it("is refused with more lettering than makes in seconds: 10 lines, 200 letters in all", () => {
+    const line = (text: string) => ({
+      kind: "text",
+      face: "top",
+      text,
+      size: 5,
+      depth: 1,
+      style: "cut",
+    });
+    const base = { kind: "box", width: 1000, depth: 1000, height: 100 };
+    const derived = (features: unknown[]) =>
+      derivePrinted("printed-part")({ part: "Sign", recipe: { base, features } });
+    expect(derived(Array.from({ length: 10 }, () => line("x".repeat(20)))).ok).toBe(true);
+    expect(derived(Array.from({ length: 11 }, () => line("Tools")))).toEqual({
+      ok: false,
+      error: [
+        "recipe.features: A part has at most 10 lines of lettering, and this has 11: put the rest on another part.",
+      ],
+    });
+    expect(derived(Array.from({ length: 3 }, () => line("x".repeat(80))))).toEqual({
+      ok: false,
+      error: [
+        "recipe.features: A part has at most 200 letters of lettering in all, and this has 240: make it shorter, or put some on another part.",
+      ],
+    });
+  });
+
+  it("is refused unread when a feature's kind is longer than any kind's name", () => {
+    const derived = derivePrinted("printed-part")({
+      part: "Test part",
+      recipe: { base: PLATE, features: [{ kind: "k".repeat(41) }] },
+    });
+    expect(derived.ok).toBe(false);
+  });
+
   it("is refused unread when its base isn't one of the four", () => {
     const derived = derivePrinted("printed-part")({
       part: "Test part",
