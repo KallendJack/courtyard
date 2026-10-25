@@ -1932,10 +1932,12 @@ its own (`build-change-one-size`). A size or price may be in other units (900 mm
 whole mm (899.6 as 900); a whole number under 10 with no unit is a count ("6 lengths") and must be one the Build
 counts (a part's count, a buy line's packs, how many lengths or sheets), while dates, step numbers and a list's own
 numbering aren't checked. A number the Build gave before the change counts too, so "an offcut of 247 mm, not 197 mm"
-passes. Run 3 times on each provider on 2026-10-24
-(#732): Claude passed both 3 of 3, once the check took the Build's numbers from before the change (it had failed every
-answer that said what a length was); Codex passed the change 3 of 3 and the bench 0 of 3, sending `{}` as parameters,
-until their shape moved into the tool's description, then 3 of 3.
+passes. Run 3 times on each provider on 2026-10-24 (#732): Claude passed both 3 of 3, once the check took the Build's
+numbers from before the change (it had failed every answer that said what a length was); Codex passed the change 3
+of 3 and the bench 0 of 3, sending `{}` as parameters, until their shape moved into the tool's description, then 3 of
+3. Run again on 2026-10-25 (#752), once steps had IDs, sizes were told to the whole mm and brackets had their screws:
+Codex passed both 3 of 3; Claude passed the change 3 of 3 and the bench 2 of 3 (one run saved no Build), then 3 of 3
+run again, each run guessing at keys for the screws' pack size before finding `price.packOf`.
 
 ## The move review
 
