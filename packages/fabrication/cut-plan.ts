@@ -76,8 +76,9 @@ type Space = { x: number; y: number; along: number; across: number };
 /**
  * Straight cuts right across what's left (a guillotine plan, as a panel saw or a shop cuts), the
  * biggest pieces first, each into the smallest space it fits, turned only if it fits no other
- * way. A piece placed splits its space into what's beside it (the full width) and what's below
- * it, each a saw cut away.
+ * way. A piece placed splits its space into what's beside it and what's below it, each a saw cut
+ * away: the first cut along the sheet (what's beside it the full width) or across it (what's below
+ * it the full length), whichever needs fewer sheets, along first when they need the same (#704).
  */
 export const planSheets = <P extends SheetPiece>(options: {
   sheetLength: number;
@@ -85,6 +86,16 @@ export const planSheets = <P extends SheetPiece>(options: {
   kerf: number;
   pieces: readonly P[];
 }): { sheets: { pieces: PlacedPiece<P>[] }[]; uncut: P[] } => {
+  const along = packSheets(options, "along");
+  const across = packSheets(options, "across");
+  return across.sheets.length < along.sheets.length ? across : along;
+};
+
+/** The pieces packed with every first cut one way: along the sheet, or across it. */
+const packSheets = <P extends SheetPiece>(
+  options: { sheetLength: number; sheetWidth: number; kerf: number; pieces: readonly P[] },
+  firstCut: "along" | "across",
+): { sheets: { pieces: PlacedPiece<P>[] }[]; uncut: P[] } => {
   const { sheetLength, sheetWidth, kerf } = options;
   const biggestFirst = [...options.pieces].sort((a, b) => b.length * b.width - a.length * a.width);
   const sheets: { pieces: PlacedPiece<P>[]; spaces: Space[] }[] = [];
@@ -132,12 +143,12 @@ export const planSheets = <P extends SheetPiece>(options: {
       x: space.x + along + kerf,
       y: space.y,
       along: space.along - along - kerf,
-      across: space.across,
+      across: firstCut === "along" ? space.across : across,
     };
     const below: Space = {
       x: space.x,
       y: space.y + across + kerf,
-      along,
+      along: firstCut === "along" ? along : space.along,
       across: space.across - across - kerf,
     };
     for (const left of [beside, below]) {

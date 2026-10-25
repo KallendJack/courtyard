@@ -44,6 +44,7 @@ export {
   PartScrew,
   PrinterSpec,
 } from "./recipe.ts";
+export { BuildStockChoice, BuildStockOptions, BuildStockPick } from "./stock.ts";
 export {
   COMMON_TOOLS,
   FoundTool,

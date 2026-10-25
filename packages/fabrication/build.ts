@@ -91,6 +91,8 @@ export type CutPlan = {
 export type BuyLine = {
   readonly item: string;
   readonly kind: "timber" | "sheet" | "fitted" | "fixing" | "filament";
+  /** The timber or sheet it buys, by name, so its row can open that stock's options (#704). */
+  readonly stock?: string;
   /** What it's for, in a few words. */
   readonly for: string;
   /** How many pieces the Build uses. */
@@ -204,6 +206,14 @@ export type Finding =
     }
   | { readonly kind: "too-big-for-stock"; readonly label: string; readonly stock: string }
   | {
+      /** A stock wrong for what it's used for: MDF in a damp garage, CLS for castor bases. */
+      readonly kind: "wrong-stock";
+      readonly stock: string;
+      /** The parts it's wrong for, by name. */
+      readonly parts: readonly string[];
+      readonly why: string;
+    }
+  | {
       readonly kind: "assumed";
       /** The sizes nobody measured or read from a maker: check these before cutting. */
       readonly sizes: readonly string[];
@@ -247,6 +257,45 @@ export type BuildPrint = {
   readonly recipe: CheckedRecipe | null;
 };
 
+/** What an option is like, as a chip says it: fine, or something to know. */
+export type Said = { readonly text: string; readonly tone: "fine" | "warn" };
+
+/** One stock a Build's timber or sheet could be swapped for, costed for this Build (#704). */
+export type StockChoice = {
+  /**
+   * The option it is; none for what the Build uses when that's no option ("45 × 95 C24"), shown
+   * first as picked and never offered again once swapped out.
+   */
+  readonly option?: string;
+  /** As a beginner reads it: "CLS, 38 × 89". */
+  readonly title: string;
+  /** Its name as the parts, cut plan and buy list give it: "38 × 89 CLS". */
+  readonly stock: string;
+  /** Why pick it, or not, in a line: its strength for the job and its finish. */
+  readonly why: string;
+  /** Its faces, when it's an option. */
+  readonly finish?: "rough" | "smooth";
+  readonly says: readonly Said[];
+  /** What this Build would buy of it: "5 lengths of 2.4 m". */
+  readonly buys: string;
+  /** A length's or a sheet's price, and where from, when known. */
+  readonly price?: { readonly pence: number; readonly shop?: string; readonly link?: string };
+  /** What this Build's lengths or sheets of it come to, when priced. */
+  readonly total?: number;
+  readonly picked: boolean;
+  readonly recommended: boolean;
+};
+
+/** A timber or sheet a Build uses, with the options it could be, the recommended first. */
+export type StockOptions = {
+  /** The stock it is now, as the buy list and cut plan name it. */
+  readonly stock: string;
+  readonly name: string;
+  /** The parts cut from it: "Top, shelf and braces". */
+  readonly for: string;
+  readonly choices: readonly StockChoice[];
+};
+
 export type Build = {
   readonly template: BuildTemplate;
   /** The finished size, mm. */
@@ -258,6 +307,8 @@ export type Build = {
   readonly steps: readonly Step[];
   readonly glossary: readonly GlossaryWord[];
   readonly findings: readonly Finding[];
+  /** Each timber and sheet with more than one option, to pick from. */
+  readonly options: readonly StockOptions[];
   /** A printed part's own; `null` for a Build cut from timber and sheets. */
   readonly print: BuildPrint | null;
 };

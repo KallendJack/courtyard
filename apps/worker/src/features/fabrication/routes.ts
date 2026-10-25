@@ -6,8 +6,10 @@ import {
   BuildParametersChange,
   BuildProgress,
   BuildSlug,
+  BuildStockPick,
   type Builds,
-  type MadePart,
+  type BuildView,
+  ChangeId,
   NewMessage,
   type ProviderList,
   ToolsChange,
@@ -34,8 +36,16 @@ import type { Sessions } from "../sessions/index.ts";
 import { readMessageWithAttachments, sessionError } from "../sessions/routes.ts";
 import { getWorkspace } from "../workspaces/index.ts";
 import { chatOf, chatSessionOf } from "./chat.ts";
-import { type BuildRefusal, readBuild, readBuilds, saveBuild, viewOf } from "./index.ts";
-import { createPrints, filesOf, madePartOf, type PrintRefusal } from "./print.ts";
+import {
+  type BuildRefusal,
+  readBuild,
+  readBuilds,
+  saveBuild,
+  undoChangeToBuild,
+  viewOf,
+} from "./index.ts";
+import type { createPrints } from "./print.ts";
+import { printRoutes } from "./print-routes.ts";
 import { keepProgress } from "./progress.ts";
 import { hearTools, saveTools, type ToolsRefusal, undoToolsSave, yourTools } from "./tools.ts";
 
@@ -94,28 +104,6 @@ export const buildUndoError = (c: Context, refusal: WholeFilesUndoRefusal) =>
         error: "That Build has changed since, so undoing this would lose the newer change.",
       })
     : sharedFileError(c, refusal, BUILDS);
-
-/** Why a printed part wasn't made, as the API answers it. */
-const printError = (c: Context, refusal: PrintRefusal) => {
-  switch (refusal.kind) {
-    case "not-printed":
-      return apiError(c, { status: 404, error: "That Build isn't a printed part." });
-    case "cannot-make":
-      return apiError(c, {
-        status: 422,
-        error: `That part can't be made as it is: ${refusal.problems.join(" ")}`,
-      });
-    case "too-long":
-      return apiError(c, {
-        status: 503,
-        error: "Making that part took too long, so it was stopped: make it simpler.",
-      });
-    case "stopped":
-      return apiError(c, { status: 503, error: "Making that part was stopped." });
-    case "failed":
-      return apiError(c, { status: 500, error: "That part couldn't be made just now." });
-  }
-};
 
 /** Why the owner's tools weren't read or saved, as the API answers it. */
 const toolsError = (c: Context, refusal: ToolsRefusal) => {
@@ -178,7 +166,6 @@ export const fabricationRoutes = (
 ) => {
   const routes = new Hono();
   const { now, sessions, providers, printing, ...where } = target;
-  const prints = createPrints(printing);
 
   // The owner's tools (#707): every Build's and every workspace's, with what to move.
   routes.get("/tools", async (c) => {
@@ -335,43 +322,8 @@ export const fabricationRoutes = (
     return c.json({ session: started.value.id } satisfies BuildChatSent, 202);
   });
 
-  /** A printed part's Build made, by the request's workspace and Build, or the answer why not. */
-  const madePrint = async (c: Context) => {
-    const found = await opened(c);
-    if (!found.ok) return found;
-    const { build, place, slug } = found.value;
-    const made = await prints.make(`${place.workspace.id}/${slug}`, build, c.req.raw.signal);
-    if (made.ok) return ok({ made: made.value, slug });
-    return err(printError(c, made.error));
-  };
-
-  // A printed part made (#702): its size and volume from the solid, its triangles for the 3D view,
-  // and its files' names.
-  routes.get("/workspaces/:id/builds/:slug/print", async (c) => {
-    const made = await madePrint(c);
-    if (!made.ok) return made.error;
-    const { slug } = made.value;
-    return c.json(madePartOf(made.value.made, filesOf(slug)) satisfies MadePart);
-  });
-
-  // Its files to print, by their names: the 3MF Bambu Studio opens, and the STL.
-  routes.get("/workspaces/:id/builds/:slug/print/:file", async (c) => {
-    const made = await madePrint(c);
-    if (!made.ok) return made.error;
-    const files = filesOf(made.value.slug);
-    const file = c.req.param("file");
-    const bytes =
-      file === files.threeMf
-        ? { body: made.value.made.threeMf, type: "model/3mf" }
-        : file === files.stl
-          ? { body: made.value.made.stl, type: "model/stl" }
-          : undefined;
-    if (bytes === undefined) return apiError(c, { status: 404, error: "There's no such file." });
-    return c.body(new Uint8Array(bytes.body), 200, {
-      "Content-Type": bytes.type,
-      "Content-Disposition": `attachment; filename="${file}"`,
-    });
-  });
+  // A printed part made, and its files (#702).
+  printRoutes(routes, { opened, printing });
 
   // The owner's own change to a Build's parameters, as a merge patch, worked out again.
   routes.patch("/workspaces/:id/builds/:slug/parameters", async (c) => {
@@ -389,6 +341,39 @@ export const fabricationRoutes = (
       change: saved.value.change ?? null,
       build: viewOf(saved.value.build),
     } satisfies BuildChanged);
+  });
+
+  // The owner's pick of one of a stock's options (#704): every part cut from it follows, worked
+  // out again.
+  routes.post("/workspaces/:id/builds/:slug/stock", async (c) => {
+    const named = fileIn(c, where, BuildSlug);
+    if (named === undefined) return sharedFileError(c, { kind: "not-found" }, BUILDS);
+    const body = await readBody(c, BuildStockPick);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const saved = await saveBuild(
+      named.workspace,
+      { slug: named.slug, pick: body.value },
+      { now: now() },
+    );
+    if (!saved.ok) return buildError(c, saved.error);
+    return c.json({
+      change: saved.value.change ?? null,
+      build: viewOf(saved.value.build),
+    } satisfies BuildChanged);
+  });
+
+  // Undo of one of its changes, from Fabrication: the Build as it is again.
+  routes.post("/workspaces/:id/builds/:slug/changes/:change/undo", async (c) => {
+    const named = fileIn(c, where, BuildSlug);
+    const id = ChangeId.safeParse(c.req.param("change"));
+    if (named === undefined || !id.success) {
+      return sharedFileError(c, { kind: "not-found" }, BUILDS);
+    }
+    const undone = await undoChangeToBuild(named.workspace, { slug: named.slug, id: id.data });
+    if (!undone.ok) return buildUndoError(c, undone.error);
+    const read = await readBuild(named.workspace, named.slug);
+    if (!read.ok) return buildError(c, read.error);
+    return c.json(viewOf(read.value) satisfies BuildView);
   });
 
   return routes;

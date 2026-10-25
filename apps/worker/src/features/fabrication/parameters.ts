@@ -1,6 +1,6 @@
-import type { BuildParameters, BuildTemplate } from "@courtyard/contract";
-import { type Build, deriveBench, derivePrinted } from "@courtyard/fabrication";
-import type { Result } from "../../lib/result.ts";
+import type { BuildParameters, BuildStockPick, BuildTemplate } from "@courtyard/contract";
+import { type Build, deriveBench, derivePrinted, pickBenchStock } from "@courtyard/fabrication";
+import { err, type Result } from "../../lib/result.ts";
 
 // A Build's parameters: worked out by its template's engine, changed by a merge patch, and what a
 // change did, in a few words for its note.
@@ -17,6 +17,27 @@ const ENGINES: Readonly<Record<BuildTemplate, (parameters: unknown) => Result<Bu
 /** Everything a Build shows, worked out from its template and parameters (ADR 0036). */
 export const derive = (template: BuildTemplate, parameters: BuildParameters) =>
   ENGINES[template](parameters);
+
+/** A printed part is made of filament, so it has no stock to swap. */
+const noStock = err(["A printed part has no timber or sheets to pick from."]);
+
+/** Each template's way to swap one of its stocks for an option, in every part cut from it. */
+const PICKERS: Readonly<
+  Record<
+    BuildTemplate,
+    (parameters: unknown, pick: BuildStockPick) => Result<BuildParameters, string[]>
+  >
+> = {
+  "framed-bench": pickBenchStock,
+  "battery-holster": () => noStock,
+  "castor-shim": () => noStock,
+  bracket: () => noStock,
+  "printed-part": () => noStock,
+};
+
+/** A Build's parameters with one of its stocks swapped for an option (#704), or why not. */
+export const pickStockIn = (template: BuildTemplate, parameters: unknown, pick: BuildStockPick) =>
+  PICKERS[template](parameters, pick);
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

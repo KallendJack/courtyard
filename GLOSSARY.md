@@ -237,6 +237,13 @@ Its **progress**, the step reached and the lines ticked, is kept on the Build fo
 step by its ID ("fit-castors") rather than its number, so ticks stay put when a step before comes or goes.
 _Avoid_: instructions (that's what a model is given), tasks, project steps (those are a project's)
 
+**Stock options**:
+The timbers or sheets a Build's stock could be instead (#704), such as CLS or treated timber for the frame, or OSB or
+MDF for the top: the recommended first, each costed for this Build, with what it's like and what to know. **Pick**
+swaps one in every part cut from that stock, and the Build is worked out again. A stock wrong for its parts (MDF in a
+damp garage) is a making-rule finding.
+_Avoid_: materials, alternatives, variants
+
 **Sourced size**:
 A size as a Build takes it (#696): a number, its unit and its source, `measured`, `specified` (with the maker's page
 or spec it came from) or `assumed`. Never free text. The sourced Facts of #701 will use the same shape.

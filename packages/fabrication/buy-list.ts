@@ -8,6 +8,7 @@ import type { Price, Sheet, Timber } from "./stock.ts";
 export const buyLine = (line: {
   item: string;
   kind: BuyLine["kind"];
+  stock?: string;
   for: string;
   needed: number;
   price: Price | undefined;
@@ -46,6 +47,7 @@ export const stockLines = (options: {
       buyLine({
         item: `${plan.stock}, ${plan.stockLength / 1000} m`,
         kind: "timber",
+        stock: plan.stock,
         for: usedFor(plan.lengths.flatMap((length) => length.cuts.map((cut) => cut.label))),
         needed: plan.lengths.length,
         price: options.timbers.find((timber) => timber.name === plan.stock)?.price,
@@ -55,6 +57,7 @@ export const stockLines = (options: {
       buyLine({
         item: `${plan.stock}, ${plan.sheetLength} × ${plan.sheetWidth}`,
         kind: "sheet",
+        stock: plan.stock,
         for: usedFor(plan.sheets.flatMap((sheet) => sheet.pieces.map((piece) => piece.label))),
         needed: plan.sheets.length,
         price: options.sheets.find((sheet) => sheet.name === plan.stock)?.price,

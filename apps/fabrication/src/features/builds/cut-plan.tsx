@@ -25,12 +25,24 @@ const sameCuts = (lengths: readonly Length[]) => {
   return groups;
 };
 
-/** A group's line: what it's cut from and how many. */
-function StockLine(props: { name: string; count: number }) {
+/** A group's line: what it's cut from and how many, and its stock's options on its first (#704). */
+function StockLine(props: { name: string; count: number; options: (() => void) | undefined }) {
   return (
     <p className="flex items-baseline justify-between gap-3 text-meta text-foreground">
       <span className="min-w-0 font-semibold">{props.name}</span>
-      <span className="font-mono text-muted-foreground">× {props.count}</span>
+      <span className="flex items-baseline gap-3">
+        <span className="font-mono text-muted-foreground">× {props.count}</span>
+        {props.options !== undefined && (
+          <button
+            type="button"
+            aria-label={`Options for ${props.name.split(",")[0]}`}
+            onClick={props.options}
+            className="font-medium text-primary-text hover:underline"
+          >
+            Options
+          </button>
+        )}
+      </span>
     </p>
   );
 }
@@ -44,8 +56,14 @@ export function CutPlan(props: {
   derived: DerivedBuild;
   lit: string | undefined;
   pick: (label: string) => void;
+  openOptions: (stock: string) => void;
 }) {
   const { cutPlan } = props.derived;
+  /** A stock's options, on its first line only, where it has some. */
+  const optionsOf = (stock: string, first: boolean) =>
+    first && props.derived.options.some((options) => options.stock === stock)
+      ? () => props.openOptions(stock)
+      : undefined;
   const assumed = assumedSizes(props.derived.findings).includes("saw cut");
   const button = (label: string, title: string) => ({
     type: "button" as const,
@@ -59,12 +77,16 @@ export function CutPlan(props: {
         Each saw cut takes {cutPlan.kerf} mm{assumed ? " · assumed" : ""}
       </p>
       {cutPlan.timber.flatMap((timber) =>
-        sameCuts(timber.lengths).map(({ length, count }) => (
+        sameCuts(timber.lengths).map(({ length, count }, group) => (
           <section
             key={`${timber.stock}:${length.cuts.map((cut) => cut.label).join()}`}
             className="flex flex-col gap-1.5"
           >
-            <StockLine name={`${timber.stock}, ${metres(timber.stockLength)}`} count={count} />
+            <StockLine
+              name={`${timber.stock}, ${metres(timber.stockLength)}`}
+              count={count}
+              options={optionsOf(timber.stock, group === 0)}
+            />
             <div className="flex h-9 gap-px rounded-sm bg-muted">
               {length.cuts.map((cut, at) => (
                 <button
@@ -93,6 +115,7 @@ export function CutPlan(props: {
             <StockLine
               name={`${sheet.stock}, ${sheet.sheetLength} × ${sheet.sheetWidth}`}
               count={1}
+              options={optionsOf(sheet.stock, at === 0)}
             />
             <div
               className="relative w-full rounded-sm bg-muted"

@@ -148,6 +148,38 @@ describe("the Build tool", () => {
     expect(reply?.reply).toContain(
       "- M6 × 50 bolts are too short: they need 59 mm, through the castor plate, castor base, M6 washer, M6 lock nut, two threads. The steps and buy list use 60 mm ones instead (step 4).",
     );
+    expect(reply?.reply).toContain(
+      "Stock options, the recommended first:\n- Frame timber, now 45 × 95 C16, for legs, long rails, end rails and shelf support:\n  - Sawn C16, 45 × 95 (recommended, picked): 5 lengths of 2.4 m, £34.00 at Woodstore (https://shop.example/c16-45x95). Strong, kiln-dried, rough faces. Right for a bench. Fine in a garage.\n  - CLS, 38 × 89: 5 lengths of 2.4 m, £31.50 at Woodstore (https://shop.example/cls-38x89). Smooth, with rounded edges, but 7 mm slimmer than C16, so each screw has less to grip. Less wood for screws.",
+    );
+    expect(reply?.reply).toContain(
+      "  - MDF, 18 mm: 1 sheet of 2440 × 1220, £28.00 at Panel Cutters (https://shop.example/mdf-18). Smooth and cheap, but heavy, and splits at screws near its edges. Keep it dry.",
+    );
+  });
+
+  it("marks an option's price with no shop, or no link, so the model never gives it as sourced (#704)", async () => {
+    const { saver } = await sessionWith([
+      [
+        buildTool({
+          name: "Workbench",
+          template: "framed-bench",
+          parameters: {
+            ...goldenBench,
+            prices: {
+              ...goldenBench.prices,
+              "osb-18": { pence: 3200 },
+              "mdf-18": { pence: 2800, shop: "Panel Cutters" },
+            },
+          },
+        }),
+      ],
+    ]);
+    const [reply] = saver.replies[0] ?? [];
+    expect(reply?.reply).toContain(
+      "  - OSB, 18 mm: 1 sheet of 2440 × 1220, £32.00, no shop given. ",
+    );
+    expect(reply?.reply).toContain(
+      "  - MDF, 18 mm: 1 sheet of 2440 × 1220, £28.00 at Panel Cutters, no link given. ",
+    );
   });
 
   it("changes one size by its label, leaving every other parameter, and the Build works the rest out again", async () => {
@@ -272,6 +304,78 @@ describe("Fabrication's API", () => {
     );
     expect(await buildFile("workbench")).toMatchObject({
       parameters: { height: goldenBench.height },
+    });
+  });
+
+  it("swaps a stock for one of its options, as one change the owner can undo from Fabrication (#704)", async () => {
+    const request = await withBench();
+    const options = (await viewOf(request, "workbench")).derived.options;
+    expect(options.map(({ stock, name }) => [stock, name])).toEqual([
+      ["45 × 95 C16", "Frame timber"],
+      ["18 mm plywood", "Sheet"],
+    ]);
+
+    const response = await postJson(
+      request,
+      "/api/fabrication/workspaces/garage/builds/workbench/stock",
+      { stock: "45 × 95 C16", option: "cls-38x89" },
+    );
+    expect(response.status).toBe(200);
+    const changed = BuildChanged.parse(await response.json());
+    expect(changed.build.derived.buyList.lines[0]).toMatchObject({
+      item: "38 × 89 CLS, 2.4 m",
+      total: 3150,
+    });
+    expect(changed.build.derived.parts.find(({ label }) => label === "C")?.length).toBe(474);
+    expect((await changesIn(contextDir))[0]?.title).toBe("Change Build: Workbench");
+
+    const undone = await postJson(
+      request,
+      `/api/fabrication/workspaces/garage/builds/workbench/changes/${changed.change}/undo`,
+      {},
+    );
+    expect(undone.status).toBe(200);
+    expect(BuildView.parse(await undone.json()).derived.buyList.lines[0]).toMatchObject({
+      item: "45 × 95 C16, 2.4 m",
+      total: 3400,
+    });
+    expect(await buildFile("workbench")).toEqual({
+      name: "Workbench",
+      template: "framed-bench",
+      parameters: goldenBench,
+    });
+  });
+
+  it("refuses an option the stock doesn't have, and Undo of another Build's change", async () => {
+    const request = await withBench();
+    const refused = await postJson(
+      request,
+      "/api/fabrication/workspaces/garage/builds/workbench/stock",
+      { stock: "45 × 95 C16", option: "mdf-18" },
+    );
+    expect(refused.status).toBe(400);
+    expect(await errorOf(refused)).toBe("mdf-18 isn't one of 45 × 95 C16's options.");
+
+    await writeFile(
+      join(contextDir, "garage", "builds", "trestle.json"),
+      JSON.stringify({ name: "Trestle", template: "framed-bench", parameters: goldenBench }),
+    );
+    const picked = BuildChanged.parse(
+      await (
+        await postJson(request, "/api/fabrication/workspaces/garage/builds/workbench/stock", {
+          stock: "18 mm plywood",
+          option: "osb-18",
+        })
+      ).json(),
+    );
+    const elsewhere = await postJson(
+      request,
+      `/api/fabrication/workspaces/garage/builds/trestle/changes/${picked.change}/undo`,
+      {},
+    );
+    expect(elsewhere.status).toBe(404);
+    expect(await buildFile("workbench")).toMatchObject({
+      parameters: { top: { sheet: { name: "18 mm OSB" } } },
     });
   });
 

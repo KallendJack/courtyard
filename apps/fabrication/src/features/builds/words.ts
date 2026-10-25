@@ -87,6 +87,11 @@ const findingWords = (finding: Exclude<BuildFinding, { kind: "assumed" }>): Card
         title: `${finding.where} is too thin`,
         detail: `${tenths(finding.mm)} mm, less than the ${tenths(finding.least)} mm the nozzle prints well. Make it thicker.`,
       };
+    case "wrong-stock":
+      return {
+        title: `${finding.stock} is wrong for the ${listed(finding.parts.map((part) => part.toLowerCase()))}`,
+        detail: `${finding.why} Pick another from its options.`,
+      };
   }
 };
 

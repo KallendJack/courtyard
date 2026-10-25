@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SizeSource, SourcedSize } from "../sourced/size.ts";
+import { BuildStockOptions } from "./stock.ts";
 
 // What `packages/fabrication` derives for a Build, as Fabrication shows it (#698): the engine's
 // `Build` (its `build.ts`), checked here so the app parses what crosses rather than trusting it,
@@ -75,6 +76,8 @@ export type BuildCutPlan = z.infer<typeof BuildCutPlan>;
 export const BuildBuyLine = z.object({
   item: z.string(),
   kind: z.enum(["timber", "sheet", "fitted", "fixing", "filament"]),
+  /** The timber or sheet it buys, whose options its row opens (#704). */
+  stock: z.string().optional(),
   for: z.string(),
   needed: z.number(),
   packOf: z.number(),
@@ -154,6 +157,12 @@ export const BuildFinding = z.discriminatedUnion("kind", [
     tools: list(z.object({ tool: z.string(), name: z.string(), steps: list(z.number().int()) })),
   }),
   z.object({ kind: z.literal("too-big-for-stock"), label: z.string(), stock: z.string() }),
+  z.object({
+    kind: z.literal("wrong-stock"),
+    stock: z.string(),
+    parts: list(z.string()),
+    why: z.string(),
+  }),
   z.object({ kind: z.literal("assumed"), sizes: list(z.string()) }),
   z.object({ kind: z.literal("cannot-make"), problems: list(z.string()) }),
   z.object({
@@ -196,6 +205,7 @@ export const DerivedBuild = z.object({
   /** The words the steps use that a beginner may not know, each with a line saying what it means. */
   glossary: list(z.object({ word: z.string(), means: z.string() })),
   findings: list(BuildFinding),
+  options: list(BuildStockOptions),
   /** A printed part's own; `null` for a Build cut from timber and sheets. */
   print: BuildPrint.nullable(),
 });

@@ -2,11 +2,14 @@ import {
   ApiError,
   ATTACHMENTS_FIELD,
   AuthState,
+  BuildChanged,
   BuildChat,
   BuildChatSent,
   BuildOpened,
   BuildProgress,
   type BuildSlug,
+  type BuildStockPick,
+  BuildView,
   type ChangeId,
   MadePart,
   MESSAGE_FIELD,
@@ -70,6 +73,28 @@ export const madePart = (workspaceId: WorkspaceId, slug: BuildSlug) =>
 /** Where one of a printed part's files downloads from, by its name. */
 export const printFile = (workspaceId: WorkspaceId, slug: BuildSlug, file: string) =>
   `/api${buildPath(workspaceId, slug)}/print/${encodeURIComponent(file)}`;
+
+/** One of a Build's timbers or sheets swapped for an option, and the change Undo takes back. */
+export const pickStock = (
+  where: { workspaceId: WorkspaceId; slug: BuildSlug },
+  pick: BuildStockPick,
+) =>
+  ask(`${buildPath(where.workspaceId, where.slug)}/stock`, BuildChanged, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(pick),
+  });
+
+/** Undo of one of a Build's changes: the Build as it is again. */
+export const undoBuildChange = (
+  where: { workspaceId: WorkspaceId; slug: BuildSlug },
+  change: ChangeId,
+) =>
+  ask(
+    `${buildPath(where.workspaceId, where.slug)}/changes/${encodeURIComponent(change)}/undo`,
+    BuildView,
+    { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+  );
 
 /** A Build's chat: what's been said in its session. */
 export const buildChat = (workspaceId: WorkspaceId, slug: BuildSlug) =>

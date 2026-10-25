@@ -243,6 +243,7 @@ export const derivePrinted =
       steps,
       glossary: glossaryOf(steps.flatMap((step) => step.words)),
       findings,
+      options: [],
       print: {
         plate: printer.plate,
         fits,

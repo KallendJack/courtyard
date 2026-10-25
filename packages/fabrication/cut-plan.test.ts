@@ -84,6 +84,25 @@ describe("sheets", () => {
     expect(plan.uncut).toEqual([]);
   });
 
+  it("fits the CLS bench's sheet pieces on one sheet, cutting across first where that fits more (#704)", () => {
+    // By hand: G in a corner, H below it, two J beside H and the third beside G.
+    const plan = planSheets({
+      sheetWidth: 1220,
+      sheetLength: 2440,
+      kerf: KERF,
+      pieces: [
+        { label: "G", length: 1500, width: 600 },
+        { label: "H", length: 1192, width: 550 },
+        { label: "J", length: 474, width: 500 },
+        { label: "J", length: 474, width: 500 },
+        { label: "J", length: 474, width: 500 },
+      ],
+    });
+
+    expect(plan.sheets).toHaveLength(1);
+    expect(plan.uncut).toEqual([]);
+  });
+
   it("starts another sheet when one is full", () => {
     const plan = planSheets({
       sheetWidth: 1220,
