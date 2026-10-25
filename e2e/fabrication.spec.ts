@@ -41,6 +41,8 @@ const workspaceWithBuild = async (
   );
   await expect(page.getByRole("list", { name: "Projects saved" })).toContainText("Started project");
   await page.getByRole("link", { name: `Back to ${name}` }).click();
+  // On Home with its project before the next message, so it isn't typed into the session left.
+  await expect(page.getByRole("region", { name: "Projects" })).toContainText("Split the garage");
   await startSaving(page, `build: ${JSON.stringify({ ...build, project: "P1", step: "s1" })}`);
   await expect(page.getByRole("list", { name: "Builds saved" })).toContainText("Started Build");
   await page.getByRole("link", { name: `Back to ${name}` }).click();
