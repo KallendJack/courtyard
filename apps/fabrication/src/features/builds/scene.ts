@@ -111,11 +111,12 @@ const MARK_COLOUR: Readonly<Record<BuildSceneMark["kind"], string>> = {
   arrow: "primary",
   check: "success",
   note: "muted-foreground",
+  callout: "yours",
 };
 
-/** Where a mark's words go: a line's middle, an arrow's tail, a note's place. */
+/** Where a mark's words go: a line's middle, an arrow's tail, a note's or a callout's place. */
 export const anchorOf = (mark: BuildSceneMark): At => {
-  if (mark.kind === "note") return mark.at;
+  if (mark.kind === "note" || mark.kind === "callout") return mark.at;
   if (mark.kind === "arrow") return mark.from;
   if (mark.kind === "line") return mark.to;
   return {
@@ -125,13 +126,34 @@ export const anchorOf = (mark: BuildSceneMark): At => {
   };
 };
 
+/**
+ * How a mark's words look: as big as the step's own lines, read at arm's length (#777), sizes in
+ * gold, checks moss, a waste note red; a callout's two lines a little smaller, so they sit off the
+ * model, in the owner's colour or the next action's green (#783).
+ */
+export const markClass = (mark: BuildSceneMark, big: boolean) => {
+  if (mark.kind === "callout") {
+    // On the background in a small picture, so it still reads where there's no room off the model.
+    const tone = mark.tone === "yours" ? "text-yours" : "text-success";
+    return `${big ? "text-meta" : "text-label"} group-data-small:bg-background/80 ${tone}`;
+  }
+  const size = big ? "text-bench" : "text-answer";
+  if (mark.kind === "size") {
+    return `${size} border border-warning/60 bg-background/80 font-mono text-warning`;
+  }
+  if (mark.kind === "check") return `${size} bg-background/80 font-mono text-success`;
+  if (mark.kind === "line") return `${size} font-mono text-foreground`;
+  if (mark.kind === "arrow") return `${size} text-primary-text`;
+  return `${size} ${mark.tone === "waste" ? "text-destructive-text" : mark.tone === "check" ? "text-success" : "text-muted-foreground"}`;
+};
+
 /** What a mark says: a size or check by its whole mm, the others in their own words. */
 export const markWords = (mark: BuildSceneMark) =>
   mark.kind === "size" || mark.kind === "check" ? String(Math.round(mark.mm)) : mark.says;
 
 /**
  * A mark's lines in the scene: a dashed dimension or check, a pencil line, an arrow with its head.
- * Notes are words only. Returns what to dispose of.
+ * Notes and callouts are words only. Returns what to dispose of.
  */
 export const drawMark = (
   world: THREE.Scene,
@@ -139,7 +161,7 @@ export const drawMark = (
   point: (at: At) => THREE.Vector3,
   reach: number,
 ) => {
-  if (mark.kind === "note") return [];
+  if (mark.kind === "note" || mark.kind === "callout") return [];
   const colour = themed(MARK_COLOUR[mark.kind]);
   const from = point(mark.from);
   const to = point(mark.to);
@@ -163,7 +185,7 @@ export const drawMark = (
 };
 
 /** The room kept between two words or letters over the picture, in px, so none touch (#753). */
-const GAP = 4;
+export const GAP = 4;
 
 /** Which ways a word may move to make room, nearest first: down, up, then each side. */
 const DIRECTIONS = [
@@ -181,7 +203,7 @@ const DIRECTIONS = [
 const FURTHEST = 8;
 
 /** Something to place over the picture: its middle where it belongs, and its size, in px. */
-type Placing = { x: number; y: number; w: number; h: number };
+export type Placing = { x: number; y: number; w: number; h: number };
 
 /**
  * Where each word or letter goes, in order: where it belongs, or the nearest spot clear of those
@@ -222,4 +244,17 @@ export const spread = (
     placed.push(spots.find(clear) ?? inside(want));
   }
   return placed.map(({ x, y }) => ({ x, y }));
+};
+
+/**
+ * The parts with a letter over them: those lit at the step, or every part when none is, one
+ * letter a part so they don't pile up (#753).
+ */
+export const letteredOf = (scene: BuildScene) => {
+  const anyLit = scene.pieces.some((piece) => piece.tone === "lit");
+  return scene.pieces.flatMap((piece) =>
+    piece.kind === "part" && piece.label !== null && (!anyLit || piece.tone === "lit")
+      ? [{ label: piece.label, name: piece.name, lit: piece.tone === "lit" }]
+      : [],
+  );
 };

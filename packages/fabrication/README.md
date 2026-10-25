@@ -31,7 +31,7 @@ if (recipe) {
 |---|---|
 | `index.ts` | What callers import |
 | `build.ts` | What a template derives: parts with a box each for the 3D view, the cut plan, the buy list, steps, findings, and a printed part's own; and what it's worked out with besides its parameters (`BuildSetting`: the owner's tools, the ways steps done were done) |
-| `scene.ts` | What a step's picture is made of: its pieces and the marks drawn over them |
+| `scene.ts` | What a step's picture is made of: its pieces and the marks drawn over them, callouts among them (#783) |
 | `stock.ts` | What parts are cut from and fixed with: timber, sheets, fixings and their prices. A template takes each slot's stock as a parameter, so a slot can be swapped |
 | `catalog.ts` | The stock options (#704): each timber's and sheet's sizes, what it's like, and the jobs it suits, and what each is like for the slots it would fill, judged by the strictest |
 | `options.ts` | A template's slots offered those options, each costed by working the Build out again with it, the stock in use as it is; a pick swapped in, keeping the old one's price and size; and the making rule that flags stock wrong for its slot |
@@ -39,8 +39,8 @@ if (recipe) {
 | `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed; and the tools the owner chose to buy, while they're missing, a set's missing bits by size (#763) |
 | `findings.ts` | The making rules code checks: a bolt's length to use, long enough for what it passes through plus two threads, and the owner's own that are short (`boltLength`), tools needed and not to hand, sizes assumed |
 | `capacity.ts` | What a mitre or circular saw cuts (#780): its width at 90° and depth, read from its size in Your tools, assumed until given, and whether a timber fits it |
-| `tools.ts`, `glossary.ts` | The tools and kit a step can need, which of them each of Your tools, or something else the owner has, is by the words in its name, one tool or several ("Drill and drill bits", `toolsFrom`; a step stool for the long end, and only that, `standInFor`), a bit set's sizes and whether it has a bit (`bitSetsFrom`, `bitInSets`), and the words a beginner may not know |
-| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `step-tools.ts` (a step's tools against the owner's: a stand-in, bits by size, #763), `walk-throughs.ts` (marking as tape, tick, square and line, and a pilot hole's depth, #777), `close-ups.ts`, `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
+| `tools.ts`, `glossary.ts` | The tools and kit a step can need, which of them each of Your tools, or something else the owner has, is by the words in its name, one tool or several ("Drill and drill bits", `toolsFrom`; a step stool for the long end, and only that, `standInFor`), a bit set's sizes and whether it has a bit (`bitSetsFrom`, `bitInSets`), the spanners, adjustables, socket set and pliers among them (`spannerKitFrom`, #783), and the words a beginner may not know |
+| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `step-tools.ts` (a step's tools against the owner's: a stand-in, bits by size, #763), `walk-throughs.ts` (marking as tape, tick, square and line, and a pilot hole's depth, #777), `close-ups.ts` (with `close-up.ts`, the close-up's types: tools and a castor drawn as their shape, and words on the drawing, #783), `castor-pictures.ts` (the castor step's picture, its drill drawn as a drill and its words as callouts, and its two close-ups, #783), `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
 | `print/` | Printed parts (#702): `templates.ts` (the holster, shim and bracket, each made into a part recipe, and `printed-part`, a recipe as written), `recipe.ts` (each face's frame, and the checks that refuse a recipe before it's made), `index.ts` (a printed part's Build: its part, buy list, steps and findings), `make.ts` (the solid, with manifold-3d), `lettering.ts` (text as outlines, with opentype.js), `files.ts` (3MF, zipped with fflate, and STL) |
 | `print/font/` | Figtree Bold, for lettering: `figtree-bold.ttf` from Fontsource (`@fontsource/figtree` 5.2.10, latin 700), under the SIL Open Font License in `OFL.txt`, from github.com/erikdkennedy/figtree |
 
@@ -75,7 +75,7 @@ if (recipe) {
 - **Each step has an ID** saying what it does ("fit-castors"), the same whichever steps the Build has, so the
   owner's progress stays on its step when one before it comes or goes.
 - **Each step has a picture of the job as it's done** (#754): the length on the Workmate or in its jaws (clamped on the
-  Workmate for a circular saw, or on a mitre saw's bed), an end frame flat on the floor, a castor base upside down, or the frame as far as it's built.
+  Workmate for a circular saw, or on a mitre saw's bed), an end frame flat on the floor, a castor base in the Workmate's jaws (or on two offcuts without one) with the drill in a plate's hole and its words as callouts off the model, or the frame as far as it's built.
   It says where it opens from (15° to 60° above level), and its marks (sizes, the pencil line, where the saw runs,
   the diagonals to check, where the support goes, where the brackets go, the waste side) are the Build's own numbers.
   Tools are drawn only when they're to hand, and nothing the owner doesn't have is drawn as if they did.
@@ -83,6 +83,16 @@ if (recipe) {
   the kerf between pieces. Show me how walks through the first length's tape, tick, square and line, with close-ups
   of the tape's hook over the end and the square's stock against the edge; the first step that drills shows a pilot
   hole's depth, a mark on the bit at the screw's length (#777).
+- **The castors go on after the frames** (#783), so a spanner still to get doesn't hold up the day, in four short
+  lines as the board has them ("Castors in 3D, your kit · Fold (#783)"): each hole drilled through the plate's own hole
+  and bolted loosely before the next, so none is off, and each bolt tightened with its head held, the tool's handle
+  against the castor. Its tools are the owner's: the nut turned with their socket, adjustable or spanner, the head held
+  with what's left (a spanner, an adjustable or pliers), one adjustable never two; what's missing is a chip not to
+  hand. It opens on those lines and nothing else: no walk-through, and the tips (the drill's clutch, a hole that's
+  off, starting the nut by hand, the quarter turn) wait for the steps' Tips (#789). Its two close-ups are the board's:
+  tightening, with the owner's tools drawn as their shapes, and one bolt taken apart (the castor, the bolt's head and
+  the plate on top, the base, then the washers the Build has under the nut, against the wood, never under the head).
+  A castor step started on its lines from before keeps them, so its ticks stay on the lines they were ticked on.
 - **A bolt given too short is never fitted, nor said:** the steps and the buy list use the length to use instead,
   unpriced until it's given a price. Its buy-list line carries what it passes through and their sum, and, when the
   owner has bolts of its thread that are too short, by how much (#763). It's no finding: the old length means nothing

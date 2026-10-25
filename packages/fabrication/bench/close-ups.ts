@@ -33,11 +33,14 @@ const line = (x1: number, y1: number, x2: number, y2: number) => ({
   mm: Math.round(Math.hypot(x2 - x1, y2 - y1) * 10) / 10,
 });
 
+/** How far in from each end of its base a castor sits, mm. */
+export const CASTOR_INSET = 10;
+
 /** A castor base from above, with its castors' plates and bolt holes. */
 export const baseCloseUp = (s: Shape, castors: Castors): CloseUp => {
   const plateLength = castors.plate.length.value;
   const plateWidth = castors.plate.width.value;
-  const inset = 10;
+  const inset = CASTOR_INSET;
   const plateY = (s.wideWidth - plateWidth) / 2;
   const plates = [inset, s.frameDepth - inset - plateLength];
   const corner = 10;

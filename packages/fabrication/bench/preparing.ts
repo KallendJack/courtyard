@@ -8,6 +8,13 @@ import { markingWalk, type Section } from "./walk-throughs.ts";
 // read the cut plan, and the cutting step reads the tools to hand: a hand saw on a folding
 // workbench, or a circular or mitre saw once there is one (#777).
 
+/**
+ * A step's tool as the template writes it: the tool, or the tool with what this step calls it
+ * ("Drill, 7 mm bit"), and whether it's to hand when the step knows better than the tool's own
+ * (pliers holding a bolt's head, #783).
+ */
+export type DraftTool = Tool | { tool: Tool; name: string; toHand?: boolean };
+
 /** A step as the template writes it, before it's numbered and its tools are checked. */
 export type Draft = {
   /** What it does, as a slug: the step's ID, the same whichever steps the Build has. */
@@ -20,13 +27,17 @@ export type Draft = {
   /** The parts it puts on the Build: its parts, unless it only prepares or checks them. */
   adds?: readonly string[];
   ways?: readonly Way[];
-  tools: readonly Tool[];
+  /** What its lines are, when a step started keeps them (#783). */
+  lines?: string;
+  tools: readonly DraftTool[];
   /** The bits it drills with, when its tools have drill bits: 3 mm pilots unless it says. */
   bits?: readonly { mm: number; for: string }[];
   safety?: readonly Tool[];
   fixings?: readonly { name: string; count: number }[];
   actions: readonly Action[];
   closeUp?: CloseUp;
+  /** Its close-ups when it has more than one: a fixing tightened, and taken apart (#783). */
+  closeUps?: readonly CloseUp[];
   walkThrough?: readonly WalkStep[];
   check: { says: string; photo: string };
   words?: readonly Word[];
@@ -128,7 +139,9 @@ const longEnd = (holding: string) =>
     "Long end supported, level.",
   );
 
-const CUTTING: Readonly<Record<Saw, Pick<Draft, "tools" | "safety" | "actions">>> = {
+const CUTTING: Readonly<
+  Record<Saw, Pick<Draft, "safety" | "actions"> & { tools: readonly Tool[] }>
+> = {
   "mitre-saw": {
     tools: ["mitre-saw", "long-end-support", "square", "tape-measure", "pencil"],
     safety: ["safety-glasses", "ear-defenders"],
@@ -271,8 +284,13 @@ const handedLine = (
 };
 
 /** The tools of the saw in use, then those of any saw it hands cuts on to, each once. */
-const sawTools = (saw: Saw, others: readonly Saw[], of: "tools" | "safety") => [
-  ...new Set([saw, ...others].flatMap((each) => CUTTING[each][of] ?? [])),
+const sawTools = (saw: Saw, others: readonly Saw[]) => [
+  ...new Set([saw, ...others].flatMap((each) => CUTTING[each].tools)),
+];
+
+/** The safety kit of the saw in use and of any saw it hands cuts on to, each once. */
+const sawSafety = (saw: Saw, others: readonly Saw[]) => [
+  ...new Set([saw, ...others].flatMap((each) => CUTTING[each].safety ?? [])),
 ];
 
 /** The steps before anything is joined, the timber cut with `saw`. */
@@ -358,8 +376,8 @@ export const preparingSteps = (options: {
       parts: timberLabels,
       adds: [],
       ways: sawWays(toHand, saw),
-      tools: sawTools(saw, others, "tools"),
-      safety: sawTools(saw, others, "safety"),
+      tools: sawTools(saw, others),
+      safety: sawSafety(saw, others),
       // The cuts handed on go before the labelling, which every piece gets.
       actions: [
         ...cutting.actions.slice(0, -1),

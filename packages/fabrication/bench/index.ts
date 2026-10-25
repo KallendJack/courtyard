@@ -14,7 +14,15 @@ import { assumedSizes, boltLength, toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
 import { oneSheetEach, stockOptions, wrongStock } from "../options.ts";
 import type { Price } from "../stock.ts";
-import { bitSetsFrom, standInFor, Tool, toolsFrom } from "../tools.ts";
+import {
+  bitSetsFrom,
+  NO_SPANNERS,
+  type SpannerKit,
+  spannerKitFrom,
+  standInFor,
+  Tool,
+  toolsFrom,
+} from "../tools.ts";
 import { benchFitted, benchParts, shapeOf, shapeProblems } from "./frame.ts";
 import { BenchParameters, castorFixingNames } from "./parameters.ts";
 import { benchSteps } from "./steps.ts";
@@ -48,13 +56,22 @@ export const deriveBench = (
       return thing === undefined ? [] : [[tool, thing] as const];
     }),
   );
+  // With no Your tools saved, the Build's own spanner is two of them, as its steps first said.
+  const kit =
+    setting.tools !== undefined
+      ? spannerKitFrom(setting.tools)
+      : parameters.tools.includes("spanner")
+        ? { ...NO_SPANNERS, spanners: 2 }
+        : NO_SPANNERS;
   const benchOf = benchWith({
     toHand: new Set([...own, ...standIns.keys()]),
     standIns,
     have,
     bitSets: bitSetsFrom(setting.sizes ?? []),
     buying: setting.buying ?? [],
+    kit,
     kept: setting.kept ?? [],
+    started: setting.started ?? [],
     capacities: capacitiesFrom(setting.sizes ?? []),
   });
   const build = benchOf(parameters);
@@ -79,7 +96,11 @@ type Setting = {
   readonly have: readonly string[];
   readonly bitSets: readonly string[];
   readonly buying: readonly Tool[];
+  /** What the owner has that holds a bolt's head and turns its nut (#783). */
+  readonly kit: SpannerKit;
   readonly kept: readonly KeptWay[];
+  /** The steps with a line ticked, by ID: a step started keeps its lines (#783). */
+  readonly started: readonly string[];
   readonly capacities: Capacities;
 };
 
@@ -88,7 +109,7 @@ type Setting = {
  * tools to hand and the ways kept.
  */
 const benchWith =
-  ({ toHand, standIns, have, bitSets, buying, kept, capacities }: Setting) =>
+  ({ toHand, standIns, have, bitSets, buying, kit, kept, started, capacities }: Setting) =>
   (parameters: BenchParameters): Result<Omit<Build, "options">, string[]> => {
     const shape = shapeOf(parameters);
     const problems = shapeProblems(shape);
@@ -129,9 +150,11 @@ const benchWith =
       parts,
       fitted,
       toHand,
+      kit,
       standIns,
       bitSets,
       kept,
+      started,
       capacities,
     });
 

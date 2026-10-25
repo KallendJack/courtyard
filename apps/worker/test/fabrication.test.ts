@@ -147,7 +147,7 @@ describe("the Build tool", () => {
     expect(reply?.reply).toContain("Total: £177.02, leaving out 1 line with no price");
     // The bolts given too short are only the length to use, its sum on its line (#763).
     expect(reply?.reply).toContain(
-      "- M6 × 60 bolts: 16 × 1 (16 used, fit the castors to the bases), no price yet; long enough for 59.2 mm, through the castor plate 4 + castor base 45 + M6 washer 1.6 + M6 washer 1.6 + M6 lock nut 5 + two threads 2",
+      "- M6 × 60 bolts: 16 × 1 (16 used, fit the castors to the bases), no price yet; long enough for 57.6 mm, through the castor plate 4 + castor base 45 + M6 washer 1.6 + M6 lock nut 5 + two threads 2",
     );
     expect(reply?.reply).not.toContain("M6 × 50");
     expect(reply?.reply).toContain(

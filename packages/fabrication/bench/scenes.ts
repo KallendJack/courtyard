@@ -1,7 +1,6 @@
 import type { Scene, SceneMark } from "../scene.ts";
-import { baseCloseUp } from "./close-ups.ts";
+import { castorScene } from "./castor-pictures.ts";
 import { cutScene, markScene } from "./cut-scenes.ts";
-import { castorFixingNames } from "./parameters.ts";
 import {
   at,
   box,
@@ -21,87 +20,6 @@ import {
 // number drawn on it is the Build's own. The tools are only pictures (a Workmate is about 600
 // long and 780 high) and only drawn when they're to hand; where one isn't, its place is still
 // marked.
-
-/** One castor base upside down on the floor, its castors on it and a bolt through each hole. */
-const castorScene = (setting: SceneSetting): Scene => {
-  const castors = setting.parameters.castors;
-  const s = setting.shape;
-  if (!castors) return whole(setting, []);
-  const closeUp = baseCloseUp(s, castors);
-  const plates = closeUp.pieces.filter((piece) => piece.label === "castor");
-  const plate = castors.plate.thickness.value;
-  const bolt = castors.bolt.diameter.value;
-  const head = plate + castors.washer.thickness.value + 4;
-  // The arrow at the far castor's last hole, its words clear of the near castor's note.
-  const hole = closeUp.fixings.at(-1);
-  const near = plates[0];
-  return {
-    title: "A castor base, upside down",
-    view: { turn: -25, tilt: 45 },
-    pieces: [
-      part("E", nameOf(setting, "E"), "lit", [
-        box(0, 0, 0, s.frameDepth, s.wideWidth, s.wideThick),
-      ]),
-      {
-        kind: "fitted",
-        name: castors.name,
-        label: null,
-        tone: "plain",
-        // Each castor's plate on the base, and its wheel's housing standing up from the plate.
-        boxes: plates.flatMap((each) => [
-          box(each.x, each.y, s.wideThick, each.w, each.h, plate),
-          box(
-            each.x + each.w / 4,
-            each.y + each.h / 4,
-            s.wideThick + plate,
-            each.w / 2,
-            each.h / 2,
-            s.castor - plate,
-          ),
-        ]),
-      },
-      {
-        kind: "fitted",
-        name: castorFixingNames(castors, setting.boltLength).bolts,
-        label: null,
-        tone: "plain",
-        boxes: closeUp.fixings.map((each) =>
-          box(each.x - bolt / 2, each.y - bolt / 2, 0, bolt, bolt, s.wideThick + head),
-        ),
-      },
-    ],
-    marks: [
-      {
-        kind: "size",
-        from: at(0, -OUT, s.wideThick),
-        to: at(s.frameDepth, -OUT, s.wideThick),
-        mm: s.frameDepth,
-      },
-      {
-        kind: "size",
-        from: at(0, s.wideWidth + OUT, s.wideThick),
-        to: at(near?.x ?? 0, s.wideWidth + OUT, s.wideThick),
-        mm: near?.x ?? 0,
-      },
-      ...(hole === undefined
-        ? []
-        : [
-            {
-              kind: "arrow",
-              from: at(hole.x, hole.y, s.wideThick + 250),
-              to: at(hole.x, hole.y, s.wideThick + head),
-              says: "bolt down through the plate and the base",
-            } satisfies SceneMark,
-          ]),
-      {
-        kind: "note",
-        at: at((near?.x ?? 0) + (near?.w ?? 0) / 2, s.wideWidth / 2, s.wideThick + s.castor + 60),
-        says: "washer, plate, base, washer, nut",
-        tone: "plain",
-      },
-    ],
-  };
-};
 
 /** One end frame flat on the floor, outside down: two legs, the rails across them, a square. */
 const endFrameScene = (setting: SceneSetting): Scene => {
