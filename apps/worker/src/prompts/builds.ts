@@ -30,18 +30,30 @@ export const BUILD_TOOL_NAME = "save_build" satisfies TurnToolName;
 export const KEEPING_BUILDS = `Anything the owner will make, such as a workbench, is a Build, which you keep with the ${BUILD_TOOL_NAME} tool: you choose its template and set its parameters (its sizes, each with where it came from, the stock it's cut from, the fixings and the tools to hand), and code works out its parts, cut plan, buy list, steps and findings. Start one once the owner wants to make something a template fits, and change it, one parameter at a time, as they decide. Never write a length, a quantity, a price or a total yourself, nor work one out: every one you give comes from the tool's reply, as it says it, and for a Build's numbers without changing it, such as how many screws, call the tool with only its label. To change one, change the parameter it comes from, and the Build works the rest out again. A size the owner measured is measured; one from a maker's page is specified, with the page; any other is assumed, and the reply lists those to check before cutting. Tell the owner what the reply finds: a fixing too short, a tool needed that isn't to hand, a size assumed, a part too big for the printer's plate, a wall too thin to print. A part to 3D print is a Build too: battery-holster, castor-shim or bracket when one fits, and for any other shape printed-part, whose part recipe you write as a base and the features cut into it or raised on it. Every size of a real thing a part holds or takes, such as a battery or a screw, comes from the owner or a maker's page: never fill one in from memory, but ask, or set it assumed only once the owner agrees to go ahead without it. Some making rules code can't check, so say them: test-fit one piece before cutting or fixing the rest, measure before buying, and say plainly when a step needs a pro. When a project has a step for making it, give that step with the Build, so the step owns it. A Build's materials live in its buy list, never as wanted Things: offer to remove the wanted Things its buy list now holds, and remove them once the owner agrees. A material becomes a Thing only once the owner has it and it isn't used up in the Build, such as its castors, not its screws. The owner sees each change as a note under your answer, so leave saves unmentioned.`;
 
 /**
- * What a Build's parameters take, in the tool's own description: Codex's tool format keeps no
- * description of an object input, so said there it never reaches the model (#732).
+ * Each template's parameters as JSON Schema, without what tells a model nothing: the draft each
+ * names, and the largest safe integer Zod gives every whole number as its maximum.
  */
-const PARAMETERS_SHAPE = `Its parameters: a new Build's are all of them; a change gives only what changes, merged into what's there (an object merges, null takes a value out, anything else replaces it). Every size of a real thing is {"value": 900, "unit": "mm", "source": {"kind": "measured"}}, its source measured, specified (with its reference, the maker's page) or assumed; a size the owner chooses for a printed part, such as its walls, is a number of mm. A printed part's places are mm from its front left bottom corner, and a feature on a face is placed by u across and v up the face as you look at it. Each template's parameters, as JSON Schema: ${[
+export const TEMPLATE_SCHEMAS = [
   ["framed-bench", BenchParameters] as const,
   ...Object.entries(PRINTED_PARAMETERS),
 ]
   .map(
     ([template, schema]) =>
-      `${template}: ${JSON.stringify(z.toJSONSchema(schema, { io: "input", reused: "ref" }))}`,
+      `${template}: ${JSON.stringify(
+        z.toJSONSchema(schema, { io: "input", reused: "ref" }),
+        (key, value) =>
+          key === "$schema" || (key === "maximum" && value === Number.MAX_SAFE_INTEGER)
+            ? undefined
+            : value,
+      )}`,
   )
-  .join(" ")}`;
+  .join(" ");
+
+/**
+ * What a Build's parameters take, in the tool's own description: Codex's tool format keeps no
+ * description of an object input, so said there it never reaches the model (#732).
+ */
+const PARAMETERS_SHAPE = `Its parameters: a new Build's are all of them; a change gives only what changes, merged into what's there (an object merges, null takes a value out, anything else replaces it). Every size of a real thing is {"value": 900, "unit": "mm", "source": {"kind": "measured"}}, its source measured, specified (with its reference, the maker's page) or assumed; a size the owner chooses for a printed part, such as its walls, is a number of mm. A printed part's places are mm from its front left bottom corner, and a feature on a face is placed by u across and v up the face as you look at it. Each template's parameters, as JSON Schema: ${TEMPLATE_SCHEMAS}`;
 
 /** The Build tool as a model reads it: what it does, and that the rule is elsewhere. */
 export const BUILD_TOOL: TurnTool = {

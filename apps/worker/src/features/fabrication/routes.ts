@@ -113,7 +113,7 @@ const printError = (c: Context, refusal: PrintRefusal) => {
     case "stopped":
       return apiError(c, { status: 503, error: "Making that part was stopped." });
     case "failed":
-      return apiError(c, { status: 500, error: "That part couldn't be made just now." });
+      return apiError(c, { status: 500, error: "That part couldn't be made: make it simpler." });
   }
 };
 

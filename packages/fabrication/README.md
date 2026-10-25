@@ -35,7 +35,7 @@ if (recipe) {
 | `findings.ts` | The making rules code checks: a bolt long enough for what it passes through plus two threads, tools needed and not to hand, sizes assumed |
 | `tools.ts`, `glossary.ts` | The tools and kit a step can need, and the words a beginner may not know |
 | `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `close-ups.ts` |
-| `print/` | Printed parts (#702): `templates.ts` (the holster, shim and bracket, each made into a part recipe, and `printed-part`, a recipe as written), `recipe.ts` (each face's frame, and the checks that refuse a recipe before it's made), `index.ts` (a printed part's Build: its part, buy list, steps and findings), `make.ts` (the solid, with manifold-3d), `lettering.ts` (text as outlines, with opentype.js), `files.ts` (3MF and STL) |
+| `print/` | Printed parts (#702): `templates.ts` (the holster, shim and bracket, each made into a part recipe, and `printed-part`, a recipe as written), `recipe.ts` (each face's frame, and the checks that refuse a recipe before it's made), `index.ts` (a printed part's Build: its part, buy list, steps and findings), `make.ts` (the solid, with manifold-3d), `lettering.ts` (text as outlines, with opentype.js), `files.ts` (3MF, zipped with fflate, and STL) |
 | `print/font/` | Figtree Bold, for lettering: `figtree-bold.ttf` from Fontsource (`@fontsource/figtree` 5.2.10, latin 700), under the SIL Open Font License in `OFL.txt`, from github.com/erikdkennedy/figtree |
 
 ## The rules it keeps
@@ -57,7 +57,11 @@ if (recipe) {
 - **A part recipe is checked before it's made:** a feature of a kind no recipe knows, a hole or slot off its face, or
   a pocket running out of the part where it isn't open is refused with a finding, and nothing is made. Holes, slots
   and pockets allow the printer's clearance (0.2 mm, assumed, until it's calibrated); a wall thinner than two lines
-  of the nozzle, or a part bigger than the plate (256 mm each way until the printer's Thing says), is found.
+  of the nozzle, or a part bigger than the plate (256 mm each way until the printer's Thing says), is found. A part
+  has at most 10 lines of lettering, 200 letters in all, so it makes in seconds.
+- **Only one closed solid is made:** a pocket or lettering without the part under it (on a cylinder's curved side,
+  or the empty part of an L-bracket's top), a part in pieces or of nothing, and a part manifold fails on are each
+  refused with the reason, and no file is made.
 - **A countersink goes where the hole first meets the part,** so a screw through a holster's back wall sits flush
   inside it.
 
@@ -66,7 +70,8 @@ if (recipe) {
 `cut-plan.test.ts` (packing, whatever the pieces), `bench/bench.test.ts` (the golden bench, the garage workbench's
 hand-checked numbers with invented names, in `bench/fixtures/golden.ts`), `print/print.test.ts` (the golden holster
 and shim, `print/fixtures/golden.ts`: their size and volume worked out by hand, closed all round, the pocket allowing
-the clearance) and `print/recipe.test.ts` (what a recipe is refused for).
+the clearance), `print/recipe.test.ts` (what a recipe is refused for) and `print/make.test.ts` (what a checked
+recipe still can't be made into).
 
 ## Used by
 

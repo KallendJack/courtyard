@@ -78,8 +78,10 @@ or Recent changes.
   tool by a tile's name or the owner's own, once.
 - **Printed parts** (`print.ts`, `make-thread.ts`, #702): a printed part's checked recipe is made in a worker thread
   once it has a place in the machine's builds lock (`@courtyard/builds`), and the thread is stopped at
-  `COURTYARD_PRINT_TIME_LIMIT_MS` (a minute unless set), freeing the place. What's made, its 3MF and STL too, is kept
-  by the Build's file text, so the page asking again and a download after it make nothing twice.
+  `COURTYARD_PRINT_TIME_LIMIT_MS` (a minute unless set), or when its JavaScript heap passes
+  `COURTYARD_PRINT_MEMORY_LIMIT_MB` (512 unless set), freeing the place. What's made, its 3MF and STL too, is kept
+  by the Build's file text, so the page asking again and a download after it make nothing twice; why a recipe
+  couldn't be made is kept by the recipe, so asking again is answered at once, without the lock.
 - **The chat** (`chat.ts`): which session is the Build's, and its events read as the chat's lines, through
   `sessions/`.
 - **The API** (`routes.ts`): under `/api/fabrication`, mounted by `worker.ts`, which also serves the Fabrication

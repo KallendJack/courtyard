@@ -389,6 +389,9 @@ importers:
       '@courtyard/contract':
         specifier: workspace:*
         version: link:../contract
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       manifold-3d:
         specifier: 3.5.4
         version: 3.5.4(@gltf-transform/core@4.5.1)(@gltf-transform/extensions@4.5.1)(@gltf-transform/functions@4.5.1(@types/node@24.19.2))(esbuild-wasm@0.27.7)

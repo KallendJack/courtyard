@@ -18,6 +18,9 @@ const PLA = 1.24 / 1000;
 /** How many made parts are kept: the Builds the owner has open, and a few more. */
 const KEPT_MOST = 12;
 
+/** How many recipes that couldn't be made are remembered, each only its reason. */
+const REFUSED_MOST = 100;
+
 const FONT_PATH = join(
   dirname(fileURLToPath(import.meta.resolve("@courtyard/fabrication"))),
   FONT_FILE,
@@ -42,16 +45,27 @@ export type PrintRefusal =
   | { readonly kind: "stopped" }
   | { readonly kind: "failed" };
 
-/** Makes a recipe in a thread of its own, stopping the thread at the time limit. */
-const inThread = (recipe: CheckedRecipe, name: string, timeLimitMs: number) =>
+/** How a part is made: its turn in the builds lock, and its thread's time and memory limits. */
+type Printing = { lock: BuildsLock; timeLimitMs: number; memoryLimitMb: number };
+
+/**
+ * Makes a recipe in a thread of its own, stopping the thread at the time limit, or when its
+ * JavaScript heap passes the memory limit (manifold's WebAssembly memory is its own, outside it).
+ */
+const inThread = (
+  recipe: CheckedRecipe,
+  name: string,
+  limits: Pick<Printing, "timeLimitMs" | "memoryLimitMb">,
+) =>
   new Promise<Result<MadePrint, PrintRefusal>>((resolve) => {
     const thread = new Worker(new URL("./make-thread.ts", import.meta.url), {
       workerData: { recipe, name, fontPath: FONT_PATH },
+      resourceLimits: { maxOldGenerationSizeMb: limits.memoryLimitMb },
     });
     const limit = setTimeout(() => {
       void thread.terminate();
       resolve(err({ kind: "too-long" }));
-    }, timeLimitMs);
+    }, limits.timeLimitMs);
     const done = (result: Result<MadePrint, PrintRefusal>) => {
       clearTimeout(limit);
       void thread.terminate();
@@ -95,10 +109,13 @@ export const madePartOf = (print: MadePrint, files: MadePart["files"]): MadePart
 
 /**
  * The printed parts' maker: one part at a time per Build, each in the machine's builds lock, kept
- * while its Build's file is as it was made from.
+ * while its Build's file is as it was made from. A recipe that couldn't be made is remembered by
+ * what it says, so asking again (the page every 30 seconds) is answered at once rather than
+ * holding the builds lock for another time limit; only a recipe that changes is tried again.
  */
-export const createPrints = (options: { lock: BuildsLock; timeLimitMs: number }) => {
+export const createPrints = (options: Printing) => {
   const kept = new Map<string, { text: string; made: Promise<Result<MadePrint, PrintRefusal>> }>();
+  const refused = new Map<string, PrintRefusal>();
 
   const makeNow = async (
     build: ReadBuild,
@@ -107,16 +124,29 @@ export const createPrints = (options: { lock: BuildsLock; timeLimitMs: number })
     const print = build.derived.print;
     if (print === null) return err({ kind: "not-printed" });
     if (print.recipe === null) {
-      const refused = build.derived.findings.find((finding) => finding.kind === "cannot-make");
-      return err({ kind: "cannot-make", problems: refused?.problems ?? [] });
+      const found = build.derived.findings.find((finding) => finding.kind === "cannot-make");
+      return err({ kind: "cannot-make", problems: found?.problems ?? [] });
     }
+    const recipe = JSON.stringify(print.recipe);
+    const before = refused.get(recipe);
+    if (before !== undefined) return err(before);
     const place = await takePlace(options.lock, {
       label: `Courtyard print ${build.summary.slug}`,
       signal,
     });
     if (place === null) return err({ kind: "stopped" });
     try {
-      return await inThread(print.recipe, build.file.name, options.timeLimitMs);
+      const made = await inThread(print.recipe, build.file.name, options);
+      // Making it again would only fail the same way; a stopped request is no answer about it.
+      if (!made.ok && made.error.kind !== "stopped") {
+        refused.set(recipe, made.error);
+        while (refused.size > REFUSED_MOST) {
+          const oldest = refused.keys().next().value;
+          if (oldest === undefined) break;
+          refused.delete(oldest);
+        }
+      }
+      return made;
     } finally {
       place.free();
     }
@@ -130,7 +160,7 @@ export const createPrints = (options: { lock: BuildsLock; timeLimitMs: number })
       const made = makeNow(build, signal);
       kept.delete(key);
       kept.set(key, { text: build.text, made });
-      // Only what's made is kept: a refusal is asked again next time.
+      // Only what's made is kept here: a refusal is asked again, and answered from its recipe.
       void made.then((result) => {
         if (!result.ok && kept.get(key)?.made === made) kept.delete(key);
       });

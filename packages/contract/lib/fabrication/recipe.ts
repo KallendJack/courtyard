@@ -130,14 +130,47 @@ export type PrinterSpec = z.infer<typeof PrinterSpec>;
 const PART_FEATURES_MOST = 40;
 
 /**
- * A part recipe as written: its base, and its features, each checked on its own so a feature of
- * an unknown kind is found and named rather than the whole recipe refused unread.
+ * The most lettering one part has: lines of it, and letters in all. Each line is cut or raised as
+ * one boolean on a solid that grows with every line, so lettering is what makes a part slow: a part
+ * at these limits makes in a few seconds, where 40 lines of 80 ran for minutes and crashed (#702).
  */
-export const PartRecipe = z.strictObject({
-  base: PartBase,
-  features: z
-    .array(z.looseObject({ kind: z.string() }))
-    .max(PART_FEATURES_MOST)
-    .default([]),
-});
+export const LETTERING_MOST = { lines: 10, letters: 200 } as const;
+
+/**
+ * A part recipe as written: its base, and its features, each checked on its own so a feature of
+ * an unknown kind is found and named rather than the whole recipe refused unread. Its lettering is
+ * counted here, as a recipe with too much would take too long to make.
+ */
+export const PartRecipe = z
+  .strictObject({
+    base: PartBase,
+    features: z
+      .array(z.looseObject({ kind: z.string().max(40) }))
+      .max(PART_FEATURES_MOST)
+      .default([])
+      .describe(
+        `At most ${PART_FEATURES_MOST}, of which at most ${LETTERING_MOST.lines} are lettering, ${LETTERING_MOST.letters} letters in all.`,
+      ),
+  })
+  .superRefine(({ features }, context) => {
+    const lettering = features.filter((feature) => feature.kind === "text");
+    const letters = lettering.reduce(
+      (sum, feature) => sum + (typeof feature.text === "string" ? feature.text.length : 0),
+      0,
+    );
+    if (lettering.length > LETTERING_MOST.lines) {
+      context.addIssue({
+        code: "custom",
+        path: ["features"],
+        message: `A part has at most ${LETTERING_MOST.lines} lines of lettering, and this has ${lettering.length}: put the rest on another part.`,
+      });
+    }
+    if (letters > LETTERING_MOST.letters) {
+      context.addIssue({
+        code: "custom",
+        path: ["features"],
+        message: `A part has at most ${LETTERING_MOST.letters} letters of lettering in all, and this has ${letters}: make it shorter, or put some on another part.`,
+      });
+    }
+  });
 export type PartRecipe = z.infer<typeof PartRecipe>;

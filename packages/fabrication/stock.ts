@@ -14,7 +14,7 @@ export const Price = z.object({
   /** How many come in one pack: a set of 4 castors, a box of 100 screws. */
   packOf: z.number().int().positive().default(1),
   shop: Words.optional(),
-  link: z.url().optional(),
+  link: z.url().max(2000).optional(),
 });
 export type Price = z.infer<typeof Price>;
 

@@ -1,7 +1,9 @@
+import { strToU8, zipSync } from "fflate";
 import type { Made } from "./make.ts";
 
 // A made part as the files a slicer opens (#702): 3MF, which Bambu Studio opens as a project, and
-// STL, which every slicer reads. Both in mm.
+// STL, which every slicer reads. Both in mm. The 3MF is zipped with fflate (MIT), which
+// manifold-3d brings already.
 
 type Mesh = Pick<Made, "positions" | "triangles">;
 
@@ -84,71 +86,10 @@ const RELATIONSHIPS = [
   "</Relationships>",
 ].join("\n");
 
-/** A 3MF: its three files in a zip. */
+/** A 3MF: its three files in a zip, packed. */
 export const to3mf = (mesh: Mesh, name: string): Uint8Array =>
-  zip([
-    { path: "[Content_Types].xml", text: CONTENT_TYPES },
-    { path: "_rels/.rels", text: RELATIONSHIPS },
-    { path: "3D/3dmodel.model", text: modelXml(mesh, name) },
-  ]);
-
-const CRC_TABLE = Uint32Array.from({ length: 256 }, (_, n) => {
-  let c = n;
-  for (let bit = 0; bit < 8; bit += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  return c >>> 0;
-});
-
-const crc32 = (bytes: Uint8Array) => {
-  let crc = 0xffffffff;
-  for (const byte of bytes) crc = (CRC_TABLE[(crc ^ byte) & 0xff] ?? 0) ^ (crc >>> 8);
-  return (crc ^ 0xffffffff) >>> 0;
-};
-
-/**
- * A zip of ASCII text files, stored as they are: a 3MF reader needs no more, and a part's file is
- * small enough that packing it isn't worth a library.
- */
-const zip = (files: readonly { path: string; text: string }[]): Uint8Array => {
-  const entries = files.map(({ path, text }) => {
-    const name = ascii(path);
-    const data = ascii(text);
-    return { name, data, crc: crc32(data) };
+  zipSync({
+    "[Content_Types].xml": strToU8(CONTENT_TYPES),
+    "_rels/.rels": strToU8(RELATIONSHIPS),
+    "3D/3dmodel.model": strToU8(modelXml(mesh, name)),
   });
-  const locals = entries.reduce((sum, { name, data }) => sum + 30 + name.length + data.length, 0);
-  const centrals = entries.reduce((sum, { name }) => sum + 46 + name.length, 0);
-  const bytes = new Uint8Array(locals + centrals + 22);
-  const view = new DataView(bytes.buffer);
-  let at = 0;
-  const offsets: number[] = [];
-  for (const { name, data, crc } of entries) {
-    offsets.push(at);
-    view.setUint32(at, 0x04034b50, true);
-    view.setUint16(at + 4, 20, true);
-    view.setUint32(at + 14, crc, true);
-    view.setUint32(at + 18, data.length, true);
-    view.setUint32(at + 22, data.length, true);
-    view.setUint16(at + 26, name.length, true);
-    bytes.set(name, at + 30);
-    bytes.set(data, at + 30 + name.length);
-    at += 30 + name.length + data.length;
-  }
-  const central = at;
-  entries.forEach(({ name, data, crc }, index) => {
-    view.setUint32(at, 0x02014b50, true);
-    view.setUint16(at + 4, 20, true);
-    view.setUint16(at + 6, 20, true);
-    view.setUint32(at + 16, crc, true);
-    view.setUint32(at + 20, data.length, true);
-    view.setUint32(at + 24, data.length, true);
-    view.setUint16(at + 28, name.length, true);
-    view.setUint32(at + 42, offsets[index] ?? 0, true);
-    bytes.set(name, at + 46);
-    at += 46 + name.length;
-  });
-  view.setUint32(at, 0x06054b50, true);
-  view.setUint16(at + 8, entries.length, true);
-  view.setUint16(at + 10, entries.length, true);
-  view.setUint32(at + 12, at - central, true);
-  view.setUint32(at + 16, central, true);
-  return bytes;
-};

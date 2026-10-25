@@ -162,6 +162,9 @@ test.describe("on the unfolded Fold", () => {
       "href",
       /\/builds\/battery-holster\/print\/battery-holster\.3mf$/,
     );
+    const downloaded = page.waitForEvent("download");
+    await print.getByRole("link", { name: "Open in Bambu Studio" }).click();
+    expect((await downloaded).suggestedFilename()).toBe("battery-holster.3mf");
     await expect(
       print.getByRole("button", { name: "Send to printer · once you have one" }),
     ).toBeDisabled();
@@ -399,8 +402,11 @@ test.describe("on a desktop", () => {
     }
   });
 
-  test("a printed part's file downloads, ready for Bambu Studio", async ({ page }) => {
+  test("a printed part shows its size, and its file downloads, ready for Bambu Studio", async ({
+    page,
+  }) => {
     await holsterOpen(page);
+    await expect(page.getByText("84.4 × 119.2 × 70.2 mm · printed part")).toBeVisible();
     for (const panel of ["Chat", "In 3D", "Print"]) {
       await expect(page.getByRole("region", { name: panel })).toBeVisible();
     }
