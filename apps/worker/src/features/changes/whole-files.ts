@@ -2,12 +2,14 @@ import { err, type Result } from "../../lib/result.ts";
 import { type HistoryChange, undoWholeFiles } from "../context-folder/index.ts";
 import { undoDocumentChange } from "../documents/index.ts";
 import { undoBuildChange } from "../fabrication/index.ts";
+import { undoSizeChange } from "../fabrication/sizes.ts";
 import { undoProjectChange } from "../projects/index.ts";
 import { undoThingChange } from "../things/index.ts";
 import type { ChangesTarget, ChangeUndoRefusal } from "./index.ts";
 
 /**
- * Undoes a change to a document or a Thing (ADR 0020), a project (#603) or a Build (#697): through
+ * Undoes a change to a document or a Thing (ADR 0020), a project (#603), a Build (#697) or a size
+ * (#708): through
  * its session when one made it, so the note there shows it as for a save, or else (the owner's own
  * change, or a session since deleted) file by file.
  */
@@ -31,7 +33,10 @@ export const undoWholeFileChange = async (
     }
   }
   const of =
-    change.kind === "thing" || change.kind === "project" || change.kind === "build"
+    change.kind === "thing" ||
+    change.kind === "project" ||
+    change.kind === "build" ||
+    change.kind === "size"
       ? change.kind
       : "document";
   if (change.session !== undefined) {
@@ -41,6 +46,7 @@ export const undoWholeFileChange = async (
       thing: sessions.undoThing,
       project: sessions.undoProject,
       build: sessions.undoBuild,
+      size: sessions.undoSize,
       document: sessions.undoDocument,
     }[of](through);
     if (undone.ok) return undone;
@@ -51,6 +57,7 @@ export const undoWholeFileChange = async (
     thing: undoThingChange,
     project: undoProjectChange,
     build: undoBuildChange,
+    size: undoSizeChange,
     document: undoDocumentChange,
   }[of](target, change.id);
   if (undone.ok) return undone;

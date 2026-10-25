@@ -4,13 +4,14 @@ import { DocumentChange } from "./documents.ts";
 import { BuildChange } from "./fabrication/builds.ts";
 import { ProjectChange } from "./projects.ts";
 import { PlacedLine, SessionId } from "./session.ts";
+import { SizeChange } from "./sourced/records.ts";
 import { ThingChange } from "./things.ts";
 import { WorkspaceId } from "./workspace.ts";
 
 /**
  * The kinds of change Recent changes lists: a model's save, the owner's undo or edit, a hand edit,
- * a tidy, a change to a document or a Thing (ADR 0020), a project or a Build, or a move the owner
- * ticked (#603).
+ * a tidy, a change to a document or a Thing (ADR 0020), a project, a Build or sizes (#708), or a
+ * move the owner ticked (#603).
  */
 export const RecentChangeKind = z.enum([
   "save",
@@ -22,6 +23,7 @@ export const RecentChangeKind = z.enum([
   "thing",
   "project",
   "build",
+  "size",
   "move",
 ]);
 export type RecentChangeKind = z.infer<typeof RecentChangeKind>;
@@ -57,6 +59,8 @@ export const RecentChange = z.object({
   project: ProjectChange.optional(),
   /** For a change to a Build, and its undo: what it did to the Build, with no lines (#697). */
   build: BuildChange.optional(),
+  /** For a change to sizes (#708), and its undo: the size it recorded or corrected. */
+  size: SizeChange.optional(),
   /** For a move the owner ticked in the move review (#603), and its undo: what moved where. */
   move: z.object({ title: z.string() }).optional(),
   undo: RecentChangeUndo,

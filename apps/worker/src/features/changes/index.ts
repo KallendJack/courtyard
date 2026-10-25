@@ -1,18 +1,14 @@
 import { join } from "node:path";
 import {
-  type BuildChange,
   type ChangeId,
-  type DocumentChange,
   type LinePlace,
   type PlacedLine,
-  type ProjectChange,
   RECENT_CHANGES_PAGE,
   type RecentChange,
   RecentChangeKind,
   type RecentChanges,
   type RecentChangeUndo,
   type SessionId,
-  type ThingChange,
 } from "@courtyard/contract";
 import { exists, readTextFile, writeTextFile } from "../../lib/files.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
@@ -34,6 +30,7 @@ import {
 } from "../context-folder/index.ts";
 import { documentChangeOf } from "../documents/index.ts";
 import { buildChangeOf, isBuildChange } from "../fabrication/index.ts";
+import { isSizeChange, sizeChangeOf } from "../fabrication/sizes.ts";
 import { isProjectChange, projectChangeOf } from "../projects/index.ts";
 import { titleOf } from "../saves/index.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";
@@ -63,9 +60,10 @@ export type ChangeUndoRefusal =
   | { readonly kind: "document-changed-since" }
   /** A Thing the change wrote or removed has changed since. */
   | { readonly kind: "thing-changed-since" }
-  /** A project (#603) or a Build (#697) the change wrote has changed since. */
+  /** A project (#603), a Build (#697) or a size (#708) the change wrote has changed since. */
   | { readonly kind: "project-changed-since" }
   | { readonly kind: "build-changed-since" }
+  | { readonly kind: "size-changed-since" }
   /** A file a move wrote or removed has changed since (#603). */
   | { readonly kind: "move-changed-since" }
   /** A save is undone through its session, which refused. */
@@ -85,6 +83,7 @@ const WHOLE_FILE_KINDS: ReadonlySet<HistoryChange["kind"]> = new Set([
   "thing",
   "project",
   "build",
+  "size",
   "move",
 ]);
 
@@ -233,16 +232,7 @@ export const listChanges = async (
   const wholeFileEntry = async (
     change: HistoryChange,
     files: readonly WholeFile[],
-  ): Promise<
-    Result<
-      | { document: DocumentChange; undo: RecentChangeUndo }
-      | { thing: ThingChange; undo: RecentChangeUndo }
-      | { project: ProjectChange; undo: RecentChangeUndo }
-      | { build: BuildChange; undo: RecentChangeUndo }
-      | { move: { title: string }; undo: RecentChangeUndo },
-      HistoryError
-    >
-  > => {
+  ): Promise<Result<Partial<RecentChange> & { undo: RecentChangeUndo }, HistoryError>> => {
     const now = await stillAsLeft(contextDir, files);
     if (!now.ok) return err("storage");
     const undo: RecentChangeUndo = !WHOLE_FILE_KINDS.has(change.kind)
@@ -256,6 +246,7 @@ export const listChanges = async (
     if (change.kind === "move") {
       return ok({ move: { title: change.title.replace(/^Move: /, "") }, undo });
     }
+    if (isSizeChange(files)) return ok({ size: sizeChangeOf(files).size, undo });
     const made = isBuildChange(files)
       ? buildChangeOf(files)
       : isProjectChange(files)

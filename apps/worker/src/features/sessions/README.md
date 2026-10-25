@@ -36,8 +36,10 @@ Claude, and every page that has the session open gets the answer as it's written
 - **Tools by name.** It answers each call to Courtyard's tools by name: one `callTool` on the provider seam, so a
   new tool needs no adapter change. A new tool is a name in `TurnToolName` (`providers/`), its definition beside its
   replies in `prompts/`, its answer in the turn's `answers` (which the compiler asks for), and a scripted line for
-  the fake. A tool that saves (context, documents, Things, projects, Builds) is a `savingTool` (`saving-tools.ts`):
-  nothing saved once the turn's stopped, each save recorded as its event, and a refused one put right once.
+  the fake. A tool that saves (context, documents, Things, projects, Builds, sizes) is a `savingTool`
+  (`saving-tools.ts`): nothing saved once the turn's stopped, each save recorded as its event, and a refused one put
+  right once. The tools for a planning workspace's files are made together in `file-tools.ts`; the size tool reads
+  the owner's messages from the session's events, to tie a measured size to the one that gave it.
 - **Following a turn.** It follows each one live from any position, and handles Stop, Carry on, titles, and Undo and
   Edit of saves.
 - **Sent while a turn runs.** A message goes into that answer on a provider that steers (#252, `added.ts`), or is

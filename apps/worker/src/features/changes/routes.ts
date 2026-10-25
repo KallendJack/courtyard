@@ -37,6 +37,12 @@ const undoRefused = (c: Context, refusal: ChangeUndoRefusal) => {
         status: 409,
         error: "That Build has changed since, so undoing this would lose the newer change.",
       });
+    case "size-changed-since":
+      return apiError(c, {
+        status: 409,
+        error:
+          "That size has been corrected or changed since, so undoing this would lose the newer one.",
+      });
     case "move-changed-since":
       return apiError(c, {
         status: 409,
