@@ -165,7 +165,7 @@ for (const viewport of [
       const name = `Trail bike ${Date.now()}`;
       await newWorkspace(page, name);
       const project = (named: string, step: string) =>
-        `project: ${JSON.stringify({ name: named, add_steps: [{ kind: "you can do this", text: step }] })}`;
+        `project: ${JSON.stringify({ name: named, add_steps: [{ who: "you", text: step }] })}`;
       await addBike(page, name, [
         project("Ride red trails with confidence", "The cornering drill on Saturday's ride"),
         project("Bike set up right", "Fit the DMR V8 pedals when they arrive"),

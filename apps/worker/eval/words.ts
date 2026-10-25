@@ -1,8 +1,12 @@
 import type { Words } from "./scenarios.ts";
 
-// How the context eval reads words in what a model wrote: each word, or any one of a list.
+// How the eval judges words in what a model wrote or saved: every word, or any one of a list.
 
-const anyOf = (word: string | readonly string[]) => (typeof word === "string" ? [word] : word);
+/** One thing a turn is checked for, and what went wrong when it failed. */
+export type Check = { readonly miss: string | null };
+
+export const anyOf = (word: string | readonly string[]) =>
+  typeof word === "string" ? [word] : word;
 
 /** Whether text has every word (any one of a list) and none of the words it must not. */
 export const hasWords = (

@@ -23,21 +23,43 @@ const OFFICE = {
   name: "Turn the garage into an office",
   goal: "Storage at the front, a desk at the back. Budget £200–500.",
   add_steps: [
-    { kind: "decided", text: "Split: storage at the front, office at the back" },
     {
-      kind: "you can do this",
+      who: "you",
       text: "Measure the back wall and the boiler corner",
       detail: "about 10 minutes, laser measurer",
     },
-    { kind: "you can do this", text: "Pick a desk and chair that fit the back wall" },
-    { kind: "needs a pro", text: "Sockets by the desk", detail: "an electrician (Part P)" },
-    {
-      kind: "needs a pro",
-      text: "A door through to the house",
-      detail: "a builder, building regs",
-    },
+    { who: "you", text: "Pick a desk and chair that fit the back wall" },
+    { who: "a pro", text: "Sockets by the desk", detail: "an electrician (Part P)" },
+    { who: "a pro", text: "A door through to the house", detail: "a builder, building regs" },
   ],
 };
+
+/** The garage split in two, as the board draws it (#710): one step done, a Build, one not ready. */
+const SPLIT = [
+  startProject({
+    name: "Split the garage in two",
+    goal: "A bench for the printer and work, storage off the floor. Budget £200–500.",
+    add_steps: [
+      { who: "you", text: "Order the outdoor storage" },
+      {
+        who: "you",
+        text: "Assemble the storage, clear the garage",
+        detail: "about 2 hours, a helper for the doors",
+      },
+      { who: "you", text: "Build the workbench", detail: "a weekend" },
+      { who: "you", text: "Fix shelving to the back wall", needs: ["the wall's construction"] },
+      {
+        who: "a pro",
+        text: "A door through to the shoe cupboard",
+        detail: "a builder, and a structural engineer if the wall is block",
+      },
+    ],
+  }),
+  startProject({ project: "P1", step: "s1", done: true }),
+  startProject({ project: "P1", step: "s3", step_build: "workbench" }),
+  startProject({ project: "P1", decision_about: "Bench legs", decision_pick: "4×2 timber" }),
+  startProject({ project: "P1", decision_about: "Lower shelf", decision_pick: "18 mm OSB" }),
+];
 
 /** Starts the scripted session, waits for its project notes, and goes back to Home. */
 const saveAndGoHome = async (page: Page, name: string, lines: readonly string[]) => {
@@ -60,11 +82,11 @@ test("Home lists each project under the bike, with its next step and Carry on", 
     "thing add: name Fork | status have | part of T1",
     startProject({
       name: "Ride red trails with confidence",
-      add_steps: [{ kind: "you can do this", text: "The cornering drill on Saturday's ride" }],
+      add_steps: [{ who: "you", text: "The cornering drill on Saturday's ride" }],
     }),
     startProject({
       name: "Bike set up right",
-      add_steps: [{ kind: "you can do this", text: "Fit the DMR V8 pedals when they arrive" }],
+      add_steps: [{ who: "you", text: "Fit the DMR V8 pedals when they arrive" }],
     }),
   ]);
 
@@ -100,15 +122,7 @@ test("a project's page shows its goal, what's next and its steps, and Carry on s
   await expect(page.getByText(OFFICE.goal)).toBeVisible();
   const next = page.getByRole("region", { name: "Next" });
   await expect(next).toContainText("Measure the back wall and the boiler corner");
-  await expect(next).toContainText("You can do this · about 10 minutes, laser measurer");
-  const steps = page.getByRole("region", { name: "Steps" }).getByRole("listitem");
-  await expect(steps).toHaveText([
-    "DecidedSplit: storage at the front, office at the back",
-    "You can do thisPick a desk and chair that fit the back wall",
-    "Needs a proSockets by the desk · an electrician (Part P)",
-    "Needs a proA door through to the house · a builder, building regs",
-  ]);
-  await shot(page, "project-page");
+  await expect(next).toContainText("You · about 10 minutes, laser measurer");
 
   await next.getByRole("button", { name: "Carry on" }).click();
   await expect(page.getByRole("list", { name: "Session" })).toContainText(
@@ -120,6 +134,56 @@ test("a project's page shows its goal, what's next and its steps, and Carry on s
   await projects(page).getByRole("link", { name: OFFICE.name }).click();
   await page.getByRole("link", { name: "Projects", exact: true }).click();
   await expect(projects(page)).toBeVisible();
+});
+
+test("a project's steps show done, who does each, a Build, what's not ready yet, and its decisions in one row (#710)", async ({
+  page,
+}) => {
+  const name = `Garage ${Date.now()}`;
+  await newWorkspace(page, name);
+  await saveAndGoHome(page, name, SPLIT);
+
+  // Home's next step is the first not done.
+  await expect(projects(page).getByRole("listitem")).toContainText(
+    "Next: Assemble the storage, clear the garage",
+  );
+  await projects(page).getByRole("link", { name: "Split the garage in two" }).click();
+
+  const next = page.getByRole("region", { name: "Next" });
+  await expect(next).toContainText("Assemble the storage, clear the garage");
+  await expect(next).toContainText("You · about 2 hours, a helper for the doors");
+  const steps = page.getByRole("region", { name: "Steps · 1 of 5 done" });
+  const rows = steps.getByRole("listitem");
+  await expect(rows).toHaveCount(5);
+  const state = (row: number) => rows.nth(row).getByRole("img");
+  await expect(state(0)).toHaveAccessibleName("Done");
+  await expect(rows.nth(0)).toContainText(/^Order the outdoor storageDone \d{1,2} [A-Z][a-z]{2}$/);
+  await expect(state(1)).toHaveAccessibleName("Next");
+  await expect(rows.nth(1)).toContainText("Assemble the storage, clear the garageYou");
+  await expect(state(2)).toHaveAccessibleName("To do");
+  await expect(rows.nth(2)).toContainText(
+    "Build the workbenchA Build: workbenchOpen in FabricationYou",
+  );
+  await expect(rows.nth(2).getByRole("link", { name: "Open in Fabrication" })).toHaveAttribute(
+    "href",
+    /\/fabrication\/workspaces\/[^/]+\/builds\/workbench$/,
+  );
+  await expect(state(3)).toHaveAccessibleName("Not ready yet");
+  await expect(rows.nth(3)).toContainText("Not ready yet: needs the wall's construction");
+  await expect(rows.nth(4)).toContainText(
+    "A door through to the shoe cupboardA builder, and a structural engineer if the wall is blockA pro",
+  );
+
+  // Decisions fold into one row, which opens to show each.
+  const decisions = page.getByRole("button", { name: /^Decisions/ });
+  await expect(decisions).toHaveText("Decisions2 made · Bench legs, Lower shelf");
+  await expect(decisions).toHaveAttribute("aria-expanded", "false");
+  await shot(page, "project-steps");
+  await decisions.click();
+  await expect(page.getByRole("list", { name: "Decisions" }).getByRole("listitem")).toHaveText([
+    "Bench legs4×2 timber",
+    "Lower shelf18 mm OSB",
+  ]);
 });
 
 /** Options for the office's desk, as a model would answer in its session, the fake echoing them. */
@@ -167,16 +231,13 @@ test("Pick on an options block, in a session that belongs to a project, records 
   await expect(options.getByRole("button", { name: "Pick" })).toHaveCount(1);
   await shot(page, "p3-decision-pick");
 
-  // The project keeps it as a decided step, first among its steps.
+  // The project keeps it under Decisions, never as a step (#710).
   await page.getByRole("link", { name: `Back to ${name}` }).click();
   await projects(page).getByRole("link", { name: OFFICE.name }).click();
-  await expect(page.getByRole("region", { name: "Steps" }).getByRole("listitem")).toHaveText([
-    "DecidedSplit: storage at the front, office at the back",
-    "DecidedDesk: Flexispot E7",
-    "You can do thisPick a desk and chair that fit the back wall",
-    "Needs a proSockets by the desk · an electrician (Part P)",
-    "Needs a proA door through to the house · a builder, building regs",
-  ]);
+  await expect(page.getByRole("button", { name: /^Decisions/ })).toHaveText(
+    "Decisions1 made · Desk",
+  );
+  await expect(page.getByRole("region", { name: /^Steps/ }).getByRole("listitem")).toHaveCount(4);
 });
 
 test("a project save's note opens the project, and Undo takes it back", async ({ page }) => {
@@ -186,7 +247,7 @@ test("a project save's note opens the project, and Undo takes it back", async ({
   const note = page.getByRole("list", { name: "Projects saved" });
   await expect(note).toContainText("Started project");
   await expect(note).toContainText("Turn the garage into an office");
-  await expect(note).toContainText("Step: Sockets by the desk (needs a pro)");
+  await expect(note).toContainText("Step: Sockets by the desk (a pro)");
   await shot(page, "project-note");
 
   await note.getByRole("button", { name: "Undo" }).click();

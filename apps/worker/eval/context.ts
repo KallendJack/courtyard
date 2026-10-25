@@ -56,7 +56,7 @@ import {
   type Turn,
 } from "./scenarios.ts";
 import { judgeHeardTools } from "./tools.ts";
-import { describeWords, hasWords } from "./words.ts";
+import { type Check, describeWords, hasWords } from "./words.ts";
 
 /**
  * The context eval (docs/ai-conduct.md): runs every scenario against a real model, Claude's or
@@ -106,9 +106,6 @@ const SessionNoteLines = z.object({ done: z.string(), decided: z.string(), next:
 
 /** The longest one turn may take before the scenario counts as not run. */
 const TURN_TIMEOUT_MINUTES = 5;
-
-/** One thing a turn is checked for, and what went wrong when it failed. */
-type Check = { readonly miss: string | null };
 
 /**
  * A scenario's run: judged on its checks, or not run to the end (a failed turn, a usage limit),

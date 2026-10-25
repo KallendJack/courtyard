@@ -34,7 +34,8 @@ const BuildRequest = z.strictObject({
   template: BuildTemplate.optional(),
   parameters: BuildParameters.optional(),
   project: z.string().optional(),
-  step: z.number().int().optional(),
+  /** The project's step that makes it, by its ID (#710). */
+  step: z.string().optional(),
 });
 
 /** An input left as `null` is one not given, as some models send them. */
@@ -67,7 +68,7 @@ export type BuildToolDone = (
 ) & {
   readonly build: ReadBuild;
   readonly label: string;
-  readonly step?: { readonly project: string; readonly number: number };
+  readonly step?: { readonly project: string; readonly id: string };
 };
 
 /**
@@ -104,7 +105,7 @@ export const createTurnBuilds = (
     const step =
       sent.project === undefined || sent.step === undefined
         ? {}
-        : { step: { project: sent.project, number: sent.step } };
+        : { step: { project: sent.project, id: sent.step } };
     /**
      * The Build as it is now, for a call that changes nothing, so the model can give its numbers
      * without working any out (#697): it's been shown it afresh.

@@ -320,8 +320,8 @@ describe("a project step's Build", () => {
         "",
         "## Steps",
         "",
-        "- [you can do this] Measure the back wall",
-        "- [you can do this] Build the workbench · a weekend",
+        "- [ ] Measure the back wall [id: s1] [who: you]",
+        "- [ ] Build the workbench · a weekend [id: s2] [who: you]",
         ...steps,
         "",
       ].join("\n"),
@@ -337,10 +337,15 @@ describe("a project step's Build", () => {
           template: "framed-bench",
           parameters: goldenBench,
           project: "P1",
-          step: 2,
+          step: "s2",
         }),
       ],
-      [{ call: "save_project", input: { project: "P1", step: 2, step_text: "Build the bench" } }],
+      [
+        {
+          call: "save_project",
+          input: { project: "P1", step: "s2", step_text: "Build the bench" },
+        },
+      ],
     ]);
 
     expect(saver.replies[0]?.[0]?.reply).toContain(
@@ -351,23 +356,26 @@ describe("a project step's Build", () => {
         {
           action: "change",
           project: { slug: "split-the-garage", name: "Split the garage" },
-          changes: ["Step: Build the workbench (you can do this, Build: workbench)"],
+          changes: ["Step: Build the workbench (you, Build: workbench)"],
         },
         {
           action: "change",
           project: { slug: "split-the-garage", name: "Split the garage" },
-          changes: ["Step: Build the bench (you can do this, Build: workbench)"],
+          changes: ["Step: Build the bench (you, Build: workbench)"],
         },
       ],
     );
     expect(await readFile(projectFile(), "utf8")).toContain(
-      "- [you can do this] Build the bench · a weekend [build: workbench]\n",
+      "- [ ] Build the bench · a weekend [id: s2] [who: you] [build: workbench]\n",
     );
     const home = PlanningHome.parse(await (await request("/api/workspaces/garage/home")).json());
     expect(home.projects[0]?.steps[1]).toEqual({
-      kind: "you can do this",
+      id: "s2",
       text: "Build the bench",
       detail: "a weekend",
+      who: "you",
+      done: false,
+      needs: [],
       build: "workbench",
     });
   });
@@ -381,10 +389,10 @@ describe("a project step's Build", () => {
           template: "framed-bench",
           parameters: goldenBench,
           project: "P1",
-          step: 2,
+          step: "s2",
         }),
       ],
-      [{ call: "save_project", input: { project: "P1", step: 2, step_build: "" } }],
+      [{ call: "save_project", input: { project: "P1", step: "s2", step_build: "" } }],
     ]);
     const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
     const started = await postJson(request, "/api/workspaces/garage/sessions", {
@@ -416,24 +424,30 @@ describe("a project step's Build", () => {
 
     await turn();
     const removed =
-      "- projects/split-the-garage.md: Step 2's Build, workbench: Build removed. Give the step a Build again with save_build, or clear it with step_build as an empty text.";
+      "- projects/split-the-garage.md: Step s2's Build, workbench: Build removed. Give the step a Build again with save_build, or clear it with step_build as an empty text.";
     expect(saver.framings[1]?.instructions).toContain(removed);
     expect(saver.replies[1]).toEqual([{ ok: true, reply: "Changed [P1] Split the garage." }]);
     expect(await readFile(projectFile(), "utf8")).toContain(
-      "- [you can do this] Build the workbench · a weekend\n",
+      "- [ ] Build the workbench · a weekend [id: s2] [who: you]\n",
     );
     await turn();
     expect(saver.framings[2]?.instructions).not.toContain("Build removed");
   });
 
   it("reads a project with a mistyped Build link, keeping the step without it and saying why", async () => {
-    await withProject("- [you can do this] Fit the shelf [build: Work Bench]");
+    await withProject("- [ ] Fit the shelf [id: s3] [who: you] [build: Work Bench]");
     const { saver, request } = await sessionWith([[]]);
 
     const home = PlanningHome.parse(await (await request("/api/workspaces/garage/home")).json());
-    expect(home.projects[0]?.steps[2]).toEqual({ kind: "you can do this", text: "Fit the shelf" });
+    expect(home.projects[0]?.steps[2]).toEqual({
+      id: "s3",
+      text: "Fit the shelf",
+      who: "you",
+      done: false,
+      needs: [],
+    });
     expect(saver.framings[0]?.instructions).toContain(
-      `- projects/split-the-garage.md: Step 3's Build link "[build: Work Bench]" isn't a Build's file name (lowercase letters, digits and dashes), so the step is read without it.`,
+      `- projects/split-the-garage.md: Step "Fit the shelf"'s Build link "[build: Work Bench]" isn't a Build's file name (lowercase letters, digits and dashes), so the step is read without it.`,
     );
     expect(saver.framings[0]?.instructions).not.toContain("can't be read as a project");
   });
@@ -442,7 +456,7 @@ describe("a project step's Build", () => {
     await withProject();
     const { saver, events } = await sessionWith([
       [START_BENCH],
-      [buildTool({ build: "B1", project: "P1", step: 2 })],
+      [buildTool({ build: "B1", project: "P1", step: "s2" })],
     ]);
 
     const [reply] = saver.replies[1] ?? [];
@@ -450,7 +464,7 @@ describe("a project step's Build", () => {
     expect(reply?.reply).toContain("Its project step: Changed [P1] Split the garage.");
     expect(buildSaves(events)).toHaveLength(1);
     expect(await readFile(projectFile(), "utf8")).toContain(
-      "- [you can do this] Build the workbench · a weekend [build: workbench]\n",
+      "- [ ] Build the workbench · a weekend [id: s2] [who: you] [build: workbench]\n",
     );
   });
 });

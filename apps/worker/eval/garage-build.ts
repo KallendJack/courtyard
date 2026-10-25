@@ -283,7 +283,7 @@ export const GARAGE_BUILD: readonly Scenario[] = [
   {
     // Two garage build sessions opened on a next step the real work had overtaken (#700).
     name: "project-steps-current",
-    rule: "the project keeps up with the work: steps the owner has done marked done, and the step they're really on added (#700)",
+    rule: "the project keeps up with the work: steps the owner has done marked done, and the step they're really on added as what's next, the decided size never a step (#700, #710)",
     ...WORKSHOP,
     turns: [
       {
@@ -293,12 +293,10 @@ export const GARAGE_BUILD: readonly Scenario[] = [
           {
             action: "change",
             name: ["workbench"],
-            // The step they're on is a step, not only a line in its history.
-            words: [
-              "done: cut the legs",
-              "done: fix the frame",
-              ["can do this] glu", "can do this] worktop", "can do this] clamp"],
-            ],
+            words: ["[x] cut the legs", "[x] fix the frame"],
+            // The step they're on is what's next, not only a line in its history.
+            next: [["glu", "worktop", "clamp"]],
+            noStep: ["150 × 60"],
           },
         ],
       },

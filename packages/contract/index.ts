@@ -121,7 +121,6 @@ export {
   COMMON_TOOLS,
   FoundTool,
   PRINTER_TOOL,
-  TOOLS_MAX,
   TOOLS_SAID_MAX_CHARACTERS,
   ToolPick,
   ToolsChange,
@@ -223,7 +222,10 @@ export {
   ProjectSlug,
   ProjectStatus,
   ProjectStep,
-  StepKind,
+  StepId,
+  StepNeed,
+  StepWho,
+  unknownNeedsOf,
 } from "./lib/projects.ts";
 export {
   BumpStanding,

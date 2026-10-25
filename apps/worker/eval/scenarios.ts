@@ -3,6 +3,7 @@ import { pdfOf, pngOf, type TestFile } from "../test/testing.ts";
 import { BUILDS, type ExpectedBuild } from "./builds.ts";
 import { GARAGE_BUILD } from "./garage-build.ts";
 import { PLANNING } from "./planning.ts";
+import { type ExpectedProject, PROJECTS } from "./projects.ts";
 import { REPLIES } from "./replies.ts";
 import { TOOLS } from "./tools.ts";
 
@@ -162,16 +163,6 @@ export type Turn = {
 export type ExpectedTool = { readonly name: string; readonly count?: number };
 
 /**
- * A project a turn should start or change (#603): words its name has, and words its file should
- * have afterwards, such as a step's kind and who to get.
- */
-export type ExpectedProject = {
-  readonly action: "add" | "change";
-  readonly name: Words;
-  readonly words: Words;
-};
-
-/**
  * A Thing a turn should add, change or remove: words its name has, and words each field it names
  * should have afterwards, the last line of its history, and the Thing it's part of, by file name.
  */
@@ -270,26 +261,6 @@ const BROCHURE_PLAN: TestFile = {
     return wall ? INK : PAPER;
   }),
 };
-
-/** A made-up garage's office project, as the project scenarios start with it (#603). */
-const GARAGE_OFFICE = [
-  "---",
-  "name: Turn the garage into an office",
-  "goal: Storage and a desk for working from home. Budget £200–500.",
-  "status: active",
-  "---",
-  "",
-  "## Steps",
-  "",
-  "- [you can do this] Decide the layout",
-  "- [you can do this] Measure the back wall · about 10 minutes, tape measure",
-  "- [you can do this] Pick a desk and chair that fit",
-  "",
-  "## History",
-  "",
-  "- 2026-10-12: Started",
-  "",
-].join("\n");
 
 /** A made-up rack manual for the attachment scenarios. */
 const RACK_MANUAL: TestFile = {
@@ -636,6 +607,7 @@ export const SCENARIOS: readonly Scenario[] = [
   ...PLANNING,
   ...GARAGE_BUILD,
   ...BUILDS,
+  ...PROJECTS,
   ...TOOLS,
   {
     name: "attached-pdf",
@@ -751,37 +723,6 @@ export const SCENARIOS: readonly Scenario[] = [
       {
         say: "It's decided, I'm doing it.",
         expect: [{ action: "add", section: "facts", words: ["green"] }],
-      },
-    ],
-  },
-  {
-    name: "done-step-leaves-project",
-    rule: "\"I've done it\" marks the project's step done, not a context line (#603)",
-    workspace: "Garage gym",
-    context: { facts: ["The garage is 5 m by 3 m"] },
-    files: {
-      "projects/set-up-the-garage-gym.md": [
-        "---",
-        "name: Set up the garage gym",
-        "status: active",
-        "---",
-        "",
-        "## Steps",
-        "",
-        "- [you can do this] Fit a pull-up bar on the back wall",
-        "- [you can do this] Lay rubber mats",
-        "",
-        "## History",
-        "",
-        "- 2026-10-12: Started",
-        "",
-      ].join("\n"),
-    },
-    turns: [
-      {
-        say: "Finished fitting the pull-up bar on the back wall yesterday! What should a first pull-up programme look like?",
-        expect: [],
-        projects: [{ action: "change", name: ["gym"], words: ["done:", "pull-up"] }],
       },
     ],
   },
@@ -1430,46 +1371,6 @@ export const SCENARIOS: readonly Scenario[] = [
             name: ["pedals"],
             fields: { upcoming: [["v8", "dmr"]] },
             partOf: "boardman-mht-8-6",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "project-needs-a-pro",
-    rule: "new sockets asked for on a project are a step that needs a pro, with an electrician, never one the owner does (#603)",
-    workspace: "Garage",
-    context: { facts: ["A single garage, 2.6 m by 5 m", "Has one double socket by the door"] },
-    files: { "projects/turn-the-garage-into-an-office.md": GARAGE_OFFICE },
-    turns: [
-      {
-        say: "For the office I'll want a couple of double sockets by the desk at the back. Add that to the project.",
-        expect: [],
-        projects: [
-          {
-            action: "change",
-            name: ["office"],
-            words: ["[needs a pro]", "socket", ["electrician", "electrical"]],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "project-decision-why",
-    rule: "a decision the owner makes for a project is recorded on it with the pick and why (#603)",
-    workspace: "Garage",
-    context: { facts: ["A single garage, 2.6 m by 5 m"] },
-    files: { "projects/turn-the-garage-into-an-office.md": GARAGE_OFFICE },
-    turns: [
-      {
-        say: "I've decided on the layout: storage at the front, the desk at the back, because the back is warmer and away from the door.",
-        expect: [],
-        projects: [
-          {
-            action: "change",
-            name: ["office"],
-            words: ["[decided]", "pick:", "why:", ["warm"], ["back"]],
           },
         ],
       },

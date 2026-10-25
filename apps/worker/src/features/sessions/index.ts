@@ -93,8 +93,6 @@ import {
   type LeadBrief,
   notOfferedReply,
   PREVIEW_TOOL_NAME,
-  PROJECT_TOOL_NAME,
-  projectReply,
   READ_SESSION_TOOL_NAME,
   readSessionReply,
   SAVE_TOOL_NAME,
@@ -115,6 +113,7 @@ import {
   useSkillReply,
   withTaskOutput,
 } from "../../prompts/index.ts";
+import { PROJECT_TOOL_NAME, projectReply } from "../../prompts/projects.ts";
 import {
   type CodePlugin,
   type Framing,
@@ -1328,7 +1327,7 @@ export const createSessions = (options: {
             }
             stepReply = undefined;
             if (step === undefined) return;
-            const given = { step: step.number, step_build: build.summary.slug };
+            const given = { step: step.id, step_build: build.summary.slug };
             stepReply = projectReply(await projectSaved({ project: step.project, ...given }), true);
           },
           reply: (done, retrying) => buildReply(done, { retrying, step: stepReply }),

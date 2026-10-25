@@ -53,8 +53,8 @@ const MOVES = [
       name: "Ride red trails with confidence",
       goal: "Ride the reds at the bike park",
       steps: [
-        { kind: "you can do this", text: "Cornering drill on Saturday", detail: "30 minutes" },
-        { kind: "you can do this", text: "Get the chain checked at a shop", detail: null },
+        { who: "you", text: "Cornering drill on Saturday", detail: "30 minutes" },
+        { who: "you", text: "Get the chain checked at a shop", detail: null },
       ],
     },
     remove: { documents: ["journey-guide"], lines: ["Get the chain checked at a shop"] },
@@ -89,7 +89,7 @@ const MOVES = [
       slug: "bike-set-up-right",
       name: null,
       goal: null,
-      steps: [{ kind: "you can do this", text: "Ride a pump track", detail: null }],
+      steps: [{ who: "you", text: "Ride a pump track", detail: null }],
     },
     remove: { lines: ["Ride a pump track one day"] },
   },
@@ -216,7 +216,7 @@ describe("the move review", () => {
       "<things>\n[T1] Boardman MHT 8.6, have (things/boardman.md)\n[T2] DMR V8 pedals, want, DMR V8, price about £30, part of [T1] (things/dmr-v8-pedals.md)\n[T3] Pedals, have, Wellgo alloy flats, part of [T1] (things/pedals.md)\n</things>",
     );
     expect(input?.message).toContain(
-      "<projects>\n[P1] Bike set up right, active, next: Fit the DMR V8 pedals (you can do this), 1 step, 0 decisions (projects/bike-set-up-right.md)\n</projects>",
+      "<projects>\n[P1] Bike set up right, active, next: s1 Fit the DMR V8 pedals (you), 1 step (0 done), 0 decisions (projects/bike-set-up-right.md)\n</projects>",
     );
   });
 
@@ -241,8 +241,8 @@ describe("the move review", () => {
         "",
         "## Steps",
         "",
-        "- [you can do this] Cornering drill on Saturday · 30 minutes",
-        "- [you can do this] Get the chain checked at a shop",
+        "- [ ] Cornering drill on Saturday · 30 minutes [id: s1] [who: you]",
+        "- [ ] Get the chain checked at a shop [id: s2] [who: you]",
         "",
         "## History",
         "",
@@ -261,7 +261,7 @@ describe("the move review", () => {
     expect(await fileIn("things/dmr-v8-pedals.md")).toBeNull();
     // The idea is a later step, and both lines have left the context file.
     expect(await fileIn("projects/bike-set-up-right.md")).toContain(
-      "- [you can do this] Fit the DMR V8 pedals\n- [you can do this] Ride a pump track\n",
+      "- [ ] Fit the DMR V8 pedals [id: s1] [who: you]\n- [ ] Ride a pump track [id: s2] [who: you]\n",
     );
     expect(await fileIn("CONTEXT.md")).toBe(
       CONTEXT.replace("- Get the chain checked at a shop\n", "").replace(

@@ -9,6 +9,10 @@ export const dayAndTimeWords = (iso: string) => {
   return `${date.toLocaleDateString([], { weekday: "short" })} ${time(date)}`;
 };
 
+/** A day as people say it, from its date (`2026-10-23`): "23 Oct". */
+export const dayWords = (date: string) =>
+  new Date(`${date}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+
 /** How long something has taken, as a clock shows it: "0:40", "2:14", "1:02:14". */
 export const elapsedWords = (ms: number) => {
   const seconds = Math.max(0, Math.floor(ms / 1000));

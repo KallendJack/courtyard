@@ -10,7 +10,8 @@ import {
   ProjectFields,
   type ProjectSave,
   ProjectSlug,
-  ProjectStep,
+  type StepId,
+  type StepWho,
 } from "@courtyard/contract";
 import { listFolder, readTextFile, writeTextFileIn } from "../../lib/files.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
@@ -27,9 +28,9 @@ import {
 /**
  * A planning workspace's projects (#603, ADR 0032): what the owner carries over days and sessions,
  * a Markdown file each in its `projects` folder. Its name, goal and status in front matter, then
- * its steps (each one the owner can do, one that needs a pro, or one decided), its decisions (the
- * options weighed, the pick and why) and a dated history. Every write is one change through the
- * context folder, so Recent changes lists it with Undo.
+ * its steps (each with its ID, who does it, done or not and what it needs, #710), its decisions
+ * (the options weighed, the pick and why) and a dated history. Every write is one change through
+ * the context folder, so Recent changes lists it with Undo.
  */
 
 /** The folder in a workspace's folder that holds its projects. */
@@ -40,7 +41,8 @@ export const projectPath = (slug: ProjectSlug) => `${PROJECTS_FOLDER}/${slug}.md
 
 const fileOf = (folder: string, slug: ProjectSlug) => join(folder, PROJECTS_FOLDER, `${slug}.md`);
 
-import { DETAIL, projectText, readProjectText } from "./file.ts";
+import { projectText, readProjectText } from "./file.ts";
+import { editSteps } from "./steps.ts";
 
 export { type ProjectFile, type ProjectHistoryLine, projectText, readProjectText } from "./file.ts";
 
@@ -56,8 +58,10 @@ export type ProjectRefusal =
   | { readonly kind: "not-found"; readonly slug: ProjectSlug }
   /** Its file isn't a project as written (a hand edit, say), so it can't be changed here. */
   | { readonly kind: "unreadable"; readonly path: string; readonly problem: string }
-  /** No step has that number. */
-  | { readonly kind: "no-such-step"; readonly number: number; readonly steps: number }
+  /** No step has that ID: the IDs it has. */
+  | { readonly kind: "no-such-step"; readonly id: string; readonly ids: readonly StepId[] }
+  /** The step has no such need: the needs it has. */
+  | { readonly kind: "no-such-need"; readonly need: string; readonly needs: readonly string[] }
   /** It would change nothing. */
   | { readonly kind: "unchanged"; readonly name: string }
   /** It has changed since the model was shown it. */
@@ -150,26 +154,30 @@ export type ProjectEdit = {
     readonly goal?: string | null;
     readonly status?: ProjectFields["status"];
   };
-  /** One of its steps, by its number as its file lists them (1 is the first). */
+  /** One of its steps, by its ID (#710). */
   readonly step?: {
-    readonly number: number;
-    readonly kind?: ProjectStep["kind"];
+    readonly id: string;
     readonly text?: string;
     /** Its detail, or `null` to clear it. */
     readonly detail?: string | null;
+    readonly who?: StepWho;
     /** The Build it makes (#697), or `null` to clear it. */
     readonly build?: BuildSlug | null;
-    /** The owner has done it: it leaves the steps, its history saying so. */
+    /** What it needs to know first, in place of what it needed; an answer kept for the same need. */
+    readonly needs?: readonly string[];
+    /** One of its needs, by its words, now known: what was found. */
+    readonly known?: { readonly need: string; readonly known: string };
+    /** Done (dated today, its history saying so), or not done after all. */
     readonly done?: boolean;
     readonly remove?: boolean;
+    /** Moved before another step, by its ID, or to the end with `null`. */
+    readonly before?: string | null;
   };
-  /** Steps to add, after its others. */
-  readonly addSteps?: readonly ProjectStep[];
-  /**
-   * A decision made: kept with its options, pick and why, and a decided step. The numbered step
-   * becomes it when `step` names one (with nothing else to change), else it's a new decided step
-   * after those decided already.
-   */
+  /** Steps to add, each its words, detail, who and needs. */
+  readonly addSteps?: readonly NewStep[];
+  /** The step to add them before, by its ID; left out, after its others. */
+  readonly addBefore?: string;
+  /** A decision made: kept with its options, pick and why, under Decisions (#710: never a step). */
   readonly decision?: ProjectDecision;
   /** A line for its history, dated today. */
   readonly history?: string;
@@ -183,9 +191,13 @@ export type ProjectSaved = {
   readonly project: Project;
 };
 
-/** A step as a note names it: its words and what it asks. */
-const stepWords = ({ kind, text, build }: ProjectStep) =>
-  `${text} (${kind}${build === undefined ? "" : `, Build: ${build}`})`;
+/** A step to add: its words, its detail, who does it and what it needs to know first. */
+export type NewStep = {
+  readonly text: string;
+  readonly detail?: string | undefined;
+  readonly who: StepWho;
+  readonly needs?: readonly string[];
+};
 
 /**
  * Starts or changes one project, as one change. `check` is given the project as it is now, and
@@ -225,7 +237,6 @@ export const saveProject = async (
       const today = historyDate(options.now);
       const changes: string[] = [];
       const history = [...(was?.value.history ?? [])];
-      const steps = [...(was?.value.steps ?? [])];
       const decisions = [...(was?.value.decisions ?? [])];
 
       const merged: Record<string, string | undefined> = { ...was?.value.fields };
@@ -255,56 +266,11 @@ export const saveProject = async (
         }
       }
 
-      const { step } = edit;
-      /** The numbered step becomes the decision's, when it's there only for that. */
-      const decides =
-        step !== undefined &&
-        edit.decision !== undefined &&
-        step.kind === undefined &&
-        step.text === undefined &&
-        step.detail === undefined &&
-        step.build === undefined &&
-        !step.done &&
-        !step.remove;
-      if (step !== undefined) {
-        const at = step.number - 1;
-        const there = steps[at];
-        if (!Number.isInteger(step.number) || there === undefined) {
-          return err({ kind: "no-such-step", number: step.number, steps: steps.length });
-        }
-        if (step.done || step.remove) {
-          steps.splice(at, 1);
-          const line = `${step.done ? "Done" : "Removed step"}: ${there.text}`;
-          changes.push(line);
-          if (step.done) history.push({ date: today, text: line });
-        } else if (!decides) {
-          const changed = ProjectStep.safeParse({
-            kind: step.kind ?? there.kind,
-            text: step.text ?? there.text,
-            ...(step.detail === null
-              ? {}
-              : (step.detail ?? there.detail) === undefined
-                ? {}
-                : { detail: step.detail ?? there.detail }),
-            ...(step.build === null || (step.build ?? there.build) === undefined
-              ? {}
-              : { build: step.build ?? there.build }),
-          });
-          if (!changed.success) {
-            return err({ kind: "invalid", problem: changed.error.issues[0]?.message ?? "" });
-          }
-          steps[at] = changed.data;
-          changes.push(`Step: ${stepWords(changed.data)}`);
-        }
-      }
-      for (const added of edit.addSteps ?? []) {
-        const checked = ProjectStep.safeParse(added);
-        if (!checked.success) {
-          return err({ kind: "invalid", problem: checked.error.issues[0]?.message ?? "" });
-        }
-        steps.push(checked.data);
-        changes.push(`Step: ${stepWords(checked.data)}`);
-      }
+      const edited = editSteps(was?.value.steps ?? [], edit, today);
+      if (!edited.ok) return edited;
+      const { steps } = edited.value;
+      changes.push(...edited.value.changes);
+      history.push(...edited.value.history);
       if (edit.decision !== undefined) {
         const decision = ProjectDecision.safeParse(edit.decision);
         if (!decision.success) {
@@ -315,24 +281,6 @@ export const saveProject = async (
         const same = decisions.findIndex((one) => one.about.toLowerCase() === about.toLowerCase());
         if (same === -1) decisions.push(decision.data);
         else decisions[same] = decision.data;
-        const decided = ProjectStep.safeParse({
-          kind: "decided",
-          text: `${about}: ${pick}`.replaceAll(DETAIL, ", "),
-        });
-        if (!decided.success) {
-          return err({ kind: "invalid", problem: decided.error.issues[0]?.message ?? "" });
-        }
-        const sameStep = steps.findIndex(
-          (one) =>
-            one.kind === "decided" && one.text.toLowerCase().startsWith(`${about.toLowerCase()}:`),
-        );
-        if (decides && step !== undefined) steps[step.number - 1] = decided.data;
-        else if (sameStep !== -1) steps[sameStep] = decided.data;
-        else {
-          // Decided steps are settled, so they lead the list, in the order they were made.
-          const after = steps.findIndex((one) => one.kind !== "decided");
-          steps.splice(after === -1 ? steps.length : after, 0, decided.data);
-        }
         const line = `Decided ${about}: ${pick}`;
         changes.push(line);
         history.push({ date: today, text: line });

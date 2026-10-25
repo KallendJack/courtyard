@@ -24,7 +24,7 @@ const JOURNEY = move({
   about: "Ride red trails with confidence: skills as its steps, next up as Next",
   project: {
     name: "Ride red trails with confidence",
-    steps: [{ kind: "you can do this", text: "The cornering drill on Saturday's ride" }],
+    steps: [{ who: "you", text: "The cornering drill on Saturday's ride" }],
   },
   remove: { documents: ["mtb-journey-guide"] },
 });

@@ -20,7 +20,7 @@ const workspaceWithBuild = async (page: Page) => {
     page,
     `project: ${JSON.stringify({
       name: "Split the garage",
-      add_steps: [{ kind: "you can do this", text: STEP }],
+      add_steps: [{ who: "you", text: STEP }],
     })}`,
   );
   await expect(page.getByRole("list", { name: "Projects saved" })).toContainText("Started project");
@@ -33,7 +33,7 @@ const workspaceWithBuild = async (page: Page) => {
       template: "framed-bench",
       parameters: goldenBench,
       project: "P1",
-      step: 1,
+      step: "s1",
     })}`,
   );
   await expect(page.getByRole("list", { name: "Builds saved" })).toContainText("Started Build");

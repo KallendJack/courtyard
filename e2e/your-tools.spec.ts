@@ -29,7 +29,7 @@ const garageWithBuild = async (page: Page) => {
       "thing add: name Tenon saw | status have",
       `project: ${JSON.stringify({
         name: "Make a bench",
-        add_steps: [{ kind: "you can do this", text: "Build the bench" }],
+        add_steps: [{ who: "you", text: "Build the bench" }],
       })}`,
     ].join("\n"),
   );
@@ -42,7 +42,7 @@ const garageWithBuild = async (page: Page) => {
       template: "framed-bench",
       parameters: goldenBench,
       project: "P1",
-      step: 1,
+      step: "s1",
     })}`,
   );
   await expect(page.getByRole("list", { name: "Builds saved" })).toContainText("Started Build");
