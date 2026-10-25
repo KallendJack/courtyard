@@ -583,12 +583,14 @@ describe("the golden bench's steps", () => {
     const ways = (build: Build) => build.steps.find((step) => step.title.startsWith("Cut"))?.ways;
 
     expect(ways(built(goldenBench))).toEqual([
-      { name: "Hand saw", using: true, toHand: true },
-      { name: "Circular saw", using: false, toHand: false },
+      { tool: "hand-saw", name: "Hand saw", using: true, toHand: true },
+      { tool: "circular-saw", name: "Circular saw", using: false, toHand: false },
+      { tool: "mitre-saw", name: "Mitre saw", using: false, toHand: false },
     ]);
     expect(ways(built({ ...goldenBench, tools: [...goldenBench.tools, "circular-saw"] }))).toEqual([
-      { name: "Hand saw", using: false, toHand: true },
-      { name: "Circular saw", using: true, toHand: true },
+      { tool: "hand-saw", name: "Hand saw", using: false, toHand: true },
+      { tool: "circular-saw", name: "Circular saw", using: true, toHand: true },
+      { tool: "mitre-saw", name: "Mitre saw", using: false, toHand: false },
     ]);
     expect(built(goldenBench).steps.find((step) => step.number === 5)?.ways).toEqual([]);
   });

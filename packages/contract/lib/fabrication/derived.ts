@@ -174,7 +174,11 @@ export const BuildStep = z.object({
   helper: z.boolean(),
   parts: list(z.string()),
   adds: list(z.string()),
-  ways: list(z.object({ name: z.string(), using: z.boolean(), toHand: z.boolean() })),
+  ways: list(
+    z.object({ tool: z.string(), name: z.string(), using: z.boolean(), toHand: z.boolean() }),
+  ),
+  /** The way the Build's own tools would do it, and the owner's now, when they differ (#777). */
+  wayChanged: z.object({ was: z.string(), now: z.string() }).nullable(),
   tools: list(StepTool),
   safety: list(StepTool),
   fixings: list(z.object({ name: z.string(), count: z.number() })),
@@ -182,6 +186,10 @@ export const BuildStep = z.object({
     z.object({ howTo: z.string(), numbers: z.string(), length: BuildMarkedLength.optional() }),
   ),
   closeUp: BuildCloseUp.nullable(),
+  /** What "show me how" walks through first, each move with its close-up where one shows it. */
+  walkThrough: list(
+    z.object({ title: z.string(), says: z.string(), closeUp: BuildCloseUp.nullable() }),
+  ),
   scene: BuildScene.nullable(),
   check: z.object({ says: z.string(), photo: z.string() }),
   words: list(z.string()),

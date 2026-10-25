@@ -4,10 +4,11 @@ import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Camera, Check, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
+import { CloseUp } from "./close-up.tsx";
 import { LengthBar } from "./cut-plan.tsx";
 import { Findings } from "./findings.tsx";
 import { type Detail, type Progress, useDetail } from "./progress.ts";
-import { listed, stepFindings } from "./words.ts";
+import { listed, stepFindings, wayChanges } from "./words.ts";
 
 // A Build's steps as an instruction manual (#699; Paper, 2 · Agreed, "Fabrication · Build steps
 // v2, teaching · Tablet (#699)" and "· Build steps, cutting by your tools · Tablet (#699)"): one
@@ -69,6 +70,34 @@ function Ways(props: { ways: BuildStep["ways"] }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/**
+ * What "show me how" walks through first (#777): each move in order, numbered, with its close-up
+ * where one shows it (the tape's hook, the square's stock).
+ */
+function WalkThrough(props: { step: BuildStep; parts: DerivedBuild["parts"]; big: boolean }) {
+  if (props.step.walkThrough.length === 0) return null;
+  return (
+    <section aria-label="How it's done" className="flex flex-col gap-2">
+      <CapsLabel tone="muted" heading={{ level: 3 }}>
+        How it's done
+      </CapsLabel>
+      <ol className="flex flex-col gap-3">
+        {props.step.walkThrough.map((move, at) => (
+          <li key={move.title} className="flex flex-col gap-2">
+            <p className={classes("text-foreground", props.big ? "text-bench" : "text-answer")}>
+              <span className="font-bold">
+                {at + 1}. {move.title}:
+              </span>{" "}
+              {move.says}
+            </p>
+            {move.closeUp !== null && <CloseUp closeUp={move.closeUp} parts={props.parts} narrow />}
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
@@ -268,6 +297,8 @@ export function StepPanel(props: {
   const [detail, choose] = useDetail();
   const [word, setWord] = useState<string>();
   const meaning = derived.glossary.find((each) => each.word === word);
+  // How the steps are done now Your tools have changed, said whichever step is showing.
+  const changes = wayChanges(derived);
   return (
     <section aria-label="Steps" className="flex min-w-0 flex-col gap-4 pb-2">
       <div className="flex flex-col gap-1.5">
@@ -284,6 +315,12 @@ export function StepPanel(props: {
           {step.title}
         </h2>
       </div>
+      {changes.map((change) => (
+        <p key={change} className="text-interface text-primary-text">
+          {change}
+        </p>
+      ))}
+      {detail === "how" && <WalkThrough step={step} parts={derived.parts} big={big} />}
       <Checklist
         step={step}
         detail={detail}

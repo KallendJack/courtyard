@@ -24,8 +24,23 @@ export const BuildProgress = z.object({
       }),
     )
     .max(MOST_STEPS),
+  /**
+   * Each step done (every line ticked) and the tool it was done with (#777), so it stays as it was
+   * done when the owner's tools change. The worker keeps these as lines are ticked; what's sent is
+   * never taken for them.
+   */
+  ways: z
+    .array(z.object({ step: BuildStepId, tool: z.string().max(60) }))
+    .max(MOST_STEPS)
+    .default([]),
 });
 export type BuildProgress = z.infer<typeof BuildProgress>;
+
+/** Whether a step is done: every one of its lines ticked. */
+export const stepDone = (
+  progress: BuildProgress,
+  step: { id: string; actions: readonly unknown[] },
+): boolean => tickedIn(progress, step.id).length >= step.actions.length;
 
 /** The lines ticked in a step, by their place in it. */
 export const tickedIn = (progress: BuildProgress, step: string): readonly number[] =>
@@ -40,7 +55,7 @@ export const stepReached = <S extends { id: string; actions: readonly unknown[] 
   progress: BuildProgress,
 ): S | undefined =>
   steps.find((step) => step.id === progress.step) ??
-  steps.find((step) => tickedIn(progress, step.id).length < step.actions.length) ??
+  steps.find((step) => !stepDone(progress, step)) ??
   steps.at(-1);
 
 /** Whether the owner has started building: a line ticked, or a step past the first reached. */

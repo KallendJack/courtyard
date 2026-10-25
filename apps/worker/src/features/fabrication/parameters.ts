@@ -1,12 +1,23 @@
 import type { BuildParameters, BuildStockPick, BuildTemplate } from "@courtyard/contract";
-import { type Build, deriveBench, derivePrinted, pickBenchStock } from "@courtyard/fabrication";
+import {
+  type Build,
+  type BuildSetting,
+  deriveBench,
+  derivePrinted,
+  pickBenchStock,
+} from "@courtyard/fabrication";
 import { err, type Result } from "../../lib/result.ts";
 
 // A Build's parameters: worked out by its template's engine, changed by a merge patch, and what a
 // change did, in a few words for its note.
 
-/** Each template's engine: its parameters in, everything its Build shows out, or what's wrong. */
-const ENGINES: Readonly<Record<BuildTemplate, (parameters: unknown) => Result<Build, string[]>>> = {
+/**
+ * Each template's engine: its parameters in, with the owner's tools and the ways its steps were
+ * done (#777), everything its Build shows out, or what's wrong.
+ */
+const ENGINES: Readonly<
+  Record<BuildTemplate, (parameters: unknown, setting?: BuildSetting) => Result<Build, string[]>>
+> = {
   "framed-bench": deriveBench,
   "battery-holster": derivePrinted("battery-holster"),
   "castor-shim": derivePrinted("castor-shim"),
@@ -15,8 +26,11 @@ const ENGINES: Readonly<Record<BuildTemplate, (parameters: unknown) => Result<Bu
 };
 
 /** Everything a Build shows, worked out from its template and parameters (ADR 0036). */
-export const derive = (template: BuildTemplate, parameters: BuildParameters) =>
-  ENGINES[template](parameters);
+export const derive = (
+  template: BuildTemplate,
+  parameters: BuildParameters,
+  setting?: BuildSetting,
+) => ENGINES[template](parameters, setting);
 
 /** A printed part is made of filament, so it has no stock to swap. */
 const noStock = err(["A printed part has no timber or sheets to pick from."]);

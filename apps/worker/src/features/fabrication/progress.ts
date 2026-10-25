@@ -4,6 +4,7 @@ import { writeTextFileIn } from "../../lib/files.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 import { type PlanningFilesTarget, pathInFolder, planningFolder } from "../planning-files/index.ts";
 import { type BuildRefusal, progressPath, readBuild } from "./index.ts";
+import { keptWays } from "./setting.ts";
 
 /**
  * How far the owner has got with a Build's steps (#699), kept in `builds/progress/<slug>.json` and
@@ -37,11 +38,18 @@ export const keepProgress = async (
       }
       const folder = await planningFolder(target);
       if (!folder.ok) return folder;
-      const text = `${JSON.stringify(progress, null, 2)}\n`;
+      // The ways the steps done were done are the worker's to keep, never what's sent (#777).
+      const ways = keptWays({
+        steps: read.value.derived.steps,
+        progress,
+        before: read.value.progress.ways,
+      });
+      const kept: BuildProgress = { step, ticked: progress.ticked, ways };
+      const text = `${JSON.stringify(kept, null, 2)}\n`;
       if (!(await writeTextFileIn(join(folder.value, progressPath(slug)), text))) {
         return err({ kind: "storage" });
       }
-      return ok(progress);
+      return ok(kept);
     },
     () => ({
       kind: "build-progress",

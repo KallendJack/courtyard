@@ -1,5 +1,6 @@
 import type { BuildTemplate, SizeSource, SourcedSize } from "@courtyard/contract";
 import type { CheckedRecipe } from "./print/recipe.ts";
+import type { Scene } from "./scene.ts";
 import type { Tool } from "./tools.ts";
 
 // What any template derives from its parameters (ADR 0036): everything a Build shows. Code works
@@ -140,55 +141,6 @@ export type Action = {
   readonly length?: MarkedLength;
 };
 
-/** A point in a step's scene, in mm, as a box's corner is: `x` along, `y` back, `z` up. */
-export type At = { readonly x: number; readonly y: number; readonly z: number };
-
-/**
- * Something drawn in a step's scene: a part (with its letter), something fitted, a tool, or the
- * offcut on the waste side. This step's own are lit, those put on before are faint (built), and
- * the rest plain.
- */
-export type ScenePiece = {
-  readonly kind: "part" | "fitted" | "tool" | "offcut";
-  readonly name: string;
-  readonly label: string | null;
-  readonly tone: "lit" | "built" | "plain";
-  readonly boxes: readonly Box[];
-};
-
-/**
- * What's drawn over a scene, each from the Build's numbers: a size as a dimension line, a pencil
- * line on a piece, an arrow (where the saw runs, where a screw goes in), a corner-to-corner check,
- * and a note at a place (where the support goes, the waste side).
- */
-export type SceneMark =
-  | { readonly kind: "size"; readonly from: At; readonly to: At; readonly mm: number }
-  | { readonly kind: "line"; readonly from: At; readonly to: At; readonly says: string }
-  | { readonly kind: "arrow"; readonly from: At; readonly to: At; readonly says: string }
-  | { readonly kind: "check"; readonly from: At; readonly to: At; readonly mm: number }
-  | {
-      readonly kind: "note";
-      readonly at: At;
-      readonly says: string;
-      readonly tone: "plain" | "waste" | "check";
-    };
-
-/**
- * A step's picture (#754): the job as it's done (the length in the Workmate, an end frame flat on
- * the floor, the frame so far), in its own mm, with where it opens from.
- */
-export type Scene = {
-  /** What it shows, as the picture's heading: "In the Workmate". */
-  readonly title: string;
-  /**
-   * Where it opens from, in degrees: turned from the front (towards the right end is +) and up
-   * from level, between 15 and 60.
-   */
-  readonly view: { readonly turn: number; readonly tilt: number };
-  readonly pieces: readonly ScenePiece[];
-  readonly marks: readonly SceneMark[];
-};
-
 /**
  * A step's close-up: a flat view of what it makes, in mm from the view's top left corner (`y`
  * down), with its key sizes as dimension lines and where each fixing goes.
@@ -214,10 +166,40 @@ export type CloseUp = {
 };
 
 /**
- * A way a step can be done (a hand saw, or a circular saw): the one in use, and whether its tool is
- * to hand. The steps use the best way whose tools are to hand.
+ * A way a step can be done (a hand saw, a circular saw or a mitre saw): its tool, the one in use,
+ * and whether its tool is to hand. The steps use the best way whose tools are to hand, unless the
+ * step was done another way.
  */
-export type Way = { readonly name: string; readonly using: boolean; readonly toHand: boolean };
+export type Way = {
+  readonly tool: Tool;
+  readonly name: string;
+  readonly using: boolean;
+  readonly toHand: boolean;
+};
+
+/** A step done, and the tool it was done with: it stays as it was done (#777). */
+export type KeptWay = { readonly step: string; readonly tool: string };
+
+/**
+ * What a Build is worked out with besides its parameters (#777): the owner's tools as Your tools
+ * saves them (each by its tile's name, or the owner's own), which the steps follow in place of the
+ * parameters' own when given, and the ways the steps already done were done.
+ */
+export type BuildSetting = {
+  /** Left out, or undefined, when the owner has saved none: the steps follow the Build's own. */
+  readonly tools?: readonly string[] | undefined;
+  readonly kept?: readonly KeptWay[];
+};
+
+/**
+ * One move of a step a beginner may never have made, in order, with its close-up where one shows
+ * it: "Tape", then "Tick", "Square" and "Line" for marking (#777).
+ */
+export type WalkStep = {
+  readonly title: string;
+  readonly says: string;
+  readonly closeUp: CloseUp | null;
+};
 
 export type Step = {
   /**
@@ -235,11 +217,18 @@ export type Step = {
   readonly adds: readonly string[];
   /** The ways it can be done, when there's more than one; none otherwise. */
   readonly ways: readonly Way[];
+  /**
+   * The way the Build's own tools would do it, and the way the owner's do now, when they differ
+   * and it isn't done yet: "Now uses your mitre saw" (#777).
+   */
+  readonly wayChanged: { readonly was: string; readonly now: string } | null;
   readonly tools: readonly StepTool[];
   readonly safety: readonly StepTool[];
   readonly fixings: readonly { readonly name: string; readonly count: number }[];
   readonly actions: readonly Action[];
   readonly closeUp: CloseUp | null;
+  /** What "show me how" walks through first, the first time it comes up; none otherwise. */
+  readonly walkThrough: readonly WalkStep[];
   /** The step's picture (#754); null where another view shows it, as a printed part's plate. */
   readonly scene: Scene | null;
   /** How to know it's right before moving on, and the photo to send to have it checked. */

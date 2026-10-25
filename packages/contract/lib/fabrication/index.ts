@@ -34,7 +34,7 @@ export {
   DerivedBuild,
   MadePart,
 } from "./derived.ts";
-export { BuildProgress, buildStarted, stepReached, tickedIn } from "./progress.ts";
+export { BuildProgress, buildStarted, stepDone, stepReached, tickedIn } from "./progress.ts";
 export {
   Face,
   PART_FEATURES,

@@ -67,7 +67,8 @@ or Recent changes.
   save is one change through `context-folder/`, its note listing each parameter changed ("height: 900 mm → 850
   mm"); Undo (`undoBuildChange`) puts the file back whole, unless it's changed since.
 - **Progress** (`progress.ts`, #699): `builds/progress/<slug>.json`, the step reached and the lines ticked, read with
-  the Build. It sits beside the Build's file, so ticking a line never stands in the way of undoing a change to the
+  the Build, and the tool each step done was done with (#777), which the worker works out as lines are ticked (never
+  from what's sent), so a done step stays as it was done. It sits beside the Build's file, so ticking a line never stands in the way of undoing a change to the
   Build. Each write is a `build-progress` change: backed up, never listed in Recent changes. The model's list of
   Builds says the step reached once building has started, so a new session carries on there.
 - **The tool** (`tool.ts`): one turn's `save_build`, by the labels the turn was shown (`B1`), keeping each file as
@@ -75,6 +76,9 @@ or Recent changes.
   label, or a change of nothing, it writes nothing and gives the Build as it is, so a later turn reads its numbers
   rather than working them out. Given a project's label and step, `sessions/` gives that step the Build through the
   project tool (`[build: <slug>]` on the step).
+- **What a Build is worked out with** (`setting.ts`, #777): besides its parameters, the owner's tools, by name and
+  tile, which its steps and pictures follow once they've saved any (its own `tools` until then), and the ways its
+  steps done were done. Every read of a Build, the model's and Fabrication's, works it out the same way.
 - **The owner's tools** (`tools.ts`, ADR 0037): Things of kind tool in the context folder's own `things/`, so every
   workspace and Build sees the same ones; `sessions/` lists them in every planning turn. A Save writes them all as one
   change: a tool given is written (its count, make and size; a size gives it a subject ID), one not given is removed,

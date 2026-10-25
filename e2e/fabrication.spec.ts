@@ -273,7 +273,11 @@ test.describe("on the unfolded Fold", () => {
       "Support for the long end?",
     );
     const ways = steps.getByRole("region", { name: "How you'll do it" });
-    await expect(ways.getByRole("listitem")).toHaveText(["Hand saw", "Circular saw · not yet"]);
+    await expect(ways.getByRole("listitem")).toHaveText([
+      "Hand saw",
+      "Circular saw · not yet",
+      "Mitre saw · not yet",
+    ]);
   });
 
   test("Plan: the Build big in 3D, fitted, letters apart, its cut plan with each offcut, buy list and a part's card", async ({
@@ -454,9 +458,11 @@ test.describe("on the unfolded Fold", () => {
     await expect(letter(page, "E, Castor bases")).toHaveCount(0);
     await expect(letter(page, "B, Long rails")).toHaveCount(0);
     expect(await overlappingLetters(page)).toEqual([]);
-    await expect(page.getByRole("region", { name: "Close-up" })).toContainText(
-      "Close-up · One end frame",
-    );
+    // Show me how first shows how deep a pilot hole goes, the first step that drills one (#777);
+    // the step's own close-up follows.
+    const closeUps = page.getByRole("region", { name: "Close-up" });
+    await expect(closeUps.first()).toContainText("Close-up · A pilot hole's depth");
+    await expect(closeUps.last()).toContainText("Close-up · One end frame");
     await expect(steps).toContainText("Fixings: 5 × 80 screws (16)");
     const checklist = steps.getByRole("list", { name: "Checklist" });
     await checklist.getByRole("checkbox", { name: "Line 1 done" }).click();
@@ -631,6 +637,84 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     const bars = checklist.getByRole("img");
     await expect(bars).toHaveCount(3);
     await expect(bars.first()).toHaveAccessibleName("B 1450 · 3 mm saw cut · A 750 · offcut 197");
+  });
+
+  test("the marking step's Show me how walks through the tape, tick, square and line, with its close-ups (#777)", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await toStep(page, 2);
+
+    const steps = page.getByRole("region", { name: "Steps" });
+    const walk = steps.getByRole("region", { name: "How it's done" });
+    // Its own moves, not the close-ups' notes.
+    const moves = walk.locator("ol > li");
+    await expect(moves).toHaveCount(4);
+    for (const [at, move] of ["1. Tape:", "2. Tick:", "3. Square:", "4. Line:"].entries()) {
+      await expect(moves.nth(at)).toContainText(move);
+    }
+    await expect(moves.nth(1)).toContainText("At 1450");
+    // The tape's hook over the end, and the square's stock against the edge, drawn close.
+    const closeUps = walk.getByRole("region", { name: "Close-up" });
+    await expect(closeUps).toHaveCount(2);
+    await expect(closeUps.first()).toContainText("The tape's hook over the end");
+    await expect(closeUps.last()).toContainText("The square's stock against the edge");
+    await expect(closeUps.last().getByRole("img")).toHaveAccessibleName(/95 mm marked/);
+
+    // Just the numbers leaves it out.
+    await steps.getByRole("button", { name: "Just the numbers" }).click();
+    await expect(walk).toBeHidden();
+    await steps.getByRole("button", { name: "Show me how" }).click();
+    await expect(walk).toBeVisible();
+  });
+
+  test("the pictures' words are as big as the step's, and none sits on another (#777)", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+
+    /** Each mark's words and part's letter over the picture: its size and where it is. */
+    const placed = (picture: Locator) =>
+      picture.evaluate((figure) =>
+        [...figure.querySelectorAll(":scope > span, :scope > button")].map((each) => {
+          const box = each.getBoundingClientRect();
+          return {
+            text: each.textContent ?? "",
+            size: Number.parseFloat(getComputedStyle(each).fontSize),
+            box: { left: box.left, right: box.right, top: box.top, bottom: box.bottom },
+            mark: each.tagName === "SPAN",
+          };
+        }),
+      );
+    const overlaps = (all: Awaited<ReturnType<typeof placed>>) =>
+      all.flatMap((one, at) =>
+        all
+          .slice(at + 1)
+          .filter(
+            (other) =>
+              one.box.left < other.box.right &&
+              other.box.left < one.box.right &&
+              one.box.top < other.box.bottom &&
+              other.box.top < one.box.bottom,
+          )
+          .map((other) => `${one.text} on ${other.text}`),
+      );
+
+    await toStep(page, 2);
+    // The marking step, then the cut step, the most crowded.
+    for (const name of ["On the Workmate, in 3D", "In the Workmate, in 3D"]) {
+      if (name.startsWith("In"))
+        await page.getByRole("button", { name: "Done, next step" }).click();
+      const picture = page.getByRole("figure", { name });
+      await expect(picture).toBeVisible();
+      // Placed once the picture's drawn.
+      await expect.poll(async () => overlaps(await placed(picture))).toEqual([]);
+      const marks = (await placed(picture)).filter((each) => each.mark);
+      expect(marks.length).toBeGreaterThan(2);
+      for (const mark of marks) expect(mark.size, mark.text).toBe(20);
+    }
   });
 
   test("Reset view puts the camera back after a drag, and a drag can't take it under the floor or flat on top", async ({

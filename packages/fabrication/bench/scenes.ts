@@ -1,171 +1,26 @@
-import type { Scene, SceneMark, ScenePiece } from "../build.ts";
+import type { Scene, SceneMark } from "../scene.ts";
 import { baseCloseUp } from "./close-ups.ts";
+import { cutScene, markScene } from "./cut-scenes.ts";
 import { castorFixingNames } from "./parameters.ts";
-import { markedLengths, sawInUse, ticksOf } from "./preparing.ts";
 import {
   at,
   box,
-  CLEAR,
-  JAWS,
   nameOf,
   OUT,
   part,
   type SceneSetting,
-  SUPPORT_IN,
-  sectionOf,
   soFar,
   tenth,
   toolIf,
   whole,
-  workmate,
 } from "./scene-pieces.ts";
 
 // Each step's picture (#754; Paper, 2 · Agreed, "Fabrication · At the bench · Fold 933×645"): the
-// job as it's done, not the finished bench. The length in the Workmate's jaws with its line, the
-// saw and the waste side; an end frame flat on the floor; a castor base upside down; or the frame
-// as far as it's built. Every number drawn on it is the Build's own. The tools are only pictures
-// (a Workmate is about 600 long and 780 high) and only drawn when they're to hand; where one
-// isn't, its place is still marked.
-
-/** The first length marked, flat on the Workmate: the tape hooked on its end, a tick at each piece. */
-const markScene = (setting: SceneSetting): Scene => {
-  const length = markedLengths(setting.cutPlan)[0];
-  const first = length?.cuts[0];
-  if (length === undefined || first === undefined) return whole(setting, []);
-  const { wide, thick } = sectionOf(setting, length.stock);
-  const top = JAWS.top;
-  const ticks = ticksOf(length);
-  const last = ticks.at(-1)?.at ?? 0;
-  const square = ticks[0]?.at ?? 0;
-  const benched = setting.toHand.has("folding-workbench");
-  return {
-    title: benched ? "On the Workmate" : "On something flat",
-    // Along the length from its checked end, as the board has it, so it fills the picture.
-    view: { turn: -50, tilt: 45 },
-    pieces: [
-      part(first.label, nameOf(setting, first.label), "lit", [
-        box(0, 0, top - thick, length.stockLength, wide, thick),
-      ]),
-      ...toolIf(
-        setting.toHand,
-        "folding-workbench",
-        workmate((length.stockLength - JAWS.length) / 2, wide),
-      ),
-      ...toolIf(setting.toHand, "tape-measure", [
-        box(-3, 0, top - thick, 3, 25, thick + 3),
-        box(last + 40, 10, top, 70, 70, 35),
-      ]),
-      ...toolIf(setting.toHand, "square", [
-        box(square, -20, top - 30, 150, 20, 35),
-        box(square, 0, top, 25, 200, 2),
-      ]),
-    ],
-    marks: [
-      ...ticks.map(
-        (tick): SceneMark => ({
-          kind: "line",
-          from: at(tick.at, 0, top),
-          to: at(tick.at, wide, top),
-          says: `${tick.label} ${tick.length}`,
-        }),
-      ),
-      ...ticks.map(
-        (tick, index): SceneMark => ({
-          kind: "size",
-          from: at(0, -OUT * (index + 1), top),
-          to: at(tick.at, -OUT * (index + 1), top),
-          mm: tick.at,
-        }),
-      ),
-      { kind: "note", at: at(0, wide / 2, top), says: "check this end is square", tone: "check" },
-    ],
-  };
-};
-
-/**
- * The first cut of the first length: the piece held in the Workmate's jaws (or clamped to a bench
- * for a circular saw) with the line just past them, the long end on a support, the offcut beyond.
- */
-const cutScene = (setting: SceneSetting, circular: boolean): Scene => {
-  const plan = setting.cutPlan.timber[0];
-  const cut = plan?.lengths[0]?.cuts[0];
-  if (plan === undefined || cut === undefined) return whole(setting, []);
-  const { wide, thick } = sectionOf(setting, plan.stock);
-  const top = JAWS.top;
-  const line = cut.length;
-  const total = plan.stockLength;
-  const saw = line + setting.cutPlan.kerf / 2;
-  const held = line - CLEAR - JAWS.length;
-  // The longer side sags as the cut goes through, so the support goes under it.
-  const support = line >= total - line ? SUPPORT_IN - 50 : total - SUPPORT_IN - 50;
-  const benched = !circular && setting.toHand.has("folding-workbench");
-  return {
-    title: circular ? "Clamped to the bench" : benched ? "In the Workmate" : "Cutting the length",
-    // From the side and above, along the length, as the board has it.
-    view: { turn: -50, tilt: 30 },
-    pieces: [
-      part(cut.label, nameOf(setting, cut.label), "lit", [
-        box(0, 0, top - thick, line, wide, thick),
-      ]),
-      {
-        kind: "offcut",
-        name: "Offcut",
-        label: null,
-        tone: "plain",
-        boxes: [box(line, 0, top - thick, total - line, wide, thick)],
-      },
-      ...(circular
-        ? [
-            {
-              kind: "tool",
-              name: "Bench",
-              label: null,
-              tone: "plain",
-              boxes: [box(line - CLEAR - 900, -300, 0, 900, wide + 600, top - thick)],
-            } satisfies ScenePiece,
-          ]
-        : toolIf(setting.toHand, "folding-workbench", workmate(held, wide))),
-      ...toolIf(setting.toHand, "long-end-support", [
-        box(support, -200, 0, 100, wide + 400, top - thick),
-      ]),
-      ...(circular
-        ? toolIf(setting.toHand, "circular-saw", [box(line - 230, -30, top, 240, wide + 60, 90)])
-        : toolIf(setting.toHand, "hand-saw", [box(saw - 1, -60, top, 2, wide + 120, 110)])),
-    ],
-    // Each mark's words apart from the others': the size above the piece, the saw's arrow higher
-    // still, the clamp's at the Workmate's legs and the waste side's at the offcut's far end.
-    marks: [
-      { kind: "size", from: at(0, 0, top + 200), to: at(line, 0, top + 200), mm: cut.length },
-      { kind: "line", from: at(line, 0, top), to: at(line, wide, top), says: `cut at ${line}` },
-      {
-        kind: "arrow",
-        from: at(saw, wide / 2, top + 450),
-        to: at(saw, wide / 2, top),
-        says: "saw here, just past the line",
-      },
-      {
-        kind: "note",
-        at: at(support + 50, wide / 2, (top - thick) / 2),
-        says: "support the long end here",
-        tone: "plain",
-      },
-      {
-        kind: "note",
-        at: circular
-          ? at(line - 200, wide / 2, top)
-          : at(held + JAWS.length / 2, -JAWS.width, top / 2),
-        says: circular ? "clamp here" : "clamped in the jaws",
-        tone: "plain",
-      },
-      {
-        kind: "note",
-        at: at(total - SUPPORT_IN, wide / 2, top),
-        says: "offcut · waste side",
-        tone: "waste",
-      },
-    ],
-  };
-};
+// job as it's done, not the finished bench. The length marked and cut (`cut-scenes.ts`); an end
+// frame flat on the floor; a castor base upside down; or the frame as far as it's built. Every
+// number drawn on it is the Build's own. The tools are only pictures (a Workmate is about 600
+// long and 780 high) and only drawn when they're to hand; where one isn't, its place is still
+// marked.
 
 /** One castor base upside down on the floor, its castors on it and a bolt through each hole. */
 const castorScene = (setting: SceneSetting): Scene => {
@@ -317,7 +172,42 @@ const assemblyMarks = (setting: SceneSetting, id: string): SceneMark[] => {
         },
       ];
     }
-    case "fit-supports":
+    case "stand-on-bases": {
+      // At the near leg's foot, as the steps say: one bracket on its face towards the bench's
+      // middle, one on its face towards the other leg.
+      const x = s.left + s.wide;
+      const y = s.front + 2 * s.thick;
+      const z = s.foot + 20;
+      return [
+        {
+          kind: "arrow",
+          from: at(x + 300, y - s.thick / 2, z + 200),
+          to: at(x, y - s.thick / 2, z),
+          says: "bracket on the face to the middle",
+        },
+        {
+          kind: "arrow",
+          from: at(x - s.wide / 2, y + 250, z + 450),
+          to: at(x - s.wide / 2, y, z),
+          says: "bracket on the face to the other leg",
+        },
+      ];
+    }
+    case "fit-supports": {
+      // A bracket in the corner at each end of each support; drawn at its front end.
+      const bracketAt = (label: string, says: string): SceneMark[] => {
+        const end = setting.parts.find((each) => each.label === label)?.boxes[0];
+        if (end === undefined) return [];
+        const corner = at(end.x + end.w, end.y, end.z + end.h / 2);
+        return [
+          {
+            kind: "arrow",
+            from: at(corner.x + 250, corner.y - 150, corner.z + 250),
+            to: corner,
+            says,
+          },
+        ];
+      };
       return [
         {
           kind: "size",
@@ -325,7 +215,10 @@ const assemblyMarks = (setting: SceneSetting, id: string): SceneMark[] => {
           to: at(s.left + s.frameLength / 2, s.front - OUT, s.legTop),
           mm: s.frameLength / 2,
         },
+        ...bracketAt("F", "a bracket at each end"),
+        ...bracketAt("D", "and at each end of D"),
       ];
+    }
     case "fit-top":
       return [
         { kind: "size", from: at(0, 0, s.height), to: at(s.left, 0, s.height), mm: s.overhang },
@@ -358,7 +251,7 @@ export const stepScene = (
     case "mark-lengths":
       return markScene(setting);
     case "cut-timber":
-      return cutScene(setting, sawInUse(setting.toHand) === "circular-saw");
+      return cutScene(setting);
     case "fit-castors":
       return castorScene(setting);
     case "end-frames":

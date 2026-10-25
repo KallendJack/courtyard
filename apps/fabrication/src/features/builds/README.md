@@ -24,12 +24,12 @@ turning in 3D, its cut plan with each offcut's length, and "M6 × 50 bolts too s
 | `chat/hold-to-ask.tsx` | Hold to ask, and the answer it brings over the picture, or that it didn't answer, with Try again |
 | `bench-panel.tsx` | The 3D panel: its label, Reset view, what sits at its foot, and a part's card |
 | `bench-view.tsx` | The scene itself, `three`, loaded lazily so only this page loads it: the whole Build, or a step's picture with its marks, fitted to its panel, its letters apart |
-| `scene.ts` | What `bench-view.tsx` draws a scene with: where the camera goes and how far it may tilt, the marks' lines and words, the waste side's hatching, the letters kept apart |
+| `scene.ts` | What `bench-view.tsx` draws a scene with: where the camera goes and how far it may tilt, the marks' lines and words, the waste side's hatching, the marks' words and the letters kept apart and inside the picture |
 | `cut-plan.tsx` | Each length of timber as a bar of its cuts and its offcut, and each sheet with its pieces where they sit, each with its size; a length as it's marked, with the saw's cut between pieces |
 | `buy-list.tsx` | What to buy, from where, how many and for how much, with the total; a timber or sheet with options opens them |
 | `stock-options.tsx` | A stock's options (#704; "Fabrication · Choose materials · Tablet (#704)"): the recommended first, each costed, Pick, and Undo of the pick just made; `useStockOptions`, which stock's are open |
 | `tools-list.tsx` | The tools needed against what's to hand |
-| `step-panel.tsx` | The steps as an instruction manual (#699): one step, its checklist, its tools, the check before moving on |
+| `step-panel.tsx` | The steps as an instruction manual (#699): one step, what's changed with Your tools, its walk-through, its checklist, its tools, the check before moving on |
 | `step-moves.tsx` | Moving between steps: Back and Done, a swipe, and the dots that show how far |
 | `close-up.tsx` | A step's close-up, drawn to scale: its sizes and where each fixing goes |
 | `progress.ts` | The step reached and the lines ticked, kept for every device |
@@ -65,11 +65,16 @@ end and the offcut hatched on the waste side, an end frame flat on the floor wit
 down with its bolts, or the frame so far (the parts put on before faint, the step's own violet, the rest hidden). Its
 marks are the Build's own numbers; only the tools to hand are drawn. Each step opens at its own angle, fitted to the
 view; turning stays between 15° and 60° above level, and Reset view (or another step) puts it back. Only the step's
-own parts have their letter, and a new step closes a part's card. A step has its time, a checklist whose ticked lines
+own parts have their letter, and a new step closes a part's card. The marks' words are the step's own type size (20 px
+beside a step in big type, 16 px otherwise), and none sits on another or on a letter (#777). A step has its time; a
+line in violet when Your tools have changed how a step is done ("Cut and label the timber now uses your mitre saw, not
+the hand saw.", #777); under "Show me how", a walk-through the first time a move comes up (marking as 1. Tape,
+2. Tick, 3. Square, 4. Line, with close-ups of the tape's hook and the square's stock; a pilot hole's depth on the end
+frames); a checklist whose ticked lines
 go grey and whose next line is lit (marking puts a bar under each length's line, "B 1450 · 3 mm saw cut · A 750 ·
 offcut 197"), words such as "flush" to tap for a line saying what they mean, its tools, its fixings, what the making
 rules found about it in gold (bolts too short, and the length the step uses instead), its close-up, "Before you move
 on" with Send a photo to check (the photo and what it's for go in the chat's Reply box, to send), how it's done ("Hand
-saw", "Circular saw · not yet") and "Show me how" or "Just the numbers" (kept on the device). On a computer the steps
+saw", "Circular saw · not yet", "Mitre saw · not yet") and "Show me how" or "Just the numbers" (kept on the device). On a computer the steps
 are the side panel's Steps tab, with the close-up under the 3D view. The page opens on the steps once building has
 started, and the Fold, the PC and a new session all carry on from where the owner left off.
