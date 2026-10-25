@@ -67,10 +67,10 @@ export const pathInWorkspace = (path: string) => path.split("/").slice(1).join("
 
 /**
  * The kinds of change to a planning workspace's files: its documents', Things' (ADR 0020),
- * projects' or Builds' (#697), or a move the owner ticked, which may touch any of them and its
- * context file (#603).
+ * projects', Builds' (#697) or sizes' (#708), or a move the owner ticked, which may touch any of
+ * them and its context file (#603).
  */
-export type PlanningFileKind = "document" | "thing" | "project" | "build" | "move";
+export type PlanningFileKind = "document" | "thing" | "project" | "build" | "size" | "move";
 
 /**
  * A change to a planning workspace's documents, Things or projects, described for the context

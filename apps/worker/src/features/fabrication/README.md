@@ -2,8 +2,9 @@
 
 Fabrication's Builds, hosted by a planning workspace (#697, ADRs 0036, 0037): one JSON file each,
 `builds/<slug>.json`, holding the Build's name, template and parameters, worked out by `packages/fabrication` each
-time it's read. And Fabrication's API, which the Fabrication app (#698) calls rather than Courtyard's own routes, so a
-standalone Fabrication could answer it with storage of its own.
+time it's read. Its sizes (#708): measurements kept as records with their source, `sizes/<id>.json`. And Fabrication's
+API, which the Fabrication app (#698) calls rather than Courtyard's own routes, so a standalone Fabrication could
+answer it with storage of its own.
 
 **Example:** the owner asks for a workbench. The model's Build tool starts "Workbench" from the framed bench's
 parameters; the engine works out its parts, cut plan and buy list (total £177.02), the file is one change with one
@@ -12,9 +13,9 @@ rest is worked out again.
 
 - **Uses:** `@courtyard/fabrication` (the engine, and the part maker), `@courtyard/builds` (the machine's builds
   lock, for making a printed part), `context-folder/` (each change), `planning-files/`.
-- **Used by:** `sessions/` (the Build tool, Undo from its note), `prompts/` (the list, the rule, the tool and its
-  reply, `prompts/builds.ts`), `changes/` (Recent changes and Undo); in the web app, `features/fabrication/`; and the
-  Fabrication app (`apps/fabrication`).
+- **Used by:** `sessions/` (the Build and size tools, Undo from their notes), `prompts/` (the lists, the rules, the
+  tools and their replies, `prompts/builds.ts` and `prompts/sizes.ts`), `changes/` (Recent changes and Undo); in the
+  web app, `features/fabrication/`; and the Fabrication app (`apps/fabrication`).
 - **Its chat uses** `sessions/` (list, events, create, send) and `projects/` (which project's step has the Build).
 
 ## API
@@ -54,8 +55,12 @@ rest is worked out again.
 - `POST /api/fabrication/workspaces/:id/builds/:slug/changes/:change/undo`: Undo from Fabrication of a change to this
   Build (404 for another's). Answers the Build as it is again, a `BuildView`.
 
+- `GET /api/fabrication/workspaces/:id/sizes`: the workspace's size records (#708), oldest first, superseded ones
+  too, each with the Thing it's of and the standing records it conflicts with, and each file that can't be read as
+  one with what's wrong. Answers `Sizes`.
+
 A code workspace keeps none (409). A Build save is undone from its note (`POST /api/sessions/:id/builds/:save/undo`)
-or Recent changes.
+or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:save/undo`).
 
 ## How it works
 
@@ -94,7 +99,16 @@ or Recent changes.
   `COURTYARD_PRINT_MEMORY_LIMIT_MB` (512 unless set), freeing the place. What's made, its 3MF and STL too, is kept
   by the Build's file text, so the page asking again and a download after it make nothing twice; why a recipe
   couldn't be made is kept by the recipe, so asking again is answered at once, without the lock.
+- **Sizes** (`sizes.ts`, #708, ADR 0037): a record each, of a Thing by the subject ID it gets with its first size
+  (written in the same change). A correction is a new record, the next revision, and the one it corrects says so
+  (`supersededBy`); a correction of a revision that isn't the one standing is refused. Two different values for the
+  same thing are both kept, each listing the other as a conflict. Undo (`undoSizeChange`) puts each file back whole,
+  unless it's changed since. A Build's size can point at the record it comes from (`SourcedSize.record`).
+- **The size tool** (`size-tool.ts`): one turn's `save_size`, by the labels the turn was shown (`Z1`, and `T1` for
+  Things). The model says a size is measured; the worker ties it to the owner's newest message in the session that
+  gives that value exactly (`givenIn`: any length unit, a bare number in mm, cm or m of it), and refuses it when none
+  does or one gives it only roughly ("about 140"). It's offered only in planning workspaces.
 - **The chat** (`chat.ts`): which session is the Build's, and its events read as the chat's lines, through
   `sessions/`.
-- **The API** (`routes.ts`, and a printed part's in `print-routes.ts`): under `/api/fabrication`, mounted by `worker.ts`, which also serves the Fabrication
-  app's files under `/fabrication`.
+- **The API** (`routes.ts`, a printed part's in `print-routes.ts`, sizes in `size-routes.ts`): under
+  `/api/fabrication`, mounted by `worker.ts`, which also serves the Fabrication app's files under `/fabrication`.
