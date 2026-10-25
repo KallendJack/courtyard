@@ -10,6 +10,7 @@ import {
 } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { SegmentedChoice } from "@courtyard/ui/forms/segmented-choice.tsx";
 import { useDock, useFinePointer } from "@courtyard/ui/frame/handheld.ts";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { Page } from "@courtyard/ui/layout/page.tsx";
@@ -17,7 +18,6 @@ import { useRouter } from "@tanstack/react-router";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { ButtonLink } from "@/components/buttons/button-link";
 import { CodeMark, RepoPicker } from "@/components/code/repo-picker";
-import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { TextField, WrappingTextField } from "@/components/forms/text-field";
 import { addStylesheet } from "@/lib/stylesheet";
 import { addWorkspace, type FromWorker } from "../../api/worker.ts";

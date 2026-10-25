@@ -131,6 +131,7 @@ export function Button({
   fullWidth = false,
   grow = false,
   narrowIcon,
+  held = false,
   type = "button",
   busy = false,
   busyLabel,
@@ -148,6 +149,11 @@ export function Button({
     grow?: boolean;
     /** On a narrow screen, only this icon shows, in a round button; the label stays for screen readers. */
     narrowIcon?: ReactNode;
+    /**
+     * Held down to talk (Fabrication's Hold to ask, #753): no scroll, text selection or
+     * callout takes the finger.
+     */
+    held?: boolean;
   }) {
   const collapses = narrowIcon !== undefined;
   const { working, attributes } = useBusy({ busy, busyLabel, onClick });
@@ -161,6 +167,7 @@ export function Button({
         fullWidth && "w-full",
         grow && "grow",
         collapses && "max-md:size-9 max-md:px-0",
+        held && "touch-none [-webkit-touch-callout:none]",
       )}
       disabled={disabled === true || waiting}
       {...props}

@@ -68,7 +68,7 @@ const APPS: readonly App[] = [
   {
     name: "UI",
     src: uiPackage,
-    folders: ["buttons", "forms", "frame", "hooks", "layout", "lib", "reply"],
+    folders: ["answer", "buttons", "forms", "frame", "hooks", "layout", "lib", "reply"],
     files: ["README.md", "package.json", "theme.css", "tsconfig.json"],
     readmeEach: [],
     readmeOwn: [],

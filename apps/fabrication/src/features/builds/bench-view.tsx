@@ -21,6 +21,51 @@ const KIND_COLOUR: Readonly<Record<BuildPart["material"]["kind"], string>> = {
 /** How far a press may move and still be a tap on a part, not a turn, in pixels. */
 const TAP_SLOP = 6;
 
+/** Where the camera looks from, at first and after Reset view: front left, a little above. */
+const FROM = new THREE.Vector3(-1, 0.85, 1.35).normalize();
+
+/** How much of the view's shorter half the Build reaches, from its middle, once fitted (#753). */
+const FILL = 0.9;
+
+/** The room a part's letter takes, its 32 px and a gap, so no two overlap (#753). */
+const LETTER_ROOM = 36;
+
+/** Where a letter may move to make room, nearest first: a little way each side, then further. */
+const NUDGES = [1, 2, 3, 4, 5, 6].flatMap((far) =>
+  [
+    [0, 1],
+    [0, -1],
+    [1, 0],
+    [-1, 0],
+    [1, 1],
+    [-1, 1],
+    [1, -1],
+    [-1, -1],
+  ].map(([across = 0, down = 0]) => ({
+    x: (across * far * LETTER_ROOM) / 2,
+    y: (down * far * LETTER_ROOM) / 2,
+  })),
+);
+
+/**
+ * Where each letter goes, in order: on its part, or the nearest spot clear of those placed before
+ * it, so G never sits on H.
+ */
+const spread = (wanted: readonly { x: number; y: number }[]) => {
+  const placed: { x: number; y: number }[] = [];
+  const clear = (x: number, y: number) =>
+    placed.every(
+      (other) => Math.abs(other.x - x) >= LETTER_ROOM || Math.abs(other.y - y) >= LETTER_ROOM,
+    );
+  for (const { x, y } of wanted) {
+    const nudge = clear(x, y)
+      ? { x: 0, y: 0 }
+      : NUDGES.find((each) => clear(x + each.x, y + each.y));
+    placed.push(nudge === undefined ? { x, y } : { x: x + nudge.x, y: y + nudge.y });
+  }
+  return placed;
+};
+
 /**
  * Where a box sits in the scene: the engine's `x` along, `y` back from the front and `z` up,
  * centred on the Build, with three's `y` up and its `z` towards the viewer.
@@ -46,8 +91,10 @@ const shapeOf = (derived: DerivedBuild) =>
 
 /**
  * The scene, drawn when something changes it (a turn, a part lit, a new size), never in a loop.
- * The part labels are buttons over the canvas, moved to where each part's first box is. Built
- * again only when the Build's numbers change, and then from where the owner had turned it.
+ * What shows is fitted to the view (#753): the whole Build, or at a step the parts put on so far,
+ * turned as the owner left it; Reset view turns it back. The part labels are buttons over the
+ * canvas, moved to where each part's first box is, and apart. Built again only when the Build's
+ * numbers change, and then from where the owner had turned it.
  */
 export default function BenchView(props: {
   derived: DerivedBuild;
@@ -55,13 +102,16 @@ export default function BenchView(props: {
   /** At a step (#699): the parts put on so far, and the step's own, lit; else the whole Build. */
   view: InView | undefined;
   pick: (label: string) => void;
+  /** Changes when Reset view is tapped. */
+  reset: number;
 }) {
-  const { derived, lit, view: atStep } = props;
+  const { derived, lit, view: atStep, reset } = props;
   const host = useRef<HTMLDivElement>(null);
   const labels = useRef(new Map<string, HTMLButtonElement>());
   const scene = useRef<{
     draw: () => void;
     light: (label: string | undefined, view: InView | undefined) => void;
+    fit: (from?: THREE.Vector3) => void;
   }>(undefined);
   const pick = useRef(props.pick);
   pick.current = props.pick;
@@ -72,7 +122,7 @@ export default function BenchView(props: {
   const [drawn, setDrawn] = useState({ derived, shape });
   if (drawn.shape !== shape) setDrawn({ derived, shape });
   const built = drawn.derived;
-  // Where the camera was from what it turns about, in the Build's reach, for the next scene.
+  // Which way the camera looked, for the next scene.
   const view = useRef<THREE.Vector3>(undefined);
 
   useEffect(() => {
@@ -93,12 +143,7 @@ export default function BenchView(props: {
     const reach = Math.max(size.length, size.depth, size.height);
     const world = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, 1, reach / 20, reach * 20);
-    const target = new THREE.Vector3(0, size.height / 2.2, 0);
-    camera.position.copy(
-      view.current === undefined
-        ? new THREE.Vector3(-1, 0.85, 1.35).normalize().multiplyScalar(reach * 2.3)
-        : view.current.clone().multiplyScalar(reach).add(target),
-    );
+    camera.position.copy((view.current ?? FROM).clone().multiplyScalar(reach * 2.3));
     world.add(new THREE.HemisphereLight(0xffffff, 0x202020, 2.2));
     const sun = new THREE.DirectionalLight(0xffffff, 2.4);
     sun.position.set(-reach, reach * 2, reach * 1.5);
@@ -139,10 +184,7 @@ export default function BenchView(props: {
     }
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.copy(target);
     controls.enablePan = false;
-    controls.minDistance = reach * 1.1;
-    controls.maxDistance = reach * 4;
 
     const anchors = built.parts.map((part) => ({
       label: part.label,
@@ -151,19 +193,71 @@ export default function BenchView(props: {
     const draw = () => {
       renderer.render(world, camera);
       const { clientWidth: width, clientHeight: height } = element;
-      for (const { label, at } of anchors) {
+      const shown = anchors.flatMap(({ label, at }) => {
         const button = labels.current.get(label);
-        if (button === undefined || at === undefined) continue;
+        if (button === undefined || at === undefined) return [];
         const onScreen = at.clone().project(camera);
-        button.style.transform = `translate(${((onScreen.x + 1) / 2) * width}px, ${((1 - onScreen.y) / 2) * height}px) translate(-50%, -50%)`;
-      }
+        return [
+          {
+            button,
+            x: ((onScreen.x + 1) / 2) * width,
+            y: ((1 - onScreen.y) / 2) * height,
+          },
+        ];
+      });
+      spread(shown).forEach(({ x, y }, at) => {
+        const button = shown[at]?.button;
+        if (button !== undefined)
+          button.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+      });
     };
+
+    /**
+     * Turns the camera to look from `from` (else as it looks now) at what shows, near enough that
+     * it fills the view: moved in or out until the farthest corner of what shows is at `FILL`.
+     */
+    const fit = (from?: THREE.Vector3) => {
+      const shown = new THREE.Box3();
+      for (const { mesh } of meshes) if (mesh.visible) shown.expandByObject(mesh);
+      if (shown.isEmpty()) return;
+      const direction = (from ?? camera.position.clone().sub(controls.target)).normalize();
+      const centre = shown.getCenter(new THREE.Vector3());
+      const corners = [0, 1, 2, 3, 4, 5, 6, 7].map(
+        (corner) =>
+          new THREE.Vector3(
+            corner & 1 ? shown.max.x : shown.min.x,
+            corner & 2 ? shown.max.y : shown.min.y,
+            corner & 4 ? shown.max.z : shown.min.z,
+          ),
+      );
+      let distance = shown.getSize(new THREE.Vector3()).length() * 1.5;
+      // Nearly in proportion, so a few rounds settle it.
+      for (let round = 0; round < 5; round += 1) {
+        camera.position.copy(direction).multiplyScalar(distance).add(centre);
+        camera.lookAt(centre);
+        camera.updateMatrixWorld();
+        const reaches = Math.max(
+          ...corners.map((corner) => {
+            const onScreen = corner.clone().project(camera);
+            return Math.max(Math.abs(onScreen.x), Math.abs(onScreen.y));
+          }),
+        );
+        if (reaches > 0) distance *= reaches / FILL;
+      }
+      controls.target.copy(centre);
+      camera.position.copy(direction).multiplyScalar(distance).add(centre);
+      controls.minDistance = distance * 0.4;
+      controls.maxDistance = distance * 3;
+      controls.update();
+    };
+
     const resize = () => {
       const { clientWidth: width, clientHeight: height } = element;
       if (width === 0 || height === 0) return;
       renderer.setSize(width, height);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      fit();
       draw();
     };
     controls.addEventListener("change", draw);
@@ -220,12 +314,16 @@ export default function BenchView(props: {
         }
         draw();
       },
+      fit: (from) => {
+        fit(from);
+        draw();
+      },
     };
     scene.current.light(litNow.current.lit, litNow.current.atStep);
 
     return () => {
       scene.current = undefined;
-      view.current = camera.position.clone().sub(controls.target).divideScalar(reach);
+      view.current = camera.position.clone().sub(controls.target).normalize();
       watch.disconnect();
       controls.dispose();
       for (const { mesh } of meshes) {
@@ -239,6 +337,12 @@ export default function BenchView(props: {
   }, [built]);
 
   useEffect(() => scene.current?.light(lit, atStep), [lit, atStep]);
+  // Another step shows other parts: fitted to them, turned as the owner left it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fitted again as the step changes
+  useEffect(() => scene.current?.fit(), [atStep]);
+  useEffect(() => {
+    if (reset > 0) scene.current?.fit(FROM.clone());
+  }, [reset]);
 
   return (
     <div ref={host} className="relative h-full w-full touch-none select-none">
@@ -263,7 +367,7 @@ export default function BenchView(props: {
               aria-current={atStep?.current.has(part.label) ? "step" : undefined}
               onClick={() => props.pick(part.label)}
               className={classes(
-                "absolute top-0 left-0 flex size-6 items-center justify-center rounded-full border-2 font-mono text-caption font-bold",
+                "absolute top-0 left-0 flex size-8 items-center justify-center rounded-full border-2 font-mono text-meta font-bold",
                 lit === part.label || atStep?.current.has(part.label)
                   ? "border-primary-text bg-primary text-primary-foreground"
                   : "border-primary bg-background text-foreground",

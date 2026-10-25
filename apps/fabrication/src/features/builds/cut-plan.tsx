@@ -1,15 +1,94 @@
 import type { BuildCutPlan, DerivedBuild } from "@courtyard/contract";
 import { classes } from "@courtyard/ui/lib/classes.ts";
+import { type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { assumedSizes, metres } from "./words.ts";
 
 type Length = BuildCutPlan["timber"][number]["lengths"][number];
 
+/** The type a piece's words are in: the probe that measures them uses it too. */
+const PIECE_TYPE = "font-mono text-meta font-semibold";
+
 /** A part's piece, lit while it's the one tapped (#698), here as in the 3D view and its key. */
 const piece = (lit: boolean) =>
   classes(
-    "flex min-w-0 items-center justify-center rounded-sm font-mono text-caption font-semibold text-background",
+    "flex min-w-0 items-center justify-center overflow-hidden rounded-sm text-background",
+    PIECE_TYPE,
     lit && "ring-stroke ring-primary-text ring-offset-2 ring-offset-surface",
   );
+
+/** The room a piece's words leave at its edges, in CSS px: `px-1` each side, and a little more. */
+const EDGE = 10;
+
+/** How wide the cut plan is drawn, and how wide its pieces' words are, measured on the page. */
+type Room = { width: number; line: number; measure: (text: string) => number };
+
+/**
+ * The cut plan's width and its pieces' type, measured before it's painted and again as it
+ * resizes or its font arrives, so each piece's words are laid out to fit it (#753).
+ */
+const useRoom = (plan: RefObject<HTMLElement | null>, probe: RefObject<HTMLElement | null>) => {
+  const [room, setRoom] = useState<Room>();
+  useLayoutEffect(() => {
+    const [box, type] = [plan.current, probe.current];
+    const drawing = document.createElement("canvas").getContext("2d");
+    if (box === null || type === null || drawing === null) return;
+    const read = () => {
+      const style = getComputedStyle(type);
+      drawing.font = style.font;
+      const size = Number.parseFloat(style.fontSize);
+      const line = Number.parseFloat(style.lineHeight);
+      setRoom({
+        width: box.clientWidth,
+        line: Number.isNaN(line) ? size * 1.4 : line,
+        measure: (text) => drawing.measureText(text).width,
+      });
+    };
+    read();
+    const watch = new ResizeObserver(read);
+    watch.observe(box);
+    void document.fonts.ready.then(read);
+    return () => watch.disconnect();
+  }, [plan, probe]);
+  return room;
+};
+
+/** How a sheet piece's words sit: each layout's lines, and whether they're turned along it. */
+type Words = { lines: readonly string[]; turned: boolean };
+
+/**
+ * A sheet piece's words (#753): its letter and size on one line, or its size on the next line
+ * when it's narrow, turned along it when it's tall, its size in two lines if need be, and its
+ * letter alone only when none of those fit.
+ */
+const wordsFor = (
+  room: Room | undefined,
+  piece: { label: string; along: number; across: number },
+  sheetLength: number,
+) => {
+  const { label, along, across } = piece;
+  const letterOnly: Words = { lines: [label], turned: false };
+  if (room === undefined) return letterOnly;
+  // The sheet is drawn the plan's width, so a millimetre is that width over the sheet's length.
+  const px = (mm: number) => (mm / sheetLength) * room.width;
+  const [w, h] = [px(along), px(across)];
+  const fits = (lines: readonly string[], width: number, height: number) =>
+    Math.max(...lines.map(room.measure)) + EDGE <= width && lines.length * room.line <= height;
+  const sized = `${along} × ${across}`;
+  const ways: Words[] = [
+    { lines: [`${label} ${sized}`], turned: false },
+    { lines: [label, sized], turned: false },
+    ...(h > w
+      ? [
+          { lines: [`${label} ${sized}`], turned: true },
+          { lines: [label, sized], turned: true },
+        ]
+      : []),
+    { lines: [label, `${along} ×`, `${across}`], turned: false },
+  ];
+  return (
+    ways.find((way) => (way.turned ? fits(way.lines, h, w) : fits(way.lines, w, h))) ?? letterOnly
+  );
+};
 
 /** Lengths cut the same way, once each, with how many: four lengths of B and A read "× 4". */
 const sameCuts = (lengths: readonly Length[]) => {
@@ -25,13 +104,24 @@ const sameCuts = (lengths: readonly Length[]) => {
   return groups;
 };
 
-/** A group's line: what it's cut from and how many, and its stock's options on its first (#704). */
-function StockLine(props: { name: string; count: number; options: (() => void) | undefined }) {
+/**
+ * A group's line: what it's cut from and how many, the offcut when its bar has no room for it
+ * (#753), and its stock's options on its first (#704).
+ */
+function StockLine(props: {
+  name: string;
+  count: number;
+  offcut?: number;
+  options: (() => void) | undefined;
+}) {
   return (
-    <p className="flex items-baseline justify-between gap-3 text-meta text-foreground">
+    <p className="flex items-baseline justify-between gap-3 text-interface text-foreground">
       <span className="min-w-0 font-semibold">{props.name}</span>
-      <span className="flex items-baseline gap-3">
-        <span className="font-mono text-muted-foreground">× {props.count}</span>
+      <span className="flex shrink-0 items-baseline gap-3">
+        <span className="font-mono text-meta text-muted-foreground">
+          × {props.count}
+          {props.offcut !== undefined && ` · offcut ${props.offcut}`}
+        </span>
         {props.options !== undefined && (
           <button
             type="button"
@@ -49,8 +139,9 @@ function StockLine(props: { name: string; count: number; options: (() => void) |
 
 /**
  * The cut plan (#698; the board's Cut plan tab): each length of timber as a bar of its cuts, each
- * as long as it is, with the offcut left; and each sheet with its pieces where they sit. Tapping a
- * piece lights its part everywhere and opens its card.
+ * as long as it is, with the offcut left and how long it is (#753); and each sheet with its pieces
+ * where they sit, each with its size. Tapping a piece lights its part everywhere and opens its
+ * card.
  */
 export function CutPlan(props: {
   derived: DerivedBuild;
@@ -59,6 +150,9 @@ export function CutPlan(props: {
   openOptions: (stock: string) => void;
 }) {
   const { cutPlan } = props.derived;
+  const plan = useRef<HTMLElement>(null);
+  const probe = useRef<HTMLSpanElement>(null);
+  const room = useRoom(plan, probe);
   /** A stock's options, on its first line only, where it has some. */
   const optionsOf = (stock: string, first: boolean) =>
     first && props.derived.options.some((options) => options.stock === stock)
@@ -72,38 +166,51 @@ export function CutPlan(props: {
     onClick: () => props.pick(label),
   });
   return (
-    <section aria-label="Cut plan" className="flex flex-col gap-4">
+    <section ref={plan} aria-label="Cut plan" className="relative flex flex-col gap-4">
+      <span ref={probe} aria-hidden className={classes(PIECE_TYPE, "invisible absolute")} />
       <p className="text-meta text-muted-foreground">
         Each saw cut takes {cutPlan.kerf} mm{assumed ? " · assumed" : ""}
       </p>
       {cutPlan.timber.flatMap((timber) =>
-        sameCuts(timber.lengths).map(({ length, count }, group) => (
-          <section
-            key={`${timber.stock}:${length.cuts.map((cut) => cut.label).join()}`}
-            className="flex flex-col gap-1.5"
-          >
-            <StockLine
-              name={`${timber.stock}, ${metres(timber.stockLength)}`}
-              count={count}
-              options={optionsOf(timber.stock, group === 0)}
-            />
-            <div className="flex h-9 gap-px rounded-sm bg-muted">
-              {length.cuts.map((cut, at) => (
-                <button
-                  // biome-ignore lint/suspicious/noArrayIndexKey: a length's cuts are only ever in this order
-                  key={at}
-                  {...button(cut.label, `${cut.label}, ${cut.length} mm`)}
-                  style={{ width: `${(cut.length / timber.stockLength) * 100}%` }}
-                  className={classes(piece(props.lit === cut.label), "bg-timber")}
-                >
-                  <span className="truncate px-1">
-                    {cut.label} {cut.length}
+        sameCuts(timber.lengths).map(({ length, count }, group) => {
+          const label = `offcut ${length.offcut}`;
+          const roomy =
+            room !== undefined &&
+            room.measure(label) + EDGE <= (length.offcut / timber.stockLength) * room.width;
+          return (
+            <section
+              key={`${timber.stock}:${length.cuts.map((cut) => cut.label).join()}`}
+              className="flex flex-col gap-1.5"
+            >
+              <StockLine
+                name={`${timber.stock}, ${metres(timber.stockLength)}`}
+                count={count}
+                {...(roomy || length.offcut <= 0 ? {} : { offcut: length.offcut })}
+                options={optionsOf(timber.stock, group === 0)}
+              />
+              <div className="flex h-11 gap-px rounded-sm bg-muted">
+                {length.cuts.map((cut, at) => (
+                  <button
+                    // biome-ignore lint/suspicious/noArrayIndexKey: a length's cuts are only ever in this order
+                    key={at}
+                    {...button(cut.label, `${cut.label}, ${cut.length} mm`)}
+                    style={{ width: `${(cut.length / timber.stockLength) * 100}%` }}
+                    className={classes(piece(props.lit === cut.label), "bg-timber")}
+                  >
+                    <span className="truncate px-1">
+                      {cut.label} {cut.length}
+                    </span>
+                  </button>
+                ))}
+                {roomy && (
+                  <span className="flex min-w-0 flex-1 items-center justify-center font-mono text-meta text-muted-foreground">
+                    <span className="truncate px-1">{label}</span>
                   </span>
-                </button>
-              ))}
-            </div>
-          </section>
-        )),
+                )}
+              </div>
+            </section>
+          );
+        }),
       )}
       {cutPlan.sheets.flatMap((sheet) =>
         sheet.sheets.map((each, at) => (
@@ -122,7 +229,7 @@ export function CutPlan(props: {
               style={{ aspectRatio: `${sheet.sheetLength} / ${sheet.sheetWidth}` }}
             >
               {each.pieces.map((part) => {
-                const wide = part.along / sheet.sheetLength > 0.3;
+                const words = wordsFor(room, part, sheet.sheetLength);
                 return (
                   <button
                     key={`${part.label}:${part.x}:${part.y}`}
@@ -135,8 +242,17 @@ export function CutPlan(props: {
                     }}
                     className={classes(piece(props.lit === part.label), "absolute bg-sheet")}
                   >
-                    <span className="truncate px-1">
-                      {wide ? `${part.label} ${part.along} × ${part.across}` : part.label}
+                    <span
+                      className={classes(
+                        "flex flex-col items-center px-1",
+                        words.turned && "rotate-180 [writing-mode:vertical-rl]",
+                      )}
+                    >
+                      {words.lines.map((line) => (
+                        <span key={line} className="whitespace-nowrap">
+                          {line}
+                        </span>
+                      ))}
                     </span>
                   </button>
                 );

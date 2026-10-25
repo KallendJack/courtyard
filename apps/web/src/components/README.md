@@ -9,14 +9,14 @@ never style a raw `<button>`, `<input>` or error line themselves (AGENTS.md). Wh
 | Folder | What's in it |
 |---|---|
 | `layout/` | Notices, problems, Home's blocks, dialogs, the Courtyard mark |
-| `buttons/` | Links that look like buttons, copy, thumb and sort buttons, a row as a button, the ⋯ menu |
+| `buttons/` | Links that look like buttons, copy and thumb buttons, a row as a button, the ⋯ menu (web links are `packages/ui`'s) |
 | `drawings/` | Kinds of things Courtyard draws itself, never a model: a mountain bike, with the places its parts go (#603), and its labels kept apart (`labels-apart.ts`, #657) |
-| `forms/` | Text fields, file pickers, selects, switches, tick boxes, segmented choices |
-| `sheets/` | Sheets and what opens in them: Skills and Model, Allow all, Allowed commands, Notify me, Icon, recent sessions, Something's off |
+| `forms/` | Text fields, file pickers, selects, switches, tick boxes (segmented choices are `packages/ui`'s) |
+| `sheets/` | Handheld sheets (the plain sheet is `packages/ui`'s) and what opens in them: Skills and Model, Allow all, Allowed commands, Notify me, Icon, recent sessions, Something's off |
 | `frame/` | The Handheld frame round every page: its layout, rails (the right one listing the open workspace's sessions, #492), arranging workspaces |
 | `chat/` | A session's flow: whose turn it is, the Working line, queued messages, approvals, notes, the photo viewer |
 | `code/` | Code workspaces' pieces: the repo picker, file tree, build stages, ask line, branch strip, connections |
 | `workspace/` | A workspace's icon, menu and tabs, its context lines |
-| `rich-blocks/` | Tables, charts and diagrams Courtyard draws in answers (ADR 0021) |
+| `rich-blocks/` | Charts, diagrams and the blocks Courtyard draws in answers (ADR 0021); tables are `packages/ui/answer/`'s, drawn in a `RichBlock` |
 
 How they fit together is in [`architecture.md`](../../../../docs/architecture.md#the-web-app-appswebsrc).

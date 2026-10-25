@@ -1,11 +1,11 @@
 import type { FirstMessage, ProviderList, ThingSummary, WorkspaceId } from "@courtyard/contract";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { SegmentedChoice } from "@courtyard/ui/forms/segmented-choice.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { Page, PageTitle } from "@courtyard/ui/layout/page.tsx";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { BackLink } from "@/components/buttons/back-link";
-import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { Composer } from "../sessions/composer/composer.tsx";
 import { startSession } from "../sessions/composer/messages.ts";

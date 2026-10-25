@@ -2,11 +2,12 @@ import type {
   BuildChatEntry,
   BuildSlug,
   BuildChat as Chat,
+  NewMessage,
   ProviderList,
   WorkspaceId,
 } from "@courtyard/contract";
+import { MarkdownAnswer } from "@courtyard/ui/answer/markdown.tsx";
 import { DockContext } from "@courtyard/ui/frame/handheld.ts";
-import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { createKept, PlaceholderRows, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
@@ -30,22 +31,16 @@ const savedLine = (entry: Extract<BuildChatEntry, { from: "build" }>) =>
   entry.did === "started" ? "Started the Build" : `Changed: ${entry.changed.join(", ")}`;
 
 /**
- * A Build's chat (#698; Paper, "Fabrication · A Build · Tablet (#698)"): what's been said about
- * it in its project's session, each change it saved, and the Reply box with Talk at its foot.
- * Kept fresh the shared way, faster while an answer comes.
+ * A Build's chat, once for its page (#698, #753): what's been said about it in its project's
+ * session, kept fresh the shared way and faster while an answer comes, the models it can answer
+ * with, and a way to send. The chat panel or sheet shows it, and Hold to ask sends through it.
  */
-export function BuildChat(props: {
+export const useBuildChat = (props: {
   workspaceId: WorkspaceId;
   slug: BuildSlug;
   /** What changed the Build, so the page reads it again: a change saved in the chat. */
   onChanged: () => void;
-  placeholder: string;
-  /** Words and a photo to put in the Reply box, for the owner to send (#699's photo to check). */
-  draft:
-    | { readonly text: string; readonly files: readonly File[]; readonly key: number }
-    | undefined;
-  onDrafted: () => void;
-}) {
+}) => {
   const { workspaceId, slug, onChanged } = props;
   const [asked, setAsked] = useState(0);
   const chat = useKept(chats, {
@@ -64,7 +59,6 @@ export function BuildChat(props: {
       return answer.kind === "loaded" ? answer.data.providers : undefined;
     },
   });
-  const { dock, place } = useChatDock();
 
   // A change saved in the chat changes the Build: the page reads it again.
   const saves = chat?.entries.filter((entry) => entry.from === "build").length;
@@ -75,7 +69,8 @@ export function BuildChat(props: {
     seenSaves.current = saves;
   }, [saves, onChanged]);
 
-  const send = async (message: Parameters<typeof sendToChat>[1], files: readonly File[]) => {
+  /** Sends a message, and says why when it couldn't go. */
+  const send = async (message: NewMessage, files: readonly File[]) => {
     const sent = await sendToChat({ workspaceId, slug }, message, files);
     if (sent.kind === "loaded") {
       setAsked((count) => count + 1);
@@ -84,22 +79,50 @@ export function BuildChat(props: {
     return sent.kind === "failed" ? sent.message : "Can't reach Courtyard's worker. Try again.";
   };
 
+  return { chat, providers, send };
+};
+export type BuildTalk = ReturnType<typeof useBuildChat>;
+
+/**
+ * A Build's chat (#698; #753's chat sheet): what's been said, each change saved, and the Reply
+ * box with Talk at its foot. Answers are formatted as Courtyard's session formats them, with the
+ * shared pieces, and nothing in it is wider than the chat.
+ */
+export function BuildChat(props: {
+  talk: BuildTalk;
+  /** Whether it's on screen: opened, it shows the latest, as a new entry does. */
+  showing: boolean;
+  placeholder: string;
+  /** Words and a photo to put in the Reply box, for the owner to send (#699's photo to check). */
+  draft:
+    | { readonly text: string; readonly files: readonly File[]; readonly key: number }
+    | undefined;
+  onDrafted: () => void;
+}) {
+  const { chat, providers, send } = props.talk;
+  const { dock, place } = useChatDock();
+  const column = useRef<HTMLElement>(null);
+  const said = chat?.entries.length;
+  // Opened, or with something new said, it shows the latest; an answer as it grows doesn't move it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: to the latest as something new is said
+  useEffect(() => {
+    const element = column.current;
+    if (props.showing && element !== null) element.scrollTop = element.scrollHeight;
+  }, [props.showing, said]);
   return (
-    <section aria-label="Chat" className="flex min-h-0 flex-1 flex-col gap-3">
-      <CapsLabel tone="muted" heading={{ level: 2 }}>
-        Chat
-      </CapsLabel>
-      <Scroller className="flex min-h-0 flex-1 flex-col">
+    <section aria-label="Chat" className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+      {/* To the panel's edges, so a table can run to them on a phone, as in Courtyard's answers. */}
+      <Scroller ref={column} className="-mx-4 flex min-h-0 min-w-0 flex-1 flex-col px-4">
         {chat === undefined ? (
           <PlaceholderRows count={3} />
         ) : chat.entries.length === 0 ? (
-          <p className="text-interface text-muted-foreground">
+          <p className="text-answer text-muted-foreground">
             Ask about the Build, or say what to change.
           </p>
         ) : (
-          <ol aria-label="Messages" className="flex flex-col gap-3.5 pb-2">
+          <ol aria-label="Messages" className="flex min-w-0 flex-col gap-4 pb-2">
             {chat.entries.map((entry) => (
-              <li key={entry.seq} className="flex flex-col">
+              <li key={entry.seq} className="flex min-w-0 flex-col">
                 <Entry entry={entry} />
               </li>
             ))}
@@ -129,25 +152,18 @@ export function BuildChat(props: {
   );
 }
 
+/** One entry: the owner's words, an answer formatted, or a change the chat saved. */
 function Entry(props: { entry: BuildChatEntry }) {
   const { entry } = props;
   switch (entry.from) {
     case "owner":
       return (
-        <p className="ml-6 self-end rounded-bubble bg-muted px-3.5 py-2.5 text-message whitespace-pre-wrap text-foreground">
+        <p className="ml-6 self-end rounded-bubble bg-muted px-3.5 py-2.5 text-message whitespace-pre-wrap wrap-anywhere text-foreground">
           {entry.text}
         </p>
       );
     case "model":
-      return (
-        <div className="flex flex-col gap-2 text-answer/6 text-foreground/95">
-          {entry.text.split(/\n{2,}/).map((paragraph) => (
-            <p key={paragraph} className="whitespace-pre-wrap">
-              {paragraph}
-            </p>
-          ))}
-        </div>
-      );
+      return <MarkdownAnswer text={entry.text} className="text-answer text-foreground/95" />;
     case "build":
       return (
         <p

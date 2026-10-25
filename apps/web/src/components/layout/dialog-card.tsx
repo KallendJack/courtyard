@@ -1,6 +1,6 @@
+import { useDialog } from "@courtyard/ui/hooks/use-dialog.ts";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import type { ReactNode } from "react";
-import { useDialog } from "./use-dialog.ts";
 
 /**
  * A card in the middle of the screen over the dimmed page, for one decision with a few choices

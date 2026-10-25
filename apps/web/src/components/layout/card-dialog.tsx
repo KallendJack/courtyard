@@ -1,8 +1,8 @@
 import { IconButton } from "@courtyard/ui/buttons/button.tsx";
+import { useDialog } from "@courtyard/ui/hooks/use-dialog.ts";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { X } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
-import { useDialog } from "./use-dialog.ts";
 
 /**
  * A card over the page for one task with a few lines to it (Connections, #308; the setup card,

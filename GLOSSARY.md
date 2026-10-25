@@ -283,6 +283,18 @@ The app the owner opens a Build in (`apps/fabrication`, ADR 0036): the chat abou
 The engine behind it is `packages/fabrication`.
 _Avoid_: Fabricator, maker mode, workshop
 
+**At the bench**:
+Fabrication's way of working on a Build while making it (#753): one step fills the screen, read at arm's length, with
+the step in 3D beside it, Back and Done at thumb height and a swipe between steps. Where a Build with steps opens on
+the Fold; folded, the only way. Its other way is **Plan**, for planning at a desk: the Build big in 3D with its cut
+plan, buy list and tools beside it. On a computer, the three panels show both.
+_Avoid_: step mode, workshop mode, focus mode
+
+**Hold to ask**:
+The chat behind one button, at the bench (#753): held, it listens, and let go, what was said is asked in the Build's
+chat about the step, its answer showing over the picture until it gets out of the way. A tap opens the chat.
+_Avoid_: push to talk (that's the Talk key's), voice chat
+
 **Carry on (a project)**:
 Starting a session from a project, on Home or its page (#603): its first message the project and what's next, and the
 session **belongs to** the project, so each of its turns is given the project whole. A model can also attach a
