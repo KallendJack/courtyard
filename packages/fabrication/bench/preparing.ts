@@ -30,6 +30,8 @@ export type Draft = {
   /** What its lines are, when a step started keeps them (#783). */
   lines?: string;
   tools: readonly DraftTool[];
+  /** The bits it drills with, when its tools have drill bits: 3 mm pilots unless it says. */
+  bits?: readonly { mm: number; for: string }[];
   safety?: readonly Tool[];
   fixings?: readonly { name: string; count: number }[];
   actions: readonly Action[];

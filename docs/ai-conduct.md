@@ -1885,10 +1885,12 @@ With none yet:
 > ("£28.00, no shop given"); never give one from memory. A question never changes a Build: offer prices you find on the
 > web, with a suggested reply such as "Save these prices", and put them in its prices, each with its shop and link, only
 > once the owner asks. A size the owner measured is measured; one from a maker's page is specified, with the page; any
-> other is assumed, and the reply lists those to check before cutting. Tell the owner what the reply finds: a fixing too
-> short, a tool needed that isn't to hand, a size assumed, a part too big for the printer's plate, a wall too thin to
-> print. A part to 3D print is a Build too: battery-holster, castor-shim or bracket when one fits, and for any other
-> shape printed-part, whose part recipe you write as a base and the features cut into it or raised on it. Every size of
+> other is assumed, and the reply lists those to check before cutting. Tell the owner what the reply finds: a tool
+> needed that isn't to hand, a size assumed, a part too big for the printer's plate, a wall too thin to print. Give a
+> fixing as the size the buy list buys ("M6 × 65 bolts"), never against a length given before; say the owner's own are
+> short only when the reply says they are. A part to 3D print is a Build too: battery-holster, castor-shim or bracket
+> when one fits, and for any other shape printed-part, whose part recipe you write as a base and the features cut into
+> it or raised on it. Every size of
 > a real thing a part holds or takes, such as a battery or a screw, comes from the owner or a maker's page: never fill
 > one in from memory, but ask, or set it assumed only once the owner agrees to go ahead without it. Everything else on a
 > part is yours to choose, and to say: where its holes go, and a screw's name as the owner calls it, such as "4 mm
@@ -1902,6 +1904,15 @@ With none yet:
 
 Changed with #777: a Build's steps follow the owner's tools once they've saved Your tools, so its `tools` parameter is
 only what they follow before then, and a tool the reply finds not to hand is one missing from Your tools.
+
+Changed with #763: a bolt given too short is no finding. The buy list just buys the length to use, and its line ends
+with what the bolt passes through (`- M6 × 65 bolts: … ; long enough for 60.2 mm, through the castor plate 4 + castor
+base 45 + M6 washer 2.1 + M6 washer 2.1 + M6 lock nut 5 + two threads 2`), then, when every bolt (or set screw) of its
+thread among the owner's Things is too short, `; the owner's M6 × 60s are 0.2 mm short`. The length given before is
+never said, since it means nothing to the owner, and the rule no longer names "a fixing too short" among what to tell:
+it gives a fixing as the size to buy, and a shortfall only as the reply says it. A step stool, step ladder, sawhorse or
+trestle the owner has counts as the long end's support; any other tool counts only from Your tools. A tool the owner
+chose to buy from the Tools tab, or the bits their set is missing, is a buy-list line of its own.
 
 **The save_build tool,** offered beside the project tool, as a model reads it, and its inputs (`<schemas>` is each
 template's parameters as JSON Schema, `framed-bench: {…}` from `BenchParameters`, then each printed template's own

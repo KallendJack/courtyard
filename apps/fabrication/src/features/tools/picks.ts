@@ -26,12 +26,9 @@ export const ownPicks = (picks: Picks) =>
 /** The tile a saved tool is ticked as: its own name, unless it's kept a tile beside it (F-clamps). */
 const tileOf = (tool: ThingSummary) => tool.tile ?? tool.name;
 
-/**
- * What Your tools opens with: the owner's tools as saved, then the workspaces' tools not among
- * them, ticked to move with the Save (the garage's hand saw).
- */
-export const startingPicks = (tools: YourTools): Picks => {
-  const saved = tools.tools.map(
+/** The owner's tools as saved, as Save would keep them. */
+const savedPicks = (tools: YourTools): ToolPick[] =>
+  tools.tools.map(
     (tool): ToolPick => ({
       name: tileOf(tool),
       ...(tool.count === undefined ? {} : { count: tool.count }),
@@ -39,10 +36,41 @@ export const startingPicks = (tools: YourTools): Picks => {
       ...(tool.size === undefined ? {} : { size: tool.size }),
     }),
   );
+
+/**
+ * What Your tools opens with: the owner's tools as saved, then the workspaces' tools not among
+ * them, ticked to move with the Save (the garage's hand saw).
+ */
+export const startingPicks = (tools: YourTools): Picks => {
+  const saved = savedPicks(tools);
   for (const found of tools.found) {
     if (!pickOf(saved, found.tool.name)) saved.push(found.tool);
   }
   return saved;
+};
+
+/**
+ * The owner's tools with one more they have, from a Build's Tools tab (#763): its name, and for a
+ * drill bit set the sizes they have, added to those it's kept with ("3, 7 mm"). It adds to the
+ * tools the Build counts as theirs, never replacing them with one: Your tools as saved, or before
+ * they've saved any, the workspaces' tools, which move with the Save as from Your tools, and the
+ * Build's own tools to hand (`builds`).
+ */
+export const withHad = (
+  tools: YourTools,
+  had: { name: string; sizes?: readonly number[]; builds?: readonly string[] },
+): Picks => {
+  const sizes = had.sizes ?? [];
+  const picks = tools.saved ? savedPicks(tools) : [...startingPicks(tools)];
+  if (!tools.saved) {
+    for (const own of had.builds ?? []) if (!pickOf(picks, own)) picks.push({ name: own });
+  }
+  const there = pickOf(picks, had.name);
+  const size = [there?.size, sizes.length === 0 ? undefined : `${sizes.join(", ")} mm`]
+    .filter((part) => part !== undefined)
+    .join(", ");
+  const pick: ToolPick = { ...there, name: there?.name ?? had.name, ...(size ? { size } : {}) };
+  return there === undefined ? [...picks, pick] : picks.map((one) => (one === there ? pick : one));
 };
 
 /**

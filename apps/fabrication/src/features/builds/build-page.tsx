@@ -185,6 +185,8 @@ export function BuildPage(props: { build: BuildOpened }) {
           <ToolsList
             derived={derived}
             build={`/workspaces/${encodeURIComponent(place.workspace.id)}/builds/${build.slug}`}
+            progress={progress}
+            reread={reread}
           />
         );
       case "Steps":

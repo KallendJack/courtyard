@@ -44,7 +44,8 @@ export const keepProgress = async (
         progress,
         before: read.value.progress.ways,
       });
-      const kept: BuildProgress = { step, ticked: progress.ticked, ways };
+      // The tools chosen to buy are the owner's, from the Tools tab (#763): kept as sent.
+      const kept: BuildProgress = { step, ticked: progress.ticked, ways, buying: progress.buying };
       const text = `${JSON.stringify(kept, null, 2)}\n`;
       if (!(await writeTextFileIn(join(folder.value, progressPath(slug)), text))) {
         return err({ kind: "storage" });

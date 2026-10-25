@@ -49,7 +49,12 @@ describe("a Build's progress", () => {
   it("starts with no step reached and nothing ticked", async () => {
     const request = await owner();
 
-    expect((await opened(request)).progress).toEqual({ step: null, ticked: [], ways: [] });
+    expect((await opened(request)).progress).toEqual({
+      step: null,
+      ticked: [],
+      ways: [],
+      buying: [],
+    });
   });
 
   it("is kept, so the Build opens at the step reached with its lines ticked", async () => {
@@ -67,9 +72,9 @@ describe("a Build's progress", () => {
     expect(kept.status).toBe(200);
     // The castor step started keeps the lines it was started on (#783).
     const ways = [{ step: "fit-castors", tool: "through-plate" }];
-    expect(BuildProgress.parse(await kept.json())).toEqual({ ...progress, ways });
+    expect(BuildProgress.parse(await kept.json())).toEqual({ ...progress, ways, buying: [] });
     // Read from the Build again, as another device opening it would.
-    expect((await opened(request)).progress).toEqual({ ...progress, ways });
+    expect((await opened(request)).progress).toEqual({ ...progress, ways, buying: [] });
   });
 
   it("isn't a change to undo: it's kept in git without a Recent changes entry", async () => {
@@ -108,7 +113,7 @@ describe("a Build's progress", () => {
     );
 
     const build = await opened(request);
-    expect(build.progress).toEqual({ ...progress, ways: [] });
+    expect(build.progress).toEqual({ ...progress, ways: [], buying: [] });
     expect(build.derived.steps.find((step) => step.id === "fit-supports")?.number).toBe(6);
   });
 
@@ -120,7 +125,12 @@ describe("a Build's progress", () => {
     );
     const request = await owner();
 
-    expect((await opened(request)).progress).toEqual({ step: null, ticked: [], ways: [] });
+    expect((await opened(request)).progress).toEqual({
+      step: null,
+      ticked: [],
+      ways: [],
+      buying: [],
+    });
     // And it's kept the new way from the next tick.
     const kept = await keep(request, {
       step: null,
@@ -133,7 +143,12 @@ describe("a Build's progress", () => {
     const request = await owner();
     const cutDone = { step: "cut-timber", lines: [0, 1, 2, 3] };
 
-    const kept = await keep(request, { step: "fit-castors", ticked: [cutDone], ways: [] });
+    const kept = await keep(request, {
+      step: "fit-castors",
+      ticked: [cutDone],
+      ways: [],
+      buying: [],
+    });
     expect(BuildProgress.parse(await kept.json()).ways).toEqual([
       { step: "cut-timber", tool: "hand-saw" },
     ]);
@@ -269,6 +284,20 @@ describe("a Build's steps with Your tools (#777)", () => {
     expect(cut(build)?.actions[0]?.numbers).toBe("In the jaws, line just past the edge.");
   });
 
+  it("know a drill bit set's sizes from the size it's kept with (#763)", async () => {
+    await ownTools(...theirs);
+    await writeFile(
+      join(contextDir, "things", "drill-bits.md"),
+      `---\nname: "Drill bits"\nstatus: have\nkind: tool\nsize: "1–6 mm"\n---\n`,
+    );
+    const request = await owner();
+
+    const bits = (await opened(request)).derived.steps
+      .find((step) => step.id === "fit-castors")
+      ?.tools.find((tool) => tool.tool === "drill-bits")?.bits;
+    expect(bits).toEqual([{ mm: 7, for: "the M6 bolts", have: false }]);
+  });
+
   it("keep a step done before the ways were kept as the Build's own tools did it", async () => {
     // As kept before #777: the cut step done, no ways.
     await mkdir(join(contextDir, "garage", "builds", "progress"), { recursive: true });
@@ -349,5 +378,52 @@ describe("the castor step started on its old lines (#783)", () => {
     await keep(request, { step: "fit-castors", ticked: [] });
 
     expect(castors(await opened(request))?.actions).toHaveLength(4);
+  });
+});
+
+/** A Thing the owner has in the garage, as a planning workspace keeps it. */
+const garageThing = async (name: string) => {
+  await mkdir(join(contextDir, "garage", "things"), { recursive: true });
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  await writeFile(
+    join(contextDir, "garage", "things", `${slug}.md`),
+    `---\nname: ${JSON.stringify(name)}\nstatus: have\n---\n`,
+  );
+};
+
+describe("a Build with what the owner has besides Your tools (#763)", () => {
+  it("finds a step stool in a space for the long end's support, saying it will do", async () => {
+    await ownTools("Tape, pencil", "Square", "Hand saw", "Workmate", "Clamps");
+    await garageThing("Step stool");
+    const request = await owner();
+
+    const support = (await opened(request)).derived.steps
+      .find((step) => step.id === "cut-timber")
+      ?.tools.find((tool) => tool.tool === "long-end-support");
+    expect(support).toMatchObject({ toHand: true, standIn: "Step stool" });
+  });
+
+  it("says on the bolts' line when the owner's own are too short", async () => {
+    await garageThing("Castor bolts M6 × 50");
+    const request = await owner();
+
+    const bolts = (await opened(request)).derived.buyList.lines.find(
+      (line) => line.item === "M6 × 60 bolts",
+    );
+    expect(bolts?.length?.yoursShort).toEqual({ name: "M6 × 50", by: 9.2 });
+  });
+
+  it("keeps a tool chosen to buy, listing it on the buy list until they have it", async () => {
+    const request = await owner();
+
+    const kept = await keep(request, { step: null, ticked: [], buying: ["spanner"] });
+    expect(BuildProgress.parse(await kept.json()).buying).toEqual(["spanner"]);
+    const lines = (await opened(request)).derived.buyList.lines;
+    expect(lines.find((line) => line.kind === "tool")).toMatchObject({ item: "Spanner" });
+
+    // A socket turns the nut and pliers hold the head (#783).
+    await ownTools("Socket set", "Pliers");
+    const had = (await opened(request)).derived.buyList.lines;
+    expect(had.filter((line) => line.kind === "tool")).toEqual([]);
   });
 });

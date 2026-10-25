@@ -26,7 +26,8 @@ rest is worked out again.
   and the project whose step makes it, #698), and how far the owner has got with its steps (#699). Answers
   `BuildOpened`.
 - `PUT /api/fabrication/workspaces/:id/builds/:slug/progress`: `BuildProgress`, the step reached and the lines
-  ticked (#699); a step the Build doesn't have is refused (400). Answers it as kept.
+  ticked (#699), and the tools chosen to buy from the Tools tab (#763); a step the Build doesn't have is refused
+  (400). Answers it as kept.
 - `GET /api/fabrication/workspaces/:id/builds/:slug/chat`: its chat (#698), from its project's latest session, or
   else the latest that saved it: what was said and each change saved, and whether an answer is coming. Answers
   `BuildChat`.
@@ -72,7 +73,7 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   save is one change through `context-folder/`, its note listing each parameter changed ("height: 900 mm → 850
   mm"); Undo (`undoBuildChange`) puts the file back whole, unless it's changed since.
 - **Progress** (`progress.ts`, #699): `builds/progress/<slug>.json`, the step reached and the lines ticked, read with
-  the Build, and the tool each step started was done with (#777), which the worker works out as lines are ticked
+  the Build, the tools chosen to buy (#763), and the tool each step started was done with (#777), which the worker works out as lines are ticked
   (never from what's sent), so a started step stays as it was started and its ticks stay on their lines; a file kept
   before then gets the ways the Build's own tools gave. It sits beside the Build's file, so ticking a line never
   stands in the way of undoing a change to the Build. Each write is a `build-progress` change: backed up, never
@@ -85,8 +86,10 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   project tool (`[build: <slug>]` on the step).
 - **What a Build is worked out with** (`setting.ts`, #777): besides its parameters, the owner's tools, by name and
   tile, which its steps and pictures follow once they've saved any (its own `tools` until then), the sizes given them
-  (a saw's cutting capacity, #780), and the ways its
-  steps started were done. Every read of a Build, the model's and Fabrication's, works it out the same way.
+  (a saw's cutting capacity, #780; a bit set's sizes, #763), and the ways its steps started were done. And (#763) the
+  names of the Things the owner has in their planning workspaces (a step stool stands in for the long end's support;
+  bolts too short are said on their line when every one of its thread they have is), and the tools its progress keeps to buy. Every read of a Build, the
+  model's and Fabrication's, works it out the same way.
 - **The owner's tools** (`tools.ts`, ADR 0037): Things of kind tool in the context folder's own `things/`, so every
   workspace and Build sees the same ones; `sessions/` lists them in every planning turn. A Save writes them all as one
   change: a tool given is written (its count, make and size; a size gives it a subject ID), one not given is removed,

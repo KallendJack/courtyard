@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ToolSize } from "./capacity.ts";
 
 // The tools and safety kit a step can need, which the owner's tools to hand are set against. Kit
 // is a tool like any other here, so a missing pair of glasses is listed as a missing saw is.
@@ -58,8 +59,9 @@ const TOOL_WORDS: Readonly<Record<Tool, RegExp>> = {
   "circular-saw": /\bcircular saw/,
   "mitre-saw": /\b(mitre|miter|chop) saw/,
   "folding-workbench": /\b(workmate|folding (work)?bench)/,
-  // A sawhorse, a trestle or a stool: anything that holds a length's far end level.
-  "long-end-support": /\b(saw ?horse|trestle|stool|support for the long end)/,
+  // A sawhorse, a trestle, a stool or a step: anything that holds a length's far end level.
+  "long-end-support":
+    /\b(saw ?horse|trestle|stool|step ?ladder|kick ?step|support for the long end)/,
   clamps: /\bclamp/,
   // A drill, but not "drill bits" on their own.
   "drill-driver": /\bdrill\b(?! bits?\b)/,
@@ -71,14 +73,16 @@ const TOOL_WORDS: Readonly<Record<Tool, RegExp>> = {
   "ear-defenders": /\bear ?(defenders|muffs|protectors?|protection|plugs)\b/,
 };
 
+/** A name as its words are read: lower case, anything but letters and digits a space. */
+const wordsOf = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
 /** The steps' tools among the owner's, as Your tools saves them: each its tile's name or theirs. */
 export const toolsFrom = (names: readonly string[]): Tool[] => {
-  const said = names.map((name) =>
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim(),
-  );
+  const said = names.map(wordsOf);
   return Tool.options.filter((tool) => said.some((name) => TOOL_WORDS[tool].test(name)));
 };
 
@@ -126,4 +130,41 @@ export const spannerKitFrom = (names: readonly string[]): SpannerKit => {
     else if (KIT_WORDS.pliers.test(name)) kit.pliers = true;
   }
   return kit;
+};
+
+/**
+ * The only tools something else the owner has can stand in for (#763), by the words in its name.
+ * Any other tool counts only from Your tools (#777): a mitre saw in the garage never changes how a
+ * step is done until it's saved there.
+ */
+const STAND_INS: Partial<Record<Tool, RegExp>> = {
+  "long-end-support": /\b(saw ?horse|trestle|stool|step ?ladder|kick ?step)/,
+};
+
+/** The first of the owner's Things, by name, that will do for a tool, when it's one that can (#763). */
+export const standInFor = (tool: Tool, names: readonly string[]): string | undefined => {
+  const words = STAND_INS[tool];
+  return words && names.find((name) => words.test(wordsOf(name)));
+};
+
+/** The sizes the owner's drill bit sets are kept with ("3, 5, 7 mm", "1–10 mm"), among their tools'. */
+export const bitSetsFrom = (sizes: readonly ToolSize[]): string[] => [
+  ...new Set(
+    sizes.filter(({ name }) => toolsFrom([name]).includes("drill-bits")).map(({ size }) => size),
+  ),
+];
+
+/**
+ * Whether the owner's drill bit sets have a bit, by the sizes each is kept with: listed ("3, 5,
+ * 7 mm"), a range ("1–10 mm") or both ("1–6 mm, 7 mm"). Left out when no set's sizes are known.
+ */
+export const bitInSets = (sets: readonly string[], mm: number): boolean | undefined => {
+  if (sets.length === 0) return undefined;
+  return sets.some((size) =>
+    size.split(",").some((part) => {
+      const range = /(\d+(?:\.\d+)?)\s*(?:–|-|to)\s*(\d+(?:\.\d+)?)/.exec(part);
+      if (range) return mm >= Number(range[1]) && mm <= Number(range[2]);
+      return (part.match(/\d+(?:\.\d+)?/g) ?? []).map(Number).includes(mm);
+    }),
+  );
 };

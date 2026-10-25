@@ -1,4 +1,9 @@
-import { type BuildStep, type DerivedBuild, tickedIn } from "@courtyard/contract";
+import {
+  type BuildStep,
+  type BuildStepTool,
+  type DerivedBuild,
+  tickedIn,
+} from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
@@ -8,7 +13,7 @@ import { CloseUp } from "./close-up.tsx";
 import { LengthBar } from "./cut-plan.tsx";
 import { Findings } from "./findings.tsx";
 import { type Detail, type Progress, useDetail } from "./progress.ts";
-import { listed, stepFindings, wayChanges } from "./words.ts";
+import { bitToCheck, listed, stepFindings, wayChanges } from "./words.ts";
 
 // A Build's steps as an instruction manual (#699; Paper, 2 · Agreed, "Fabrication · Build steps
 // v2, teaching · Tablet (#699)" and "· Build steps, cutting by your tools · Tablet (#699)"): one
@@ -208,36 +213,56 @@ function Checklist(props: {
   );
 }
 
+/**
+ * A step's tool as its chip says it (#763): drill bits by the size the step drills with, "a 7 mm
+ * bit: check your set" while the set's sizes aren't known; and what will do for a tool the owner
+ * hasn't, "Support for the long end: your step stool".
+ */
+const chipOf = (tool: BuildStepTool): { says: string; ready: boolean } => {
+  const bits = tool.bits ?? [];
+  const unsure = bits.filter((bit) => bit.have !== true);
+  if (!tool.toHand) {
+    return {
+      says: bits.length === 0 ? `${tool.name}?` : listed(bits.map((bit) => `${bit.mm} mm bit?`)),
+      ready: false,
+    };
+  }
+  if (unsure.length > 0) return { says: listed(unsure.map(bitToCheck)), ready: false };
+  if (bits.length > 0) return { says: listed(bits.map((bit) => `${bit.mm} mm bit`)), ready: true };
+  if (tool.standIn !== undefined) {
+    return { says: `${tool.name}: your ${tool.standIn.toLowerCase()}`, ready: true };
+  }
+  return { says: tool.name, ready: true };
+};
+
 /** The step's tools as chips, as the bench board has them: ticked, or gold to check. */
 function ToolChips(props: { step: BuildStep; big: boolean }) {
   const tools = [...props.step.tools, ...props.step.safety];
   if (tools.length === 0) return null;
   return (
     <ul aria-label="Tools for this step" className="flex flex-wrap gap-2">
-      {tools.map((tool) => (
-        <li
-          key={tool.tool}
-          className={classes(
-            "flex items-center gap-2 rounded-full border px-4 font-semibold",
-            props.big ? "h-11 text-interface" : "h-9 text-meta",
-            tool.toHand
-              ? "border-transparent bg-muted text-foreground"
-              : "border-warning/50 bg-warning/10 text-warning",
-          )}
-        >
-          {tool.toHand ? (
-            <>
+      {tools.map((tool) => {
+        const { says, ready } = chipOf(tool);
+        return (
+          <li
+            key={tool.tool}
+            className={classes(
+              "flex items-center gap-2 rounded-full border px-4 font-semibold",
+              props.big ? "h-11 text-interface" : "h-9 text-meta",
+              ready
+                ? "border-transparent bg-muted text-foreground"
+                : "border-warning/50 bg-warning/10 text-warning",
+            )}
+          >
+            {ready ? (
               <Check aria-hidden className="size-4 text-success" />
-              {tool.name}
-            </>
-          ) : (
-            <>
+            ) : (
               <span aria-hidden className="size-1.5 rounded-full bg-warning" />
-              {tool.name}?
-            </>
-          )}
-        </li>
-      ))}
+            )}
+            {says}
+          </li>
+        );
+      })}
     </ul>
   );
 }
