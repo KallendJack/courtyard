@@ -57,10 +57,12 @@ if (recipe) {
   to hand in use. A step started keeps the way it was started (`kept`), and one not started whose way differs from the one
   the parameters' own tools would use says so (`wayChanged`). A new tool changes only the steps it does better.
 - **A saw cuts only what fits it** (#780): a timber wider or deeper than the saw in use cuts (its **cutting capacity**,
-  from its size in Your tools, `sizes`) goes to the next best saw to hand that takes it, the hand saw taking anything,
+  from the size line on the owner's tool, `sizes`) goes to the next best saw to hand that takes it, the hand saw taking anything,
   and the step says why in one line ("The 145 castor bases and top support are too wide for your mitre saw: hand saw
-  for these"). Until it's given, a mitre saw is assumed to cut 100 mm wide and 60 deep, a circular saw 45 deep, and the
-  line says it's assumed.
+  for these"), and the picture draws the saw that cuts the timber shown. Its size is read only as a width by a depth
+  ("120 × 60 mm"), or a circular saw's as a depth ("54 mm deep"); until it's given that way, a mitre saw is assumed to
+  cut 100 mm wide and 60 deep, a circular saw 45 deep, and the line says it's assumed. A cut step started keeps
+  its lines as they were: nothing is handed on once it is.
 - **Each step says which parts it puts on the Build** (none for checking, marking and cutting), and something fitted
   (a castor) says the part it's fitted to, so the 3D view can build the Build up step by step (#699).
 - **Each step has an ID** saying what it does ("fit-castors"), the same whichever steps the Build has, so the

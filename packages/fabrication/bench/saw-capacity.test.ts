@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Build, BuildSetting, Step } from "../build.ts";
+import { capacitiesFrom } from "../capacity.ts";
 import { goldenBench } from "./fixtures/golden.ts";
 import { deriveBench } from "./index.ts";
 
@@ -85,5 +86,83 @@ describe("a saw's cutting capacity", () => {
     expect(said(cut)).toContain(
       "The 145 castor bases and top support are too wide for your mitre saw: circular saw for these.",
     );
+  });
+});
+
+describe("a cut step already started (#777)", () => {
+  it("keeps exactly its lines, nothing handed on", () => {
+    const before = cutOf(
+      built({ tools: theirs, kept: [{ step: "cut-timber", tool: "mitre-saw" }] }),
+    );
+    const started = cutOf(
+      built({
+        tools: [...theirs, "Mitre saw"],
+        kept: [{ step: "cut-timber", tool: "mitre-saw" }],
+      }),
+    );
+
+    expect(started.ways.find((way) => way.using)?.tool).toBe("mitre-saw");
+    expect(started.actions).toEqual(before.actions);
+    expect(said(started)).not.toContain("hand saw for");
+  });
+});
+
+describe("a saw's capacity as the owner gave it", () => {
+  it.each([
+    ["120 × 60 mm", { width: 120, depth: 60 }],
+    ["120x60", { width: 120, depth: 60 }],
+    ["90°: 120 x 60 mm", { width: 120, depth: 60 }],
+  ])("reads %s as a width by a depth, said by the owner", (size, { width, depth }) => {
+    const capacity = capacitiesFrom([{ name: "Mitre saw", size }])["mitre-saw"];
+
+    expect(capacity?.width).toEqual({ value: width, unit: "mm", source: { kind: "reported" } });
+    expect(capacity?.depth).toEqual({ value: depth, unit: "mm", source: { kind: "reported" } });
+  });
+
+  it("leaves a lone number, such as the blade's, unknown", () => {
+    expect(capacitiesFrom([{ name: "Mitre saw", size: "210 mm blade" }])).toEqual({});
+    const cut = cutOf(
+      built({
+        tools: [...theirs, "Mitre saw"],
+        sizes: [{ name: "Mitre saw", size: "210 mm blade" }],
+      }),
+    );
+
+    expect(said(cut)).toContain("Your mitre saw's cutting capacity isn't known");
+  });
+
+  it("reads a circular saw's depth only when it's said as one", () => {
+    expect(
+      capacitiesFrom([{ name: "Circular saw", size: "54 mm deep" }])["circular-saw"]?.depth.value,
+    ).toBe(54);
+    expect(capacitiesFrom([{ name: "Circular saw", size: "165 mm blade" }])).toEqual({});
+  });
+});
+
+describe("the cut step's picture", () => {
+  it("draws the saw that cuts the timber shown: the hand saw in the Workmate when it's too big for the mitre saw", () => {
+    const cut = cutOf(
+      built({
+        tools: [...theirs, "Mitre saw"],
+        sizes: [{ name: "Mitre saw", size: "90 × 60 mm" }],
+      }),
+    );
+
+    expect(cut.ways.find((way) => way.using)?.tool).toBe("mitre-saw");
+    expect(cut.scene?.title).toBe("In the Workmate");
+    expect(
+      cut.scene?.pieces.filter((piece) => piece.kind === "tool").map((piece) => piece.name),
+    ).not.toContain("Mitre saw");
+  });
+
+  it("draws the mitre saw when it takes the timber shown", () => {
+    const cut = cutOf(
+      built({
+        tools: [...theirs, "Mitre saw"],
+        sizes: [{ name: "Mitre saw", size: "120 × 60 mm" }],
+      }),
+    );
+
+    expect(cut.scene?.title).toBe("On the mitre saw");
   });
 });

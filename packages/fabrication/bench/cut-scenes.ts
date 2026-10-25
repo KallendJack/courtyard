@@ -1,6 +1,6 @@
 import type { Box } from "../build.ts";
 import type { Scene, SceneMark, ScenePiece } from "../scene.ts";
-import { markedLengths, ticksOf } from "./preparing.ts";
+import { markedLengths, type Saw, ticksOf } from "./preparing.ts";
 import {
   at,
   box,
@@ -80,8 +80,8 @@ export const markScene = (setting: SceneSetting): Scene => {
   };
 };
 
-/** How the saw in use holds and cuts the length: where it rests, the tools drawn, what's said. */
-const sawing = (setting: SceneSetting, line: number, wide: number, thick: number) => {
+/** How a saw holds and cuts the length: where it rests, the tools drawn, what's said. */
+const sawing = (setting: SceneSetting, using: Saw, line: number, wide: number, thick: number) => {
   const benched = setting.toHand.has("folding-workbench");
   const held = line - CLEAR - JAWS.length;
   const kerf = setting.cutPlan.kerf;
@@ -89,7 +89,7 @@ const sawing = (setting: SceneSetting, line: number, wide: number, thick: number
   const tools: ScenePiece[] = [];
   const add = (tool: Parameters<typeof toolIf>[1], boxes: Box[]) =>
     tools.push(...toolIf(setting.toHand, tool, boxes));
-  switch (setting.saw) {
+  switch (using) {
     case "mitre-saw": {
       // On the Workmate when it's to hand, else on the floor; the length on the saw's bed.
       const under = benched ? JAWS.top : 0;
@@ -142,8 +142,9 @@ const sawing = (setting: SceneSetting, line: number, wide: number, thick: number
 };
 
 /**
- * The first cut of the first length, with the saw in use: the piece held with the line just past
- * where it's held, the long end on a support, the offcut beyond.
+ * The first cut of the first length, with the saw that cuts it: the one in use, or the one it's
+ * handed on to when it's too big for that (#780). The piece held with the line just past where
+ * it's held, the long end on a support, the offcut beyond.
  */
 export const cutScene = (setting: SceneSetting): Scene => {
   const plan = setting.cutPlan.timber[0];
@@ -153,7 +154,8 @@ export const cutScene = (setting: SceneSetting): Scene => {
   const line = cut.length;
   const total = plan.stockLength;
   const saw = line + setting.cutPlan.kerf / 2;
-  const sawn = sawing(setting, line, wide, thick);
+  const using = setting.handed.find((each) => each.stock === plan.stock)?.saw ?? setting.saw;
+  const sawn = sawing(setting, using, line, wide, thick);
   const { top } = sawn;
   // The longer side sags as the cut goes through, so the support goes under it.
   const support = line >= total - line ? SUPPORT_IN - 50 : total - SUPPORT_IN - 50;

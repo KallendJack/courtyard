@@ -11,7 +11,7 @@ import {
 } from "./close-ups.ts";
 import { type Shape, whole } from "./frame.ts";
 import type { BenchParameters } from "./parameters.ts";
-import { act, CUT_STEP, type Draft, preparingSteps, sawInUse } from "./preparing.ts";
+import { act, CUT_STEP, type Draft, handedOn, preparingSteps, sawInUse } from "./preparing.ts";
 import { nameOf, type SceneSetting, sectionOf } from "./scene-pieces.ts";
 import { stepScene } from "./scenes.ts";
 import { pilotWalk } from "./walk-throughs.ts";
@@ -57,7 +57,8 @@ export const benchSteps = (options: {
     saw === planned || kept.some((way) => way.step === CUT_STEP)
       ? null
       : { was: TOOL_NAMES[planned], now: TOOL_NAMES[saw] };
-  const setting: SceneSetting = { ...options, saw };
+  const handed = handedOn({ ...options, saw, sectionOf: (stock) => sectionOf(options, stock) });
+  const setting: SceneSetting = { ...options, saw, handed };
   const frameScrews = p.fixings.frameScrews.name;
   const sheetScrews = p.fixings.sheetScrews.name;
   const brackets = p.fixings.brackets.name;
@@ -101,7 +102,7 @@ export const benchSteps = (options: {
       cutPlan,
       toHand,
       saw,
-      capacities: options.capacities,
+      handed,
       sectionOf: (stock) => sectionOf(setting, stock),
       nameOf: (label) => nameOf(setting, label),
     }),
