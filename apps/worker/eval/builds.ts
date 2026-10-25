@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { BuildSave, SessionEvent } from "@courtyard/contract";
+import type { BuildSave, BuildTemplate, SessionEvent } from "@courtyard/contract";
 import { goldenBench } from "../../../packages/fabrication/bench/fixtures/golden.ts";
 import { buildPath, readBuildText } from "../src/features/fabrication/index.ts";
 import type { Scenario, Words } from "./scenarios.ts";
@@ -19,8 +19,15 @@ export type ExpectedBuild =
   | {
       readonly action: "add" | "change";
       readonly name: Words;
+      /** The template it should be (#702). */
+      readonly template?: BuildTemplate;
       readonly parameters?: Readonly<Record<string, unknown>>;
       readonly changesOnly?: readonly string[];
+      /**
+       * Every size of a real thing in its parameters (a sourced size) one the owner said, so none
+       * is made up (#702).
+       */
+      readonly sizesSaid?: true;
     }
   | { readonly action: "none" };
 
@@ -35,6 +42,16 @@ const numbersIn = (value: unknown): number[] =>
       : typeof value === "object" && value !== null
         ? Object.values(value).flatMap(numbersIn)
         : [];
+
+/** Every sourced size's value in a JSON value: the sizes of real things, each from somewhere. */
+const sourcedIn = (value: unknown): number[] =>
+  Array.isArray(value)
+    ? value.flatMap(sourcedIn)
+    : typeof value === "object" && value !== null
+      ? "source" in value && "value" in value && typeof value.value === "number"
+        ? [value.value]
+        : Object.values(value).flatMap(sourcedIn)
+      : [];
 
 /** What the engine counts by: a part's count, a buy line's packs, what's needed, and so on. */
 const COUNTS = new Set(["count", "packs", "needed", "packOf", "unpriced"]);
@@ -149,12 +166,35 @@ export const judgeBuilds = async (judge: {
   const read = readBuildText(await readFile(join(folder, path), "utf8").catch(() => ""));
   if (!read.ok) return { checks: [{ miss: `${path} can't be read: ${read.error}` }], notes };
   const { file } = read.value;
-  const checks: Check[] = Object.entries(expected.parameters ?? {}).map(([where, value]) => ({
-    miss:
-      JSON.stringify(at(file.parameters, where)) === JSON.stringify(value)
-        ? null
-        : `expected ${where} to be ${JSON.stringify(value)}, not ${JSON.stringify(at(file.parameters, where))}`,
-  }));
+  const ownerSaid = said.flatMap(numbersWritten).map(({ n }) => n);
+  const checks: Check[] = [];
+  if (expected.template !== undefined) {
+    checks.push({
+      miss:
+        file.template === expected.template
+          ? null
+          : `expected a ${expected.template}, not a ${file.template}`,
+    });
+  }
+  if (expected.sizesSaid) {
+    const unsaid = sourcedIn(file.parameters).filter(
+      (n) => !ownerSaid.some((one) => Math.abs(one - n) < 0.006),
+    );
+    checks.push({
+      miss:
+        unsaid.length === 0
+          ? null
+          : `sizes the owner didn't give: ${[...new Set(unsaid)].join(", ")}`,
+    });
+  }
+  checks.push(
+    ...Object.entries(expected.parameters ?? {}).map(([where, value]) => ({
+      miss:
+        JSON.stringify(at(file.parameters, where)) === JSON.stringify(value)
+          ? null
+          : `expected ${where} to be ${JSON.stringify(value)}, not ${JSON.stringify(at(file.parameters, where))}`,
+    })),
+  );
   const before = scenario.files?.[path];
   const was = before === undefined ? undefined : readBuildText(before);
   if (expected.changesOnly !== undefined && was !== undefined) {
@@ -173,7 +213,6 @@ export const judgeBuilds = async (judge: {
     ...numbersIn(one.derived),
     ...numbersIn(one.file.parameters),
   ]);
-  const ownerSaid = said.flatMap(numbersWritten).map(({ n }) => n);
   // A size or price may be in other units (900 mm as 0.9 m, 680p as £6.80), and a size to the
   // whole mm, as the owner is told it (899.6 as 900); a count is as given.
   const sizes = [
@@ -251,6 +290,49 @@ export const BUILDS: readonly Scenario[] = [
           name: [["bench"]],
           parameters: { "height.value": 850, "height.source.kind": "measured" },
           changesOnly: ["height"],
+        },
+      },
+    ],
+  },
+  {
+    name: "build-holster-sizes",
+    rule: "asked for a holster with its sizes, the model sets the battery-holster's parameters from them, and every size in its answer is one the Build derives, as the made file is (#702)",
+    ...WORKSHOP,
+    turns: [
+      {
+        say: "Can you make me a wall holster for my drill battery? I measured it: 76 mm wide, 115 mm front to back, 66 mm tall. 4 mm walls, and two countersunk holes for 4 mm screws. How big will it come out?",
+        expect: [],
+        builds: {
+          action: "add",
+          name: [["holster", "holder", "battery"]],
+          template: "battery-holster",
+          parameters: {
+            "holds.width.value": 76,
+            "holds.depth.value": 115,
+            "holds.height.value": 66,
+            "holds.width.source.kind": "measured",
+            walls: 4,
+            "screws.count": 2,
+          },
+          sizesSaid: true,
+        },
+      },
+    ],
+  },
+  {
+    name: "build-recipe-no-template",
+    rule: "asked for a shape no template covers, the model writes a printed-part recipe from the owner's sizes, making none up (#702)",
+    ...WORKSHOP,
+    turns: [
+      {
+        say: "I'd like a printed label for the battery shelf: a flat tag 80 by 25 mm and 3 mm thick, with BATTERIES raised 1 mm on top in 8 mm letters, and a countersunk hole for a 4 mm screw near each end.",
+        expect: [],
+        builds: {
+          action: "add",
+          name: [["tag", "label"]],
+          template: "printed-part",
+          parameters: { "recipe.base.kind": "plate", "recipe.base.width": 80 },
+          sizesSaid: true,
         },
       },
     ],

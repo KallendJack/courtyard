@@ -37,7 +37,7 @@
     "apps/worker/src/providers/codex.ts": 1537,
     "apps/worker/src/providers/fake.ts": 849,
     "apps/worker/src/providers/index.ts": 607,
-    "apps/worker/src/worker.ts": 911,
+    "apps/worker/src/worker.ts": 910,
     "packages/contract/lib/session-event.ts": 480,
     "packages/ui/frame/talk-strip.tsx": 621,
     "packages/ui/reply/reply-box.tsx": 598

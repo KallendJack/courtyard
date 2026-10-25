@@ -153,5 +153,6 @@ const benchOf = (parameters: BenchParameters): Result<Omit<Build, "options">, st
     steps,
     glossary: glossaryOf(steps.flatMap((step) => step.words)),
     findings,
+    print: null,
   });
 };

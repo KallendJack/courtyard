@@ -11,6 +11,7 @@ import {
   type BuildStockPick,
   BuildView,
   type ChangeId,
+  MadePart,
   MESSAGE_FIELD,
   type NewMessage,
   ProviderList,
@@ -64,6 +65,14 @@ const buildPath = (workspaceId: WorkspaceId, slug: BuildSlug) =>
 /** A Build with everything derived, and where it is. */
 export const openBuild = (workspaceId: WorkspaceId, slug: BuildSlug) =>
   ask(buildPath(workspaceId, slug), BuildOpened);
+
+/** A printed part's Build made (#702): its size and triangles from the solid, and its files. */
+export const madePart = (workspaceId: WorkspaceId, slug: BuildSlug) =>
+  ask(`${buildPath(workspaceId, slug)}/print`, MadePart);
+
+/** Where one of a printed part's files downloads from, by its name. */
+export const printFile = (workspaceId: WorkspaceId, slug: BuildSlug, file: string) =>
+  `/api${buildPath(workspaceId, slug)}/print/${encodeURIComponent(file)}`;
 
 /** One of a Build's timbers or sheets swapped for an option, and the change Undo takes back. */
 export const pickStock = (

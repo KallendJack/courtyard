@@ -22,7 +22,26 @@ type Bench = {
   ask: ReactNode;
   /** What was asked's answer, over the 3D view while it shows. */
   answer: ReactNode;
+  /** A printed part on the printer's plate (#702), shown in place of the bench in 3D. */
+  printed: ReactNode | undefined;
 };
+
+/** A printed part's picture, with Hold to ask at its foot and the answer over it, as the bench's. */
+function Printed(props: { printed: ReactNode; ask: ReactNode; answer: ReactNode }) {
+  return (
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      {props.printed}
+      {props.answer !== null && props.answer !== undefined && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 bottom-18 flex flex-col *:pointer-events-auto">
+          {props.answer}
+        </div>
+      )}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end *:pointer-events-auto">
+        {props.ask}
+      </div>
+    </div>
+  );
+}
 
 /**
  * At the bench (#753; Paper, 2 · Agreed, "Fabrication · At the bench · Fold 933×645" and
@@ -42,19 +61,22 @@ export function AtTheBench(
 ) {
   const { derived, step, progress, cover } = props;
   const swipe = useSwipe(progress, step);
-  const picture = (
-    <BenchPanel
-      name={props.name}
-      derived={derived}
-      lit={props.lit}
-      pick={props.pick}
-      atStep={{ step, view: props.view }}
-      resettable={!cover}
-      over={props.answer}
-    >
-      {props.ask}
-    </BenchPanel>
-  );
+  const picture =
+    props.printed === undefined ? (
+      <BenchPanel
+        name={props.name}
+        derived={derived}
+        lit={props.lit}
+        pick={props.pick}
+        atStep={{ step, view: props.view }}
+        resettable={!cover}
+        over={props.answer}
+      >
+        {props.ask}
+      </BenchPanel>
+    ) : (
+      <Printed printed={props.printed} ask={props.ask} answer={props.answer} />
+    );
   const theStep = (
     <div {...swipe} className={classes(PANEL, "flex-1 touch-pan-y")}>
       <Scroller className="flex min-h-0 flex-1 flex-col">
@@ -99,18 +121,21 @@ export function AtTheBench(
  * only a Build with no steps shows it, stacked.
  */
 export function Plan(props: Bench & { side: ReactNode; cover: boolean }) {
-  const bench = (
-    <BenchPanel
-      name={props.name}
-      derived={props.derived}
-      lit={props.lit}
-      pick={props.pick}
-      resettable={!props.cover}
-      over={props.answer}
-    >
-      {props.ask}
-    </BenchPanel>
-  );
+  const bench =
+    props.printed === undefined ? (
+      <BenchPanel
+        name={props.name}
+        derived={props.derived}
+        lit={props.lit}
+        pick={props.pick}
+        resettable={!props.cover}
+        over={props.answer}
+      >
+        {props.ask}
+      </BenchPanel>
+    ) : (
+      <Printed printed={props.printed} ask={props.ask} answer={props.answer} />
+    );
   return props.cover ? (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
       <div className={classes(PANEL, "h-2/5 shrink-0")}>{bench}</div>

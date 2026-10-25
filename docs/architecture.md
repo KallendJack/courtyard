@@ -414,9 +414,16 @@ for the 3D view; the cut plan, timber packed into lengths and sheets cut up with
 pieces; the buy list in whole lengths, sheets and packs; the steps, each action said for a beginner and in just the
 numbers, with its tools, kit, fixings, close-up and check; and the making-rule findings (a bolt too short for what it
 passes through, tools needed and not to hand, sizes assumed). A size without a source is refused. It's plain
-functions with no worker, web app, file system or model in it, so it could ship on its own; its one Courtyard import
-is the contract's `SourcedSize`. The first template is the framed bench (`bench/`). [Its README](../packages/fabrication/README.md)
-has the files. The worker's `features/fabrication/` keeps Builds and works them out with it (#697).
+functions with no worker, web app, file system or model in it, so it could ship on its own; its Courtyard imports
+are the contract's `SourcedSize` and part recipe. The first template is the framed bench (`bench/`). Printed parts
+(`print/`, #702) are the holster, shim and bracket templates and a part recipe as written: each becomes a recipe
+(a base and its features), checked by the making rules (on the plate, holes on their faces, walls the nozzle prints),
+and made into a solid with manifold-3d (WebAssembly) and its lettering with opentype.js and the bundled Figtree font,
+then into 3MF (zipped with fflate) and STL; nothing a model writes is run. [Its README](../packages/fabrication/README.md) has the files.
+The worker's `features/fabrication/` keeps Builds and works them out with it (#697), and makes a printed part in a
+thread of its own, in its turn in the machine's builds lock and stopped at its time and memory limits
+(`COURTYARD_PRINT_TIME_LIMIT_MS`, `COURTYARD_PRINT_MEMORY_LIMIT_MB`), keeping what it made while the Build is
+unchanged, and why a recipe couldn't be made until the recipe changes.
 
 ### Fabrication's app: `apps/fabrication`
 

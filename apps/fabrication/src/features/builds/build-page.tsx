@@ -16,17 +16,21 @@ import { BuildChat, useBuildChat } from "./chat/build-chat.tsx";
 import { type Asked, BenchAnswer, HoldToAsk } from "./chat/hold-to-ask.tsx";
 import { CutPlan } from "./cut-plan.tsx";
 import { FINDINGS_ID, Findings } from "./findings.tsx";
+import { PrintPanel, PrintTab, useMaking } from "./print/print-panel.tsx";
 import { inView, useProgress } from "./progress.ts";
 import { StepDots, StepFoot } from "./step-moves.tsx";
 import { StepPanel } from "./step-panel.tsx";
 import { useStockOptions } from "./stock-options.tsx";
 import { ToolsList } from "./tools-list.tsx";
-import { sizeLine, toCheck } from "./words.ts";
+import { checkCards, printSizeLine, sizeLine } from "./words.ts";
 
-/** The side panel's tabs: in Plan on the Fold, and with the steps on a computer. */
-const PLAN_TABS = ["Cut plan", "Buy list", "Tools"] as const;
-const DESKTOP_TABS = [...PLAN_TABS, "Steps"] as const;
-type Tab = (typeof DESKTOP_TABS)[number];
+/**
+ * The side panel's tabs, as the boards have them, for a bench and for a printed part (#702): in
+ * Plan on the Fold, and with the steps on a computer.
+ */
+const BENCH_TABS = ["Cut plan", "Buy list", "Tools"] as const;
+const PRINT_TABS = ["Print", "Buy list"] as const;
+type Tab = (typeof BENCH_TABS)[number] | (typeof PRINT_TABS)[number] | "Steps";
 
 /** The Fold's two ways of working with a Build (#753): a step at a time, or the whole plan. */
 type Mode = "bench" | "plan";
@@ -76,19 +80,23 @@ function Tabs(props: { tabs: readonly Tab[]; showing: Tab; show: (tab: Tab) => v
  * one job at a time: At the bench, a step filling the screen (where a Build with steps opens), or
  * Plan, the Build in 3D with its cut plan, buy list and tools; the chat is behind Hold to ask, in
  * a sheet. Folded, At the bench alone, stacked. On a computer, the three panels: its chat, the
- * Build in 3D, and its cut plan, buy list, tools and steps. A part tapped anywhere is lit
- * everywhere.
+ * Build in 3D, and its cut plan, buy list, tools and steps. A printed part (#702; "· Text to print
+ * · Tablet (#702)") shows itself on the printer's plate, and its Print tab before its buy list. A
+ * part tapped anywhere is lit everywhere.
  */
 export function BuildPage(props: { build: BuildOpened }) {
   const { build } = props;
   const { derived, place } = build;
+  const { print } = derived;
+  const planTabs: readonly Tab[] = print === null ? BENCH_TABS : PRINT_TABS;
+  const firstSide = planTabs[0] ?? "Buy list";
   const router = useRouter();
   const cover = useLayout() === "cover";
   const wide = useWide() && !cover;
   const [lit, setLit] = useState<string>();
   // Once building has started, a computer opens on the steps, where the owner left off (#699).
   const started = buildStarted(derived.steps, build.progress);
-  const [side, setSide] = useState<Tab>(started ? "Steps" : "Cut plan");
+  const [side, setSide] = useState<Tab>(started ? "Steps" : firstSide);
   const [mode, setMode] = useState<Mode>("bench");
   const [draft, setDraft] = useState<{ text: string; files: File[]; key: number }>();
   const [chatOpen, setChatOpen] = useState(false);
@@ -106,6 +114,7 @@ export function BuildPage(props: { build: BuildOpened }) {
     slug: build.slug,
     onChanged: reread,
   });
+  const making = useMaking({ workspaceId: place.workspace.id, slug: build.slug, derived });
   const progress = useProgress(build, reread);
   const { step } = progress;
   const view = useMemo(
@@ -126,13 +135,13 @@ export function BuildPage(props: { build: BuildOpened }) {
     setSide(tab);
   };
 
-  const checks = toCheck(derived.findings).length;
+  const checks = checkCards(derived.findings, print).length;
   const back = courtyardPlace(place);
   const name = `The ${derived.template.split("-").at(-1)}`;
 
   const showFindings = () => {
     setMode("plan");
-    if (side === "Steps") setSide("Cut plan");
+    if (side === "Steps") setSide(firstSide);
     requestAnimationFrame(() => document.getElementById(FINDINGS_ID)?.focus());
   };
 
@@ -150,6 +159,15 @@ export function BuildPage(props: { build: BuildOpened }) {
 
   const sideContent = (tab: Tab): ReactNode => {
     switch (tab) {
+      case "Print":
+        return print === null ? null : (
+          <PrintTab
+            print={print}
+            making={making}
+            workspaceId={place.workspace.id}
+            slug={build.slug}
+          />
+        );
       case "Cut plan":
         return <CutPlan derived={derived} lit={lit} pick={pick} openOptions={stock.open} />;
       case "Buy list":
@@ -182,7 +200,7 @@ export function BuildPage(props: { build: BuildOpened }) {
     ) : (
       <Scroller className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-col gap-4 pb-2">
-          <Findings findings={derived.findings} />
+          <Findings findings={derived.findings} print={print} />
           {stock.panel(tab) ?? sideContent(tab)}
         </div>
       </Scroller>
@@ -216,6 +234,9 @@ export function BuildPage(props: { build: BuildOpened }) {
       />
     );
 
+  /** A printed part on the printer's plate, in place of the bench in 3D. */
+  const printed = print === null ? undefined : <PrintPanel print={print} making={making} />;
+
   const toCheckButton = checks > 0 && (
     <button
       type="button"
@@ -242,7 +263,8 @@ export function BuildPage(props: { build: BuildOpened }) {
           <div className="flex min-w-0 flex-1 items-baseline gap-3">
             <h1 className="display-title truncate text-title">{build.name}</h1>
             <p className="truncate font-mono text-meta text-muted-foreground">
-              {sizeLine(derived.size)} · {derived.template.replaceAll("-", " ")}
+              {print === null ? sizeLine(derived.size) : printSizeLine(derived.size)} ·{" "}
+              {print === null ? derived.template.replaceAll("-", " ") : "printed part"}
             </p>
           </div>
           {toCheckButton}
@@ -255,22 +277,24 @@ export function BuildPage(props: { build: BuildOpened }) {
             {chat}
           </div>
           <div className={PANEL}>
-            <BenchPanel
-              name={name}
-              derived={derived}
-              lit={lit}
-              pick={pick}
-              atStep={
-                side === "Steps" && step !== undefined && view !== undefined
-                  ? { step, view }
-                  : undefined
-              }
-              closeUp
-              withKey
-            />
+            {printed ?? (
+              <BenchPanel
+                name={name}
+                derived={derived}
+                lit={lit}
+                pick={pick}
+                atStep={
+                  side === "Steps" && step !== undefined && view !== undefined
+                    ? { step, view }
+                    : undefined
+                }
+                closeUp
+                withKey
+              />
+            )}
           </div>
           <div className={classes(PANEL, "gap-4")}>
-            <Tabs tabs={DESKTOP_TABS} showing={side} show={showTab} />
+            <Tabs tabs={[...planTabs, "Steps"]} showing={side} show={showTab} />
             {sidePanel(side)}
           </div>
         </div>
@@ -300,7 +324,7 @@ export function BuildPage(props: { build: BuildOpened }) {
           <StepDots derived={derived} step={step} />
         ) : (
           <p className="truncate font-mono text-meta text-muted-foreground">
-            {sizeLine(derived.size)}
+            {print === null ? sizeLine(derived.size) : printSizeLine(derived.size)}
           </p>
         )}
         <span className="flex-1" />
@@ -328,6 +352,7 @@ export function BuildPage(props: { build: BuildOpened }) {
           progress={progress}
           sendPhoto={sendPhoto}
           cover={cover}
+          printed={printed}
         />
       ) : (
         <Plan
@@ -338,14 +363,11 @@ export function BuildPage(props: { build: BuildOpened }) {
           ask={ask(true)}
           answer={answer}
           cover={cover}
+          printed={printed}
           side={
             <>
-              <Tabs
-                tabs={PLAN_TABS}
-                showing={side === "Steps" ? "Cut plan" : side}
-                show={showTab}
-              />
-              {sidePanel(side === "Steps" ? "Cut plan" : side)}
+              <Tabs tabs={planTabs} showing={side === "Steps" ? firstSide : side} show={showTab} />
+              {sidePanel(side === "Steps" ? firstSide : side)}
             </>
           }
         />

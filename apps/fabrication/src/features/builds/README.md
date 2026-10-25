@@ -10,8 +10,9 @@ to ask, say "does the offcut need support?", let go, and the answer shows over t
 turning in 3D, its cut plan with each offcut's length, and "M6 × 50 bolts too short" in gold.
 
 - **Uses:** Fabrication's API through `api/fabrication.ts` (the Build and where it is, its progress, a stock picked
-  and its Undo, its chat, the models), `packages/ui` (the Reply box, Talk's listening and its tap or hold, how an answer's
-  Markdown looks, the sheet, the segmented choice, `Scroller`, `useKept`, `CapsLabel`) and `three` for the 3D view.
+  and its Undo, its chat, the models, a printed part made and its files), `packages/ui` (the Reply box, Talk's
+  listening and its tap or hold, how an answer's Markdown looks, the sheet, the segmented choice, `Scroller`, `useKept`,
+  `CapsLabel`) and `three` for the 3D view.
 - **Used by:** the route `routes/workspaces.$id.builds.$slug.tsx`.
 
 | File | What it is |
@@ -31,7 +32,9 @@ turning in 3D, its cut plan with each offcut's length, and "M6 × 50 bolts too s
 | `step-moves.tsx` | Moving between steps: Back and Done, a swipe, and the dots that show how far |
 | `close-up.tsx` | A step's close-up, drawn to scale: its sizes and where each fixing goes |
 | `progress.ts` | The step reached and the lines ticked, kept for every device; what the 3D view shows at a step |
-| `findings.tsx` | What the making rules found that needs the owner, in gold |
+| `print/print-panel.tsx` | A printed part's own (#702; "Fabrication · Text to print · Tablet (#702)"): the part on the plate, and the Print tab with its sizes and sources, its file, Open in Bambu Studio (its 3MF) and Send to printer, waiting for one |
+| `print/print-view.tsx` | The printed part's scene, `three`, on the printer's plate, loaded lazily as the bench's is |
+| `findings.tsx` | What the making rules found that needs the owner, in gold; for a printed part, each size assumed too |
 | `words.ts` | How the numbers read: money, sizes, stock, the findings' words |
 
 **Screens:** a part tapped in the 3D view, its letter, its name in the key (on a computer) or a piece in the cut plan
@@ -40,7 +43,8 @@ turned as the owner left it, and Reset view turns it back; a part's letter that 
 nearest clear spot. Each piece in the cut plan shows its size: beside its letter, on the next line when it's
 narrow, turned along a tall piece, or in lines of its own, and its letter alone only when none of those fit; each
 timber bar's offcut shows its length, in the bar or on its line when the bar has no room. A buy-list row or a cut plan's Options opens that stock's options in the side panel (in Plan on
-the Fold), in place of its tab, until a tab or ‹ Buy list is tapped.
+the Fold), in place of its tab, until a tab or ‹ Buy list is tapped. A printed part (#702) shows on the printer's
+plate in place of the bench, its Print tab before its buy list.
 
 **On the Fold** (#753): **At the bench** is where a Build with steps opens: the step's label, title and checklist in
 big type, its tools as chips (gold where one's to check), Back and "Done, next step" at thumb height, and a swipe on

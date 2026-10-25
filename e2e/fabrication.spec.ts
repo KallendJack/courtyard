@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { BuildChat, BuildOpened } from "../packages/contract/index.ts";
 import { goldenBench } from "../packages/fabrication/bench/fixtures/golden.ts";
+import { goldenHolster } from "../packages/fabrication/print/fixtures/golden.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
 import { hear, standInSpeechRecognition } from "./speech-recognition.ts";
 
@@ -17,11 +18,18 @@ const STEP = "Build the workbench";
 const UNFOLDED = { width: 933, height: 645 };
 const FOLDED = { width: 476, height: 695 };
 
+/** The golden bench, as its step's Build. Not "Workbench": its tile on Home would then match home.spec's seeded Workbench tile. */
+const SPLIT_BENCH = { name: "Split bench", template: "framed-bench", parameters: goldenBench };
+
 /**
- * A workspace with a project whose first step owns the golden bench, made as the model makes them:
- * the project in one session, then the Build given to its step in another. Ends on its Home.
+ * A workspace with a project whose first step owns a Build (the golden bench unless another is
+ * given), made as the model makes them: the project in one session, then the Build given to its
+ * step in another. Ends on its Home.
  */
-const workspaceWithBuild = async (page: Page) => {
+const workspaceWithBuild = async (
+  page: Page,
+  build: { name: string; template: string; parameters: unknown } = SPLIT_BENCH,
+) => {
   const name = `Garage ${Date.now()}`;
   await newWorkspace(page, name);
   await startSaving(
@@ -33,24 +41,14 @@ const workspaceWithBuild = async (page: Page) => {
   );
   await expect(page.getByRole("list", { name: "Projects saved" })).toContainText("Started project");
   await page.getByRole("link", { name: `Back to ${name}` }).click();
-  await startSaving(
-    page,
-    `build: ${JSON.stringify({
-      // Not "Workbench": its tile on Home would then match home.spec's seeded Workbench tile.
-      name: "Split bench",
-      template: "framed-bench",
-      parameters: goldenBench,
-      project: "P1",
-      step: "s1",
-    })}`,
-  );
+  await startSaving(page, `build: ${JSON.stringify({ ...build, project: "P1", step: "s1" })}`);
   await expect(page.getByRole("list", { name: "Builds saved" })).toContainText("Started Build");
   await page.getByRole("link", { name: `Back to ${name}` }).click();
   return name;
 };
 
-/** From Home, the project's page, and its step's Open in Fabrication. */
-const openInFabrication = async (page: Page) => {
+/** From Home, the project's page, and its step's Open in Fabrication, to the Build `name` at `slug`. */
+const openInFabrication = async (page: Page, name = "Split bench", slug = "split-bench") => {
   await page
     .getByRole("region", { name: "Projects" })
     .getByRole("link", { name: "Split the garage" })
@@ -60,12 +58,21 @@ const openInFabrication = async (page: Page) => {
     .getByRole("link", { name: "Open in Fabrication" })
     .click();
   // Your tools comes first while the owner has none saved (your-tools.spec.ts).
-  const built = page.getByRole("heading", { level: 1, name: "Split bench" });
+  const built = page.getByRole("heading", { level: 1, name });
   const skip = page.getByRole("button", { name: "Skip for now" });
   await expect(built.or(skip)).toBeVisible();
   if (await skip.isVisible()) await skip.click();
-  await expect(page).toHaveURL(/\/fabrication\/workspaces\/[^/]+\/builds\/split-bench$/);
+  await expect(page).toHaveURL(new RegExp(`/fabrication/workspaces/[^/]+/builds/${slug}$`));
   await expect(built).toBeVisible();
+};
+
+/** The golden holster (#702), as a step's printed part. */
+const HOLSTER = { name: "Battery holster", template: "battery-holster", parameters: goldenHolster };
+
+/** A workspace whose project's step owns the golden holster, open in Fabrication. */
+const holsterOpen = async (page: Page) => {
+  await workspaceWithBuild(page, HOLSTER);
+  await openInFabrication(page, "Battery holster", "battery-holster");
 };
 
 /**
@@ -353,6 +360,52 @@ test.describe("on the unfolded Fold", () => {
     await expect(page.getByRole("region", { name: "Tools" })).toContainText("4 not to hand");
   });
 
+  test("a printed part shows in Plan on the plate with its size, its sources and its file (#702)", async ({
+    page,
+  }) => {
+    await holsterOpen(page);
+    if (await page.getByRole("group", { name: "Way of working" }).isVisible()) await toPlan(page);
+
+    await expect(page.getByText("84.4 × 119.2 × 70.2 mm")).toBeVisible();
+    await expect(page.getByRole("button", { name: "1 to check" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "To check" })).toContainText(
+      "Battery width assumed76 mm isn't measured.",
+    );
+
+    const plate = page.getByRole("region", { name: "In 3D" });
+    await expect(plate.getByRole("heading", { name: "On the plate · 256 mm" })).toBeVisible();
+    await expect(plate.locator("canvas")).toHaveCount(1);
+    await expect(plate).toContainText(
+      "Fits the plate · holes allow 0.2 mm (assumed until the printer's calibrated)",
+    );
+
+    await expect(page.getByRole("tablist", { name: "Show" }).getByRole("tab")).toHaveText([
+      "Print",
+      "Buy list",
+    ]);
+    const print = page.getByRole("region", { name: "Print" });
+    await expect(print).toContainText("Battery width76 mm · assumed");
+    await expect(print).toContainText("Battery depth115 mm · measured");
+    await expect(print).toContainText("Walls4 mm");
+    await expect(print).toContainText("Screw holes2 × 4 mm, countersunk · specified");
+    await expect(print).toContainText("battery-holster.3mfready");
+    await expect(print.getByRole("link", { name: "Open in Bambu Studio" })).toHaveAttribute(
+      "href",
+      /\/builds\/battery-holster\/print\/battery-holster\.3mf$/,
+    );
+    const downloaded = page.waitForEvent("download");
+    await print.getByRole("link", { name: "Open in Bambu Studio" }).click();
+    expect((await downloaded).suggestedFilename()).toBe("battery-holster.3mf");
+    await expect(
+      print.getByRole("button", { name: "Send to printer · once you have one" }),
+    ).toBeDisabled();
+
+    await page.getByRole("tab", { name: "Buy list" }).click();
+    await expect(page.getByRole("region", { name: "Buy list" })).toContainText(
+      "4 × 30 mm wood screws",
+    );
+  });
+
   test("a buy-list row opens its stock's options in Plan, and a pick changes the Build, with Undo", async ({
     page,
   }) => {
@@ -579,6 +632,18 @@ test.describe("folded", () => {
     await expect(steps.getByRole("heading", { name: "Fit the shelf" })).toBeVisible();
     await expect(done).toBeInViewport();
   });
+
+  test("a printed part, folded: its step, with the part on its plate above it (#702)", async ({
+    page,
+  }) => {
+    await holsterOpen(page);
+    await page.setViewportSize(FOLDED);
+
+    await expect(page.getByRole("region", { name: "In 3D" }).locator("canvas")).toHaveCount(1);
+    await expect(page.getByRole("region", { name: "Steps" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Hold to ask" })).toBeInViewport();
+    await expect(page.getByRole("button", { name: "Done, next step" })).toBeInViewport();
+  });
 });
 
 test.describe("on a desktop", () => {
@@ -639,6 +704,20 @@ test.describe("on a desktop", () => {
     await expect(chat.getByLabel("Message", { exact: true })).toHaveValue(
       "Step 5, Make the two end frames: Both end frames, flat, from above. Measure corner to corner both ways. The same within 2 mm means it's square. Does it look right?",
     );
+  });
+
+  test("a printed part shows its size, and its file downloads, ready for Bambu Studio", async ({
+    page,
+  }) => {
+    await holsterOpen(page);
+    await expect(page.getByText("84.4 × 119.2 × 70.2 mm · printed part")).toBeVisible();
+    for (const panel of ["Chat", "In 3D", "Print"]) {
+      await expect(page.getByRole("region", { name: panel })).toBeVisible();
+    }
+    await expect(page.getByRole("region", { name: "In 3D" }).locator("canvas")).toHaveCount(1);
+    const downloaded = page.waitForEvent("download");
+    await page.getByRole("link", { name: "Open in Bambu Studio" }).click();
+    expect((await downloaded).suggestedFilename()).toBe("battery-holster.3mf");
   });
 
   test("a buy-list row opens its stock's options, and a pick changes the Build, with Undo", async ({
