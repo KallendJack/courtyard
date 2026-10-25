@@ -105,6 +105,52 @@ const BuildCloseUp = z.object({
   notes: list(z.string()),
 });
 
+/** A length of timber as it's marked: its cuts from the square end, the saw's cut, the offcut. */
+const BuildMarkedLength = z.object({
+  stock: z.string(),
+  stockLength: z.number(),
+  count: z.number().int(),
+  kerf: z.number(),
+  cuts: list(z.object({ label: z.string(), length: z.number() })),
+  offcut: z.number(),
+});
+
+/** A point in a step's scene, mm, as a box's corner is. */
+const At = z.object({ x: z.number(), y: z.number(), z: z.number() });
+
+/** What's drawn over a step's scene, each from the Build's numbers (#754). */
+const BuildSceneMark = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("size"), from: At, to: At, mm: z.number() }),
+  z.object({ kind: z.literal("line"), from: At, to: At, says: z.string() }),
+  z.object({ kind: z.literal("arrow"), from: At, to: At, says: z.string() }),
+  z.object({ kind: z.literal("check"), from: At, to: At, mm: z.number() }),
+  z.object({
+    kind: z.literal("note"),
+    at: At,
+    says: z.string(),
+    tone: z.enum(["plain", "waste", "check"]),
+  }),
+]);
+
+/**
+ * A step's picture (#754): the job as it's done, its pieces (parts, fitted, tools, the offcut)
+ * each lit, faint or plain, where it opens from, and its marks.
+ */
+const BuildScene = z.object({
+  title: z.string(),
+  view: z.object({ turn: z.number(), tilt: z.number() }),
+  pieces: list(
+    z.object({
+      kind: z.enum(["part", "fitted", "tool", "offcut"]),
+      name: z.string(),
+      label: z.string().nullable(),
+      tone: z.enum(["lit", "built", "plain"]),
+      boxes: list(BuildBox),
+    }),
+  ),
+  marks: list(BuildSceneMark),
+});
+
 /** A step's ID, the slug of what it does ("fit-castors"), the same whatever else a Build has. */
 export const BuildStepId = z
   .string()
@@ -128,8 +174,11 @@ export const BuildStep = z.object({
   tools: list(StepTool),
   safety: list(StepTool),
   fixings: list(z.object({ name: z.string(), count: z.number() })),
-  actions: list(z.object({ howTo: z.string(), numbers: z.string() })),
+  actions: list(
+    z.object({ howTo: z.string(), numbers: z.string(), length: BuildMarkedLength.optional() }),
+  ),
   closeUp: BuildCloseUp.nullable(),
+  scene: BuildScene,
   check: z.object({ says: z.string(), photo: z.string() }),
   words: list(z.string()),
 });

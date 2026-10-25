@@ -1,11 +1,4 @@
-import {
-  type BuildOpened,
-  type BuildProgress,
-  type BuildStep,
-  type DerivedBuild,
-  stepReached,
-  tickedIn,
-} from "@courtyard/contract";
+import { type BuildOpened, type BuildProgress, stepReached, tickedIn } from "@courtyard/contract";
 import { useCallback, useRef, useState } from "react";
 import { keepProgress } from "@/api/fabrication";
 
@@ -22,22 +15,6 @@ const withLines = (progress: BuildProgress, step: string, lines: readonly number
     ...(lines.length === 0 ? [] : [{ step, lines: [...lines].sort((a, b) => a - b) }]),
   ],
 });
-
-/**
- * What the 3D view shows at a step: the parts put on the Build up to it, with what they're fitted
- * with, and the step's own parts lit. Before anything's put on (checking, marking, cutting) it's
- * the whole Build, so the owner sees what the pieces become.
- */
-export const inView = (derived: DerivedBuild, step: BuildStep) => {
-  const added = derived.steps
-    .filter((each) => each.number <= step.number)
-    .flatMap((each) => each.adds);
-  return {
-    shown: added.length === 0 ? undefined : new Set(added),
-    current: new Set(step.parts),
-  };
-};
-export type InView = ReturnType<typeof inView>;
 
 const same = (a: BuildProgress, b: BuildProgress) => JSON.stringify(a) === JSON.stringify(b);
 

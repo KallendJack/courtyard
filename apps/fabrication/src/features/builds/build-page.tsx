@@ -5,14 +5,14 @@ import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useRouter } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { BenchPanel } from "./bench-panel.tsx";
 import { BuildChat } from "./build-chat.tsx";
 import { BuyList } from "./buy-list.tsx";
 import { CloseUp } from "./close-up.tsx";
 import { CutPlan } from "./cut-plan.tsx";
 import { FINDINGS_ID, Findings } from "./findings.tsx";
-import { inView, useProgress } from "./progress.ts";
+import { useProgress } from "./progress.ts";
 import { StepFoot, StepPanel } from "./step-panel.tsx";
 import { ToolsList } from "./tools-list.tsx";
 import { sizeLine, toCheck } from "./words.ts";
@@ -84,13 +84,14 @@ export function BuildPage(props: { build: BuildOpened }) {
   useFresh({ ask: () => router.invalidate() });
   const progress = useProgress(build, reread);
   const { step } = progress;
-  const view = useMemo(
-    () => (step === undefined ? undefined : inView(derived, step)),
-    [derived, step],
-  );
+  // A part's card covers the picture, so a new step closes it (#754).
+  const [cardStep, setCardStep] = useState(step?.id);
+  if (cardStep !== step?.id) {
+    setCardStep(step?.id);
+    setLit(undefined);
+  }
   const stepsShowing = cover ? coverTab === "Steps" : side === "Steps";
-  const atStep =
-    stepsShowing && step !== undefined && view !== undefined ? { step, view, progress } : undefined;
+  const atStep = stepsShowing && step !== undefined ? { step, progress } : undefined;
 
   const checks = toCheck(derived.findings).length;
   const back = courtyardPlace(place);

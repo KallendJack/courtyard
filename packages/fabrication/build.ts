@@ -112,8 +112,78 @@ export type BuyList = {
 
 export type StepTool = { readonly tool: Tool; readonly name: string; readonly toHand: boolean };
 
-/** One action of a step, said for a beginner ("show me how") and for someone who knows how. */
-export type Action = { readonly howTo: string; readonly numbers: string };
+/**
+ * A length of timber as it's marked: its cuts end to end from its square end, a saw cut between
+ * each two, and the offcut left over.
+ */
+export type MarkedLength = {
+  readonly stock: string;
+  readonly stockLength: number;
+  /** How many lengths are marked the same way. */
+  readonly count: number;
+  readonly kerf: number;
+  readonly cuts: readonly Cut[];
+  readonly offcut: number;
+};
+
+/**
+ * One action of a step, said for a beginner ("show me how") and for someone who knows how, and
+ * the length it marks when it marks one (#754).
+ */
+export type Action = {
+  readonly howTo: string;
+  readonly numbers: string;
+  readonly length?: MarkedLength;
+};
+
+/** A point in a step's scene, in mm, as a box's corner is: `x` along, `y` back, `z` up. */
+export type At = { readonly x: number; readonly y: number; readonly z: number };
+
+/**
+ * Something drawn in a step's scene: a part (with its letter), something fitted, a tool, or the
+ * offcut on the waste side. This step's own are lit, those put on before are faint (built), and
+ * the rest plain.
+ */
+export type ScenePiece = {
+  readonly kind: "part" | "fitted" | "tool" | "offcut";
+  readonly name: string;
+  readonly label: string | null;
+  readonly tone: "lit" | "built" | "plain";
+  readonly boxes: readonly Box[];
+};
+
+/**
+ * What's drawn over a scene, each from the Build's numbers: a size as a dimension line, a pencil
+ * line on a piece, an arrow (where the saw runs, where a screw goes in), a corner-to-corner check,
+ * and a note at a place (where the support goes, the waste side).
+ */
+export type SceneMark =
+  | { readonly kind: "size"; readonly from: At; readonly to: At; readonly mm: number }
+  | { readonly kind: "line"; readonly from: At; readonly to: At; readonly says: string }
+  | { readonly kind: "arrow"; readonly from: At; readonly to: At; readonly says: string }
+  | { readonly kind: "check"; readonly from: At; readonly to: At; readonly mm: number }
+  | {
+      readonly kind: "note";
+      readonly at: At;
+      readonly says: string;
+      readonly tone: "plain" | "waste" | "check";
+    };
+
+/**
+ * A step's picture (#754): the job as it's done (the length in the Workmate, an end frame flat on
+ * the floor, the frame so far), in its own mm, with where it opens from.
+ */
+export type Scene = {
+  /** What it shows, as the picture's heading: "In the Workmate". */
+  readonly title: string;
+  /**
+   * Where it opens from, in degrees: turned from the front (towards the right end is +) and up
+   * from level, between 15 and 60.
+   */
+  readonly view: { readonly turn: number; readonly tilt: number };
+  readonly pieces: readonly ScenePiece[];
+  readonly marks: readonly SceneMark[];
+};
 
 /**
  * A step's close-up: a flat view of what it makes, in mm from the view's top left corner (`y`
@@ -166,6 +236,7 @@ export type Step = {
   readonly fixings: readonly { readonly name: string; readonly count: number }[];
   readonly actions: readonly Action[];
   readonly closeUp: CloseUp | null;
+  readonly scene: Scene;
   /** How to know it's right before moving on, and the photo to send to have it checked. */
   readonly check: { readonly says: string; readonly photo: string };
   /** Words in it a beginner may not know, each in the Build's glossary. */

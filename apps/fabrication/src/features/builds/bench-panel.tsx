@@ -5,7 +5,7 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import { X } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { CloseUp } from "./close-up.tsx";
-import type { InView, Progress } from "./progress.ts";
+import type { Progress } from "./progress.ts";
 import { StepStrip } from "./step-panel.tsx";
 import { cutFrom, listed, partSize, stepsUsing } from "./words.ts";
 
@@ -57,13 +57,13 @@ function PartCard(props: { derived: DerivedBuild; label: string; close: () => vo
   );
 }
 
-/** The Build at a step (#699): the step, how it shows in 3D, and the way to another step. */
-export type AtStep = { step: BuildStep; view: InView; progress: Progress };
+/** The Build at a step (#699): the step, with its picture (#754), and the way to another step. */
+export type AtStep = { step: BuildStep; progress: Progress };
 
 /**
  * The Build in 3D (#698; the board's middle panel): drag to turn it, tap a part or its letter in
- * the key for its card. While the steps show (#699), it's the Build up to the step reached, with
- * the step strip above and the step's close-up below.
+ * the key for its card. While the steps show (#699), it's the step's picture (#754): the job as
+ * it's done, with the step strip above and the step's close-up below.
  */
 export function BenchPanel(props: {
   name: string;
@@ -95,7 +95,13 @@ export function BenchPanel(props: {
       )}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={null}>
-          <BenchView derived={derived} lit={lit} view={atStep?.view} pick={pick} />
+          <BenchView
+            derived={derived}
+            lit={lit}
+            scene={atStep?.step.scene}
+            sceneId={atStep?.step.id ?? "whole"}
+            pick={pick}
+          />
         </Suspense>
         {lit !== undefined && (
           <div className="absolute inset-x-0 bottom-0">

@@ -12,9 +12,13 @@ export type {
   Finding,
   Fitted,
   GlossaryWord,
+  MarkedLength,
   Material,
   Part,
   Result,
+  Scene,
+  SceneMark,
+  ScenePiece,
   Step,
   StepTool,
 } from "./build.ts";

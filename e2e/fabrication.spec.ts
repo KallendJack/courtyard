@@ -198,15 +198,18 @@ test.describe("the steps, on the unfolded Fold", () => {
     await expect(tools).toContainText("Spanner? Check");
     await expect(tools).toContainText("Drill driver");
 
-    // The end frames: lit, on top of the bases now faint; a checklist with words to tap.
+    // The end frames: one laid flat on the floor, lit; a checklist with words to tap.
     await done.click();
     await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
     await expect(page.getByRole("region", { name: "In 3D" })).toContainText(
       "Step 5 · Make the two end frames",
     );
+    await expect(
+      page.getByRole("figure", { name: "One end frame, flat on the floor, in 3D" }),
+    ).toBeVisible();
     await expect(letter(page, "A, Legs")).toHaveAttribute("aria-current", "step");
     await expect(letter(page, "C, End rails")).toHaveAttribute("aria-current", "step");
-    await expect(letter(page, "E, Castor bases")).not.toHaveAttribute("aria-current", "step");
+    await expect(letter(page, "E, Castor bases")).toHaveCount(0);
     await expect(letter(page, "B, Long rails")).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Close-up" })).toContainText(
       "Close-up · One end frame",
@@ -235,6 +238,118 @@ test.describe("the steps, on the unfolded Fold", () => {
     await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
     await expect(checklist.getByRole("checkbox", { name: "Line 1 done" })).toBeChecked();
     await expect(checklist.getByRole("checkbox", { name: "Line 2 done" })).not.toBeChecked();
+  });
+});
+
+// Each step's picture (#754; Paper, 2 · Agreed, "Fabrication · At the bench · Fold 933×645"): the
+// job as it's done, with the Build's numbers drawn on it.
+
+/** The 3D panel's camera, as it says it: turned from the front and up from level, in degrees. */
+const camera = async (page: Page) => {
+  const picture = page.getByRole("region", { name: "In 3D" }).getByRole("figure");
+  return {
+    turn: Number(await picture.getAttribute("data-turn")),
+    tilt: Number(await picture.getAttribute("data-tilt")),
+  };
+};
+
+/** A drag across the picture, from its left edge, clear of the letters, by so many pixels. */
+const drag = async (page: Page, by: { x: number; y: number }) => {
+  const box = await page.getByRole("region", { name: "In 3D" }).locator("canvas").boundingBox();
+  if (box === null) throw new Error("The picture isn't drawn.");
+  const from = { x: box.x + 12, y: box.y + box.height / 2 };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + by.x, from.y + by.y, { steps: 10 });
+  await page.mouse.up();
+};
+
+test.describe("each step's picture, on the unfolded Fold", () => {
+  test.use({ viewport: { width: 933, height: 645 }, hasTouch: true, isMobile: true });
+
+  test("the cut step shows the length in the Workmate as the board does, and a part's card closes at the next step", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await page.getByRole("tab", { name: "Steps" }).click();
+    await page.getByRole("button", { name: "Step 3, Cut and label the timber" }).click();
+
+    const picture = page.getByRole("figure", { name: "In the Workmate, in 3D" });
+    await expect(picture).toContainText("In the Workmate");
+    // The 1450 to cut, its line, where the saw runs, the waste side and the long end's support.
+    await expect(picture.getByText("1450", { exact: true })).toBeVisible();
+    await expect(picture).toContainText("cut at 1450");
+    await expect(picture).toContainText("saw here, just past the line");
+    await expect(picture).toContainText("offcut · waste side");
+    await expect(picture).toContainText("support the long end here");
+    await expect(picture).toContainText("clamped in the jaws");
+    await expect(picture.getByRole("button", { name: "Reset view" })).toBeVisible();
+    await expect(letter(page, "B, Long rails")).toHaveAttribute("aria-current", "step");
+
+    // The part's card covers the picture, so the next step closes it.
+    await letter(page, "B, Long rails").click();
+    const card = page.getByRole("region", { name: "B, Long rails" });
+    await expect(card).toContainText("Long rails × 4");
+    await page.getByRole("button", { name: "Done, next step" }).click();
+    await expect(
+      page.getByRole("figure", { name: "A castor base, upside down, in 3D" }),
+    ).toBeVisible();
+    await expect(card).toBeHidden();
+  });
+
+  test("the marking step shows the length on the Workmate with its marks, and a bar per length", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await page.getByRole("tab", { name: "Steps" }).click();
+    await page.getByRole("button", { name: "Step 2, Mark the lengths" }).click();
+
+    const picture = page.getByRole("figure", { name: "On the Workmate, in 3D" });
+    await expect(picture).toContainText("B 1450");
+    await expect(picture).toContainText("A 750");
+    await expect(picture).toContainText("check this end is square");
+
+    // First the end checked square, then a line per length, each with its bar.
+    const checklist = page.getByRole("region", { name: "Steps" }).getByRole("list", {
+      name: "Checklist",
+    });
+    await expect(checklist.getByRole("listitem").first()).toContainText(
+      "First check the end is square",
+    );
+    const bars = checklist.getByRole("img");
+    await expect(bars).toHaveCount(3);
+    await expect(bars.first()).toHaveAccessibleName("B 1450 · 3 mm saw cut · A 750 · offcut 197");
+  });
+
+  test("Reset view puts the camera back after a drag, and a drag can't take it under the floor or flat on top", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await page.getByRole("tab", { name: "Steps" }).click();
+    await page.getByRole("button", { name: "Step 3, Cut and label the timber" }).click();
+    await expect(page.getByRole("figure", { name: "In the Workmate, in 3D" })).toBeVisible();
+
+    // It opens where the step's scene says: from the side and above.
+    await expect.poll(() => camera(page)).toEqual({ turn: -50, tilt: 30 });
+
+    await drag(page, { x: 160, y: 0 });
+    await expect.poll(async () => (await camera(page)).turn).not.toBe(-50);
+    await page.getByRole("button", { name: "Reset view" }).click();
+    await expect.poll(() => camera(page)).toEqual({ turn: -50, tilt: 30 });
+
+    // Dragged up as far as it goes, it stops above the floor; down, it stops short of the top.
+    await drag(page, { x: 0, y: -400 });
+    await expect.poll(async () => (await camera(page)).tilt).toBe(15);
+    await drag(page, { x: 0, y: 400 });
+    await drag(page, { x: 0, y: 400 });
+    await expect.poll(async () => (await camera(page)).tilt).toBe(60);
+
+    // Another step opens at its own angle: the end frame from above.
+    await page.getByRole("button", { name: "Step 5, Make the two end frames" }).click();
+    await expect.poll(() => camera(page)).toEqual({ turn: -20, tilt: 60 });
   });
 });
 

@@ -26,7 +26,7 @@ else derived.error; // ["height.source: Invalid input…"]
 | `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed |
 | `findings.ts` | The making rules code checks: a bolt long enough for what it passes through plus two threads, tools needed and not to hand, sizes assumed |
 | `tools.ts`, `glossary.ts` | The tools and kit a step can need, and the words a beginner may not know |
-| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `close-ups.ts` |
+| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `close-ups.ts`, and `scenes.ts` with `scene-pieces.ts` (each step's picture, #754) |
 
 ## The rules it keeps
 
@@ -40,14 +40,22 @@ else derived.error; // ["height.source: Invalid input…"]
   (a castor) says the part it's fitted to, so the 3D view can build the Build up step by step (#699).
 - **Each step has an ID** saying what it does ("fit-castors"), the same whichever steps the Build has, so the
   owner's progress stays on its step when one before it comes or goes.
+- **Each step has a picture of the job as it's done** (#754): the length on the Workmate or in its jaws (on a bench
+  for a circular saw), an end frame flat on the floor, a castor base upside down, or the frame as far as it's built.
+  It says where it opens from (15° to 60° above level), and its marks (sizes, the pencil line, where the saw runs,
+  the diagonals to check, where the support goes, the waste side) are the Build's own numbers. Tools are drawn only
+  when they're to hand.
+- **Marking starts by checking the end is square,** then one line per length, each with its ticks from that end and
+  the kerf between pieces.
 - **A fixing found too short is never fitted:** the steps and the buy list use the length to use instead, unpriced
   until it's given a price, and the finding names the steps that fit it.
 - **Parts are cut to the whole mm below,** and the steps say every size to the whole mm; the Build keeps it exact.
 
 ## Tests
 
-`cut-plan.test.ts` (packing, whatever the pieces) and `bench/bench.test.ts` (the golden bench, the garage
-workbench's hand-checked numbers with invented names, in `bench/fixtures/golden.ts`).
+`cut-plan.test.ts` (packing, whatever the pieces), `bench/bench.test.ts` (the golden bench, the garage
+workbench's hand-checked numbers with invented names, in `bench/fixtures/golden.ts`) and `bench/scenes.test.ts`
+(each step's picture for the golden bench, by the tools to hand).
 
 ## Used by
 
