@@ -13,14 +13,16 @@ import type { Scenario, Words } from "./scenarios.ts";
 /**
  * A Build a turn should start or change: words its name has, parameters it should have afterwards
  * by their path (`height.value`), and the only parameters that may differ from the file it started
- * from, by their first key.
+ * from, by their first key. Or none, for a question (#704): it saves no Build.
  */
-export type ExpectedBuild = {
-  readonly action: "add" | "change";
-  readonly name: Words;
-  readonly parameters?: Readonly<Record<string, unknown>>;
-  readonly changesOnly?: readonly string[];
-};
+export type ExpectedBuild =
+  | {
+      readonly action: "add" | "change";
+      readonly name: Words;
+      readonly parameters?: Readonly<Record<string, unknown>>;
+      readonly changesOnly?: readonly string[];
+    }
+  | { readonly action: "none" };
 
 type Check = { readonly miss: string | null };
 
@@ -117,6 +119,14 @@ export const judgeBuilds = async (judge: {
       `${save.action === "add" ? "started" : "changed"} Build ${save.build.name}${save.changes.length === 0 ? "" : ` (${save.changes.join("; ")})`}`,
   );
   if (expected === undefined) return { checks: [], notes };
+  if (expected.action === "none") {
+    return {
+      checks: [
+        { miss: saves.length === 0 ? null : `expected no Build saved; ${notes.join("; ")}` },
+      ],
+      notes,
+    };
+  }
   const lower = (text: string) => text.toLowerCase();
   const save = saves.findLast(
     (one) =>
@@ -242,6 +252,21 @@ export const BUILDS: readonly Scenario[] = [
           parameters: { "height.value": 850, "height.source.kind": "measured" },
           changesOnly: ["height"],
         },
+      },
+    ],
+  },
+  {
+    name: "build-option-price-from-shop",
+    rule: "asked which sheet is cheapest, the model gives each option's price only with its shop and link, from the Build tool's reply or the web, never one from memory, and changes nothing (#704)",
+    ...WITH_BENCH,
+    turns: [
+      {
+        say: "Which sheet would be cheapest for the workbench's top, and what would each one cost me?",
+        expect: [],
+        // The golden bench's cheapest sheet, as the tool's reply costs it.
+        says: [["mdf"]],
+        links: true,
+        builds: { action: "none" },
       },
     ],
   },

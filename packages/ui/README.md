@@ -12,7 +12,7 @@ ends in the Reply box, `reply/reply-box.tsx`.
 | `theme.css` | The one theme, Handheld: every colour, font, type size, radius and effect, by name |
 | `lib/` | `classes.ts`, which joins classes without merging, so nothing that merges reaches the first load |
 | `layout/` | `page.tsx` (pinned header, one scrolling middle, pinned footer, #339) with `page-scroll.ts`, `scroller.tsx` (#420), `kept.tsx`, the loading piece and how blocks stay fresh (#269, #387), and `caps-label.tsx`, the one label in capitals (#242) |
-| `buttons/` | `button.tsx`: the pill and icon buttons, and the busy button (`useBusy`, #330) |
+| `buttons/` | `button.tsx`: the pill and icon buttons, and the busy button (`useBusy`, #330); `chip.tsx`, the chip: a few words in a pill that say what something is, never a button |
 | `forms/` | `form-error.tsx`, the error line under a form |
 | `hooks/` | `use-action.ts`: an action's busy state and its error |
 | `frame/` | What the Handheld frame offers its pages (`handheld.ts`: the layout, the dock), and Talk: the talk strip and Talk key (`talk-strip.tsx`), listening (`speech.ts`) and keeping the screen awake (`wake-lock.ts`), and the frame's buttons (`frame-button.tsx`) |

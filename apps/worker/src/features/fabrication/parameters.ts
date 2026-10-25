@@ -1,5 +1,5 @@
-import type { BuildParameters, BuildTemplate } from "@courtyard/contract";
-import { type Build, deriveBench } from "@courtyard/fabrication";
+import type { BuildParameters, BuildStockPick, BuildTemplate } from "@courtyard/contract";
+import { type Build, deriveBench, pickBenchStock } from "@courtyard/fabrication";
 import type { Result } from "../../lib/result.ts";
 
 // A Build's parameters: worked out by its template's engine, changed by a merge patch, and what a
@@ -13,6 +13,20 @@ const ENGINES: Readonly<Record<BuildTemplate, (parameters: unknown) => Result<Bu
 /** Everything a Build shows, worked out from its template and parameters (ADR 0036). */
 export const derive = (template: BuildTemplate, parameters: BuildParameters) =>
   ENGINES[template](parameters);
+
+/** Each template's way to swap one of its stocks for an option, in every part cut from it. */
+const PICKERS: Readonly<
+  Record<
+    BuildTemplate,
+    (parameters: unknown, pick: BuildStockPick) => Result<BuildParameters, string[]>
+  >
+> = {
+  "framed-bench": pickBenchStock,
+};
+
+/** A Build's parameters with one of its stocks swapped for an option (#704), or why not. */
+export const pickStockIn = (template: BuildTemplate, parameters: unknown, pick: BuildStockPick) =>
+  PICKERS[template](parameters, pick);
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

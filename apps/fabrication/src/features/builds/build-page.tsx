@@ -1,11 +1,13 @@
-import { type BuildOpened, buildStarted } from "@courtyard/contract";
+import { type BuildOpened, buildStarted, type ChangeId } from "@courtyard/contract";
 import { useLayout } from "@courtyard/ui/frame/handheld.ts";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { useFresh } from "@courtyard/ui/layout/kept.tsx";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useRouter } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { type Answer, pickStock, undoBuildChange } from "../../api/fabrication.ts";
 import { BenchPanel } from "./bench-panel.tsx";
 import { BuildChat } from "./build-chat.tsx";
 import { BuyList } from "./buy-list.tsx";
@@ -14,6 +16,7 @@ import { CutPlan } from "./cut-plan.tsx";
 import { FINDINGS_ID, Findings } from "./findings.tsx";
 import { inView, useProgress } from "./progress.ts";
 import { StepFoot, StepPanel } from "./step-panel.tsx";
+import { type JustPicked, type Pickable, StockOptionsPanel } from "./stock-options.tsx";
 import { ToolsList } from "./tools-list.tsx";
 import { sizeLine, toCheck } from "./words.ts";
 
@@ -24,6 +27,10 @@ type Tab = (typeof COVER_TABS)[number];
 
 /** A panel on the PC and the unfolded Fold: one of the board's three. */
 const PANEL = "flex min-h-0 flex-col rounded-card border border-border bg-surface p-4";
+
+/** Why a change didn't happen, as its panel says it. */
+const problemOf = (answer: Exclude<Answer<unknown>, { kind: "loaded" }>) =>
+  answer.kind === "failed" ? answer.message : "Can't reach Courtyard's worker. Try again.";
 
 /** Where the Build is in Courtyard: its project on its workspace's page, or the workspace. */
 const courtyardPlace = (place: BuildOpened["place"]) => {
@@ -92,6 +99,41 @@ export function BuildPage(props: { build: BuildOpened }) {
   const atStep =
     stepsShowing && step !== undefined && view !== undefined ? { step, view, progress } : undefined;
 
+  // A stock's options, open in the side panel in place of its tab, and the pick just made (#704).
+  const [choosing, setChoosing] = useState<string>();
+  const [justPicked, setJustPicked] = useState<
+    JustPicked & { readonly change: ChangeId; readonly before: string }
+  >();
+  const where = { workspaceId: place.workspace.id, slug: build.slug };
+  const picking = useAction(async (stock: string, choice: Pickable) => {
+    const done = await pickStock(where, { stock, option: choice.option });
+    if (done.kind !== "loaded") return problemOf(done);
+    const { change } = done.data;
+    setJustPicked(
+      change === null
+        ? undefined
+        : { stock: choice.stock, title: choice.title, change, before: stock },
+    );
+    setChoosing(choice.stock);
+    await router.invalidate();
+    return undefined;
+  });
+  const undoing = useAction(async () => {
+    if (justPicked === undefined) return undefined;
+    const done = await undoBuildChange(where, justPicked.change);
+    if (done.kind !== "loaded") return problemOf(done);
+    setChoosing(justPicked.before);
+    setJustPicked(undefined);
+    await router.invalidate();
+    return undefined;
+  });
+  const openOptions = (stock: string) => {
+    picking.setError(undefined);
+    undoing.setError(undefined);
+    setChoosing(stock);
+  };
+  const choosingOptions = derived.options.find((options) => options.stock === choosing);
+
   const checks = toCheck(derived.findings).length;
   const back = courtyardPlace(place);
 
@@ -118,9 +160,15 @@ export function BuildPage(props: { build: BuildOpened }) {
   const sideContent = (tab: (typeof SIDE_TABS)[number]): ReactNode => {
     switch (tab) {
       case "Cut plan":
-        return <CutPlan derived={derived} lit={lit} pick={pick} />;
+        return <CutPlan derived={derived} lit={lit} pick={pick} openOptions={openOptions} />;
       case "Buy list":
-        return <BuyList buyList={derived.buyList} />;
+        return (
+          <BuyList
+            buyList={derived.buyList}
+            withOptions={derived.options.map((options) => options.stock)}
+            openOptions={openOptions}
+          />
+        );
       case "Tools":
         return (
           <ToolsList
@@ -148,13 +196,27 @@ export function BuildPage(props: { build: BuildOpened }) {
       </>
     );
   const sidePanel = (tab: (typeof SIDE_TABS)[number]) =>
-    tab === "Steps" ? (
+    tab === "Steps" && choosingOptions === undefined ? (
       steps(false)
     ) : (
       <Scroller className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-col gap-4 pb-2">
           <Findings findings={derived.findings} />
-          {sideContent(tab)}
+          {choosingOptions === undefined ? (
+            sideContent(tab)
+          ) : (
+            <StockOptionsPanel
+              options={choosingOptions}
+              backTo={tab}
+              back={() => setChoosing(undefined)}
+              pick={(choice) => void picking.run(choosingOptions.stock, choice)}
+              picking={picking.running?.[1].option}
+              justPicked={justPicked?.stock === choosingOptions.stock ? justPicked : undefined}
+              undo={() => void undoing.run()}
+              undoing={undoing.busy}
+              error={picking.error ?? undoing.error}
+            />
+          )}
         </div>
       </Scroller>
     );
@@ -221,7 +283,14 @@ export function BuildPage(props: { build: BuildOpened }) {
       <div className="flex h-full flex-col">
         {header}
         <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pt-3 pb-4">
-          <Tabs tabs={COVER_TABS} showing={coverTab} show={setCoverTab} />
+          <Tabs
+            tabs={COVER_TABS}
+            showing={coverTab}
+            show={(tab) => {
+              setChoosing(undefined);
+              setCoverTab(tab);
+            }}
+          />
           <div className={classes(PANEL, "flex-1")}>
             {coverTab === "Bench" ? (
               bench
@@ -257,7 +326,14 @@ export function BuildPage(props: { build: BuildOpened }) {
         <div className={PANEL}>{chat}</div>
         <div className={PANEL}>{bench}</div>
         <div className={classes(PANEL, "gap-4")}>
-          <Tabs tabs={SIDE_TABS} showing={side} show={(tab) => setSide(tab as typeof side)} />
+          <Tabs
+            tabs={SIDE_TABS}
+            showing={side}
+            show={(tab) => {
+              setChoosing(undefined);
+              setSide(tab as typeof side);
+            }}
+          />
           {sidePanel(side)}
         </div>
       </div>
