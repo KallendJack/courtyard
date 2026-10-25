@@ -8,11 +8,11 @@ import {
   type SessionId,
 } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { SegmentedChoice } from "@courtyard/ui/forms/segmented-choice.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { BookmarkCheck, Undo2 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { NoteRow, NoteWords } from "@/components/chat/note-row";
-import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { TextField } from "@/components/forms/text-field";
 import { editSave, undoSave } from "../../../api/worker.ts";
 import { describeProblem } from "../../../components/layout/problems.tsx";

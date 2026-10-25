@@ -119,6 +119,10 @@ const pickTheFrameTimber = async (page: Page) => {
   await expect(page.getByRole("region", { name: "Buy list" })).toContainText("Total £177.02");
 };
 
+/** At the bench / Plan, in the top bar on the unfolded Fold: to Plan. */
+const toPlan = (page: Page) =>
+  page.locator("label", { has: page.getByRole("radio", { name: "Plan" }) }).click();
+
 /** The 3D panel's letter for a part. */
 const letter = (page: Page, name: string) =>
   page.getByRole("region", { name: "In 3D" }).getByRole("button", { name, exact: true });
@@ -223,10 +227,7 @@ test.describe("on the unfolded Fold", () => {
       page.getByRole("link", { name: `Back to ${name} · Split the garage` }),
     ).toBeVisible();
     const views = page.getByRole("group", { name: "Way of working" });
-    await expect(views.getByRole("button", { name: "At the bench" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    await expect(views.getByRole("radio", { name: "At the bench" })).toBeChecked();
     const dots = page.getByRole("progressbar", { name: "Steps" });
     await expect(dots).toHaveAttribute("aria-valuetext", "Step 1 of 12");
     await expect(dots.getByRole("button")).toHaveCount(0);
@@ -273,7 +274,7 @@ test.describe("on the unfolded Fold", () => {
   }) => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
-    await page.getByRole("button", { name: "Plan", exact: true }).click();
+    await toPlan(page);
 
     await expect(page.getByText("1500 × 600 × 900 mm")).toBeVisible();
     await page.getByRole("button", { name: "2 to check" }).click();
@@ -298,6 +299,32 @@ test.describe("on the unfolded Fold", () => {
     await expect(cutPlan).toContainText("45 × 95 C16, 2.4 m× 4 · offcut 197");
     await expect(cutPlan).toContainText("× 1 · offcut 88");
     await expect(cutPlan.getByText("offcut 834", { exact: true })).toBeVisible();
+
+    // Every sheet piece shows its size, the narrowest too: on a line of its own, or turned.
+    const { derived } = BuildOpened.parse(
+      await (
+        await page.request.get(
+          new URL(page.url()).pathname.replace(/^\/fabrication/, "/api/fabrication"),
+        )
+      ).json(),
+    );
+    const [narrowest] = derived.cutPlan.sheets
+      .flatMap((sheet) =>
+        sheet.sheets.flatMap((each) =>
+          each.pieces.map((piece) => ({ ...piece, share: piece.along / sheet.sheetLength })),
+        ),
+      )
+      .sort((a, b) => a.share - b.share);
+    if (narrowest === undefined) throw new Error("The bench has no sheet pieces.");
+    const size = `${narrowest.along} × ${narrowest.across}`;
+    const narrow = cutPlan.getByRole("button", { name: `${narrowest.label}, ${size} mm` }).first();
+    expect(narrowest.share).toBeLessThan(0.3);
+    expect((await narrow.innerText()).replace(/\s+/g, " ")).toContain(size);
+    for (const line of await narrow.locator("span span").all()) {
+      const [piece, words] = [await boxOf(narrow), await boxOf(line)];
+      expect(words.x).toBeGreaterThanOrEqual(piece.x - 0.5);
+      expect(words.x + words.width).toBeLessThanOrEqual(piece.x + piece.width + 0.5);
+    }
 
     // A part's letter lights it in the cut plan too, and opens its card.
     await letter(page, "B, Long rails").click();
@@ -331,7 +358,7 @@ test.describe("on the unfolded Fold", () => {
   }) => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
-    await page.getByRole("button", { name: "Plan", exact: true }).click();
+    await toPlan(page);
     await pickTheFrameTimber(page);
   });
 
@@ -433,6 +460,30 @@ test.describe("on the unfolded Fold", () => {
     await chat.getByRole("button", { name: "Close" }).click();
     await expect(chat).toBeHidden();
   });
+
+  test("hold to ask: an answer that fails says so, with Try again, until it's closed", async ({
+    page,
+  }) => {
+    test.slow();
+    await standInSpeechRecognition(page);
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await chatSettled(page);
+
+    const ask = page.getByRole("button", { name: "Hold to ask" });
+    const { x, y, width, height } = await boxOf(ask);
+    await page.mouse.move(x + width / 2, y + height / 2);
+    await page.mouse.down();
+    await hear(page, "please fail");
+    await page.mouse.up();
+
+    const answer = page.getByRole("region", { name: "Answer" });
+    await expect(answer.getByRole("alert")).toHaveText("It didn't answer.", { timeout: 60_000 });
+    await expect(answer.getByText("Answering…")).toHaveCount(0);
+    await expect(answer.getByRole("button", { name: "Try again" })).toBeVisible();
+    await answer.getByRole("button", { name: "Close" }).click();
+    await expect(answer).toBeHidden();
+  });
 });
 
 for (const [screen, viewport] of [
@@ -510,6 +561,8 @@ test.describe("folded", () => {
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "Hold to ask" })).toBeInViewport();
     expect(await overlappingLetters(page)).toEqual([]);
+    const fills = await buildFills(page);
+    expect(Math.max(fills.width, fills.height)).toBeGreaterThan(0.75);
 
     const steps = page.getByRole("region", { name: "Steps" });
     const done = page.getByRole("button", { name: "Done, next step" });

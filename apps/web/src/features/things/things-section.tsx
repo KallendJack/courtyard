@@ -1,10 +1,10 @@
 import type { ChangeId, ThingList, ThingStatus, WorkspaceId } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { SegmentedChoice } from "@courtyard/ui/forms/segmented-choice.tsx";
 import { CARD, SectionTitle } from "@courtyard/ui/layout/page.tsx";
 import { useRouter } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { JustDeleted } from "../changes/just-deleted.tsx";
 import { addThing } from "./api.ts";

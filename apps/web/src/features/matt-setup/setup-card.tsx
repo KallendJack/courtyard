@@ -11,10 +11,10 @@ import {
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { WebLink } from "@courtyard/ui/buttons/web-link.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { SegmentedChoice } from "@courtyard/ui/forms/segmented-choice.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { type ReactNode, useState } from "react";
-import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { CardDialog } from "@/components/layout/card-dialog";
 import { InfoBox } from "@/components/layout/notice";
 import { describeProblem } from "../../components/layout/problems.tsx";

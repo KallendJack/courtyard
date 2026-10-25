@@ -1,26 +1,25 @@
-import { type BuildOpened, buildStarted, type ChangeId } from "@courtyard/contract";
+import { type BuildOpened, buildStarted } from "@courtyard/contract";
+import { SegmentedChoice } from "@courtyard/ui/forms/segmented-choice.tsx";
 import { useLayout, useWide } from "@courtyard/ui/frame/handheld.ts";
-import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { useFresh } from "@courtyard/ui/layout/kept.tsx";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
+import { Sheet } from "@courtyard/ui/layout/sheet.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useRouter } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
-import { type Answer, pickStock, undoBuildChange } from "../../api/fabrication.ts";
 import { AtTheBench, PANEL, Plan } from "./at-the-bench.tsx";
 import { BenchPanel } from "./bench-panel.tsx";
 import { BuyList } from "./buy-list.tsx";
 import { BuildChat, useBuildChat } from "./chat/build-chat.tsx";
-import { ChatSheet } from "./chat/chat-sheet.tsx";
-import { BenchAnswer, HoldToAsk } from "./chat/hold-to-ask.tsx";
+import { type Asked, BenchAnswer, HoldToAsk } from "./chat/hold-to-ask.tsx";
 import { CutPlan } from "./cut-plan.tsx";
 import { FINDINGS_ID, Findings } from "./findings.tsx";
 import { inView, useProgress } from "./progress.ts";
 import { StepDots, StepFoot } from "./step-moves.tsx";
 import { StepPanel } from "./step-panel.tsx";
-import { type JustPicked, type Pickable, StockOptionsPanel } from "./stock-options.tsx";
+import { useStockOptions } from "./stock-options.tsx";
 import { ToolsList } from "./tools-list.tsx";
 import { sizeLine, toCheck } from "./words.ts";
 
@@ -31,14 +30,10 @@ type Tab = (typeof DESKTOP_TABS)[number];
 
 /** The Fold's two ways of working with a Build (#753): a step at a time, or the whole plan. */
 type Mode = "bench" | "plan";
-const MODES: readonly { mode: Mode; name: string }[] = [
-  { mode: "bench", name: "At the bench" },
-  { mode: "plan", name: "Plan" },
-];
-
-/** Why a change didn't happen, as its panel says it. */
-const problemOf = (answer: Exclude<Answer<unknown>, { kind: "loaded" }>) =>
-  answer.kind === "failed" ? answer.message : "Can't reach Courtyard's worker. Try again.";
+const MODES = [
+  { value: "bench", label: "At the bench" },
+  { value: "plan", label: "Plan" },
+] as const satisfies readonly { value: Mode; label: string }[];
 
 /** Where the Build is in Courtyard: its project on its workspace's page, or the workspace. */
 const courtyardPlace = (place: BuildOpened["place"]) => {
@@ -75,31 +70,6 @@ function Tabs(props: { tabs: readonly Tab[]; showing: Tab; show: (tab: Tab) => v
   );
 }
 
-/** At the bench or Plan, in the top bar on the unfolded Fold. */
-function ModeSwitch(props: { mode: Mode; choose: (mode: Mode) => void }) {
-  return (
-    <fieldset className="flex shrink-0 rounded-full bg-muted p-1">
-      <legend className="sr-only">Way of working</legend>
-      {MODES.map(({ mode, name }) => (
-        <button
-          key={mode}
-          type="button"
-          aria-pressed={props.mode === mode}
-          onClick={() => props.choose(mode)}
-          className={classes(
-            "h-10 rounded-full border px-4 text-interface font-semibold",
-            props.mode === mode
-              ? "border-primary bg-primary/15 text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {name}
-        </button>
-      ))}
-    </fieldset>
-  );
-}
-
 /**
  * A Build's page (#698; on the Fold, #753: Paper, 2 · Agreed, "Fabrication · At the bench · Fold
  * 933×645", "· At the bench · Cover 476×695" and "· Plan · Fold 933×645"). On the unfolded Fold,
@@ -122,8 +92,8 @@ export function BuildPage(props: { build: BuildOpened }) {
   const [mode, setMode] = useState<Mode>("bench");
   const [draft, setDraft] = useState<{ text: string; files: File[]; key: number }>();
   const [chatOpen, setChatOpen] = useState(false);
-  // What was asked with Hold to ask: the last entry before it, so its answer shows.
-  const [asked, setAsked] = useState<number>();
+  // What was asked with Hold to ask, so its answer shows.
+  const [asked, setAsked] = useState<Asked>();
   const pick = (label: string) => setLit((now) => (now === label ? undefined : label));
   const reread = useCallback(() => void router.invalidate(), [router]);
   const openChat = useCallback(() => setChatOpen(true), []);
@@ -144,43 +114,15 @@ export function BuildPage(props: { build: BuildOpened }) {
   );
   const atBench = !wide && step !== undefined && view !== undefined && (cover || mode === "bench");
 
-  // A stock's options, open in the side panel in place of its tab, and the pick just made (#704).
-  const [choosing, setChoosing] = useState<string>();
-  const [justPicked, setJustPicked] = useState<
-    JustPicked & { readonly change: ChangeId; readonly before: string }
-  >();
-  const where = { workspaceId: place.workspace.id, slug: build.slug };
-  const picking = useAction(async (stock: string, choice: Pickable) => {
-    const done = await pickStock(where, { stock, option: choice.option });
-    if (done.kind !== "loaded") return problemOf(done);
-    const { change } = done.data;
-    setJustPicked(
-      change === null
-        ? undefined
-        : { stock: choice.stock, title: choice.title, change, before: stock },
-    );
-    setChoosing(choice.stock);
-    await router.invalidate();
-    return undefined;
+  // A stock's options, open in the side panel in place of its tab (#704).
+  const stock = useStockOptions({
+    where: { workspaceId: place.workspace.id, slug: build.slug },
+    derived,
+    reread: () => router.invalidate(),
   });
-  const undoing = useAction(async () => {
-    if (justPicked === undefined) return undefined;
-    const done = await undoBuildChange(where, justPicked.change);
-    if (done.kind !== "loaded") return problemOf(done);
-    setChoosing(justPicked.before);
-    setJustPicked(undefined);
-    await router.invalidate();
-    return undefined;
-  });
-  const openOptions = (stock: string) => {
-    picking.setError(undefined);
-    undoing.setError(undefined);
-    setChoosing(stock);
-  };
-  const choosingOptions = derived.options.find((options) => options.stock === choosing);
   // A tab tapped closes a stock's options, showing that tab.
   const showTab = (tab: Tab) => {
-    setChoosing(undefined);
+    stock.close();
     setSide(tab);
   };
 
@@ -209,13 +151,13 @@ export function BuildPage(props: { build: BuildOpened }) {
   const sideContent = (tab: Tab): ReactNode => {
     switch (tab) {
       case "Cut plan":
-        return <CutPlan derived={derived} lit={lit} pick={pick} openOptions={openOptions} />;
+        return <CutPlan derived={derived} lit={lit} pick={pick} openOptions={stock.open} />;
       case "Buy list":
         return (
           <BuyList
             buyList={derived.buyList}
             withOptions={derived.options.map((options) => options.stock)}
-            openOptions={openOptions}
+            openOptions={stock.open}
           />
         );
       case "Tools":
@@ -230,7 +172,7 @@ export function BuildPage(props: { build: BuildOpened }) {
     }
   };
   const sidePanel = (tab: Tab) =>
-    tab === "Steps" && step !== undefined && choosingOptions === undefined ? (
+    tab === "Steps" && step !== undefined && !stock.showing ? (
       <>
         <Scroller className="flex min-h-0 flex-1 flex-col">
           <StepPanel derived={derived} step={step} progress={progress} sendPhoto={sendPhoto} />
@@ -241,21 +183,7 @@ export function BuildPage(props: { build: BuildOpened }) {
       <Scroller className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-col gap-4 pb-2">
           <Findings findings={derived.findings} />
-          {choosingOptions === undefined ? (
-            sideContent(tab)
-          ) : (
-            <StockOptionsPanel
-              options={choosingOptions}
-              backTo={tab}
-              back={() => setChoosing(undefined)}
-              pick={(choice) => void picking.run(choosingOptions.stock, choice)}
-              picking={picking.running?.[1].option}
-              justPicked={justPicked?.stock === choosingOptions.stock ? justPicked : undefined}
-              undo={() => void undoing.run()}
-              undoing={undoing.busy}
-              error={picking.error ?? undoing.error}
-            />
-          )}
+          {stock.panel(tab) ?? sideContent(tab)}
         </div>
       </Scroller>
     );
@@ -279,7 +207,13 @@ export function BuildPage(props: { build: BuildOpened }) {
   );
   const answer =
     asked === undefined ? null : (
-      <BenchAnswer talk={talk} after={asked} close={closeAnswer} openChat={openChat} />
+      <BenchAnswer
+        talk={talk}
+        asked={asked}
+        again={setAsked}
+        close={closeAnswer}
+        openChat={openChat}
+      />
     );
 
   const toCheckButton = checks > 0 && (
@@ -371,7 +305,15 @@ export function BuildPage(props: { build: BuildOpened }) {
         )}
         <span className="flex-1" />
         {!atBench && toCheckButton}
-        {!cover && step !== undefined && <ModeSwitch mode={mode} choose={setMode} />}
+        {!cover && step !== undefined && (
+          <SegmentedChoice
+            label="Way of working"
+            options={MODES}
+            value={mode}
+            onChange={setMode}
+            look="switch"
+          />
+        )}
       </header>
       {atBench && step !== undefined && view !== undefined ? (
         <AtTheBench
@@ -408,9 +350,15 @@ export function BuildPage(props: { build: BuildOpened }) {
           }
         />
       )}
-      <ChatSheet open={chatOpen} close={closeChat} cover={cover}>
+      <Sheet
+        title="Chat"
+        open={chatOpen}
+        onClose={closeChat}
+        from={cover ? "screen" : "right"}
+        kind="conversation"
+      >
         {chat}
-      </ChatSheet>
+      </Sheet>
     </div>
   );
 }

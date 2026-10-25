@@ -10,8 +10,8 @@ to ask, say "does the offcut need support?", let go, and the answer shows over t
 turning in 3D, its cut plan with each offcut's length, and "M6 × 50 bolts too short" in gold.
 
 - **Uses:** Fabrication's API through `api/fabrication.ts` (the Build and where it is, its progress, a stock picked
-  and its Undo, its chat, the models), `packages/ui` (the Reply box, Talk's listening, how an answer's Markdown looks,
-  `Scroller`, `useKept`, `CapsLabel`) and `three` for the 3D view.
+  and its Undo, its chat, the models), `packages/ui` (the Reply box, Talk's listening and its tap or hold, how an answer's
+  Markdown looks, the sheet, the segmented choice, `Scroller`, `useKept`, `CapsLabel`) and `three` for the 3D view.
 - **Used by:** the route `routes/workspaces.$id.builds.$slug.tsx`.
 
 | File | What it is |
@@ -20,13 +20,12 @@ turning in 3D, its cut plan with each offcut's length, and "M6 × 50 bolts too s
 | `at-the-bench.tsx` | At the bench (the step big beside it in 3D, stacked when folded) and Plan (the Build big in 3D beside its tabs) |
 | `chat/build-chat.tsx` | The chat, once for the page (`useBuildChat`), and its view: what's been said in its session, answers formatted as Courtyard's are, each change saved, and the Reply box |
 | `chat/chat-dock.ts` | Where the Reply box sits in the chat, with no Handheld frame, and its mic listening |
-| `chat/chat-sheet.tsx` | The chat as a sheet on the Fold, from the right or the whole screen folded |
-| `chat/hold-to-ask.tsx` | Hold to ask, and the answer it brings over the picture |
+| `chat/hold-to-ask.tsx` | Hold to ask, and the answer it brings over the picture, or that it didn't answer, with Try again |
 | `bench-panel.tsx` | The 3D panel: its label, Reset view, what sits at its foot, and a part's card |
 | `bench-view.tsx` | The scene itself, `three`, loaded lazily so only this page loads it: fitted to its panel, its letters apart |
-| `cut-plan.tsx` | Each length of timber as a bar of its cuts and its offcut, and each sheet with its pieces where they sit |
+| `cut-plan.tsx` | Each length of timber as a bar of its cuts and its offcut, and each sheet with its pieces where they sit, each with its size |
 | `buy-list.tsx` | What to buy, from where, how many and for how much, with the total; a timber or sheet with options opens them |
-| `stock-options.tsx` | A stock's options (#704; "Fabrication · Choose materials · Tablet (#704)"): the recommended first, each costed, Pick, and Undo of the pick just made |
+| `stock-options.tsx` | A stock's options (#704; "Fabrication · Choose materials · Tablet (#704)"): the recommended first, each costed, Pick, and Undo of the pick just made; `useStockOptions`, which stock's are open |
 | `tools-list.tsx` | The tools needed against what's to hand |
 | `step-panel.tsx` | The steps as an instruction manual (#699): one step, its checklist, its tools, the check before moving on |
 | `step-moves.tsx` | Moving between steps: Back and Done, a swipe, and the dots that show how far |
@@ -38,7 +37,9 @@ turning in 3D, its cut plan with each offcut's length, and "M6 × 50 bolts too s
 **Screens:** a part tapped in the 3D view, its letter, its name in the key (on a computer) or a piece in the cut plan
 is lit in all of them and opens its card; tapping again, or ×, closes it. The 3D view fits what it shows to its panel,
 turned as the owner left it, and Reset view turns it back; a part's letter that would sit on another's moves to the
-nearest clear spot. A buy-list row or a cut plan's Options opens that stock's options in the side panel (in Plan on
+nearest clear spot. Each piece in the cut plan shows its size: beside its letter, on the next line when it's
+narrow, turned along a tall piece, or in lines of its own, and its letter alone only when none of those fit; each
+timber bar's offcut shows its length, in the bar or on its line when the bar has no room. A buy-list row or a cut plan's Options opens that stock's options in the side panel (in Plan on
 the Fold), in place of its tab, until a tab or ‹ Buy list is tapped.
 
 **On the Fold** (#753): **At the bench** is where a Build with steps opens: the step's label, title and checklist in
@@ -46,7 +47,8 @@ big type, its tools as chips (gold where one's to check), Back and "Done, next s
 the step for the next or the one before. The dots in the top bar show how far, and are nothing to tap. Beside it, the
 step in 3D with **Hold to ask**: held, it listens and shows what will be sent ("Step 3, Cut and label the timber: …");
 let go, it's asked in the chat, and the answer shows over the picture, closing by itself 30 seconds after it has
-all come. A tap opens the chat. **Plan**, one tap away in the top bar, is the Build big in 3D with Hold to ask and
+all come; one that fails or never comes says "It didn't answer." with Try again, until it's closed. A tap
+opens the chat. **Plan**, one tap away in the top bar, is the Build big in 3D with Hold to ask and
 Chat, and its cut plan, buy list and tools as tabs under what the making rules found. The chat is a sheet from the
 right, open on its latest. Folded, it's At the bench alone, stacked: the step in 3D above, the step below.
 

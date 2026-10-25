@@ -60,12 +60,17 @@ type Words = { lines: readonly string[]; turned: boolean };
  * when it's narrow, turned along it when it's tall, its size in two lines if need be, and its
  * letter alone only when none of those fit.
  */
-const wordsFor = (room: Room | undefined, label: string, size: { w: number; h: number }) => {
-  const [along, across] = [`${Math.round(size.w)}`, `${Math.round(size.h)}`];
+const wordsFor = (
+  room: Room | undefined,
+  piece: { label: string; along: number; across: number },
+  sheetLength: number,
+) => {
+  const { label, along, across } = piece;
   const letterOnly: Words = { lines: [label], turned: false };
   if (room === undefined) return letterOnly;
-  const scale = room.width;
-  const [w, h] = [size.w * scale, size.h * scale];
+  // The sheet is drawn the plan's width, so a millimetre is that width over the sheet's length.
+  const px = (mm: number) => (mm / sheetLength) * room.width;
+  const [w, h] = [px(along), px(across)];
   const fits = (lines: readonly string[], width: number, height: number) =>
     Math.max(...lines.map(room.measure)) + EDGE <= width && lines.length * room.line <= height;
   const sized = `${along} × ${across}`;
@@ -78,7 +83,7 @@ const wordsFor = (room: Room | undefined, label: string, size: { w: number; h: n
           { lines: [label, sized], turned: true },
         ]
       : []),
-    { lines: [label, `${along} ×`, across], turned: false },
+    { lines: [label, `${along} ×`, `${across}`], turned: false },
   ];
   return (
     ways.find((way) => (way.turned ? fits(way.lines, h, w) : fits(way.lines, w, h))) ?? letterOnly
@@ -224,10 +229,7 @@ export function CutPlan(props: {
               style={{ aspectRatio: `${sheet.sheetLength} / ${sheet.sheetWidth}` }}
             >
               {each.pieces.map((part) => {
-                const words = wordsFor(room, part.label, {
-                  w: part.along / sheet.sheetLength,
-                  h: part.across / sheet.sheetLength,
-                });
+                const words = wordsFor(room, part, sheet.sheetLength);
                 return (
                   <button
                     key={`${part.label}:${part.x}:${part.y}`}

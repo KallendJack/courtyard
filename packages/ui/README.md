@@ -11,11 +11,11 @@ ends in the Reply box, `reply/reply-box.tsx`.
 |---|---|
 | `theme.css` | The one theme, Handheld: every colour, font, type size, radius and effect, by name |
 | `lib/` | `classes.ts`, which joins classes without merging, so nothing that merges reaches the first load |
-| `layout/` | `page.tsx` (pinned header, one scrolling middle, pinned footer, #339) with `page-scroll.ts`, `scroller.tsx` (#420), `kept.tsx`, the loading piece and how blocks stay fresh (#269, #387), and `caps-label.tsx`, the one label in capitals (#242) |
+| `layout/` | `page.tsx` (pinned header, one scrolling middle, pinned footer, #339) with `page-scroll.ts`, `scroller.tsx` (#420), `kept.tsx`, the loading piece and how blocks stay fresh (#269, #387), `caps-label.tsx`, the one label in capitals (#242), and `sheet.tsx`, a sheet over the page: a few choices with Done, or a chat that stays while closed (Fabrication's, #753) |
 | `buttons/` | `button.tsx`: the pill and icon buttons, and the busy button (`useBusy`, #330); `chip.tsx`, the chip: a few words in a pill that say what something is, never a button; `web-link.tsx`, a link to a web page that opens in a new tab, as words or a button |
-| `forms/` | `form-error.tsx`, the error line under a form |
-| `hooks/` | `use-action.ts`: an action's busy state and its error |
-| `frame/` | What the Handheld frame offers its pages (`handheld.ts`: the layout, the dock), and Talk: the talk strip and Talk key (`talk-strip.tsx`), listening (`speech.ts`) and keeping the screen awake (`wake-lock.ts`), and the frame's buttons (`frame-button.tsx`) |
+| `forms/` | `form-error.tsx`, the error line under a form, and `segmented-choice.tsx`, one choice of a few side by side (Fabrication's At the bench / Plan, #753) |
+| `hooks/` | `use-action.ts`: an action's busy state and its error; `use-dialog.ts`: the browser's own dialog, for a sheet |
+| `frame/` | What the Handheld frame offers its pages (`handheld.ts`: the layout, the dock), and Talk: the talk strip and Talk key (`talk-strip.tsx`), a tap told from a hold on a button that talks (`press.ts`, Fabrication's Hold to ask too), listening (`speech.ts`) and keeping the screen awake (`wake-lock.ts`), and the frame's buttons (`frame-button.tsx`) |
 | `reply/` | The Reply box (`reply-box.tsx`, #251) with its chips (`attachment.tsx`, `skill-tag.tsx`), the skills it picks from (`skill-list.tsx`), its model choice (`model-pickers.tsx`, `models.ts`) and its attachments (`attaching.ts`) |
 | `answer/` | How an answer's Markdown looks (#753): `markdown.tsx`, its elements and a finished answer formatted (`MarkdownAnswer`, which Fabrication's chat uses); `table.tsx`, a table that sorts by its columns (ADR 0021), with how cells sort (`sorting.ts`), its headings' sort button (`sort-button.tsx`) and reading Markdown's elements (`hast.ts`). The web app's answer renderer adds its fences, maths and streaming to the elements, and draws each table in a `RichBlock` |
 
