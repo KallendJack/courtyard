@@ -601,13 +601,20 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "fact-in-passing",
-    rule: "a fact stated in passing is saved",
+    rule: "a fact stated in passing is saved; a size, as a reported size record, not a context line (#708)",
     workspace: "Garage gym",
     context: { facts: ["The garage is 5 m by 3 m"] },
     turns: [
       {
         say: "What squat rack would fit in here? The ceiling's only 2.3 m, by the way.",
-        expect: [{ action: "add", section: "facts", words: ["2.3"] }],
+        expect: [],
+        // Said, not said to be measured: reported (ADR 0037).
+        sizes: {
+          records: [
+            { property: [["ceiling"]], amount: { value: 2.3, unit: "m" }, source: "reported" },
+          ],
+          never: ["measured"],
+        },
       },
     ],
   },
