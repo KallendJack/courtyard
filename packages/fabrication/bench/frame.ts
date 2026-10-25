@@ -18,6 +18,8 @@ const CASTOR_INSET = 10;
 const cutSize = (mm: number) => Math.floor(mm + 1e-9);
 /** A worked-out height, to a tenth of a mm. */
 const tenth = (mm: number) => Math.round(mm * 10) / 10;
+/** A size as a step says it to the owner: to the whole mm, though the Build keeps it exact. */
+export const whole = (mm: number) => Math.round(mm);
 
 export type Shape = ReturnType<typeof shapeOf>;
 
@@ -255,6 +257,7 @@ export const benchFitted = (parameters: BenchParameters, shape: Shape): Fitted[]
   return [
     {
       name: castors.name,
+      on: "E",
       boxes: [s.left, s.right - s.wideWidth].flatMap((x) =>
         [s.front + CASTOR_INSET, s.back - CASTOR_INSET - plateLength].map((y) =>
           box(x + (s.wideWidth - plateWidth) / 2, y, 0, plateWidth, plateLength, s.castor),

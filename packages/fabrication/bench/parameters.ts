@@ -59,17 +59,26 @@ export const BenchParameters = z.object({
   braces: z.object({ rear: z.boolean(), ends: z.boolean(), sheet: Sheet }),
   /** None when left out, so a change that takes them out (a merge patch's `null`) leaves none. */
   castors: Castors.nullable().default(null),
-  fixings: z.object({ frameScrews: Fixing, sheetScrews: Fixing, brackets: Fixing }),
+  fixings: z.object({
+    frameScrews: Fixing,
+    sheetScrews: Fixing,
+    brackets: Fixing,
+    /** The screws through the brackets' holes; the sheet screws when left out. */
+    bracketScrews: Fixing.optional(),
+  }),
   /** The tools and kit the owner has to hand. */
   tools: z.array(Tool),
 });
 export type BenchParameters = z.infer<typeof BenchParameters>;
 
-/** The bolts, washers and nuts, as the steps and the buy list name them. */
-export const castorFixingNames = (castors: Castors) => {
+/**
+ * The bolts, washers and nuts, as the steps and the buy list name them: the bolts at the length
+ * to use, which is longer than the parameters' when theirs are too short.
+ */
+export const castorFixingNames = (castors: Castors, boltLength: number) => {
   const thread = `M${castors.bolt.diameter.value}`;
   return {
-    bolts: `${thread} × ${castors.bolt.length.value} bolts`,
+    bolts: `${thread} × ${boltLength} bolts`,
     washers: `${thread} washers`,
     nuts: `${thread} lock nuts`,
   };

@@ -30,17 +30,39 @@ export const deriveBench = (input: unknown): Result<Build, string[]> => {
   const timbers = [parameters.frame.timber, parameters.frame.wide];
   const sheets = [parameters.top.sheet, parameters.shelf.sheet, parameters.braces.sheet];
   const planned = cutPlanOf({ parts, timbers, sheets, kerf: parameters.kerf.value });
-  const steps = benchSteps({ parameters, shape, cutPlan: planned.cutPlan });
-
   const castors = parameters.castors;
+  const thread = castors ? `M${castors.bolt.diameter.value}` : "";
+  const tooShort = castors
+    ? boltCheck({
+        name: `${thread} × ${castors.bolt.length.value} bolts`,
+        length: castors.bolt.length.value,
+        pitch: castors.bolt.pitch.value,
+        through: [
+          { what: "castor plate", mm: castors.plate.thickness.value },
+          { what: "castor base", mm: shape.wideThick },
+          ...Array.from({ length: castors.washer.perBolt }, () => ({
+            what: `${thread} washer`,
+            mm: castors.washer.thickness.value,
+          })),
+          { what: `${thread} lock nut`, mm: castors.nut.height.value },
+        ],
+      })
+    : null;
+  // Bolts too short are never what the steps fit or the buy list buys: the length to use is.
+  const boltLength = tooShort?.use ?? castors?.bolt.length.value ?? 0;
+  const steps = benchSteps({ parameters, shape, cutPlan: planned.cutPlan, boltLength });
+
+  const { frameScrews, sheetScrews, brackets, bracketScrews } = parameters.fixings;
   const fixingPrices = new Map<string, Price | undefined>([
-    [parameters.fixings.frameScrews.name, parameters.fixings.frameScrews.price],
-    [parameters.fixings.sheetScrews.name, parameters.fixings.sheetScrews.price],
-    [parameters.fixings.brackets.name, parameters.fixings.brackets.price],
+    [frameScrews.name, frameScrews.price],
+    [sheetScrews.name, sheetScrews.price],
+    [brackets.name, brackets.price],
+    ...(bracketScrews ? [[bracketScrews.name, bracketScrews.price] as const] : []),
   ]);
   if (castors) {
-    const names = castorFixingNames(castors);
-    fixingPrices.set(names.bolts, castors.bolt.price);
+    const names = castorFixingNames(castors, boltLength);
+    // The price given is for the bolts given, so the longer ones to use have none yet.
+    fixingPrices.set(names.bolts, tooShort ? undefined : castors.bolt.price);
     fixingPrices.set(names.washers, castors.washer.price);
     fixingPrices.set(names.nuts, castors.nut.price);
   }
@@ -85,23 +107,14 @@ export const deriveBench = (input: unknown): Result<Build, string[]> => {
   ]);
 
   const findings: Finding[] = [...planned.findings];
-  if (castors) {
-    const thread = `M${castors.bolt.diameter.value}`;
-    const tooShort = boltCheck({
-      name: castorFixingNames(castors).bolts,
-      length: castors.bolt.length.value,
-      pitch: castors.bolt.pitch.value,
-      through: [
-        { what: "castor plate", mm: castors.plate.thickness.value },
-        { what: "castor base", mm: shape.wideThick },
-        ...Array.from({ length: castors.washer.perBolt }, () => ({
-          what: `${thread} washer`,
-          mm: castors.washer.thickness.value,
-        })),
-        { what: `${thread} lock nut`, mm: castors.nut.height.value },
-      ],
+  if (castors && tooShort) {
+    const bolts = castorFixingNames(castors, boltLength).bolts;
+    findings.push({
+      ...tooShort,
+      steps: steps
+        .filter((step) => step.fixings.some((fixing) => fixing.name === bolts))
+        .map((step) => step.number),
     });
-    if (tooShort) findings.push(tooShort);
   }
   const missing = toolsMissing(steps);
   if (missing) findings.push(missing);

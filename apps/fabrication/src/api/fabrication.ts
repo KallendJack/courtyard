@@ -5,6 +5,7 @@ import {
   BuildChat,
   BuildChatSent,
   BuildOpened,
+  BuildProgress,
   type BuildSlug,
   type ChangeId,
   MESSAGE_FIELD,
@@ -89,6 +90,13 @@ export const undoTools = (change: ChangeId) =>
 /** "Or just say it": the tools a model heard in what was said, to tick; nothing is saved. */
 export const hearTools = (said: string) =>
   sendJson("/fabrication/tools/heard", ToolsHeard, "POST", { said });
+
+/** How far the owner has got with a Build's steps (#699), kept for every device. */
+export const keepProgress = (
+  where: { workspaceId: WorkspaceId; slug: BuildSlug },
+  progress: BuildProgress,
+) =>
+  sendJson(`${buildPath(where.workspaceId, where.slug)}/progress`, BuildProgress, "PUT", progress);
 
 /** The owner's next message in a Build's chat, with any photos or PDFs attached. */
 export const sendToChat = (

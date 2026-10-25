@@ -164,8 +164,12 @@ export const judgeBuilds = async (judge: {
     ...numbersIn(one.file.parameters),
   ]);
   const ownerSaid = said.flatMap(numbersWritten).map(({ n }) => n);
-  // A size or price may be in other units (900 mm as 0.9 m, 680p as £6.80); a count is as given.
-  const sizes = [...given.flatMap((n) => [n, n / 10, n / 100, n / 1000]), ...ownerSaid];
+  // A size or price may be in other units (900 mm as 0.9 m, 680p as £6.80), and a size to the
+  // whole mm, as the owner is told it (899.6 as 900); a count is as given.
+  const sizes = [
+    ...given.flatMap((n) => [n, Math.round(n), n / 10, n / 100, n / 1000]),
+    ...ownerSaid,
+  ];
   const counts = [
     ...builds.flatMap((one) => [...countsIn(one.derived), ...numbersIn(one.file.parameters)]),
     ...ownerSaid,

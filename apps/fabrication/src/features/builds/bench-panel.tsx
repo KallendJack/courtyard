@@ -1,9 +1,12 @@
-import type { DerivedBuild } from "@courtyard/contract";
+import type { BuildStep, DerivedBuild } from "@courtyard/contract";
 import { IconButton } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { X } from "lucide-react";
 import { lazy, Suspense } from "react";
+import { CloseUp } from "./close-up.tsx";
+import type { InView, Progress } from "./progress.ts";
+import { StepStrip } from "./step-panel.tsx";
 import { cutFrom, listed, partSize, stepsUsing } from "./words.ts";
 
 /** The 3D view, with `three`, in a file of its own: only a Build's page loads it. */
@@ -54,28 +57,45 @@ function PartCard(props: { derived: DerivedBuild; label: string; close: () => vo
   );
 }
 
+/** The Build at a step (#699): the step, how it shows in 3D, and the way to another step. */
+export type AtStep = { step: BuildStep; view: InView; progress: Progress };
+
 /**
  * The Build in 3D (#698; the board's middle panel): drag to turn it, tap a part or its letter in
- * the key for its card.
+ * the key for its card. While the steps show (#699), it's the Build up to the step reached, with
+ * the step strip above and the step's close-up below.
  */
 export function BenchPanel(props: {
   name: string;
   derived: DerivedBuild;
   lit: string | undefined;
   pick: (label: string) => void;
+  atStep?: AtStep | undefined;
+  /** Whether the close-up goes under the 3D view: not on the cover screen, where the step has it. */
+  closeUp?: boolean;
 }) {
-  const { derived, lit, pick } = props;
+  const { derived, lit, pick, atStep } = props;
+  const closeUp = props.closeUp === false ? null : atStep?.step.closeUp;
   return (
     <section aria-label="In 3D" className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <CapsLabel tone="muted" heading={{ level: 2 }}>
-          {props.name}
-        </CapsLabel>
-        <span className="text-meta text-muted-foreground">Drag to turn</span>
-      </div>
+      {atStep === undefined ? (
+        <div className="flex items-baseline justify-between gap-3">
+          <CapsLabel tone="muted" heading={{ level: 2 }}>
+            {props.name}
+          </CapsLabel>
+          <span className="text-meta text-muted-foreground">Drag to turn</span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <CapsLabel tone="muted" heading={{ level: 2 }} className="min-w-0 truncate">
+            Step {atStep.step.number} · {atStep.step.title}
+          </CapsLabel>
+          <StepStrip derived={derived} step={atStep.step} progress={atStep.progress} />
+        </div>
+      )}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={null}>
-          <BenchView derived={derived} lit={lit} pick={pick} />
+          <BenchView derived={derived} lit={lit} view={atStep?.view} pick={pick} />
         </Suspense>
         {lit !== undefined && (
           <div className="absolute inset-x-0 bottom-0">
@@ -83,7 +103,16 @@ export function BenchPanel(props: {
           </div>
         )}
       </div>
-      <ul aria-label="Parts" className="flex flex-wrap gap-x-3 gap-y-1">
+      {closeUp !== undefined && closeUp !== null && (
+        <div className="flex max-h-[45%] shrink-0">
+          <CloseUp closeUp={closeUp} parts={derived.parts} />
+        </div>
+      )}
+      {/* At a step, the letters on the parts are the key, and the 3D view keeps the room. */}
+      <ul
+        aria-label="Parts"
+        className={classes("flex flex-wrap gap-x-3 gap-y-1", atStep !== undefined && "hidden")}
+      >
         {derived.parts.map((part) => (
           <li key={part.label}>
             <button

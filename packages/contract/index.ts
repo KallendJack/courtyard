@@ -91,7 +91,6 @@ export {
   BuildChatEntry,
   BuildChatSent,
   BuildOpened,
-  BuildPlace,
 } from "./lib/fabrication/app.ts";
 export {
   BUILD_NAME_MAX_CHARACTERS,
@@ -117,6 +116,7 @@ export {
   BuildStep,
   DerivedBuild,
 } from "./lib/fabrication/derived.ts";
+export { BuildProgress, buildStarted, stepReached, tickedIn } from "./lib/fabrication/progress.ts";
 export {
   COMMON_TOOLS,
   FoundTool,

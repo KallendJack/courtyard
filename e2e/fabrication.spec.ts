@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { BuildOpened } from "../packages/contract/index.ts";
 import { goldenBench } from "../packages/fabrication/bench/fixtures/golden.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
 
@@ -73,11 +74,13 @@ test.describe("on the unfolded Fold", () => {
     await expect(
       page.getByRole("link", { name: `Back to ${name} · Split the garage` }),
     ).toBeVisible();
-    await expect(page.getByText("1500 × 600 × 899.6 mm · framed bench")).toBeVisible();
+    await expect(page.getByText("1500 × 600 × 900 mm · framed bench")).toBeVisible();
     await expect(page.getByRole("button", { name: "2 to check" })).toBeVisible();
     const toCheck = page.getByRole("list", { name: "To check" });
     await expect(toCheck).toContainText("M6 × 50 bolts too short");
-    await expect(toCheck).toContainText("Spanner and Spirit level not to hand");
+    await expect(toCheck).toContainText(
+      "Support for the long end, Spanner, Countersink bit and Spirit level not to hand",
+    );
 
     // Three panels: the chat, the bench in 3D, and the cut plan.
     await expect(page.getByRole("region", { name: "Chat" })).toContainText("Started the Build");
@@ -108,15 +111,15 @@ test.describe("on the unfolded Fold", () => {
     // The buy list, with its total.
     await page.getByRole("tab", { name: "Buy list" }).click();
     const buyList = page.getByRole("region", { name: "Buy list" });
-    await expect(buyList).toContainText("To buy · 10");
+    await expect(buyList).toContainText("To buy · 11");
     await expect(buyList.getByRole("link", { name: /45 × 95 C16, 2\.4 m/ })).toHaveAttribute(
       "href",
       "https://shop.example/c16-45x95",
     );
-    await expect(buyList).toContainText("Total £172.06");
+    await expect(buyList).toContainText("Total £177.02");
 
     await page.getByRole("tab", { name: "Tools" }).click();
-    await expect(page.getByRole("region", { name: "Tools" })).toContainText("2 not to hand");
+    await expect(page.getByRole("region", { name: "Tools" })).toContainText("4 not to hand");
   });
 
   test("its chat goes to the Build's session, and the answer comes back in it", async ({
@@ -134,6 +137,159 @@ test.describe("on the unfolded Fold", () => {
     await chat.getByRole("button", { name: "Send" }).click();
     await expect(chat.getByRole("list", { name: "Messages" })).toContainText(
       "You said: Do the washers come with them?",
+    );
+  });
+});
+
+// The instruction manual (#699; Paper, 2 · Agreed, "Fabrication · Build steps v2, teaching ·
+// Tablet (#699)", "· Build steps, cutting by your tools · Tablet (#699)" and "· Build steps ·
+// Cover (#699)"): one step at a time, the 3D view built up to it.
+
+/** The 3D panel's letter for a part, as the bench at a step shows it. */
+const letter = (page: Page, name: string) =>
+  page.getByRole("region", { name: "In 3D" }).getByRole("button", { name, exact: true });
+
+test.describe("the steps, on the unfolded Fold", () => {
+  test.use({ viewport: { width: 933, height: 645 }, hasTouch: true, isMobile: true });
+
+  test("stepping through shows each step's parts, tools and fixings, and the 3D view builds up to it", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await page.getByRole("tab", { name: "Steps" }).click();
+    const steps = page.getByRole("region", { name: "Steps" });
+    const done = page.getByRole("button", { name: "Done, next step" });
+
+    // Nothing's put on yet: the whole bench shows.
+    await expect(steps).toContainText("Step 1 of 12 · about 10 min");
+    await expect(steps.getByRole("heading", { name: "Check what's arrived" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Back" })).toBeDisabled();
+    await expect(letter(page, "G, Top")).toBeVisible();
+
+    // Cutting goes by the tools to hand: the hand saw, the circular saw not yet.
+    await done.click();
+    await done.click();
+    await expect(steps.getByRole("heading", { name: "Cut and label the timber" })).toBeVisible();
+    const ways = steps.getByRole("region", { name: "How you'll do it" });
+    await expect(ways.getByRole("listitem")).toHaveText(["Hand saw", "Circular saw · not yet"]);
+    // As the board has it: something to rest the long end on, to check.
+    const cutTools = steps.getByRole("region", { name: "Tools for this step" });
+    await cutTools.getByRole("button", { name: /tools ready/ }).click();
+    await expect(cutTools).toContainText("Support for the long end? Check");
+    await cutTools.getByRole("button", { name: /tools ready/ }).click();
+
+    // The castors: the bases alone in 3D, lit; the spanner to check; the bolts at the length to
+    // use, with why in gold.
+    await done.click();
+    await expect(
+      steps.getByRole("heading", { name: "Fit the castors to the bases" }),
+    ).toBeVisible();
+    await expect(letter(page, "E, Castor bases")).toHaveAttribute("aria-current", "step");
+    await expect(letter(page, "A, Legs")).toHaveCount(0);
+    await expect(steps).toContainText(
+      "Fixings: M6 × 60 bolts (16), M6 washers (32) and M6 lock nuts (16)",
+    );
+    const found = steps.getByRole("list", { name: "To check in this step" });
+    await expect(found).toContainText("M6 × 50 bolts too short");
+    await expect(found).toContainText("The steps and buy list use ones 60 mm long.");
+    const tools = steps.getByRole("region", { name: "Tools for this step" });
+    await tools.getByRole("button", { name: /tools ready/ }).click();
+    await expect(tools).toContainText("Spanner? Check");
+    await expect(tools).toContainText("Drill driver");
+
+    // The end frames: lit, on top of the bases now faint; a checklist with words to tap.
+    await done.click();
+    await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "In 3D" })).toContainText(
+      "Step 5 · Make the two end frames",
+    );
+    await expect(letter(page, "A, Legs")).toHaveAttribute("aria-current", "step");
+    await expect(letter(page, "C, End rails")).toHaveAttribute("aria-current", "step");
+    await expect(letter(page, "E, Castor bases")).not.toHaveAttribute("aria-current", "step");
+    await expect(letter(page, "B, Long rails")).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Close-up" })).toContainText(
+      "Close-up · One end frame",
+    );
+    await expect(steps).toContainText("Fixings: 5 × 80 screws (16)");
+    const checklist = steps.getByRole("list", { name: "Checklist" });
+    await checklist.getByRole("checkbox", { name: "Line 1 done" }).click();
+    await expect(checklist.getByRole("checkbox", { name: "Line 1 done" })).toBeChecked();
+    await checklist.getByRole("button", { name: "flush" }).click();
+    await expect(steps.getByRole("status")).toContainText(
+      "flush: Level with the next piece's face or edge",
+    );
+    await expect(steps.getByRole("region", { name: "Before you move on" })).toContainText(
+      "Measure corner to corner both ways.",
+    );
+
+    // Kept on the Build: opened again, it's where the owner left off.
+    const buildApi = new URL(page.url()).pathname.replace(/^\/fabrication/, "/api/fabrication");
+    await expect
+      .poll(async () => {
+        const { progress } = BuildOpened.parse(await (await page.request.get(buildApi)).json());
+        return [progress.step, progress.ticked.find((each) => each.step === "end-frames")?.lines];
+      })
+      .toEqual(["end-frames", [0]]);
+    await page.reload();
+    await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
+    await expect(checklist.getByRole("checkbox", { name: "Line 1 done" })).toBeChecked();
+    await expect(checklist.getByRole("checkbox", { name: "Line 2 done" })).not.toBeChecked();
+  });
+});
+
+test.describe("the steps, on the cover screen", () => {
+  test.use({ viewport: { width: 933, height: 645 }, hasTouch: true, isMobile: true });
+
+  test("a step is chosen from the strip, and the 3D view moves to it", async ({ page }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    // Folded, with the Build open.
+    await page.setViewportSize({ width: 476, height: 695 });
+    await page.getByRole("tablist", { name: "Show" }).getByRole("tab", { name: "Steps" }).click();
+
+    await page.getByRole("button", { name: "Step 9, Fit the shelf" }).click();
+    const steps = page.getByRole("region", { name: "Steps" });
+    await expect(steps.getByRole("heading", { name: "Fit the shelf" })).toBeVisible();
+    await expect(letter(page, "H, Shelf")).toHaveAttribute("aria-current", "step");
+    await expect(letter(page, "G, Top")).toHaveCount(0);
+    await expect(steps).toContainText("Fixings: 4 × 40 screws");
+
+    await page.getByRole("button", { name: "Back" }).click();
+    await expect(steps.getByRole("heading", { name: "Fit the supports" })).toBeVisible();
+    await expect(letter(page, "F, Top support")).toHaveAttribute("aria-current", "step");
+    await expect(page.getByRole("button", { name: "Done, next step" })).toBeInViewport();
+  });
+});
+
+test.describe("the steps, on a desktop", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("just the numbers, and a photo to check goes in the chat to send", async ({ page }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await page.getByRole("tab", { name: "Steps" }).click();
+    await page.getByRole("button", { name: "Step 5, Make the two end frames" }).click();
+    const steps = page.getByRole("region", { name: "Steps" });
+    const checklist = steps.getByRole("list", { name: "Checklist" });
+    await expect(checklist).toContainText("Lay two legs (A) flat, 460 apart outside to outside.");
+
+    await steps.getByRole("button", { name: "Just the numbers" }).click();
+    await expect(checklist).toContainText("A × 2, 460 outside.");
+    await expect(letter(page, "C, End rails")).toHaveAttribute("aria-current", "step");
+
+    await steps.getByLabel("Photo to check").setInputFiles({
+      name: "frames.png",
+      mimeType: "image/png",
+      // One grey pixel.
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNoAAAAggCBd81ytgAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    });
+    const chat = page.getByRole("region", { name: "Chat" });
+    await expect(chat.getByLabel("Message", { exact: true })).toHaveValue(
+      "Step 5, Make the two end frames: Both end frames, flat, from above. Measure corner to corner both ways. The same within 2 mm means it's square. Does it look right?",
     );
   });
 });
@@ -160,7 +316,7 @@ test.describe("on the cover screen", () => {
     await expect(page.getByRole("region", { name: "Cut plan" })).toBeHidden();
 
     await tabs.getByRole("tab", { name: "Buy list" }).click();
-    await expect(page.getByRole("region", { name: "Buy list" })).toContainText("Total £172.06");
+    await expect(page.getByRole("region", { name: "Buy list" })).toContainText("Total £177.02");
     await tabs.getByRole("tab", { name: "Chat" }).click();
     await expect(page.getByRole("region", { name: "Chat" })).toContainText("Started the Build");
   });

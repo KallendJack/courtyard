@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   BuildFile,
   type BuildParameters,
+  BuildProgress,
   type BuildSave,
   BuildSlug,
   type BuildSummary,
@@ -62,12 +63,39 @@ export const readBuildText = (
   return ok({ file: file.data, derived: derived.value });
 };
 
-/** A Build as read: its summary, its file, what's derived from it, and its file's text. */
+/**
+ * A Build's progress file (#699), beside it rather than in it, so ticking a line never stands in
+ * the way of undoing a change to the Build (`progress.ts` keeps it).
+ */
+export const progressPath = (slug: BuildSlug) => `${BUILDS_FOLDER}/progress/${slug}.json`;
+
+/** Where a Build's steps start. */
+const NOT_STARTED: BuildProgress = { step: null, ticked: [] };
+
+/**
+ * A Build's progress as kept: where it starts when there's none, or its file can't be read as
+ * progress (a hand edit, say, or one kept by step number before steps had IDs), since the steps
+ * are still there to follow and re-ticking a few lines is no loss.
+ */
+const progressOf = (text: string | undefined): BuildProgress => {
+  if (text === undefined) return NOT_STARTED;
+  try {
+    return BuildProgress.safeParse(JSON.parse(text)).data ?? NOT_STARTED;
+  } catch {
+    return NOT_STARTED;
+  }
+};
+
+/**
+ * A Build as read: its summary, its file, what's derived from it, its file's text, and how far the
+ * owner has got with its steps.
+ */
 export type ReadBuild = {
   readonly summary: BuildSummary;
   readonly file: BuildFile;
   readonly derived: Build;
   readonly text: string;
+  readonly progress: BuildProgress;
 };
 
 /** A workspace's Builds as read, and the files that aren't Builds as written. */
@@ -130,12 +158,15 @@ const readBuildsIn = async (folder: string): Promise<Result<ReadBuilds, BuildRef
     } catch {
       return err({ kind: "storage" });
     }
+    const progress = await readTextFile(join(folder, progressPath(slug.data)));
+    if (!progress.ok) return err({ kind: "storage" });
     const { file, derived } = read.value;
     builds.push({
       summary: { slug: slug.data, name: file.name, template: file.template, path, updatedAt },
       file,
       derived,
       text: text.value,
+      progress: progressOf(progress.value),
     });
   }
   builds.sort((a, b) => a.file.name.localeCompare(b.file.name, "en-GB", { sensitivity: "base" }));
@@ -283,6 +314,7 @@ export const saveBuild = async (
           file: file.data,
           derived: derived.value,
           text,
+          progress: current?.progress ?? NOT_STARTED,
         },
       });
     },
