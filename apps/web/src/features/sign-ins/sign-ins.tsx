@@ -1,12 +1,12 @@
 import type { GitHubConnection, ProviderSignIn, ProviderStatus } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { WebButton } from "@courtyard/ui/buttons/web-link.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { PlaceholderRows } from "@courtyard/ui/layout/kept.tsx";
 import { SectionTitle } from "@courtyard/ui/layout/page.tsx";
 import { type ReactNode, useEffect, useSyncExternalStore } from "react";
 import { CopyButton } from "@/components/buttons/copy-button";
-import { WebButton } from "@/components/buttons/web-link";
 import { ConnectionCard, type ConnectionState } from "@/components/code/connection-card";
 import { InfoBox, Notice, WaitingDot } from "@/components/layout/notice";
 import { loadProviders } from "../../api/worker-calls.ts";

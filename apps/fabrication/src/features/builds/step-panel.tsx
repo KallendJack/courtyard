@@ -2,7 +2,7 @@ import { type BuildStep, type DerivedBuild, tickedIn } from "@courtyard/contract
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
-import { Camera, Check, ChevronRight, X } from "lucide-react";
+import { Camera, Check, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 import { Findings } from "./findings.tsx";
 import { type Detail, type Progress, useDetail } from "./progress.ts";
@@ -108,8 +108,9 @@ function Checklist(props: {
   ticked: readonly number[];
   tick: (line: number) => void;
   openWord: (word: string) => void;
+  big: boolean;
 }) {
-  const { step, ticked } = props;
+  const { step, ticked, big } = props;
   const now = step.actions.findIndex((_, line) => !ticked.includes(line));
   return (
     <ul aria-label="Checklist" className="flex flex-col gap-1">
@@ -125,14 +126,15 @@ function Checklist(props: {
                 line === now && "bg-primary/15",
               )}
             >
-              <span className="relative flex size-7 shrink-0">
+              <span className={classes("relative flex shrink-0", big ? "size-8" : "size-7")}>
                 <input
                   type="checkbox"
                   checked={done}
                   aria-label={`Line ${line + 1} done`}
                   onChange={() => props.tick(line)}
                   className={classes(
-                    "size-7 appearance-none rounded-md border-2",
+                    "appearance-none rounded-md border-2",
+                    big ? "size-8" : "size-7",
                     done
                       ? "border-success bg-success"
                       : line === now
@@ -143,15 +145,19 @@ function Checklist(props: {
                 {done && (
                   <Check
                     aria-hidden
-                    className="pointer-events-none absolute inset-1.5 size-4 text-background"
+                    className={classes(
+                      "pointer-events-none absolute text-background",
+                      big ? "inset-1.5 size-5" : "inset-1.5 size-4",
+                    )}
                   />
                 )}
               </span>
               <p
                 className={classes(
-                  "min-w-0 flex-1 pt-0.5 text-answer",
+                  "min-w-0 flex-1 pt-0.5",
+                  big ? "text-bench" : "text-answer",
                   done
-                    ? "text-muted-foreground"
+                    ? "text-muted-foreground line-through"
                     : line === now
                       ? "font-semibold text-foreground"
                       : "text-foreground",
@@ -167,61 +173,37 @@ function Checklist(props: {
   );
 }
 
-/** The tools on one line, "4 tools ready · 2 to check", opening to each: ticked, or gold to check. */
-function ToolsLine(props: { step: BuildStep }) {
-  const [open, setOpen] = useState(false);
+/** The step's tools as chips, as the bench board has them: ticked, or gold to check. */
+function ToolChips(props: { step: BuildStep; big: boolean }) {
   const tools = [...props.step.tools, ...props.step.safety];
   if (tools.length === 0) return null;
-  const ready = tools.filter((tool) => tool.toHand).length;
-  const check = tools.length - ready;
   return (
-    <section aria-label="Tools for this step" className="flex flex-col gap-2">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((was) => !was)}
-        className="flex min-h-12 items-center gap-2 rounded-row bg-muted px-4 text-interface"
-      >
-        <Check aria-hidden className="size-4 shrink-0 text-success" />
-        <span className="font-semibold text-foreground">
-          {ready} {ready === 1 ? "tool" : "tools"} ready
-        </span>
-        <span className="flex flex-1 items-center justify-end gap-1 font-semibold text-warning">
-          {check > 0 && `${check} to check`}
-          <ChevronRight
-            aria-hidden
-            className={classes("size-4 text-muted-foreground", open && "rotate-90")}
-          />
-        </span>
-      </button>
-      {open && (
-        <ul className="flex flex-wrap gap-2">
-          {tools.map((tool) => (
-            <li
-              key={tool.tool}
-              className={classes(
-                "flex h-9 items-center gap-1.5 rounded-full border px-3 text-meta font-semibold",
-                tool.toHand
-                  ? "border-transparent bg-muted text-foreground"
-                  : "border-warning/50 bg-warning/10 text-warning",
-              )}
-            >
-              {tool.toHand ? (
-                <>
-                  <Check aria-hidden className="size-3.5 text-success" />
-                  {tool.name}
-                </>
-              ) : (
-                <>
-                  <span aria-hidden className="size-1.5 rounded-full bg-warning" />
-                  {tool.name}? Check
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <ul aria-label="Tools for this step" className="flex flex-wrap gap-2">
+      {tools.map((tool) => (
+        <li
+          key={tool.tool}
+          className={classes(
+            "flex items-center gap-2 rounded-full border px-4 font-semibold",
+            props.big ? "h-11 text-interface" : "h-9 text-meta",
+            tool.toHand
+              ? "border-transparent bg-muted text-foreground"
+              : "border-warning/50 bg-warning/10 text-warning",
+          )}
+        >
+          {tool.toHand ? (
+            <>
+              <Check aria-hidden className="size-4 text-success" />
+              {tool.name}
+            </>
+          ) : (
+            <>
+              <span aria-hidden className="size-1.5 rounded-full bg-warning" />
+              {tool.name}?
+            </>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -261,37 +243,48 @@ function BeforeMovingOn(props: { step: BuildStep; sendPhoto: (photo: File) => vo
 }
 
 /**
- * The step reached, as the instruction manual shows it: which step and how long it takes, its
- * title, how it's done and how much is said, its checklist, a word's meaning when tapped, its
- * fixings, the check before moving on, and its tools.
+ * The step reached, as the instruction manual shows it (#699; at the bench, #753): which step and
+ * how long it takes, its title, its checklist, a word's meaning when tapped, its tools, its
+ * fixings, what's left before moving on (`children`: its close-up), the check before moving on,
+ * and how it's done and how much is said. `big` at the bench on the unfolded Fold, read at arm's
+ * length.
  */
 export function StepPanel(props: {
   derived: DerivedBuild;
   step: BuildStep;
   progress: Progress;
   sendPhoto: (photo: File) => void;
+  big?: boolean;
+  children?: ReactNode;
 }) {
   const { derived, step, progress } = props;
+  const big = props.big === true;
   const [detail, choose] = useDetail();
   const [word, setWord] = useState<string>();
   const meaning = derived.glossary.find((each) => each.word === word);
   return (
-    <section aria-label="Steps" className="flex flex-col gap-4 pb-2">
+    <section aria-label="Steps" className="flex min-w-0 flex-col gap-4 pb-2">
       <div className="flex flex-col gap-1.5">
         <CapsLabel tone="primary">
           Step {step.number} of {derived.steps.length} · about {step.minutes} min
           {step.helper ? " · needs a helper" : ""}
         </CapsLabel>
-        <h2 className="display-title text-sheet-title text-foreground">{step.title}</h2>
+        <h2
+          className={classes(
+            "display-title text-foreground",
+            big ? "text-step" : "text-sheet-title",
+          )}
+        >
+          {step.title}
+        </h2>
       </div>
-      <Ways ways={step.ways} />
-      <DetailSwitch detail={detail} choose={choose} />
       <Checklist
         step={step}
         detail={detail}
         ticked={tickedIn(progress.progress, step.id)}
         tick={progress.tick}
         openWord={setWord}
+        big={big}
       />
       {meaning !== undefined && (
         <div
@@ -311,8 +304,9 @@ export function StepPanel(props: {
           </button>
         </div>
       )}
+      <ToolChips step={step} big={big} />
       {step.fixings.length > 0 && (
-        <p className="text-interface text-muted-foreground">
+        <p className={classes("text-muted-foreground", big ? "text-answer" : "text-interface")}>
           Fixings:{" "}
           <span className="text-foreground">
             {/* "5 × 80 screws (16)": a count before a size would read as one more size. */}
@@ -321,68 +315,10 @@ export function StepPanel(props: {
         </p>
       )}
       <Findings findings={stepFindings(derived, step)} label="To check in this step" />
+      {props.children}
       <BeforeMovingOn step={step} sendPhoto={props.sendPhoto} />
-      <ToolsLine step={step} />
+      <Ways ways={step.ways} />
+      <DetailSwitch detail={detail} choose={choose} />
     </section>
-  );
-}
-
-/** Back, and "Done, next step", pinned at the foot, big enough for dusty hands. */
-export function StepFoot(props: { derived: DerivedBuild; step: BuildStep; progress: Progress }) {
-  const { derived, step, progress } = props;
-  const last = step.number === derived.steps.length;
-  return (
-    <div className="flex shrink-0 flex-col gap-2 pt-3">
-      {progress.problem !== undefined && (
-        <p role="status" className="text-meta text-warning">
-          {progress.problem}
-        </p>
-      )}
-      <div className="flex gap-3">
-        <Button
-          variant="outline"
-          size="thumb"
-          disabled={step.number === 1}
-          onClick={() => progress.go(step.number - 1)}
-        >
-          Back
-        </Button>
-        <Button variant="primary" size="thumb" grow onClick={progress.done}>
-          {last ? "Done, all built" : "Done, next step"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** Each step as a dot, done · now · to go, to jump to one: the 3D view moves with it. */
-export function StepStrip(props: { derived: DerivedBuild; step: BuildStep; progress: Progress }) {
-  const { step } = props;
-  return (
-    <ol aria-label="Step by step" className="flex items-center gap-1">
-      {props.derived.steps.map((each) => (
-        <li key={each.number} className="flex">
-          <button
-            type="button"
-            aria-label={`Step ${each.number}, ${each.title}`}
-            aria-current={each.number === step.number ? "step" : undefined}
-            onClick={() => props.progress.go(each.number)}
-            className="flex h-6 items-center px-0.5"
-          >
-            <span
-              aria-hidden
-              className={classes(
-                "block h-2 rounded-full",
-                each.number === step.number
-                  ? "w-6 bg-primary"
-                  : each.number < step.number
-                    ? "w-2 bg-success"
-                    : "w-2 bg-input",
-              )}
-            />
-          </button>
-        </li>
-      ))}
-    </ol>
   );
 }

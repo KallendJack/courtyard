@@ -1,12 +1,11 @@
 import type { BuildStep, DerivedBuild } from "@courtyard/contract";
-import { IconButton } from "@courtyard/ui/buttons/button.tsx";
+import { Button, IconButton } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
-import { X } from "lucide-react";
-import { lazy, Suspense } from "react";
+import { RotateCcw, X } from "lucide-react";
+import { lazy, type ReactNode, Suspense, useState } from "react";
 import { CloseUp } from "./close-up.tsx";
-import type { InView, Progress } from "./progress.ts";
-import { StepStrip } from "./step-panel.tsx";
+import type { InView } from "./progress.ts";
 import { cutFrom, listed, partSize, stepsUsing } from "./words.ts";
 
 /** The 3D view, with `three`, in a file of its own: only a Build's page loads it. */
@@ -57,13 +56,14 @@ function PartCard(props: { derived: DerivedBuild; label: string; close: () => vo
   );
 }
 
-/** The Build at a step (#699): the step, how it shows in 3D, and the way to another step. */
-export type AtStep = { step: BuildStep; view: InView; progress: Progress };
+/** The Build at a step (#699): the step, and how it shows in 3D. */
+export type AtStep = { step: BuildStep; view: InView };
 
 /**
- * The Build in 3D (#698; the board's middle panel): drag to turn it, tap a part or its letter in
- * the key for its card. While the steps show (#699), it's the Build up to the step reached, with
- * the step strip above and the step's close-up below.
+ * The Build in 3D (#698; #753's boards): fitted to its panel, drag to turn it, Reset view to turn
+ * it back, and tap a part or its letter for its card. While the steps show (#699), it's the Build
+ * up to the step reached. Along its foot, what the page puts there (Hold to ask) and Reset view;
+ * on a computer, the step's close-up below it and the parts' key.
  */
 export function BenchPanel(props: {
   name: string;
@@ -71,37 +71,59 @@ export function BenchPanel(props: {
   lit: string | undefined;
   pick: (label: string) => void;
   atStep?: AtStep | undefined;
-  /** Whether the close-up goes under the 3D view: not on the cover screen, where the step has it. */
+  /** Whether the step's close-up goes under the 3D view: only on a computer. */
   closeUp?: boolean;
+  /** Whether the parts' key goes under it: only on a computer, with room for it. */
+  withKey?: boolean;
+  /** Whether it has Reset view: not on the cover screen, where the panel is small. */
+  resettable?: boolean;
+  /** What sits at the view's foot, left of Reset view: Hold to ask. */
+  children?: ReactNode;
+  /** What shows over the top of the view in place of a part's card: an answer. */
+  over?: ReactNode;
 }) {
-  const { derived, lit, pick, atStep } = props;
-  const closeUp = props.closeUp === false ? null : atStep?.step.closeUp;
+  const { derived, lit, pick, atStep, resettable = true } = props;
+  const [reset, setReset] = useState(0);
+  const closeUp = props.closeUp === true ? atStep?.step.closeUp : null;
+  const over =
+    props.over ??
+    (lit === undefined ? undefined : (
+      <PartCard derived={derived} label={lit} close={() => pick(lit)} />
+    ));
   return (
-    <section aria-label="In 3D" className="flex min-h-0 flex-1 flex-col gap-3">
-      {atStep === undefined ? (
-        <div className="flex items-baseline justify-between gap-3">
-          <CapsLabel tone="muted" heading={{ level: 2 }}>
-            {props.name}
-          </CapsLabel>
-          <span className="text-meta text-muted-foreground">Drag to turn</span>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <CapsLabel tone="muted" heading={{ level: 2 }} className="min-w-0 truncate">
-            Step {atStep.step.number} · {atStep.step.title}
-          </CapsLabel>
-          <StepStrip derived={derived} step={atStep.step} progress={atStep.progress} />
-        </div>
-      )}
+    <section aria-label="In 3D" className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <CapsLabel tone="muted" heading={{ level: 2 }} className="min-w-0 truncate">
+          {atStep === undefined ? props.name : `Step ${atStep.step.number} · ${atStep.step.title}`}
+        </CapsLabel>
+        <span className="shrink-0 text-meta text-muted-foreground">
+          {atStep === undefined ? "Drag to turn · tap a part" : "Drag to turn"}
+        </span>
+      </div>
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={null}>
-          <BenchView derived={derived} lit={lit} view={atStep?.view} pick={pick} />
+          <BenchView derived={derived} lit={lit} view={atStep?.view} pick={pick} reset={reset} />
         </Suspense>
-        {lit !== undefined && (
-          <div className="absolute inset-x-0 bottom-0">
-            <PartCard derived={derived} label={lit} close={() => pick(lit)} />
+        {over !== undefined && over !== null && (
+          // Over the view, clear of its foot, as tall as what's in it.
+          <div className="pointer-events-none absolute inset-x-0 top-0 bottom-18 flex flex-col *:pointer-events-auto">
+            {over}
           </div>
         )}
+        <div
+          className={classes(
+            "pointer-events-none absolute inset-x-0 bottom-0 flex items-end gap-3 *:pointer-events-auto",
+            resettable ? "justify-between" : "justify-end",
+          )}
+        >
+          {props.children}
+          {resettable && (
+            <Button variant="outline" size="lg" onClick={() => setReset((count) => count + 1)}>
+              <RotateCcw aria-hidden />
+              Reset view
+            </Button>
+          )}
+        </div>
       </div>
       {closeUp !== undefined && closeUp !== null && (
         <div className="flex max-h-[45%] shrink-0">
@@ -111,7 +133,10 @@ export function BenchPanel(props: {
       {/* At a step, the letters on the parts are the key, and the 3D view keeps the room. */}
       <ul
         aria-label="Parts"
-        className={classes("flex flex-wrap gap-x-3 gap-y-1", atStep !== undefined && "hidden")}
+        className={classes(
+          "flex flex-wrap gap-x-3 gap-y-1",
+          (props.withKey !== true || atStep !== undefined) && "hidden",
+        )}
       >
         {derived.parts.map((part) => (
           <li key={part.label}>

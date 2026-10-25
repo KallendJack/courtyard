@@ -1,10 +1,9 @@
-import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
-import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Children, type ComponentProps, createContext, use, useState } from "react";
 import type { ExtraProps } from "react-markdown";
-import { SortButton } from "@/components/buttons/sort-button";
+import { Scroller } from "../layout/scroller.tsx";
+import { classes } from "../lib/classes.ts";
 import { childrenNamed, type MarkdownElement, textOf } from "./hast.ts";
-import { RichBlock } from "./rich-block.tsx";
+import { SortButton } from "./sort-button.tsx";
 import { nextSort, type Sort, sortedOrder } from "./sorting.ts";
 
 /** What a table's headings and rows need from the table they're in. */
@@ -36,7 +35,7 @@ const ONE_LINE_CHARACTERS = 30;
  * then back to the order the model wrote, and the sort stays as more rows stream in. A wide table
  * scrolls sideways inside the answer, running to the screen's edge on a phone, so the page never
  * does. Drawn with `MarkdownHeading`, `MarkdownRows`, `MarkdownRow` and `MarkdownCell` for its
- * parts.
+ * parts. The web app wraps it in a `RichBlock`, where its classes apply (`rich-blocks.css`).
  */
 export function MarkdownTable({ node, children }: ComponentProps<"table"> & ExtraProps) {
   const [sort, setSort] = useState<Sort>();
@@ -48,15 +47,13 @@ export function MarkdownTable({ node, children }: ComponentProps<"table"> & Extr
     order: sortedOrder(rows, sort),
   };
   return (
-    <RichBlock>
-      <Scroller axis="x" className="-mx-4 px-4 md:mx-0 md:px-0">
-        <div className="w-fit min-w-full overflow-clip rounded-md border bg-field">
-          <table className="w-full border-collapse text-sm/5.5">
-            <SortingContext value={sorting}>{children}</SortingContext>
-          </table>
-        </div>
-      </Scroller>
-    </RichBlock>
+    <Scroller axis="x" className="-mx-4 px-4 md:mx-0 md:px-0">
+      <div className="w-fit min-w-full overflow-clip rounded-md border bg-field">
+        <table className="w-full border-collapse text-sm/5.5">
+          <SortingContext value={sorting}>{children}</SortingContext>
+        </table>
+      </div>
+    </Scroller>
   );
 }
 

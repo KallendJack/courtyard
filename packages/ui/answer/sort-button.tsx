@@ -5,9 +5,9 @@ import type { ReactNode } from "react";
  * A column heading that sorts by its column with a tap (ADR 0021): its words, then an arrow for the
  * way it's sorted, or a faint up-and-down one when it isn't. It fills its heading cell.
  *
- * Only a rich block's table uses it, so its classes are in the rich blocks' stylesheet, off the
- * first load (styles.css leaves this file out, rich-blocks.css takes it in): it's styled only
- * inside a `RichBlock`.
+ * Only an answer's table uses it. In the web app its classes, like the table's, are in the rich
+ * blocks' stylesheet, off the first load (styles.css leaves both files out, rich-blocks.css takes
+ * them in): there it's styled only inside a `RichBlock`.
  */
 export function SortButton(props: {
   sorted: "ascending" | "descending" | undefined;

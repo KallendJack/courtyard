@@ -1,5 +1,5 @@
 import type { Source } from "@courtyard/contract";
-import { WebLink } from "@/components/buttons/web-link";
+import { WebLink } from "@courtyard/ui/buttons/web-link.tsx";
 
 /** Text as a Markdown link's words, so brackets in it can't end the link early. */
 const linkWords = (text: string) => text.replace(/[[\]\\]/g, "\\$&");

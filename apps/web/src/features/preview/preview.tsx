@@ -1,11 +1,11 @@
 import type { Preview, SessionId } from "@courtyard/contract";
 import { Button, IconButton } from "@courtyard/ui/buttons/button.tsx";
+import { WebButton } from "@courtyard/ui/buttons/web-link.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { createKept, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { AppWindow, ExternalLink, X } from "lucide-react";
 import { useState } from "react";
-import { WebButton } from "@/components/buttons/web-link";
 import { InfoBox } from "@/components/layout/notice";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { previewAddress, previewOf, startPreview } from "./api.ts";

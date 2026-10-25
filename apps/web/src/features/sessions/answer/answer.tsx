@@ -1,53 +1,22 @@
+import { textOf } from "@courtyard/ui/answer/hast.ts";
+import { MARKDOWN_ELEMENTS, MARKDOWN_PLUGINS } from "@courtyard/ui/answer/markdown.tsx";
+import { MarkdownTable } from "@courtyard/ui/answer/table.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { memo, useEffect, useState } from "react";
 import Markdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { WebLink } from "@/components/buttons/web-link";
 import { Arriving, FencedBlock, fencedKind } from "../../../components/rich-blocks/fenced.tsx";
-import { textOf } from "../../../components/rich-blocks/hast.ts";
-import {
-  MarkdownCell,
-  MarkdownHeading,
-  MarkdownRow,
-  MarkdownRows,
-  MarkdownTable,
-} from "../../../components/rich-blocks/table.tsx";
+import { RichBlock } from "../../../components/rich-blocks/rich-block.tsx";
 import { finishForNow, splitBlocks } from "./blocks.ts";
 import { CodeBlock } from "./code-block.tsx";
 import { hasMaths, writeMathsForRemark } from "./maths.ts";
 import { useReveal } from "./reveal.ts";
 
-const SUBHEADING = "display-section text-xl/7";
-
 /**
- * How each part of an answer looks. Markdown becomes elements, never raw HTML, so an answer can't
- * inject anything into the page. Headings start at h2, under the session's own title.
+ * How each part of an answer looks: the shared elements (`packages/ui/answer/markdown.tsx`, which
+ * Fabrication's chat uses too), with the fences Courtyard draws and each table in a `RichBlock`.
  */
 const ELEMENTS: Components = {
-  h1: ({ node: _, ...props }) => <h2 className={SUBHEADING} {...props} />,
-  h2: ({ node: _, ...props }) => <h3 className={SUBHEADING} {...props} />,
-  h3: ({ node: _, ...props }) => <h4 className="display-section text-lg/7" {...props} />,
-  h4: ({ node: _, ...props }) => <h5 className="font-semibold" {...props} />,
-  h5: ({ node: _, ...props }) => <h6 className="font-semibold" {...props} />,
-  h6: ({ node: _, ...props }) => <h6 className="font-semibold" {...props} />,
-  ol: ({ node: _, ...props }) => (
-    <ol
-      className="list-decimal space-y-2 pl-6 marker:font-semibold marker:text-primary-text"
-      {...props}
-    />
-  ),
-  ul: ({ node: _, ...props }) => (
-    <ul className="list-disc space-y-2 pl-6 marker:text-primary-text" {...props} />
-  ),
-  a: ({ node: _, className: __, ...props }) => <WebLink {...props} />,
-  // An image is shown as a link, never loaded by itself: a model tricked by something it read
-  // could otherwise put data in an image's address and send it away without anyone clicking.
-  img: ({ src, alt }) => (
-    <WebLink href={typeof src === "string" ? src : undefined}>{alt || "Image"}</WebLink>
-  ),
-  code: ({ node: _, className: __, ...props }) => (
-    <code className="rounded-sm bg-muted px-1 py-0.5 text-code" {...props} />
-  ),
+  ...MARKDOWN_ELEMENTS,
   pre: ({ node }) => {
     const code = node?.children.find((child) => child.type === "element");
     const names = code?.properties.className;
@@ -64,21 +33,13 @@ const ELEMENTS: Components = {
       <FencedBlock kind={kind} language={language} source={source} />
     );
   },
-  blockquote: ({ node: _, ...props }) => (
-    <blockquote
-      className="border-l-2 border-primary-text/40 pl-4 text-muted-foreground"
-      {...props}
-    />
+  // Its classes are the rich blocks' stylesheet's, which apply only inside a `RichBlock`.
+  table: (props) => (
+    <RichBlock>
+      <MarkdownTable {...props} />
+    </RichBlock>
   ),
-  // Every table sorts by its columns (ADR 0021).
-  table: MarkdownTable,
-  th: MarkdownHeading,
-  tbody: MarkdownRows,
-  tr: MarkdownRow,
-  td: MarkdownCell,
 };
-
-const PLUGINS = [remarkGfm];
 
 type MathsPlugins = typeof import("./maths-plugins.ts");
 
@@ -122,7 +83,7 @@ const Block = memo(function Block(props: {
 }) {
   const maths = useMathsPlugins(hasMaths(props.text));
   const asWritten = (
-    <Markdown remarkPlugins={PLUGINS} components={ELEMENTS}>
+    <Markdown remarkPlugins={MARKDOWN_PLUGINS} components={ELEMENTS}>
       {props.text}
     </Markdown>
   );
@@ -136,7 +97,7 @@ const Block = memo(function Block(props: {
         asWritten
       ) : (
         <Markdown
-          remarkPlugins={[...PLUGINS, ...maths.remarkPlugins]}
+          remarkPlugins={[...MARKDOWN_PLUGINS, ...maths.remarkPlugins]}
           rehypePlugins={maths.rehypePlugins}
           components={ELEMENTS}
         >

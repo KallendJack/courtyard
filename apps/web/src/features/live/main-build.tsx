@@ -6,11 +6,11 @@ import type {
   UpdateWaiting,
 } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { WebButton } from "@courtyard/ui/buttons/web-link.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { useFresh } from "@courtyard/ui/layout/kept.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { type ReactNode, useEffect, useState } from "react";
-import { WebButton } from "@/components/buttons/web-link";
 import { BuildGraph, BuildMiniGraph, OpenRow, useTicking } from "@/components/code/build-stages";
 import { Sheet } from "@/components/sheets/sheet";
 import type { FromWorker } from "../../api/worker.ts";

@@ -9,11 +9,11 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { WebLink } from "@courtyard/ui/buttons/web-link.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { type ReactNode, useState } from "react";
-import { WebLink } from "@/components/buttons/web-link";
 import { SegmentedChoice } from "@/components/forms/segmented-choice";
 import { CardDialog } from "@/components/layout/card-dialog";
 import { InfoBox } from "@/components/layout/notice";
