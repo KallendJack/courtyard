@@ -45,27 +45,39 @@ export const TOOL_NAMES: Readonly<Record<Tool, string>> = {
 };
 
 /**
- * The tools each of Your tools' tiles is (#707), where its name isn't one of the steps' own: the
- * Workmate is a folding workbench, sawhorses hold the long end. A tile with none (a hammer) is no
- * tool the steps name.
+ * The words in a tool's name, as Your tools saves it (a tile's or the owner's own), that make it
+ * one of the steps' tools (#777, #763). One Thing can be several: "Drill and drill bits" is the
+ * drill driver and its bits, "Tape, pencil" both. A tile with none (a hammer) is no tool the steps
+ * name. Read from the name in lower case, with anything but letters and digits as a space.
  */
-const TILE_TOOLS: Readonly<Record<string, readonly Tool[]>> = {
-  "tape, pencil": ["tape-measure", "pencil"],
-  workmate: ["folding-workbench"],
-  sawhorses: ["long-end-support"],
-  "drill / driver": ["drill-driver"],
+const TOOL_WORDS: Readonly<Record<Tool, RegExp>> = {
+  "tape-measure": /(?<!(masking|duct|insulating) )\btape\b/,
+  pencil: /\bpencil/,
+  square: /\bsquare\b/,
+  "hand-saw": /\b(hand ?saw|panel saw|tenon saw)/,
+  "circular-saw": /\bcircular saw/,
+  "mitre-saw": /\b(mitre|miter|chop) saw/,
+  "folding-workbench": /\b(workmate|folding (work)?bench)/,
+  // A sawhorse, a trestle or a stool: anything that holds a length's far end level.
+  "long-end-support": /\b(saw ?horse|trestle|stool|support for the long end)/,
+  clamps: /\bclamp/,
+  // A drill, but not "drill bits" on their own.
+  "drill-driver": /\bdrill\b(?! bits?\b)/,
+  "drill-bits": /\b(drill bits?|bit set)\b/,
+  "countersink-bit": /\bcountersink/,
+  spanner: /\b(spanner|wrench|socket set)/,
+  "spirit-level": /\blevel\b/,
+  "safety-glasses": /\b(safety (glasses|specs|goggles)|goggles)\b/,
+  "ear-defenders": /\bear ?(defenders|muffs|protectors?|protection|plugs)\b/,
 };
 
-/**
- * The steps' tools among the owner's, as Your tools saves them: each by its tile's name or the
- * owner's own, matched without minding capitals (#777).
- */
+/** The steps' tools among the owner's, as Your tools saves them: each its tile's name or theirs. */
 export const toolsFrom = (names: readonly string[]): Tool[] => {
-  const byName = new Map(Tool.options.map((tool) => [TOOL_NAMES[tool].toLowerCase(), tool]));
-  const found = names.flatMap((name) => {
-    const said = name.trim().toLowerCase();
-    const one = byName.get(said);
-    return TILE_TOOLS[said] ?? (one === undefined ? [] : [one]);
-  });
-  return Tool.options.filter((tool) => found.includes(tool));
+  const said = names.map((name) =>
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim(),
+  );
+  return Tool.options.filter((tool) => said.some((name) => TOOL_WORDS[tool].test(name)));
 };

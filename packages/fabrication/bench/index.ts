@@ -22,7 +22,7 @@ import { BENCH_SLOTS } from "./stock-slots.ts";
 /**
  * The framed bench: its parameters in, everything its Build shows out. Parameters that aren't a
  * bench (a size with no source, a bench too low for its castors) are refused with what's wrong.
- * Its steps follow the owner's tools when they're given, and keep the ways the steps done were
+ * Its steps follow the owner's tools when they're given, and keep the ways the steps started were
  * done (#777).
  */
 export const deriveBench = (

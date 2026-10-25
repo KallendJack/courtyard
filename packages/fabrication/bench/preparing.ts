@@ -94,10 +94,10 @@ export type Saw = (typeof SAWS)[number];
 /** The step that cuts the timber, which the saw in use changes. */
 export const CUT_STEP = "cut-timber";
 
-/** The saw the timber is cut with: the one it was cut with once that's done, else the best to hand. */
+/** The saw the timber is cut with: the one it was started with, else the best to hand. */
 export const sawInUse = (toHand: ReadonlySet<Tool>, kept: readonly KeptWay[] = []): Saw => {
-  const done = kept.find((way) => way.step === CUT_STEP)?.tool;
-  return SAWS.find((saw) => saw === done) ?? SAWS.find((saw) => toHand.has(saw)) ?? "hand-saw";
+  const started = kept.find((way) => way.step === CUT_STEP)?.tool;
+  return SAWS.find((saw) => saw === started) ?? SAWS.find((saw) => toHand.has(saw)) ?? "hand-saw";
 };
 
 const sawWays = (toHand: ReadonlySet<Tool>, using: Saw): Way[] =>

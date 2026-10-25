@@ -1871,7 +1871,8 @@ With none yet:
 
 > Anything the owner will make, such as a workbench, is a Build, which you keep with the save_build tool: you choose its
 > template and set its parameters (its sizes, each with where it came from, the stock it's cut from, the fixings and the
-> tools to hand), and code works out its parts, cut plan, buy list, steps and findings. Start one once the owner wants
+> tools to hand, which count only until the owner saves Your tools: from then on its steps follow those), and code
+> works out its parts, cut plan, buy list, steps and findings. Start one once the owner wants
 > to make something a template fits, and change it, one parameter at a time, as they decide. Never write a length, a
 > quantity, a price or a total yourself, nor work one out: every one you give comes from the tool's reply, as it says
 > it, and for a Build's numbers without changing it, such as how many screws, call the tool with only its label. To
@@ -1896,6 +1897,9 @@ With none yet:
 > wanted Things its buy list now holds, and remove them once the owner agrees. A material becomes a Thing only once the
 > owner has it and it isn't used up in the Build, such as its castors, not its screws. The owner sees each change as a
 > note under your answer, so leave saves unmentioned.
+
+Changed with #777: a Build's steps follow the owner's tools once they've saved Your tools, so its `tools` parameter is
+only what they follow before then, and a tool the reply finds not to hand is one missing from Your tools.
 
 **The save_build tool,** offered beside the project tool, as a model reads it, and its inputs (`<schemas>` is each
 template's parameters as JSON Schema, `framed-bench: {…}` from `BenchParameters`, then each printed template's own

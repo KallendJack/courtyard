@@ -240,7 +240,7 @@ with its close-up where one shows it. A step that can be done more than one **wa
 mitre saw) uses the best to hand, and says so in a line when that's changed.
 Its **progress**, the step reached and the lines ticked, is kept on the Build for every device and session, each
 step by its ID ("fit-castors") rather than its number, so ticks stay put when a step before comes or goes; a step
-done keeps the way it was done.
+started keeps the way it was started, so its ticks stay on the lines they were ticked on.
 _Avoid_: instructions (that's what a model is given), tasks, project steps (those are a project's)
 
 **Stock options**:

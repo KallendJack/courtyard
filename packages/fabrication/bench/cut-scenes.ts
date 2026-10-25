@@ -131,7 +131,11 @@ const sawing = (setting: SceneSetting, line: number, wide: number, thick: number
         top,
         tools,
         saw: "saw here, just past the line",
-        held: { at: at(held + JAWS.length / 2, -JAWS.width, top / 2), says: "clamped in the jaws" },
+        // Only a Workmate has jaws; without one, it's clamped to whatever's solid.
+        held: {
+          at: at(held + JAWS.length / 2, -JAWS.width, top / 2),
+          says: benched ? "clamped in the jaws" : "clamped down, line past the edge",
+        },
       };
     }
   }

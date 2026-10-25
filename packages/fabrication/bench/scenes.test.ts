@@ -123,6 +123,17 @@ describe("the cut step's scene", () => {
     expect(tools(scene)).toEqual([]);
     expect(scene.title).toBe("Cutting the length");
   });
+
+  it("says jaws only when there's a Workmate to have them", () => {
+    const owned = goldenBench.tools.filter((tool) => tool !== "folding-workbench");
+    const says = (parameters: unknown) =>
+      marks(sceneOf(built(parameters), "cut-timber"), "note").map((note) => note.says);
+
+    expect(says(goldenBench)).toContain("clamped in the jaws");
+    const without = says({ ...goldenBench, tools: owned });
+    expect(without).not.toContain("clamped in the jaws");
+    expect(without).toContain("clamped down, line past the edge");
+  });
 });
 
 describe("the marking step", () => {

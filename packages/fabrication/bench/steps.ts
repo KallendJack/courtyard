@@ -42,13 +42,13 @@ export const benchSteps = (options: {
   fitted: readonly Fitted[];
   /** The tools to hand: the owner's, from Your tools, or else the parameters' own (#777). */
   toHand: ReadonlySet<Tool>;
-  /** The ways the steps already done were done, which they keep. */
+  /** The ways the steps already started were done, which they keep. */
   kept: readonly KeptWay[];
 }): Step[] => {
   const { parameters: p, shape: s, cutPlan, toHand, kept } = options;
   const castors = p.castors;
   const saw = sawInUse(toHand, kept);
-  // The saw the Build's own tools would cut with: a change from it is said, until it's cut.
+  // The saw the Build's own tools would cut with: a change from it is said, until cutting starts.
   const planned = sawInUse(new Set(p.tools));
   const sawChanged =
     saw === planned || kept.some((way) => way.step === CUT_STEP)

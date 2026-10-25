@@ -12,7 +12,7 @@ size takes, and its part recipe.
 import { deriveBench, derivePrinted, makePart, to3mf } from "@courtyard/fabrication";
 
 const derived = deriveBench(parameters); // a framed bench's parameters, as JSON
-// Its steps following the owner's tools, a step done keeping the saw it was cut with (#777):
+// Its steps following the owner's tools, a step started keeping the saw it was cut with (#777):
 deriveBench(parameters, { tools: ["Hand saw", "Mitre saw"], kept: [{ step: "cut-timber", tool: "hand-saw" }] });
 if (derived.ok) derived.value.cutPlan; // 4 lengths of B 1450 + A 750, 1 of 5 × 460…
 else derived.error; // ["height.source: Invalid input…"]
@@ -38,7 +38,7 @@ if (recipe) {
 | `cut-plan.ts` | Packing: timber pieces into lengths and sheet pieces into sheets, the kerf between every two, each sheet's first cut along it or across it, whichever needs fewer sheets |
 | `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed |
 | `findings.ts` | The making rules code checks: a bolt long enough for what it passes through plus two threads, tools needed and not to hand, sizes assumed |
-| `tools.ts`, `glossary.ts` | The tools and kit a step can need, which of them each of Your tools' tiles is (`toolsFrom`), and the words a beginner may not know |
+| `tools.ts`, `glossary.ts` | The tools and kit a step can need, which of them each of Your tools is by the words in its name, one tool or several ("Drill and drill bits", `toolsFrom`), and the words a beginner may not know |
 | `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `walk-throughs.ts` (marking as tape, tick, square and line, and a pilot hole's depth, #777), `close-ups.ts`, `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
 | `print/` | Printed parts (#702): `templates.ts` (the holster, shim and bracket, each made into a part recipe, and `printed-part`, a recipe as written), `recipe.ts` (each face's frame, and the checks that refuse a recipe before it's made), `index.ts` (a printed part's Build: its part, buy list, steps and findings), `make.ts` (the solid, with manifold-3d), `lettering.ts` (text as outlines, with opentype.js), `files.ts` (3MF, zipped with fflate, and STL) |
 | `print/font/` | Figtree Bold, for lettering: `figtree-bold.ttf` from Fontsource (`@fontsource/figtree` 5.2.10, latin 700), under the SIL Open Font License in `OFL.txt`, from github.com/erikdkennedy/figtree |
@@ -53,7 +53,7 @@ if (recipe) {
 - **The steps depend on the tools to hand;** the parts and the cut plan don't. The tools to hand are the owner's, as
   Your tools saves them, when given, else the parameters' own (#777). A step that can be done more than one way lists
   its ways, the one in use and the others not yet to hand: a hand saw, then a circular saw, then a mitre saw, the best
-  to hand in use. A step done keeps the way it was done (`kept`), and a step not done whose way differs from the one
+  to hand in use. A step started keeps the way it was started (`kept`), and one not started whose way differs from the one
   the parameters' own tools would use says so (`wayChanged`). A new tool changes only the steps it does better.
 - **Each step says which parts it puts on the Build** (none for checking, marking and cutting), and something fitted
   (a castor) says the part it's fitted to, so the 3D view can build the Build up step by step (#699).
@@ -94,7 +94,7 @@ if (recipe) {
 `cut-plan.test.ts` (packing, whatever the pieces), `bench/bench.test.ts` (the golden bench, the garage workbench's
 hand-checked numbers with invented names, in `bench/fixtures/golden.ts`), `bench/scenes.test.ts` (each step's picture
 for the golden bench, by the tools to hand, and the walk-throughs), `bench/your-tools.test.ts` (the steps following
-the owner's tools, a step done kept as it was done), `print/print.test.ts` (the golden holster and shim, `print/fixtures/golden.ts`:
+the owner's tools, a step started kept as it was started, tools found by the words in their names), `print/print.test.ts` (the golden holster and shim, `print/fixtures/golden.ts`:
 their size and volume worked out by hand, closed all round, the pocket allowing the clearance), `print/recipe.test.ts`
 (what a recipe is refused for) and `print/make.test.ts` (what a checked recipe still can't be made into).
 

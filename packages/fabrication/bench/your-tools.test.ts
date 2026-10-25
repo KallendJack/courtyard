@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Build, BuildSetting, Step } from "../build.ts";
+import { toolsFrom } from "../tools.ts";
 import { goldenBench } from "./fixtures/golden.ts";
 import { deriveBench } from "./index.ts";
 
@@ -62,6 +63,38 @@ describe("a Build's steps with Your tools", () => {
     expect(stepOf(after, "cut-timber")?.wayChanged).toEqual({ was: "Hand saw", now: "Mitre saw" });
     expect(after.steps.filter((step) => step.wayChanged !== null)).toHaveLength(1);
     expect(stepOf(built({ tools: theirs }), "cut-timber")?.wayChanged).toBeNull();
+  });
+
+  it("find each tool by the words in its name, several in one, and the kit no tile has", () => {
+    expect(toolsFrom(["Electric drill and drill bits"])).toEqual(["drill-driver", "drill-bits"]);
+    expect(toolsFrom(["Drill bits"])).toEqual(["drill-bits"]);
+    expect(toolsFrom(["Tape, pencil", "Workmate", "Sawhorses", "Drill / driver"])).toEqual([
+      "tape-measure",
+      "pencil",
+      "folding-workbench",
+      "long-end-support",
+      "drill-driver",
+    ]);
+    expect(
+      toolsFrom(["Countersink", "Socket set", "Safety specs", "Ear muffs", "Step stool"]),
+    ).toEqual([
+      "long-end-support",
+      "countersink-bit",
+      "spanner",
+      "safety-glasses",
+      "ear-defenders",
+    ]);
+    // Tools the steps don't name are none of theirs.
+    expect(toolsFrom(["Masking tape", "Hammer", "Jigsaw", "Screwdriver bits"])).toEqual([]);
+  });
+
+  it("need nothing more once the owner has said the kit the steps use", () => {
+    const missing = (tools: readonly string[]) =>
+      built({ tools }).findings.find((finding) => finding.kind === "tools-missing");
+    const all = [...theirs, "Countersink", "Spanner", "Ear defenders", "Sawhorses", "Spirit level"];
+
+    expect(missing(theirs)).toBeDefined();
+    expect(missing(all)).toBeUndefined();
   });
 
   it("keep a step already done as it was done", () => {

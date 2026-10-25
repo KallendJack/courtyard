@@ -38,7 +38,7 @@ export const keepProgress = async (
       }
       const folder = await planningFolder(target);
       if (!folder.ok) return folder;
-      // The ways the steps done were done are the worker's to keep, never what's sent (#777).
+      // The ways the steps started were done are the worker's to keep, never what's sent (#777).
       const ways = keptWays({
         steps: read.value.derived.steps,
         progress,

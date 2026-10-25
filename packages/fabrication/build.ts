@@ -177,13 +177,13 @@ export type Way = {
   readonly toHand: boolean;
 };
 
-/** A step done, and the tool it was done with: it stays as it was done (#777). */
+/** A step started, and the tool it was done with: it stays as it was started (#777). */
 export type KeptWay = { readonly step: string; readonly tool: string };
 
 /**
  * What a Build is worked out with besides its parameters (#777): the owner's tools as Your tools
  * saves them (each by its tile's name, or the owner's own), which the steps follow in place of the
- * parameters' own when given, and the ways the steps already done were done.
+ * parameters' own when given, and the ways the steps already started were done.
  */
 export type BuildSetting = {
   /** Left out, or undefined, when the owner has saved none: the steps follow the Build's own. */
@@ -219,7 +219,7 @@ export type Step = {
   readonly ways: readonly Way[];
   /**
    * The way the Build's own tools would do it, and the way the owner's do now, when they differ
-   * and it isn't done yet: "Now uses your mitre saw" (#777).
+   * and it isn't started yet: "Now uses your mitre saw" (#777).
    */
   readonly wayChanged: { readonly was: string; readonly now: string } | null;
   readonly tools: readonly StepTool[];
