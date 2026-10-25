@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ToolsRouteImport } from './routes/tools'
 import { Route as WorkspacesIdBuildsSlugRouteImport } from './routes/workspaces.$id.builds.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ToolsRoute = ToolsRouteImport.update({
+  id: '/tools',
+  path: '/tools',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WorkspacesIdBuildsSlugRoute = WorkspacesIdBuildsSlugRouteImport.update({
@@ -25,27 +31,31 @@ const WorkspacesIdBuildsSlugRoute = WorkspacesIdBuildsSlugRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/tools': typeof ToolsRoute
   '/workspaces/$id/builds/$slug': typeof WorkspacesIdBuildsSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/tools': typeof ToolsRoute
   '/workspaces/$id/builds/$slug': typeof WorkspacesIdBuildsSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/tools': typeof ToolsRoute
   '/workspaces/$id/builds/$slug': typeof WorkspacesIdBuildsSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/workspaces/$id/builds/$slug'
+  fullPaths: '/' | '/tools' | '/workspaces/$id/builds/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/workspaces/$id/builds/$slug'
-  id: '__root__' | '/' | '/workspaces/$id/builds/$slug'
+  to: '/' | '/tools' | '/workspaces/$id/builds/$slug'
+  id: '__root__' | '/' | '/tools' | '/workspaces/$id/builds/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ToolsRoute: typeof ToolsRoute
   WorkspacesIdBuildsSlugRoute: typeof WorkspacesIdBuildsSlugRoute
 }
 
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tools': {
+      id: '/tools'
+      path: '/tools'
+      fullPath: '/tools'
+      preLoaderRoute: typeof ToolsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/workspaces/$id/builds/$slug': {
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ToolsRoute: ToolsRoute,
   WorkspacesIdBuildsSlugRoute: WorkspacesIdBuildsSlugRoute,
 }
 export const routeTree = rootRouteImport

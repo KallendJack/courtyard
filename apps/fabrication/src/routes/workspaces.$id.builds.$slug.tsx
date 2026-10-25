@@ -1,15 +1,28 @@
 import { BuildSlug, WorkspaceId } from "@courtyard/contract";
-import { createFileRoute } from "@tanstack/react-router";
-import { openBuild } from "@/api/fabrication";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { openBuild, yourTools } from "@/api/fabrication";
 import { Problem } from "@/components/problem";
 import { BuildPage } from "@/features/builds/build-page";
+import { askedTools, toolsAsked } from "@/features/tools/tools-page";
 
 export const Route = createFileRoute("/workspaces/$id/builds/$slug")({
   loader: async ({ params }) => {
     const workspaceId = WorkspaceId.safeParse(params.id);
     const slug = BuildSlug.safeParse(params.slug);
     if (!workspaceId.success || !slug.success) return { kind: "not-found" } as const;
-    return openBuild(workspaceId.data, slug.data);
+    const [build, tools] = await Promise.all([
+      openBuild(workspaceId.data, slug.data),
+      toolsAsked() ? undefined : yourTools(),
+    ]);
+    // Your tools comes first, until the owner has saved some or skipped it on this visit (#707).
+    if (tools?.kind === "loaded" && tools.data.saved) askedTools();
+    else if (build.kind === "loaded" && tools?.kind === "loaded") {
+      throw redirect({
+        to: "/tools",
+        search: { back: `/workspaces/${params.id}/builds/${params.slug}` },
+      });
+    }
+    return build;
   },
   component: BuildRoute,
 });

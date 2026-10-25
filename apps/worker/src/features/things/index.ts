@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -8,6 +9,7 @@ import {
   type ThingDetailName,
   ThingFields,
   type ThingHistoryEntry,
+  ThingKind,
   type ThingProblem,
   type ThingSave,
   ThingSlug,
@@ -40,6 +42,7 @@ import {
   planningFolder,
   slugFor,
 } from "../planning-files/index.ts";
+import { FILE_KEYS, readThingText, thingText } from "./file.ts";
 
 /**
  * A workspace's Things (ADR 0020): the owner's kit, a Markdown file each in its `things` folder,
@@ -98,80 +101,7 @@ export type ThingRefusal =
 const fileOf = (folder: string, slug: ThingSlug) => join(folder, THINGS_FOLDER, `${slug}.md`);
 const photoOf = (folder: string, slug: ThingSlug) => join(folder, THINGS_FOLDER, photoName(slug));
 
-// The file: front matter between `---` lines, one `key: value` each, then the history, one dated
-// line each (`- 2026-10-09: chain swapped`).
-
-/** Each front-matter key, in the order a file is written, and the field it holds. */
-const FILE_KEYS = [
-  ["name", "name"],
-  ["status", "status"],
-  ...THING_DETAILS.map((name) => [name, name] as const),
-  ["part of", "partOf"],
-  ["photo", "photo"],
-  ["upcoming", "upcoming"],
-  ["upcoming price", "upcomingPrice"],
-  ["upcoming shop", "upcomingShop"],
-  ["upcoming link", "upcomingLink"],
-  ["upcoming why", "upcomingWhy"],
-] as const satisfies readonly (readonly [string, keyof ThingFields])[];
-
-/**
- * Keys a file may still have that Courtyard no longer keeps: a part's pin, from Home's photo
- * view, and what a Thing needs next, which a project's steps hold now (#603). They're read past,
- * and go on the Thing's next save.
- */
-const RETIRED_KEYS = new Set(["pin", "needs"]);
-
-const HISTORY_LINE = /^(?:[-*][ \t]+)?(?:(\d{4}-\d{2}-\d{2}):[ \t]*)?(.*)$/;
-
-/** A Thing's file read: its fields and its history, oldest first, or what's wrong with it. */
-export const readThingText = (
-  text: string,
-): Result<{ fields: ThingFields; history: ThingHistoryEntry[] }, string> => {
-  const lines = text.replace(/^﻿/, "").replace(/\r\n/g, "\n").split("\n");
-  const end = lines.indexOf("---", 1);
-  if (lines[0] !== "---" || end === -1) {
-    return err("It doesn't start with its fields between --- lines.");
-  }
-  const raw: Record<string, string> = {};
-  for (const line of lines.slice(1, end)) {
-    if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
-    const [, key = "", value = ""] = /^([^:]+):(.*)$/.exec(line) ?? [];
-    if (RETIRED_KEYS.has(key.trim().toLowerCase())) continue;
-    const field = FILE_KEYS.find(([name]) => name === key.trim().toLowerCase())?.[1];
-    if (field === undefined) return err(`It has a line Courtyard doesn't know: "${line.trim()}".`);
-    const unquoted = value.trim().replace(/^(["'])(.*)\1$/, "$2");
-    if (unquoted !== "") raw[field] = unquoted;
-  }
-  const fields = ThingFields.safeParse(raw);
-  if (!fields.success) {
-    const [issue] = fields.error.issues;
-    const name = FILE_KEYS.find(([, field]) => field === issue?.path[0])?.[0] ?? "a field";
-    return err(
-      issue?.code === "invalid_type" && raw[String(issue.path[0])] === undefined
-        ? `It has no ${name}.`
-        : issue?.path[0] === "status"
-          ? "Its status isn't have, want or replace."
-          : `Its ${name} doesn't fit: ${issue?.message ?? "it can't be read"}`,
-    );
-  }
-  const history = lines.slice(end + 1).flatMap((line) => {
-    if (line.trim() === "") return [];
-    const [, date, said = ""] = HISTORY_LINE.exec(line.trim()) ?? [];
-    return [{ date: date ?? null, text: said.trim() }];
-  });
-  return ok({ fields: fields.data, history });
-};
-
-/** A Thing's file, written from its fields and its history, oldest first. */
-export const thingText = (fields: ThingFields, history: readonly ThingHistoryEntry[]) => {
-  const front = FILE_KEYS.flatMap(([key, field]) => {
-    const value = fields[field];
-    return value === undefined ? [] : [`${key}: ${value}`];
-  });
-  const lines = history.map(({ date, text }) => `- ${date === null ? "" : `${date}: `}${text}`);
-  return `---\n${front.join("\n")}\n---\n${lines.length === 0 ? "" : `\n${lines.join("\n")}\n`}`;
-};
+export { readThingText, thingText };
 
 /** A Thing as read from its file: what lists show, its history and its file's text. */
 export type ReadThing = {
@@ -205,8 +135,11 @@ const inListOrder = (things: readonly ReadThing[]) => {
     ]);
 };
 
-/** Every Thing in a workspace's folder, in list order, with the files that aren't Things. */
-const readThingsIn = async (folder: string): Promise<Result<ReadThings, ThingRefusal>> => {
+/**
+ * Every Thing in a folder (a workspace's, or the owner's for their tools), in list order, with the
+ * files that aren't Things.
+ */
+export const readThingsIn = async (folder: string): Promise<Result<ReadThings, ThingRefusal>> => {
   const names = await listFolder(join(folder, THINGS_FOLDER));
   if (!names.ok) return err({ kind: "storage" });
   const things: ReadThing[] = [];
@@ -238,6 +171,7 @@ const readThingsIn = async (folder: string): Promise<Result<ReadThings, ThingRef
     things.push({
       summary: {
         ...fields,
+        kind: fields.kind ?? "item",
         ...(upcoming === undefined
           ? {}
           : {
@@ -327,6 +261,7 @@ export const keptPhoto = async (bytes: Uint8Array): Promise<Uint8Array | undefin
 type FieldChange = {
   readonly name?: string;
   readonly status?: ThingStatus;
+  readonly kind?: ThingKind;
   readonly partOf?: ThingSlug | null;
 } & { readonly [K in ThingDetailName | UpcomingField]?: string | null };
 
@@ -428,12 +363,14 @@ const fieldsChanged = (
 ): NonNullable<ThingSave["fields"]> => {
   const changed: Record<string, string | null> = {};
   for (const [, field] of FILE_KEYS) {
-    if (field === "photo") continue;
-    const was = before?.[field];
-    const now = after[field];
+    if (field === "photo" || field === "subject" || field === "tile") continue;
+    // An item is what a Thing is when its file doesn't say.
+    const unsaid = (value: unknown) => (field === "kind" && value === "item" ? undefined : value);
+    const was = unsaid(before?.[field]);
+    const now = unsaid(after[field]);
     if (was === now) continue;
     const shown = field === "partOf" && after.partOf !== undefined ? nameOf(after.partOf) : now;
-    changed[field] = shown ?? null;
+    changed[field] = shown === undefined ? null : String(shown);
   }
   return changed;
 };
@@ -498,7 +435,14 @@ export const saveThing = async (
       const was = current === undefined ? undefined : readThingText(current.text);
       if (was !== undefined && !was.ok) return err({ kind: "storage" });
       const before = was?.value.fields;
-      const merged: Record<string, string | undefined> = { ...before };
+      // As its file has them, all text: a count as "2", which the contract reads as 2.
+      const beforeText: Record<string, string | undefined> = Object.fromEntries(
+        Object.entries(before ?? {}).map(([field, value]) => [
+          field,
+          value === undefined ? undefined : String(value),
+        ]),
+      );
+      const merged = { ...beforeText };
       const written = edit.fields ?? {};
       // A new upcoming one replaces the last whole (#602): its price, shop and link go with it, and
       // clearing it clears them.
@@ -523,7 +467,7 @@ export const saveThing = async (
           return err({ kind: "nothing-upcoming", name: merged.name ?? "" });
         }
         const swap = swappedIn({
-          before: before ?? {},
+          before: beforeText,
           upcoming: merged,
           today: historyDate(options.now),
         });
@@ -577,6 +521,8 @@ export const saveThing = async (
         if (parts(slug).length > 0) return err({ kind: "nested" });
       }
       if (edit.photo !== undefined) merged.photo = photoName(slug);
+      // Its subject ID comes with its first size and stays, a rename and all (ADR 0037).
+      if (merged.size !== undefined && merged.subject === undefined) merged.subject = randomUUID();
       const fields = ThingFields.safeParse(merged);
       if (!fields.success) {
         return err({ kind: "invalid", problem: fields.error.issues[0]?.message ?? "" });
@@ -701,6 +647,7 @@ const ThingRequest = z.looseObject({
   remove: z.boolean().optional(),
   name: z.string().optional(),
   status: ThingStatus.optional(),
+  kind: ThingKind.optional(),
   part_of: z.string().optional(),
   history: z.string().optional(),
   photo: z.number().int().optional(),
@@ -803,6 +750,7 @@ export const createTurnThings = (
       remove,
       name,
       status,
+      kind,
       part_of,
       history,
       photo,
@@ -826,6 +774,7 @@ export const createTurnThings = (
     const fields: { -readonly [K in keyof FieldChange]: FieldChange[K] } = {
       ...(name === undefined ? {} : { name }),
       ...(status === undefined ? {} : { status }),
+      ...(kind === undefined ? {} : { kind }),
       ...details,
     };
     for (const [input, field] of UPCOMING_INPUTS) {

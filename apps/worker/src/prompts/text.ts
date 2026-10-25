@@ -26,6 +26,8 @@ const MARKERS = [
   "project",
   "builds",
   "document",
+  "tools",
+  "said",
 ] as const;
 const CLOSING_MARKER = new RegExp(`<\\s*/\\s*(${MARKERS.join("|")})\\s*>`, "gi");
 

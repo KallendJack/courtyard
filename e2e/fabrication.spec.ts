@@ -51,8 +51,13 @@ const openInFabrication = async (page: Page) => {
     .getByRole("region", { name: "Next" })
     .getByRole("link", { name: "Open in Fabrication" })
     .click();
+  // Your tools comes first while the owner has none saved (your-tools.spec.ts).
+  const built = page.getByRole("heading", { level: 1, name: "Split bench" });
+  const skip = page.getByRole("button", { name: "Skip for now" });
+  await expect(built.or(skip)).toBeVisible();
+  if (await skip.isVisible()) await skip.click();
   await expect(page).toHaveURL(/\/fabrication\/workspaces\/[^/]+\/builds\/split-bench$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Split bench" })).toBeVisible();
+  await expect(built).toBeVisible();
 };
 
 test.describe("on the unfolded Fold", () => {

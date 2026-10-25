@@ -597,6 +597,63 @@ const thingSaves = (events: readonly SessionEvent[]) =>
 const reasons = (replies: readonly { reply: string }[] | undefined) =>
   (replies ?? []).map(({ reply }) => reply);
 
+describe("kinds and subject IDs (ADR 0037)", () => {
+  it("reads a file from before kinds as an item, and saves a space's kind, an item's left unsaid", async () => {
+    await withKit();
+    const request = await owner();
+    expect((await listed(request)).things.map(({ kind }) => kind)).toEqual(["item", "item"]);
+
+    const added = await addThing(request, { name: "Garage", status: "have", kind: "space" });
+
+    expect(added.status).toBe(201);
+    expect(ThingChanged.parse(await added.json()).thing.kind).toBe("space");
+    expect(await thingFile("garage")).toBe("---\nname: Garage\nstatus: have\nkind: space\n---\n");
+    // Edit's form without a kind keeps the one it has; an item's is never written.
+    await changeThing(request, "garage", { name: "Garage", status: "have", where: "Side" });
+    expect(await thingFile("garage")).toContain("kind: space\n");
+    await changeThing(request, "garage", { name: "Garage", status: "have", kind: "item" });
+    expect(await thingFile("garage")).toBe("---\nname: Garage\nstatus: have\n---\n");
+  });
+
+  it("gives a Thing a subject ID with its first size, keeps it through a rename, and never gives it again", async () => {
+    await withKit();
+    const request = await owner();
+    const subjectOf = async (slug: string) =>
+      (await listed(request)).things.find((thing) => thing.slug === slug)?.subject;
+    expect(await subjectOf("chain")).toBeUndefined();
+
+    await changeThing(request, "chain", { name: "Chain", status: "have", size: "118 links" });
+    const subject = await subjectOf("chain");
+    expect(subject).toMatch(/^[0-9a-f-]{36}$/);
+    expect(await thingFile("chain")).toContain(`\nsubject: ${subject}\n`);
+
+    await changeThing(request, "chain", { name: "KMC chain", status: "have", size: "116 links" });
+    expect(await subjectOf("chain")).toBe(subject);
+    // Without a size it keeps it too: the records of its size still point here.
+    await changeThing(request, "chain", { name: "KMC chain", status: "have" });
+    expect(await subjectOf("chain")).toBe(subject);
+
+    await deleteThing(request, "chain");
+    await addThing(request, { name: "Chain", status: "have", size: "118 links" });
+    const again = await subjectOf("chain");
+    expect(again).toMatch(/^[0-9a-f-]{36}$/);
+    expect(again).not.toBe(subject);
+  });
+
+  it("lets the Things tool set a Thing's kind, and lists it to the model", async () => {
+    const { saver } = await sessionWith([
+      [thingTool({ name: "Garage", status: "have", kind: "space" })],
+      [],
+    ]);
+
+    expect(reasons(saver.replies[0])).toEqual(["Added [T1] Garage."]);
+    expect(await thingFile("garage")).toBe("---\nname: Garage\nstatus: have\nkind: space\n---\n");
+    expect(saver.framings[1]?.instructions).toContain(
+      "[T1] Garage, have, space (things/garage.md)",
+    );
+  });
+});
+
 describe("the Things tool", () => {
   it("changes the Thing a label names, adding a history line dated today, as one change with a note", async () => {
     await withKit();

@@ -1,20 +1,32 @@
 import type { DerivedBuild } from "@courtyard/contract";
+import { buttonLook } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
+import { Link } from "@tanstack/react-router";
 import { listed, toolsNeeded } from "./words.ts";
 
 /**
  * The tools the steps need against what's to hand (#698): each once, with the steps it's for;
  * what isn't to hand in gold, since it needs the owner.
  */
-export function ToolsList(props: { derived: DerivedBuild }) {
+export function ToolsList(props: { derived: DerivedBuild; build: string }) {
   const tools = toolsNeeded(props.derived);
   const missing = tools.filter((tool) => !tool.toHand).length;
   return (
     <section aria-label="Tools" className="flex flex-col gap-1">
-      <CapsLabel tone={missing === 0 ? "muted" : "warning"}>
-        {missing === 0 ? `All ${tools.length} to hand` : `${missing} not to hand`}
-      </CapsLabel>
+      <div className="flex items-center justify-between gap-3">
+        <CapsLabel tone={missing === 0 ? "muted" : "warning"}>
+          {missing === 0 ? `All ${tools.length} to hand` : `${missing} not to hand`}
+        </CapsLabel>
+        {/* The owner's tools, ticked on Your tools (#707), for any Build. */}
+        <Link
+          to="/tools"
+          search={{ back: props.build }}
+          className={buttonLook({ variant: "quietPrimary", size: "xs" })}
+        >
+          Your tools
+        </Link>
+      </div>
       <ul className="flex flex-col">
         {tools.map((tool) => (
           <li

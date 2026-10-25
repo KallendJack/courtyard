@@ -66,7 +66,7 @@ The web app's folders, for its own screens: `features/` (each with its `README.m
 to Fabrication's API, `/api/fabrication`), `routes/`, and `main.tsx` with `styles.css`. `three` draws the 3D view, in
 a file of its own that only a Build's page loads.
 
-**Fabrication features:** `builds`
+**Fabrication features:** `builds` · `tools`
 
 **Shared pieces, `packages/ui`**
 

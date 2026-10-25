@@ -113,11 +113,20 @@ export const thingError = (c: Context, refusal: ThingRefusal | ThingUndoRefusal)
   }
 };
 
-/** Every field of the owner's form as a save sets it: a blank or missing one cleared. */
+/**
+ * Every field of the owner's form as a save sets it: a blank or missing one cleared, but a kind
+ * left out kept.
+ */
 const fromForm = (form: ThingForm): NonNullable<ThingEdit["fields"]> => {
   const details: { [K in ThingDetailName]?: string | null } = {};
   for (const detail of THING_DETAILS) details[detail] = form[detail] || null;
-  return { name: form.name, status: form.status, ...details, partOf: form.partOf || null };
+  return {
+    name: form.name,
+    status: form.status,
+    ...(form.kind === undefined ? {} : { kind: form.kind }),
+    ...details,
+    partOf: form.partOf || null,
+  };
 };
 
 /**
