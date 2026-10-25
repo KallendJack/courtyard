@@ -280,8 +280,13 @@ const handedLine = (
 };
 
 /** The tools of the saw in use, then those of any saw it hands cuts on to, each once. */
-const sawTools = (saw: Saw, others: readonly Saw[], of: "tools" | "safety") => [
-  ...new Set([saw, ...others].flatMap((each) => CUTTING[each][of] ?? [])),
+const sawTools = (saw: Saw, others: readonly Saw[]) => [
+  ...new Set([saw, ...others].flatMap((each) => CUTTING[each].tools)),
+];
+
+/** The safety kit of the saw in use and of any saw it hands cuts on to, each once. */
+const sawSafety = (saw: Saw, others: readonly Saw[]) => [
+  ...new Set([saw, ...others].flatMap((each) => CUTTING[each].safety ?? [])),
 ];
 
 /** The steps before anything is joined, the timber cut with `saw`. */
@@ -367,8 +372,8 @@ export const preparingSteps = (options: {
       parts: timberLabels,
       adds: [],
       ways: sawWays(toHand, saw),
-      tools: sawTools(saw, others, "tools"),
-      safety: sawTools(saw, others, "safety"),
+      tools: sawTools(saw, others),
+      safety: sawSafety(saw, others),
       // The cuts handed on go before the labelling, which every piece gets.
       actions: [
         ...cutting.actions.slice(0, -1),
