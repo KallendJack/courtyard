@@ -3,13 +3,12 @@ import {
   placeName,
   type RecentChange,
   type RecentChanges as RecentChangesPage,
-  type WorkspaceId,
 } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { createKept, PlaceholderRows, useKept } from "@courtyard/ui/layout/kept.tsx";
-import { getRouteApi, Link } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import {
   BookmarkCheck,
   FileText,
@@ -17,6 +16,7 @@ import {
   ListChecks,
   Pencil,
   Route,
+  Ruler,
   Tag,
   Undo2,
 } from "lucide-react";
@@ -25,13 +25,8 @@ import { NoteRow, NoteWords } from "@/components/chat/note-row";
 import { EmptyState } from "@/components/layout/notice";
 import type { ContextPlace } from "../../api/worker.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
-import { describeWhen } from "../../lib/when.ts";
 import { loadChanges, undoChange } from "./api.ts";
-
-const loggedIn = getRouteApi("/_app");
-
-/** Whose changes these are: a workspace's, or the owner context's for `undefined`. */
-type Whose = WorkspaceId | undefined;
+import { Meta, OPEN, OpenLink, type Whose } from "./entry-parts.tsx";
 
 const placeOf = (workspace: Whose): ContextPlace =>
   workspace === undefined ? { kind: "owner" } : { kind: "workspace", id: workspace };
@@ -105,58 +100,6 @@ function HandEditLine(props: { section: string; line: string; was?: string; gone
   );
 }
 
-/** When it was, and where it came from: its session (with its workspace, in the owner's list). */
-function Meta(props: { workspace: Whose; change: RecentChange; note?: string | undefined }) {
-  const { workspace, change } = props;
-  const workspaces = loggedIn.useLoaderData();
-  const { session } = change;
-  const from =
-    workspace === undefined && session !== undefined && workspaces.kind === "loaded"
-      ? workspaces.data.workspaces.find((w) => w.id === session.workspaceId)?.name
-      : undefined;
-  const parts = [
-    describeWhen(change.at),
-    ...(props.note === undefined ? [] : [props.note]),
-    ...(change.kind === "hand-edit"
-      ? [`in ${workspace === undefined ? "OWNER.md" : "CONTEXT.md"}`]
-      : []),
-    ...(from === undefined ? [] : [from]),
-  ];
-  return (
-    <p className="text-meta/5 text-muted-foreground">
-      {parts.join(" · ")}
-      {session !== undefined && (
-        <>
-          {" · "}
-          <Link
-            to="/workspaces/$workspaceId/sessions/$sessionId"
-            params={{ workspaceId: session.workspaceId, sessionId: session.id }}
-            className="text-foreground underline"
-          >
-            {session.title}
-          </Link>
-        </>
-      )}
-    </p>
-  );
-}
-
-const OPEN = "text-meta/5 text-foreground underline";
-
-/** Open, under a document's or a Thing's entry while it's still there: its page. */
-function OpenLink(props: { workspaceId: WorkspaceId; kind: "document" | "thing"; slug: string }) {
-  const params = { workspaceId: props.workspaceId, slug: props.slug };
-  return props.kind === "document" ? (
-    <Link to="/workspaces/$workspaceId/documents/$slug" params={params} className={OPEN}>
-      Open
-    </Link>
-  ) : (
-    <Link to="/workspaces/$workspaceId/things/$slug" params={params} className={OPEN}>
-      Open
-    </Link>
-  );
-}
-
 /** One entry: the change as a note, when and where it came from, and Undo while it can be. */
 function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: () => void }) {
   const { workspace, change } = props;
@@ -210,20 +153,26 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
     );
   }
 
-  // A Thing (ADR 0020), a project (#603) or a Build (#697), by what the change did to it: a Thing
-  // is added, the others started. A Build has no page here yet (Fabrication opens it, #698).
+  // A Thing (ADR 0020), project (#603), Build (#697) or size (#708), by what the change did: a Thing
+  // is added, a size recorded, the others started. A Build or size has no page here (#698).
   const file =
     change.thing !== undefined
-      ? { ...change.thing, of: "Thing", icon: <Tag /> }
+      ? { ...change.thing, of: "Thing", words: ["Added", "Changed"], icon: <Tag /> }
       : change.project !== undefined
-        ? { ...change.project, of: "project", icon: <Route /> }
+        ? { ...change.project, of: "project", words: ["Started", "Updated"], icon: <Route /> }
         : change.build !== undefined
-          ? { ...change.build, of: "Build", icon: <Hammer /> }
-          : undefined;
+          ? { ...change.build, of: "Build", words: ["Started", "Updated"], icon: <Hammer /> }
+          : change.size && {
+              ...change.size,
+              slug: null,
+              of: "size",
+              words: ["Recorded", "Corrected"],
+              icon: <Ruler />,
+            };
   if (file !== undefined) {
     const { did, name, slug, of } = file;
     const thing = of === "Thing";
-    const words = { added: thing ? "Added" : "Started", changed: thing ? "Changed" : "Updated" };
+    const words = { added: file.words[0], changed: file.words[1] };
     const open = slug !== null && workspace !== undefined && !muted;
     return (
       <NoteRow

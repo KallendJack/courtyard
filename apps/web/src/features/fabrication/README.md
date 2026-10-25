@@ -8,7 +8,7 @@ API.
 calls `undoBuildSave`, and the note turns grey.
 
 - **Uses:** `api/worker.ts`.
-- **Used by:** `sessions/notes/builds.tsx` (the notes under an answer).
+- **Used by:** `sessions/notes/fabrication.tsx` (the Build and size notes under an answer).
 
 ## Calls
 

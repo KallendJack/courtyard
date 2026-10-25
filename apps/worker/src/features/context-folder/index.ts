@@ -25,8 +25,8 @@ import { ARCHIVED_FOLDER, CONTEXT_FILE, OWNER_THINGS_FOLDER } from "../workspace
  * What kind of change a commit is, as its `Courtyard-Change` trailer says: the repo's start, the
  * owner's own edits, a workspace made, renamed, given an icon or archived (or the workspaces
  * arranged), the owner context started, a model's save and the owner undoing or editing one, a
- * tidy, a document or Thing saved (ADR 0020), a project changed or a move ticked (#603), a Build
- * changed (#697), progress on its steps (#699, never in Recent changes), or a fresh start.
+ * tidy, a document or Thing saved (ADR 0020), a project or move (#603), a Build (#697), progress
+ * on its steps (#699, never in Recent changes), a size (#708), or a fresh start.
  */
 export const ChangeKind = z.enum([
   "setup",
@@ -42,6 +42,7 @@ export const ChangeKind = z.enum([
   "project",
   "build",
   "build-progress",
+  "size",
   "move",
   "fresh-start",
 ]);
@@ -205,10 +206,9 @@ export const placeFile = (place: Place) =>
 
 /**
  * The folders in a workspace's folder whose files are changed whole, rather than line by line, so
- * Recent changes lists their changes too: its documents and its Things, photos included (ADR 0020),
- * its projects (#603) and its Builds (#697).
- */
-export const WHOLE_FILE_FOLDERS = ["docs", "things", "projects", "builds"] as const;
+ * Recent changes lists their changes too: documents and Things, photos included (ADR 0020), projects
+ * (#603), Builds (#697) and sizes (#708). */
+export const WHOLE_FILE_FOLDERS = ["docs", "things", "projects", "builds", "sizes"] as const;
 
 /** Every path whose changes Recent changes lists for a place, from the folder's top. */
 const historyPaths = (place: Place) =>

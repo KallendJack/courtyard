@@ -35,6 +35,7 @@ import { type PreparedAttachment, prepareAttachments } from "../attachments/inde
 import type { BranchRefusal } from "../code/index.ts";
 import { documentError } from "../documents/routes.ts";
 import { buildUndoError } from "../fabrication/routes.ts";
+import { sizeUndoError } from "../fabrication/size-routes.ts";
 import { projectError } from "../projects/routes.ts";
 import type { NoteRefusal } from "../saves/index.ts";
 import { thingError } from "../things/routes.ts";
@@ -189,6 +190,8 @@ export const sessionError = (c: Context, error: SessionError) => {
       return projectError(c, error.refusal);
     case "build-refused":
       return buildUndoError(c, error.refusal);
+    case "size-refused":
+      return sizeUndoError(c, error.refusal);
     case "cannot-code":
       return apiError(c, {
         status: 409,
@@ -582,20 +585,14 @@ export const sessionRoutes = (options: {
     return c.json({ change: saved.value.change ?? null } satisfies DocumentChanged, 201);
   });
 
-  routes.post("/sessions/:id/documents/:save/undo", async (c) => {
-    const undone = await sessions.undoDocument({
-      rawId: c.req.param("id"),
-      save: SaveNumber.parse(c.req.param("save")),
-    });
-    if (!undone.ok) return sessionError(c, undone.error);
-    return c.body(null, 204);
-  });
-
-  // Undo from a Thing's (ADR 0020), a project's (#603) or a Build's (#697) save note.
+  // Undo from a document's or a Thing's (ADR 0020), a project's (#603), a Build's (#697) or a
+  // size's (#708) save note.
   const fileUndos = {
+    documents: sessions.undoDocument,
     things: sessions.undoThing,
     projects: sessions.undoProject,
     builds: sessions.undoBuild,
+    sizes: sessions.undoSize,
   };
   for (const [files, undo] of Object.entries(fileUndos)) {
     routes.post(`/sessions/:id/${files}/:save/undo`, async (c) => {

@@ -8,6 +8,7 @@ import {
   type Result,
 } from "../build.ts";
 import { buyLine, buyListOf, stockLines } from "../buy-list.ts";
+import { type Capacities, capacitiesFrom } from "../capacity.ts";
 import { cutPlanOf } from "../cut-plan.ts";
 import { assumedSizes, boltCheck, toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
@@ -39,7 +40,11 @@ export const deriveBench = (
   }
   const parameters = parsed.data;
   const toHand = new Set(setting.tools === undefined ? parameters.tools : toolsFrom(setting.tools));
-  const benchOf = benchWith({ toHand, kept: setting.kept ?? [] });
+  const benchOf = benchWith({
+    toHand,
+    kept: setting.kept ?? [],
+    capacities: capacitiesFrom(setting.sizes ?? []),
+  });
   const build = benchOf(parameters);
   if (!build.ok) return build;
   return ok({
@@ -60,7 +65,15 @@ export const deriveBench = (
  * tools to hand and the ways kept.
  */
 const benchWith =
-  ({ toHand, kept }: { toHand: ReadonlySet<Tool>; kept: readonly KeptWay[] }) =>
+  ({
+    toHand,
+    kept,
+    capacities,
+  }: {
+    toHand: ReadonlySet<Tool>;
+    kept: readonly KeptWay[];
+    capacities: Capacities;
+  }) =>
   (parameters: BenchParameters): Result<Omit<Build, "options">, string[]> => {
     const shape = shapeOf(parameters);
     const problems = shapeProblems(shape);
@@ -100,6 +113,7 @@ const benchWith =
       fitted,
       toHand,
       kept,
+      capacities,
     });
 
     const { frameScrews, sheetScrews, brackets, bracketScrews } = parameters.fixings;

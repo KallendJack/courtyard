@@ -8,6 +8,7 @@ import { ProjectSave } from "./projects.ts";
 import { PullRequest, WorktreeKeptWhy } from "./pull-request.ts";
 import { Effort, ModelRef, PlacedLine } from "./session.ts";
 import { SkillName, SkillSource } from "./skill-name.ts";
+import { SizeSave } from "./sourced/records.ts";
 import { TaskEnding, TaskId } from "./tasks.ts";
 import { ThingSave } from "./things.ts";
 
@@ -115,7 +116,6 @@ const eventBase = { seq: z.number().int().positive(), at: z.iso.datetime() };
 /** A file the model saved, and the change it was committed as (none when git couldn't keep it). */
 const fileSaved = <T extends string, S extends z.ZodType>(type: T, save: S) =>
   z.object({ ...eventBase, type: z.literal(type), save, change: z.optional(ChangeId) });
-
 /** The owner undid the file save numbered `save`, whenever and from wherever they did it. */
 const fileUndone = <T extends string>(type: T) =>
   z.object({ ...eventBase, type: z.literal(type), save: z.number().int().positive() });
@@ -345,15 +345,15 @@ export const SessionEvent = z.discriminatedUnion("type", [
   }),
   /** The owner undid the document save numbered `save`, whenever and from wherever they did it. */
   z.object({ ...eventBase, type: z.literal("document-undone"), save: z.number().int().positive() }),
-  /** A Thing the model added, changed or removed (ADR 0020), and the owner undoing it. */
+  /** What the model saved, and the owner undoing it: Things, projects, Builds and sizes (#708). */
   fileSaved("thing-saved", ThingSave),
   fileUndone("thing-undone"),
-  /** A project the model started or changed (#603), and the owner undoing it. */
   fileSaved("project-saved", ProjectSave),
   fileUndone("project-undone"),
-  /** A Build the model started or changed (#697), and the owner undoing it. */
   fileSaved("build-saved", BuildSave),
   fileUndone("build-undone"),
+  fileSaved("size-saved", SizeSave),
+  fileUndone("size-undone"),
   /** A model gave the session this title after its first answer, in place of the first line. */
   z.object({ ...eventBase, type: z.literal("session-titled"), title: z.string() }),
   /** Replies the model offered the owner to tap, with the answer it's writing (ADR 0017). */
