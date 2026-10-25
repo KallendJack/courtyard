@@ -1,19 +1,14 @@
-import {
-  type BuildStep,
-  type BuildStepTool,
-  type DerivedBuild,
-  tickedIn,
-} from "@courtyard/contract";
+import { type BuildStep, type DerivedBuild, tickedIn } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
-import { Camera, Check, X } from "lucide-react";
+import { Camera, Check, ChevronDown, Lightbulb, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 import { CloseUp } from "./close-up.tsx";
 import { LengthBar } from "./cut-plan.tsx";
 import { Findings } from "./findings.tsx";
 import { type Detail, type Progress, useDetail } from "./progress.ts";
-import { bitToCheck, listed, stepFindings, wayChanges } from "./words.ts";
+import { chipOf, listed, stepFindings, wayChanges } from "./words.ts";
 
 // A Build's steps as an instruction manual (#699; Paper, 2 · Agreed, "Fabrication · Build steps
 // v2, teaching · Tablet (#699)" and "· Build steps, cutting by your tools · Tablet (#699)"): one
@@ -213,27 +208,29 @@ function Checklist(props: {
   );
 }
 
-/**
- * A step's tool as its chip says it (#763): drill bits by the size the step drills with, "a 7 mm
- * bit: check your set" while the set's sizes aren't known; and what will do for a tool the owner
- * hasn't, "Support for the long end: your step stool".
- */
-const chipOf = (tool: BuildStepTool): { says: string; ready: boolean } => {
-  const bits = tool.bits ?? [];
-  const unsure = bits.filter((bit) => bit.have !== true);
-  if (!tool.toHand) {
-    return {
-      says: bits.length === 0 ? `${tool.name}?` : listed(bits.map((bit) => `${bit.mm} mm bit?`)),
-      ready: false,
-    };
-  }
-  if (unsure.length > 0) return { says: listed(unsure.map(bitToCheck)), ready: false };
-  if (bits.length > 0) return { says: listed(bits.map((bit) => `${bit.mm} mm bit`)), ready: true };
-  if (tool.standIn !== undefined) {
-    return { says: `${tool.name}: your ${tool.standIn.toLowerCase()}`, ready: true };
-  }
-  return { says: tool.name, ready: true };
-};
+/** Extras for anyone who wants them, closed until tapped, never in the checklist (#789). */
+function Tips(props: { tips: readonly string[]; big: boolean }) {
+  if (props.tips.length === 0) return null;
+  return (
+    <details
+      className={classes(
+        "group rounded-row bg-muted text-foreground",
+        props.big ? "text-answer" : "text-interface",
+      )}
+    >
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3.5 font-semibold">
+        <Lightbulb aria-hidden className="size-4 text-primary-text" />
+        Tips
+        <ChevronDown aria-hidden className="ml-auto size-4 group-open:rotate-180" />
+      </summary>
+      <ul className="flex flex-col gap-2 px-3.5 pb-3.5">
+        {props.tips.map((tip) => (
+          <li key={tip}>{tip}</li>
+        ))}
+      </ul>
+    </details>
+  );
+}
 
 /** The step's tools as chips, as the bench board has them: ticked, or gold to check. */
 function ToolChips(props: { step: BuildStep; big: boolean }) {
@@ -304,7 +301,8 @@ function BeforeMovingOn(props: { step: BuildStep; sendPhoto: (photo: File) => vo
 
 /**
  * The step reached, as the instruction manual shows it (#699; at the bench, #753): which step and
- * how long it takes, its title, its checklist, a word's meaning when tapped, its tools, its
+ * how long it takes, its title and how to batch it, its checklist, a word's meaning when tapped,
+ * its tips behind a tap (#789), its tools, its
  * fixings, what's left before moving on (`children`: its close-up), the check before moving on,
  * and how it's done and how much is said. `big` at the bench on the unfolded Fold, read at arm's
  * length.
@@ -339,6 +337,9 @@ export function StepPanel(props: {
         >
           {step.title}
         </h2>
+        <p className={classes("text-muted-foreground", big ? "text-answer" : "text-interface")}>
+          {step.batch}
+        </p>
       </div>
       {changes.map((change) => (
         <p key={change} className="text-interface text-primary-text">
@@ -372,6 +373,7 @@ export function StepPanel(props: {
           </button>
         </div>
       )}
+      <Tips tips={step.tips} big={big} />
       <ToolChips step={step} big={big} />
       {step.fixings.length > 0 && (
         <p className={classes("text-muted-foreground", big ? "text-answer" : "text-interface")}>

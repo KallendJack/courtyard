@@ -259,6 +259,7 @@ describe("the making rules", () => {
         { tool: "long-end-support", name: "Support for the long end", steps: [3] },
         { tool: "spanner", name: "Spanner", steps: [4] },
         { tool: "countersink-bit", name: "Countersink bit", steps: [11] },
+        { tool: "sandpaper", name: "Sandpaper", steps: [11] },
         { tool: "spirit-level", name: "Spirit level", steps: [12] },
       ],
     });
@@ -664,9 +665,9 @@ describe("the golden bench's steps", () => {
           ? "Rest the long end on a support as high as what it's clamped to (a sawhorse, a stool or the stack of timber), so it stays level and can't sag and pinch the saw."
           : "Rest the long end on a support as high as the jaws (a sawhorse, a stool or the stack of timber), so it stays level and can't sag and pinch the saw.",
       );
-      // Cut and label: each piece's letter goes on it as it comes off.
-      expect(cut?.actions.at(-1)?.howTo).toBe(
-        "As each piece comes off, write its letter on it in pencil, and stand it with the others of its letter.",
+      // Cut and label: each piece's letter goes on it as it comes off, said with the cut (#789).
+      expect(cut?.actions.at(-1)?.howTo).toMatch(
+        / As it comes off, write its letter on it in pencil\.$/,
       );
     }
   });
@@ -772,7 +773,7 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     ]);
     expect(standing?.actions.map((action) => action.numbers)).toContain("2 brackets a leg.");
     expect(standing?.actions.at(-1)?.howTo).toBe(
-      "Hold each bracket tight into its corner and mark through its holes. Drill a 3 mm pilot hole at each mark, then drive a screw into each hole.",
+      "Hold each bracket tight into its corner and mark through its holes. Drill a small 3 mm pilot hole at each mark, then drive the screw.",
     );
     expect(stepOf(build, "fit-supports")?.fixings).toEqual([
       { name: "40 mm angle brackets", count: 4 },
@@ -797,7 +798,7 @@ describe("the golden bench's steps, at the bench (#699)", () => {
 
     expect(top?.tools.map((tool) => tool.tool)).toContain("countersink-bit");
     expect(top?.actions.map((action) => action.howTo)).toContain(
-      "Countersink each hole with the countersink bit, a little at a time, until a screw's head sits flush with the top.",
+      "Countersink each cross a little with the countersink bit, and drive its screw until the head sits flush in the dip, so nothing catches on it.",
     );
     expect(build.glossary.find((entry) => entry.word === "countersink")?.means).toBe(
       "A cone-shaped dip cut into the top of a screw hole, so the screw's head sits flush.",
@@ -816,5 +817,132 @@ describe("the golden bench's steps, at the bench (#699)", () => {
       "Measure the height to the top: it should be 900.",
     );
     for (const line of said) expect(line).not.toMatch(/\d\.\d/);
+  });
+});
+
+describe("the simplest way first (#789)", () => {
+  const stepOf = (build: Build, id: string) => build.steps.find((step) => step.id === id);
+  const said = (build: Build, id: string) =>
+    (stepOf(build, id)?.actions ?? []).map((action) => action.howTo).join(" ");
+  const withSheet = (name: string) => ({
+    ...goldenBench,
+    top: { ...goldenBench.top, sheet: { ...goldenBench.top.sheet, name } },
+    shelf: { ...goldenBench.shelf, sheet: { ...goldenBench.shelf.sheet, name } },
+    braces: { ...goldenBench.braces, sheet: { ...goldenBench.braces.sheet, name } },
+  });
+
+  it("drill pilot holes only for screws within 25 mm of a piece's end, as one line at the screws", () => {
+    const build = built(goldenBench);
+    const piloted = build.steps
+      .filter((step) => /pilot/i.test(step.actions.map((action) => action.howTo).join(" ")))
+      .map((step) => step.id);
+
+    // The frame's joints and the brackets' screws are near an end; the sheets' screws are 50 in.
+    expect(piloted).toEqual(["end-frames", "long-rails", "stand-on-bases", "fit-supports"]);
+    for (const id of piloted) {
+      const lines = stepOf(build, id)?.actions.filter((action) => /pilot/i.test(action.howTo));
+      expect(lines).toHaveLength(1);
+      expect(lines?.[0]?.howTo).toContain("3 mm pilot hole");
+    }
+    for (const step of build.steps) {
+      expect(step.walkThrough.map((move) => move.title)).not.toContain("Pilot holes");
+      expect(step.words.includes("pilot hole")).toBe(piloted.includes(step.id));
+    }
+  });
+
+  it("drill pilot holes for every screw into MDF, and for screws thicker than 6 mm", () => {
+    const mdf = built(withSheet("18 mm MDF"));
+    for (const id of ["fit-shelf", "fit-braces", "fit-top"]) {
+      expect(said(mdf, id)).toContain("pilot hole");
+    }
+
+    const thick = built({
+      ...goldenBench,
+      fixings: {
+        ...goldenBench.fixings,
+        sheetScrews: { ...goldenBench.fixings.sheetScrews, name: "8 × 60 screws" },
+      },
+    });
+    expect(said(thick, "fit-top")).toContain("pilot hole");
+    expect(said(built(goldenBench), "fit-top")).not.toContain("pilot hole");
+  });
+
+  it("countersink only the top, the surface things slide on; the shelf's is a tip", () => {
+    const build = built(goldenBench);
+    const countersunk = build.steps
+      .filter((step) => /countersink/i.test(step.actions.map((action) => action.howTo).join(" ")))
+      .map((step) => step.id);
+
+    expect(countersunk).toEqual(["fit-top"]);
+    expect(stepOf(build, "fit-shelf")?.tips).toContainEqual(
+      expect.stringMatching(/^Want it neater\? Countersink/),
+    );
+    for (const step of build.steps) {
+      expect(step.tools.some((tool) => tool.tool === "countersink-bit")).toBe(
+        step.id === "fit-top",
+      );
+    }
+  });
+
+  it("keep every step to four lines at most, whatever the bench and the saw", () => {
+    const benches = [
+      goldenBench,
+      { ...goldenBench, castors: null, shelf: { ...goldenBench.shelf, on: false } },
+      { ...goldenBench, tools: [...goldenBench.tools, "circular-saw", "mitre-saw"] },
+      withSheet("18 mm MDF"),
+    ];
+    for (const bench of benches) {
+      for (const step of built(bench).steps) {
+        expect(step.actions.length, step.id).toBeLessThanOrEqual(4);
+      }
+    }
+  });
+
+  it("open each step with how to batch it: cutting one piece at a time, joints one at a time", () => {
+    const build = built(goldenBench);
+
+    expect(stepOf(build, "mark-lengths")?.batch).toMatch(/^One piece at a time/);
+    expect(stepOf(build, "cut-timber")?.batch).toMatch(/^One piece at a time/);
+    expect(stepOf(build, "end-frames")?.batch).toMatch(/^One joint at a time/);
+    expect(stepOf(build, "long-rails")?.batch).toMatch(/^One joint at a time/);
+    for (const step of build.steps) expect(step.batch.length).toBeGreaterThan(0);
+  });
+
+  it("mark each piece from the fresh end, with no running totals", () => {
+    const marking = stepOf(built(goldenBench), "mark-lengths")?.actions ?? [];
+
+    expect(marking[1]?.numbers).toBe("4 × 45 × 95 C16: B 1450, then A 750");
+    expect(marking[1]?.howTo).toContain("fresh end");
+    for (const action of marking) expect(action.howTo).not.toContain("2203");
+  });
+
+  it("mark the screw spots by eye, where the rail sits on the leg, before any screwing", () => {
+    const build = built(goldenBench);
+    const frames = stepOf(build, "end-frames");
+
+    expect(frames?.walkThrough.map((move) => move.title)).toEqual([
+      "The leg's edge",
+      "Two crosses",
+      "A fingertip in",
+    ]);
+    expect(frames?.walkThrough[0]?.says).toContain("offcut");
+    expect(frames?.walkThrough[2]?.says).toContain("By eye");
+    const spots = frames?.walkThrough[0]?.closeUp;
+    expect(spots?.title).toBe("Mark your screw spots");
+    expect(spots?.fixings).toHaveLength(2);
+    // The strip the screws must hit: the leg's 45 mm under the rail.
+    expect(spots?.dimensions.map((line) => line.mm)).toEqual([45]);
+    expect(said(build, "end-frames")).toContain("Mark 2 crosses where the rail sits on the leg");
+    expect(said(build, "long-rails")).toContain("2 crosses where the rail sits on the leg");
+    for (const step of build.steps) {
+      expect(step.actions.map((action) => action.howTo).join(" ")).not.toMatch(/each dot/);
+    }
+  });
+
+  it("sand the edges your hands touch, on the top", () => {
+    const top = stepOf(built(goldenBench), "fit-top");
+
+    expect(top?.tools.map((tool) => tool.tool)).toContain("sandpaper");
+    expect(top?.actions.at(-1)?.howTo).toMatch(/^Sand the top's edges/);
   });
 });

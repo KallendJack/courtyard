@@ -261,7 +261,9 @@ export type Step = {
   readonly tools: readonly StepTool[];
   readonly safety: readonly StepTool[];
   readonly fixings: readonly { readonly name: string; readonly count: number }[];
+  readonly batch: string; // How to batch it: "One joint at a time" (#789).
   readonly actions: readonly Action[];
+  readonly tips: readonly string[]; // Extras, behind a Tips tap, never in the lines (#789).
   readonly closeUp: CloseUp | null;
   /** What "show me how" walks through first, the first time it comes up; none otherwise. */
   readonly walkThrough: readonly WalkStep[];

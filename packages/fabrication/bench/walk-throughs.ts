@@ -1,10 +1,10 @@
 import type { MarkedLength, WalkStep } from "../build.ts";
-import { PILOT, pilotCloseUp, squareStockCloseUp, tapeHookCloseUp } from "./close-ups.ts";
+import { screwSpotsCloseUp, squareStockCloseUp, tapeHookCloseUp } from "./close-ups.ts";
 import type { Shape } from "./frame.ts";
 
 // What "show me how" walks through the first time a step needs a move a beginner may never have
-// made (#777): marking a length, in the order it's done, and how deep a pilot hole goes. Each
-// with its close-up where one shows the move, from the Build's own numbers.
+// made (#777): marking a length, in the order it's done, and marking a joint's screw spots
+// (#789). Each with its close-up where one shows the move, from the Build's own numbers.
 
 /** A length's section as it lies flat: how wide its face is, and how thick. */
 export type Section = { readonly wide: number; readonly thick: number };
@@ -37,23 +37,24 @@ export const markingWalk = (length: MarkedLength | undefined, section: Section):
   ];
 };
 
-/** A screw's length from its name as shops give it, "5 × 80 screws"; none when it doesn't say. */
-export const screwLength = (name: string): number | undefined => {
-  const [, length] = /×\s*(\d+(?:\.\d+)?)/.exec(name) ?? [];
-  return length === undefined ? undefined : Number(length);
-};
-
-/** How deep a pilot hole goes, the first time the steps drill one: as long as the screw. */
-export const pilotWalk = (s: Shape, screws: string): WalkStep[] => {
-  const depth = screwLength(screws);
-  return [
-    {
-      title: "Pilot holes",
-      says:
-        depth === undefined
-          ? `Drill each pilot hole with the ${PILOT} mm bit, as deep as a screw is long, so the screw doesn't split the wood.`
-          : `Wrap a strip of tape round the ${PILOT} mm bit ${depth} mm from its tip, a screw's length, and stop drilling when the tape reaches the wood. A pilot hole stops the screw splitting the wood.`,
-      closeUp: depth === undefined ? null : pilotCloseUp(s, depth),
-    },
-  ];
-};
+/**
+ * Marking a joint's screw spots, the first time a rail is screwed to a leg (#789): no tape, as the
+ * screws only have to hit the leg hidden under the rail. An offcut draws where it is.
+ */
+export const screwSpotsWalk = (s: Shape): WalkStep[] => [
+  {
+    title: "The leg's edge",
+    says: "Lay an offcut of leg timber on the rail's end, flush with it, and draw along its inside edge. The strip it covered is where the leg is underneath.",
+    closeUp: screwSpotsCloseUp(s),
+  },
+  {
+    title: "Two crosses",
+    says: "Draw 2 pencil crosses in the strip, on a diagonal: one near the top corner, one near the opposite bottom corner.",
+    closeUp: null,
+  },
+  {
+    title: "A fingertip in",
+    says: "By eye: each cross about a fingertip from the strip's edges. It only has to hit the leg, and the diagonal keeps the wood from splitting.",
+    closeUp: null,
+  },
+];

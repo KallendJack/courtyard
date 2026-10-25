@@ -19,6 +19,7 @@ export const Tool = z.enum([
   "countersink-bit",
   "spanner",
   "spirit-level",
+  "sandpaper",
   "safety-glasses",
   "ear-defenders",
 ]);
@@ -41,6 +42,7 @@ export const TOOL_NAMES: Readonly<Record<Tool, string>> = {
   "countersink-bit": "Countersink bit",
   spanner: "Spanner",
   "spirit-level": "Spirit level",
+  sandpaper: "Sandpaper",
   "safety-glasses": "Safety glasses",
   "ear-defenders": "Ear defenders",
 };
@@ -69,6 +71,7 @@ const TOOL_WORDS: Readonly<Record<Tool, RegExp>> = {
   "countersink-bit": /\bcountersink/,
   spanner: /\b(spanner|wrench|socket set)/,
   "spirit-level": /\blevel\b/,
+  sandpaper: /\b(sand ?paper|sanding (block|sponge|sheets?)|abrasive)/,
   "safety-glasses": /\b(safety (glasses|specs|goggles)|goggles)\b/,
   "ear-defenders": /\bear ?(defenders|muffs|protectors?|protection|plugs)\b/,
 };

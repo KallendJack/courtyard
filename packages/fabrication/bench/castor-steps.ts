@@ -29,6 +29,7 @@ export const castorsDraft = (options: {
       { name: names.washers, count: 4 * castors.boltsEach * castors.washer.perBolt },
       { name: names.nuts, count: 4 * castors.boltsEach },
     ],
+    batch: "One castor at a time: mark, drill, bolt, then the next.",
     actions: [
       act(
         "Set a castor on the base 10 mm in from each end, centred across it, and mark its holes.",

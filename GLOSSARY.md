@@ -235,8 +235,11 @@ A Build's instruction manual in Fabrication (#699), worked out by code from its 
 "just the numbers"), a close-up with its sizes and screw positions, a check **before you move on**, and the step's
 **picture** (#754): the job in 3D as it's done (the length in the Workmate, an end frame on the floor, the frame so
 far), with marks drawn from the Build's numbers. A move a beginner may never have made gets a **walk-through** in
-"show me how" the first time it comes up (#777): marking as tape, tick, square and line, or a pilot hole's depth, each
-with its close-up where one shows it. A step that can be done more than one **way** (a hand saw, a circular saw, a
+"show me how" the first time it comes up (#777): marking as tape, tick, square and line, or marking a joint's screw
+spots by eye (#789), each with its close-up where one shows it. Each step is the **simplest way first** (#789): it
+opens with how to **batch** it ("One joint at a time"), has at most four lines, measures only what decides how it
+turns out and says "by eye" for the rest, drills a pilot hole only where the wood would split, and keeps extras as
+**tips** behind a tap. A step that can be done more than one **way** (a hand saw, a circular saw, a
 mitre saw) uses the best to hand, and says so in a line when that's changed. A saw's **cutting capacity** (how wide
 and deep it cuts at 90°, the size line on the owner's tool) decides which cuts it takes: one too big for it goes to a
 saw that takes it, the step saying why in one line (#780).

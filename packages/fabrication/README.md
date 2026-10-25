@@ -40,7 +40,7 @@ if (recipe) {
 | `findings.ts` | The making rules code checks: a bolt's length to use, long enough for what it passes through plus two threads, and the owner's own that are short (`boltLength`), tools needed and not to hand, sizes assumed |
 | `capacity.ts` | What a mitre or circular saw cuts (#780): its width at 90° and depth, read from its size in Your tools, assumed until given, and whether a timber fits it |
 | `tools.ts`, `glossary.ts` | The tools and kit a step can need, which of them each of Your tools, or something else the owner has, is by the words in its name, one tool or several ("Drill and drill bits", `toolsFrom`; a step stool for the long end, and only that, `standInFor`), a bit set's sizes and whether it has a bit (`bitSetsFrom`, `bitInSets`), and the words a beginner may not know |
-| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `step-tools.ts` (a step's tools against the owner's: a stand-in, bits by size, #763), `walk-throughs.ts` (marking as tape, tick, square and line, and a pilot hole's depth, #777), `close-ups.ts`, `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
+| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts`, `frame-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `step-tools.ts` (a step's tools against the owner's: a stand-in, bits by size, #763), `walk-throughs.ts` (marking as tape, tick, square and line, #777, and a joint's screw spots, #789), `screws.ts` (where a pilot hole goes first, #789), `close-ups.ts`, `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
 | `print/` | Printed parts (#702): `templates.ts` (the holster, shim and bracket, each made into a part recipe, and `printed-part`, a recipe as written), `recipe.ts` (each face's frame, and the checks that refuse a recipe before it's made), `index.ts` (a printed part's Build: its part, buy list, steps and findings), `make.ts` (the solid, with manifold-3d), `lettering.ts` (text as outlines, with opentype.js), `files.ts` (3MF, zipped with fflate, and STL) |
 | `print/font/` | Figtree Bold, for lettering: `figtree-bold.ttf` from Fontsource (`@fontsource/figtree` 5.2.10, latin 700), under the SIL Open Font License in `OFL.txt`, from github.com/erikdkennedy/figtree |
 
@@ -75,10 +75,15 @@ if (recipe) {
   It says where it opens from (15° to 60° above level), and its marks (sizes, the pencil line, where the saw runs,
   the diagonals to check, where the support goes, where the brackets go, the waste side) are the Build's own numbers.
   Tools are drawn only when they're to hand, and nothing the owner doesn't have is drawn as if they did.
-- **Marking starts by checking the end is square,** then one line per length, each with its ticks from that end and
-  the kerf between pieces. Show me how walks through the first length's tape, tick, square and line, with close-ups
-  of the tape's hook over the end and the square's stock against the edge; the first step that drills shows a pilot
-  hole's depth, a mark on the bit at the screw's length (#777).
+- **Marking starts by checking the end is square,** then one line per length, its pieces one at a time: each marked,
+  cut and measured on from the fresh end, with no running totals (#789). Show me how walks through the first length's
+  tape, tick, square and line, with close-ups of the tape's hook over the end and the square's stock against the edge
+  (#777).
+- **The simplest way first** (#789): each step opens with how to batch it ("One joint at a time"), and has at most
+  four lines. Sizes that decide how it turns out are measured; the rest is by eye (a joint's screw spots are 2
+  crosses where the rail sits on the leg, a fingertip in, shown the first time). A pilot hole goes first only within
+  25 mm of a piece's end, into MDF or hardwood, or for a screw over 6 mm, as one line at the screws; only the top is
+  countersunk; extras are tips.
 - **A bolt given too short is never fitted, nor said:** the steps and the buy list use the length to use instead,
   unpriced until it's given a price. Its buy-list line carries what it passes through and their sum, and, when the
   owner has bolts of its thread that are too short, by how much (#763). It's no finding: the old length means nothing

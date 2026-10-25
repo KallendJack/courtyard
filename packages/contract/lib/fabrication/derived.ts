@@ -208,9 +208,13 @@ export const BuildStep = z.object({
   tools: list(BuildStepTool),
   safety: list(BuildStepTool),
   fixings: list(z.object({ name: z.string(), count: z.number() })),
+  /** How to batch it, in a few words: "One joint at a time" (#789). */
+  batch: z.string(),
   actions: list(
     z.object({ howTo: z.string(), numbers: z.string(), length: BuildMarkedLength.optional() }),
   ),
+  /** Extras for anyone who wants them, behind a Tips tap (#789). */
+  tips: list(z.string()),
   closeUp: BuildCloseUp.nullable(),
   /** What "show me how" walks through first, each move with its close-up where one shows it. */
   walkThrough: list(

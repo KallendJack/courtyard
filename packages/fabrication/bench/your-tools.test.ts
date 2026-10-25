@@ -91,7 +91,15 @@ describe("a Build's steps with Your tools", () => {
   it("need nothing more once the owner has said the kit the steps use", () => {
     const missing = (tools: readonly string[]) =>
       built({ tools }).findings.find((finding) => finding.kind === "tools-missing");
-    const all = [...theirs, "Countersink", "Spanner", "Ear defenders", "Sawhorses", "Spirit level"];
+    const all = [
+      ...theirs,
+      "Countersink",
+      "Spanner",
+      "Ear defenders",
+      "Sawhorses",
+      "Spirit level",
+      "Sandpaper",
+    ];
 
     expect(missing(theirs)).toBeDefined();
     expect(missing(all)).toBeUndefined();
