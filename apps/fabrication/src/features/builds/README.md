@@ -8,8 +8,8 @@ it.
 turning in 3D, its cut plan, "M6 × 50 bolts too short" in gold, and the chat they had about it; they say "make it
 850 high", the session saves the change, and every number on the page moves with it.
 
-- **Uses:** Fabrication's API through `api/fabrication.ts` (the Build and where it is, its progress, its chat, the
-  models),
+- **Uses:** Fabrication's API through `api/fabrication.ts` (the Build and where it is, its progress, a stock picked
+  and its Undo, its chat, the models),
   `packages/ui` (the Reply box, Talk, `Scroller`, `useKept`, `CapsLabel`) and `three` for the 3D view.
 - **Used by:** the route `routes/workspaces.$id.builds.$slug.tsx`.
 
@@ -21,7 +21,8 @@ turning in 3D, its cut plan, "M6 × 50 bolts too short" in gold, and the chat th
 | `bench-panel.tsx` | The 3D panel: its key, and a part's card |
 | `bench-view.tsx` | The scene itself, `three`, loaded lazily so only this page loads it |
 | `cut-plan.tsx` | Each length of timber as a bar of its cuts, and each sheet with its pieces where they sit |
-| `buy-list.tsx` | What to buy, from where, how many and for how much, with the total |
+| `buy-list.tsx` | What to buy, from where, how many and for how much, with the total; a timber or sheet with options opens them |
+| `stock-options.tsx` | A stock's options (#704; "Fabrication · Choose materials · Tablet (#704)"): the recommended first, each costed, Pick, and Undo of the pick just made |
 | `tools-list.tsx` | The tools needed against what's to hand |
 | `step-panel.tsx` | The steps as an instruction manual (#699): one step, its checklist, Back and Done, the step strip |
 | `close-up.tsx` | A step's close-up, drawn to scale: its sizes and where each fixing goes |
@@ -30,7 +31,8 @@ turning in 3D, its cut plan, "M6 × 50 bolts too short" in gold, and the chat th
 | `words.ts` | How the numbers read: money, sizes, stock, the findings' words |
 
 **Screens:** a part tapped in the 3D view, its letter in the key or a piece in the cut plan is lit in all of them and
-opens its card; tapping again, or ×, closes it.
+opens its card; tapping again, or ×, closes it. A buy-list row or a cut plan's Options opens that stock's options in
+the side panel, in place of its tab, until a tab or ‹ Buy list is tapped.
 
 **Steps** (#699; Paper, 2 · Agreed, "Fabrication · Build steps v2, teaching · Tablet (#699)", "· Build steps, cutting
 by your tools · Tablet (#699)" and "· Build steps · Cover (#699)"): the Steps tab shows the step reached, and the 3D

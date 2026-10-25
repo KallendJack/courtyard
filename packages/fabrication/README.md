@@ -21,12 +21,13 @@ else derived.error; // ["height.source: Invalid input…"]
 |---|---|
 | `index.ts` | What callers import |
 | `build.ts` | What a template derives: parts with a box each for the 3D view, the cut plan, the buy list, steps, findings |
-| `stock.ts` | What parts are cut from and fixed with: timber, sheets, fixings and their prices. A template takes each slot's stock as a parameter, so a slot can be swapped (#704) |
-| `cut-plan.ts` | Packing: timber pieces into lengths and sheet pieces into sheets, the kerf between every two |
+| `stock.ts` | What parts are cut from and fixed with: timber, sheets, fixings and their prices. A template takes each slot's stock as a parameter, so a slot can be swapped |
+| `options.ts` | The stock options (#704): each timber's and sheet's sizes, what it's like, and the jobs it suits; a template's slots offered them, each costed by working the Build out again with it; a pick swapped in; and the making rule that flags stock wrong for its slot |
+| `cut-plan.ts` | Packing: timber pieces into lengths and sheet pieces into sheets, the kerf between every two, each sheet's first cut along it or across it, whichever needs fewer sheets |
 | `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed |
 | `findings.ts` | The making rules code checks: a bolt long enough for what it passes through plus two threads, tools needed and not to hand, sizes assumed |
 | `tools.ts`, `glossary.ts` | The tools and kit a step can need, and the words a beginner may not know |
-| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `close-ups.ts` |
+| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `close-ups.ts`, `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`) |
 
 ## The rules it keeps
 
@@ -43,6 +44,10 @@ else derived.error; // ["height.source: Invalid input…"]
 - **A fixing found too short is never fitted:** the steps and the buy list use the length to use instead, unpriced
   until it's given a price, and the finding names the steps that fit it.
 - **Parts are cut to the whole mm below,** and the steps say every size to the whole mm; the Build keeps it exact.
+- **Prices are never here.** An option's price comes from its shop's page, in the Build's `prices`, set through the
+  Build tool; one without a price is offered unpriced.
+- **A pick changes only what it swaps:** the parts, cut plan and buy list follow the new section; its old price is
+  kept in `prices`, so picking it again finds it.
 
 ## Tests
 

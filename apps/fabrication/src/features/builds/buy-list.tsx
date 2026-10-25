@@ -11,8 +11,8 @@ const howMany = (line: BuildBuyLine) =>
 const shopAndFor = (line: BuildBuyLine) =>
   [line.price?.shop, line.for].filter((part) => part !== undefined).join(" · ");
 
-function Line(props: { line: BuildBuyLine }) {
-  const { line } = props;
+function Line(props: { line: BuildBuyLine; open: (() => void) | undefined }) {
+  const { line, open } = props;
   const body = (
     <>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -27,6 +27,21 @@ function Line(props: { line: BuildBuyLine }) {
   );
   const row = "flex items-center gap-3 border-b border-border py-2.5";
   const link = line.price?.link;
+  // A timber or sheet with options opens them (#704); its shop's link is there.
+  if (open !== undefined) {
+    return (
+      <li>
+        <button
+          type="button"
+          onClick={open}
+          className={`${row} w-full text-left hover:bg-muted/40`}
+        >
+          {body}
+          <ChevronRight aria-hidden className="size-4 shrink-0 text-primary-text" />
+        </button>
+      </li>
+    );
+  }
   return link === undefined ? (
     <li className={row}>
       {body}
@@ -44,17 +59,31 @@ function Line(props: { line: BuildBuyLine }) {
 
 /**
  * The buy list (#698; Paper, "Fabrication · A Build, buy list · Cover (#698)"): what to buy, from
- * where, how many, and what it comes to, each line a link to its shop where there is one. Its
- * total, and what has no price yet, at its foot.
+ * where, how many, and what it comes to, each line a link to its shop where there is one, or
+ * opening its options where it's a timber or sheet with some (#704). Its total, and what has no
+ * price yet, at its foot.
  */
-export function BuyList(props: { buyList: DerivedBuild["buyList"] }) {
+export function BuyList(props: {
+  buyList: DerivedBuild["buyList"];
+  /** The stocks with options to pick from, by name. */
+  withOptions: readonly string[];
+  openOptions: (stock: string) => void;
+}) {
   const { lines, total, unpriced } = props.buyList;
   return (
     <section aria-label="Buy list" className="flex flex-col gap-1">
       <CapsLabel tone="muted">To buy · {lines.length}</CapsLabel>
       <ul className="flex flex-col">
         {lines.map((line) => (
-          <Line key={line.item} line={line} />
+          <Line
+            key={line.item}
+            line={line}
+            open={
+              line.stock !== undefined && props.withOptions.includes(line.stock)
+                ? () => props.openOptions(line.stock ?? "")
+                : undefined
+            }
+          />
         ))}
       </ul>
       <p className="flex items-baseline justify-between gap-3 pt-3">

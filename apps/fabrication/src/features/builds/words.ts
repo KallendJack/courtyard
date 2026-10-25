@@ -48,6 +48,11 @@ export const findingWords = (
         title: `${finding.label} is too big for ${finding.stock}`,
         detail: "Choose a bigger sheet or length, or a smaller size.",
       };
+    case "wrong-stock":
+      return {
+        title: `${finding.stock} is wrong for the ${listed(finding.parts.map((part) => part.toLowerCase()))}`,
+        detail: `${finding.why} Pick another from its options.`,
+      };
   }
 };
 

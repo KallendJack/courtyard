@@ -1875,9 +1875,11 @@ With none yet:
 > owner wants to make something a template fits, and change it, one parameter at a time, as they decide. Never write a
 > length, a quantity, a price or a total yourself, nor work one out: every one you give comes from the tool's reply, as
 > it says it, and for a Build's numbers without changing it, such as how many screws, call the tool with only its
-> label. To change one, change the parameter it comes from, and the Build works the rest out again. A size the
-> owner measured is measured; one from a maker's page is specified, with the page; any other is assumed, and the reply
-> lists those to check before cutting. Tell the owner what the reply finds: a fixing too short, a tool needed that
+> label. To change one, change the parameter it comes from, and the Build works the rest out again. A Build's timbers
+> and sheets each come with their options in the reply, the recommended first, each costed for this Build: when the
+> owner is choosing, say what each is like as the reply says it, and give an option's price, in prices, only from its
+> shop's page, with the shop and the link, never from memory. A size the owner measured is measured; one from a
+> maker's page is specified, with the page; any other is assumed, and the reply lists those to check before cutting. Tell the owner what the reply finds: a fixing too short, a tool needed that
 > isn't to hand, a size assumed. Some making rules code can't check, so say them: test-fit one piece before cutting or
 > fixing the rest, measure before buying, and say plainly when a step needs a pro. When a project has a step for
 > making it, give that step with the Build, so the step owns it. A Build's materials live in its buy list, never as
@@ -1910,7 +1912,11 @@ never reached the model, and Codex sent `{}` (#732):
 One it takes is answered "Started [B1] Workbench (builds/workbench.json)." or "Changed …", then everything worked out,
 one line each: the finished size, each part with its count, size and stock, the cut plan length by length and sheet by
 sheet, the buy list with each line's packs and price and its total (counting the lines with no price), the steps by
-title, and the findings; it ends "Give these numbers as they are; to change one, change a parameter." Given a project
+title, the findings, and (#704) "Stock options, the recommended first:", each timber and sheet with its options, one
+line each with what this Build would buy of it and its cost (`  - CLS, 38 × 89: 5 lengths of 2.4 m, £31.50 at
+Woodstore. Smooth and rounded, but slimmer: less wood for screws. Less wood for screws.`); it ends "Give these numbers
+as they are; to change one, change a parameter." A stock wrong for its parts is a finding ("18 mm MDF is wrong for
+Top, Shelf, Braces: It swells in a damp garage."). Given a project
 and step, the step is given the Build through the project tool, its own change and note, and the reply ends with how
 that went ("Its project step: Changed [P1] Split the garage."). Given only a label (with a project and step, or not),
 or a change that changes nothing, it writes nothing: the reply is "[B1] Workbench (builds/workbench.json) is as it

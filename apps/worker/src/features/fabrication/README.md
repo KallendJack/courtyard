@@ -41,6 +41,11 @@ rest is worked out again.
 - `POST /api/fabrication/tools/undo`: `ToolsUndo`, Undo of that Save.
 - `POST /api/fabrication/tools/heard`: "Or just say it", `ToolsSaid`. Answers `ToolsHeard`, the tools a model ticked,
   saving nothing; 503 when no model can answer.
+- `POST /api/fabrication/workspaces/:id/builds/:slug/stock`: the owner's pick of one of a stock's options (#704),
+  `BuildStockPick` (the stock by name, as the buy list gives it, and the option), swapped in every part cut from it.
+  Answers `BuildChanged`; an option the stock doesn't have is 400.
+- `POST /api/fabrication/workspaces/:id/builds/:slug/changes/:change/undo`: Undo from Fabrication of a change to this
+  Build (404 for another's). Answers the Build as it is again, a `BuildView`.
 
 A code workspace keeps none (409). A Build save is undone from its note (`POST /api/sessions/:id/builds/:save/undo`)
 or Recent changes.
@@ -50,7 +55,8 @@ or Recent changes.
 - **The file** (`index.ts`): `{ name, template, parameters }`, nothing derived. A file that isn't JSON, isn't a Build,
   or whose parameters the engine refuses is listed with its problem, never breaking a turn or a list.
 - **Saves** (`saveBuild`): a new Build needs its name, template and every parameter; a change merges its parameters
-  into the Build's (`parameters.ts`). The engine works them out first, and parameters it refuses save nothing. Each
+  into the Build's (`parameters.ts`), and a pick swaps a stock through its template's picker. The engine works them
+  out first, and parameters it refuses save nothing. Each
   save is one change through `context-folder/`, its note listing each parameter changed ("height: 900 mm → 850
   mm"); Undo (`undoBuildChange`) puts the file back whole, unless it's changed since.
 - **Progress** (`progress.ts`, #699): `builds/progress/<slug>.json`, the step reached and the lines ticked, read with

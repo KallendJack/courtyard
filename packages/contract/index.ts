@@ -86,12 +86,7 @@ export {
   DocumentSummary,
   SaveAsDocument,
 } from "./lib/documents.ts";
-export {
-  BuildChat,
-  BuildChatEntry,
-  BuildChatSent,
-  BuildOpened,
-} from "./lib/fabrication/app.ts";
+export { BuildChat, BuildChatEntry, BuildChatSent, BuildOpened } from "./lib/fabrication/app.ts";
 export {
   BUILD_NAME_MAX_CHARACTERS,
   BuildChange,
@@ -117,6 +112,7 @@ export {
   DerivedBuild,
 } from "./lib/fabrication/derived.ts";
 export { BuildProgress, buildStarted, stepReached, tickedIn } from "./lib/fabrication/progress.ts";
+export { BuildStockChoice, BuildStockOptions, BuildStockPick } from "./lib/fabrication/stock.ts";
 export {
   COMMON_TOOLS,
   FoundTool,
