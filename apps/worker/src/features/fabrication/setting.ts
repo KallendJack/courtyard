@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { BuildProgress, type BuildStep, tickedIn } from "@courtyard/contract";
-import { type Build, type BuildSetting, Tool, toolsFrom } from "@courtyard/fabrication";
+import { BuildProgress, type BuildStep, type ThingSummary, tickedIn } from "@courtyard/contract";
+import { type Build, type BuildSetting, Tool } from "@courtyard/fabrication";
 import { err, ok, type Result } from "../../lib/result.ts";
 import { readThingsIn } from "../things/index.ts";
 import { listWorkspaces } from "../workspaces/index.ts";
@@ -26,29 +26,30 @@ export const readTools = async (contextDir: string) => {
 };
 
 /** What every Build is worked out with from the owner's things, before its own progress. */
-export type OwnerSetting = Pick<BuildSetting, "tools" | "have" | "bitSets">;
+export type OwnerSetting = Pick<BuildSetting, "tools" | "sizes" | "have">;
 
 /**
- * What a Build's steps and buy list follow from the owner's things (#777, #763): Your tools, each
- * by its name and its tile's, or none when they've saved none (or they can't be read just now), so
- * a Build follows its own; the sizes their drill bit sets are kept with; and what they have in
- * their planning workspaces, by name, which can stand in for a tool (a step stool) or be bolts too
- * short.
+ * What a Build's steps and buy list follow from the owner's things (#777, #780, #763): Your tools,
+ * each by its name and its tile's, with the sizes they gave (a mitre saw's cutting capacity, a bit
+ * set's sizes), or none when they've saved none (or they can't be read just now), so a Build
+ * follows its own; and what they have in their planning workspaces, by name, which can stand in
+ * for a tool (a step stool) or be bolts too short.
  */
 export const ownerSetting = async (contextDir: string): Promise<OwnerSetting> => {
+  const have = await thingsHad(contextDir);
   const read = await readTools(contextDir);
-  const saved = read.ok ? read.value.tools.map(({ summary }) => summary) : [];
-  const namesOf = (tool: (typeof saved)[number]) => [
-    tool.name,
-    ...(tool.tile === undefined ? [] : [tool.tile]),
+  if (!read.ok || read.value.tools.length === 0) return { have };
+  const namesOf = ({ summary }: { summary: ThingSummary }) => [
+    summary.name,
+    ...(summary.tile === undefined ? [] : [summary.tile]),
   ];
-  const bitSets = saved.flatMap((tool) =>
-    tool.size !== undefined && toolsFrom(namesOf(tool)).includes("drill-bits") ? [tool.size] : [],
-  );
   return {
-    tools: saved.length === 0 ? undefined : saved.flatMap(namesOf),
-    have: await thingsHad(contextDir),
-    bitSets,
+    tools: read.value.tools.flatMap(namesOf),
+    sizes: read.value.tools.flatMap((tool) => {
+      const { size } = tool.summary;
+      return size === undefined ? [] : namesOf(tool).map((name) => ({ name, size }));
+    }),
+    have,
   };
 };
 

@@ -18,6 +18,7 @@ import {
   type Save,
   SessionEvent,
   type SessionId,
+  type SizeSave,
   type SkillName,
   type Source,
   type TaskTold,
@@ -60,6 +61,8 @@ export type ThingNote = FileNote<ThingSave>;
 export type ProjectNote = FileNote<ProjectSave>;
 /** A Build the model started or changed in its answer (#697). */
 export type BuildNote = FileNote<BuildSave>;
+/** A size the model recorded or corrected in its answer (#708). */
+export type SizeNote = FileNote<SizeSave>;
 
 /** An image a tool connection showed (ADR 0023), by what it shows. */
 export type ShownImage = {
@@ -150,9 +153,10 @@ export type Turn = {
   readonly documents: readonly DocumentNote[];
   /** The Things its model saved, in order. */
   readonly things: readonly ThingNote[];
-  /** The projects (#603) and Builds (#697) its model started or changed, in order. */
+  /** The projects (#603) and Builds (#697) its model started or changed, and sizes (#708). */
   readonly projects: readonly ProjectNote[];
   readonly builds: readonly BuildNote[];
+  readonly sizes: readonly SizeNote[];
   /** Replies the model suggested the owner tap (ADR 0017); none when it suggested none. */
   readonly replies: readonly string[];
   /** The web pages the answer used, listed under it (ADR 0019); none when it used none. */
@@ -274,6 +278,25 @@ const withTurn = (
   ),
 });
 
+/** The turn's notes of each kind of file the model saves, by their field. */
+type FileNotes = "things" | "projects" | "builds" | "sizes";
+
+/** The last turn with a note added, for a save the model just made. */
+const savedIn = <K extends FileNotes>(log: Log, field: K, note: Turn[K][number]) =>
+  withTurn(log, {
+    seq: note.seq,
+    holds: (_, last) => last,
+    change: (turn) => ({ ...turn, [field]: [...turn[field], note] }),
+  });
+
+/** The turn holding the note numbered `save` with it undone, from whichever turn it is. */
+const undoneFrom = <K extends FileNotes>(log: Log, field: K, undo: { seq: number; save: number }) =>
+  withTurn(log, {
+    seq: undo.seq,
+    holds: (turn) => turn[field].some((note) => note.seq === undo.save),
+    change: (turn) => ({ ...turn, [field]: undoneIn<FileNote<unknown>>(turn[field], undo.save) }),
+  });
+
 /**
  * Applies one event to the turns so far. Events already seen are ignored, so a reconnect that
  * repeats one changes nothing. Only the turn an event belongs to changes, so the rest don't re-render.
@@ -314,6 +337,7 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
             things: [],
             projects: [],
             builds: [],
+            sizes: [],
             replies: [],
             sources: [],
             images: [],
@@ -622,14 +646,22 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
         holds: (turn) => turn.documents.some((note) => note.seq === event.save),
         change: (turn) => ({ ...turn, documents: undoneIn(turn.documents, event.save) }),
       });
-    case "thing-saved": {
-      const note: ThingNote = { seq, save: event.save, undone: false };
-      return withTurn(log, {
-        seq,
-        holds: (_, last) => last,
-        change: (turn) => ({ ...turn, things: [...turn.things, note] }),
-      });
-    }
+    case "thing-saved":
+      return savedIn(log, "things", { seq, save: event.save, undone: false });
+    case "thing-undone":
+      return undoneFrom(log, "things", { seq, save: event.save });
+    case "project-saved":
+      return savedIn(log, "projects", { seq, save: event.save, undone: false });
+    case "project-undone":
+      return undoneFrom(log, "projects", { seq, save: event.save });
+    case "build-saved":
+      return savedIn(log, "builds", { seq, save: event.save, undone: false });
+    case "build-undone":
+      return undoneFrom(log, "builds", { seq, save: event.save });
+    case "size-saved":
+      return savedIn(log, "sizes", { seq, save: event.save, undone: false });
+    case "size-undone":
+      return undoneFrom(log, "sizes", { seq, save: event.save });
     // What the worker did for a code workspace's Lead (#347), under the turn before it.
     case "lead-note":
       return withLastTurn(log, {
@@ -646,40 +678,6 @@ const applyEvent = (log: Log, update: { event: SessionEvent; replayed: boolean }
       });
     case "worktree-restored":
       return { ...log, lastSeq: seq };
-    case "thing-undone":
-      return withTurn(log, {
-        seq,
-        holds: (turn) => turn.things.some((note) => note.seq === event.save),
-        change: (turn) => ({ ...turn, things: undoneIn(turn.things, event.save) }),
-      });
-    case "project-saved": {
-      const note: ProjectNote = { seq, save: event.save, undone: false };
-      return withTurn(log, {
-        seq,
-        holds: (_, last) => last,
-        change: (turn) => ({ ...turn, projects: [...turn.projects, note] }),
-      });
-    }
-    case "project-undone":
-      return withTurn(log, {
-        seq,
-        holds: (turn) => turn.projects.some((note) => note.seq === event.save),
-        change: (turn) => ({ ...turn, projects: undoneIn(turn.projects, event.save) }),
-      });
-    case "build-saved": {
-      const note: BuildNote = { seq, save: event.save, undone: false };
-      return withTurn(log, {
-        seq,
-        holds: (_, last) => last,
-        change: (turn) => ({ ...turn, builds: [...turn.builds, note] }),
-      });
-    }
-    case "build-undone":
-      return withTurn(log, {
-        seq,
-        holds: (turn) => turn.builds.some((note) => note.seq === event.save),
-        change: (turn) => ({ ...turn, builds: undoneIn(turn.builds, event.save) }),
-      });
   }
 };
 

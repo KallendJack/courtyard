@@ -26,6 +26,7 @@ import {
   USE_SKILL_TOOL_NAME,
 } from "../prompts/index.ts";
 import { PROJECT_TOOL_NAME } from "../prompts/projects.ts";
+import { SIZE_TOOL_NAME } from "../prompts/sizes.ts";
 import { scriptedAnswer } from "./fake-answers.ts";
 import type {
   Activity,
@@ -202,9 +203,8 @@ const scriptedThings = (message: string): Record<string, unknown>[] =>
   });
 
 /**
- * The project (#603) or Build (#697) saves a message scripts, one per line: "project: " or "build: "
- * and the tool's input as JSON, such as `project: {"name": "Garage office", "add_steps": [{"who":
- * "a pro", "text": "Sockets"}]}`. A line whose JSON doesn't read is left out.
+ * The project (#603), Build (#697) or size (#708) saves a message scripts, one per line: its word,
+ * "project: ", and the tool's input as JSON. A line whose JSON doesn't read is left out.
  */
 const scriptedJson = (word: string) => (message: string) =>
   message.split("\n").flatMap((line): unknown[] => {
@@ -261,8 +261,7 @@ const scriptedBuildOrder = (message: string): Record<string, unknown>[] =>
 
 /**
  * The calls a message scripts to each of Courtyard's tools, in the order the fake makes them:
- * skills loaded first, then saves, documents and Things, then suggested replies, then the Lead's
- * build order tool.
+ * skills loaded first, then saves and files, then suggested replies, then the Lead's build order.
  */
 const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unknown[]])[] = [
   [USE_SKILL_TOOL_NAME, scriptedSkillLoads],
@@ -271,6 +270,7 @@ const SCRIPTED_CALLS: readonly (readonly [TurnToolName, (message: string) => unk
   [THING_TOOL_NAME, scriptedThings],
   [PROJECT_TOOL_NAME, scriptedJson("project")],
   [BUILD_TOOL_NAME, scriptedJson("build")],
+  [SIZE_TOOL_NAME, scriptedJson("size")],
   [SUGGEST_REPLIES_TOOL_NAME, scriptedReplies],
   [LEAD_TOOL_NAME, scriptedBuildOrder],
 ];

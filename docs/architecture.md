@@ -109,7 +109,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
   decisions and history, a file each, kept by the model's project tool; a session started from one belongs to it.
 - [`fabrication/`](../apps/worker/src/features/fabrication/README.md): Fabrication's Builds, hosted by a planning
   workspace (#697, ADRs 0036, 0037), a file each, worked out by `packages/fabrication` on read, kept by the model's
-  Build tool; and Fabrication's API (`/api/fabrication`).
+  Build tool; its size records with their sources (#708), kept by the model's size tool; and Fabrication's API
+  (`/api/fabrication`).
 - [`move-review/`](../apps/worker/src/features/move-review/README.md): once, a planning workspace's moves into
   what it keeps now (#603), written by a model, kept in the data folder, each ticked move one change with Undo.
 - [`status-line/`](../apps/worker/src/features/status-line/README.md): the status line under a code workspace's
@@ -582,6 +583,11 @@ Where the rest fits:
   nothing and replies with the numbers as they are. Given a project's step, the step is given the Build through the
   project tool. The Fabrication app (#698) reads and changes Builds through
   `/api/fabrication` only.
+- **Sizes** (#708, ADR 0037). The model calls the size tool by the labels its turn listed (`Z1` sizes, `T1` Things);
+  `fabrication/size-tool.ts` checks a measured size against the owner's messages, which `sessions/` reads from the
+  session's events, and ties the record to the one that gave it; `fabrication/sizes.ts` writes the record (and the
+  Thing's subject ID, with its first size) as one change through `context-folder/`. The session records a
+  `size-saved` event and the browser shows a note with Undo. Every planning turn lists the standing records.
 - **The status line** (#256). A code workspace's line is built from `sessions/`' list and `next-up/` when asked, with
   no model. A planning workspace has none (#600).
 - **Session notes** (#601, ADR 0032). `sessions/notes.ts` asks the errand model for a planning session's note
@@ -813,6 +819,9 @@ things live only in the worker's memory and go when it restarts.
   kept before then gets the ways the Build's own tools gave). Each write is
   a `build-progress` change, kept and backed up but never listed in Recent changes. A Build's steps follow the owner's
   tools (`things/` at the top) once they've saved any, and its own `tools` parameter until then.
+- `<workspace>/sizes/<id>.json`: a planning workspace's size records (#708, ADR 0037): the Thing it's of by its
+  subject ID, what it is of it, its value, its source (measured ones with the owner's message), the day observed,
+  when recorded, its revision and what superseded it. A correction is a new record; the old one stays.
 - `.agents/skills/<skill>/` at the top: the owner's skills for every workspace; `<workspace>/.agents/skills/<skill>/`:
   their skills for one workspace (ADR 0016). Added by hand, so they're kept and backed up like everything else.
 - `archived/<workspace>/`: archived workspaces.

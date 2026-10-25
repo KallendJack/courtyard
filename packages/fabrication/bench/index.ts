@@ -8,12 +8,13 @@ import {
   type Result,
 } from "../build.ts";
 import { buyLine, buyListOf, stockLines, toolsToBuy } from "../buy-list.ts";
+import { type Capacities, capacitiesFrom } from "../capacity.ts";
 import { cutPlanOf } from "../cut-plan.ts";
 import { assumedSizes, boltLength, toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
 import { stockOptions, wrongStock } from "../options.ts";
 import type { Price } from "../stock.ts";
-import { Tool, thingFor, toolsFrom } from "../tools.ts";
+import { bitSetsFrom, Tool, thingFor, toolsFrom } from "../tools.ts";
 import { benchFitted, benchParts, shapeOf, shapeProblems } from "./frame.ts";
 import { BenchParameters, castorFixingNames } from "./parameters.ts";
 import { benchSteps } from "./steps.ts";
@@ -51,9 +52,10 @@ export const deriveBench = (
     toHand: new Set([...own, ...standIns.keys()]),
     standIns,
     have,
-    bitSets: setting.bitSets ?? [],
+    bitSets: bitSetsFrom(setting.sizes ?? []),
     buying: setting.buying ?? [],
     kept: setting.kept ?? [],
+    capacities: capacitiesFrom(setting.sizes ?? []),
   });
   const build = benchOf(parameters);
   if (!build.ok) return build;
@@ -78,6 +80,7 @@ type Setting = {
   readonly bitSets: readonly string[];
   readonly buying: readonly Tool[];
   readonly kept: readonly KeptWay[];
+  readonly capacities: Capacities;
 };
 
 /**
@@ -85,7 +88,7 @@ type Setting = {
  * tools to hand and the ways kept.
  */
 const benchWith =
-  ({ toHand, standIns, have, bitSets, buying, kept }: Setting) =>
+  ({ toHand, standIns, have, bitSets, buying, kept, capacities }: Setting) =>
   (parameters: BenchParameters): Result<Omit<Build, "options">, string[]> => {
     const shape = shapeOf(parameters);
     const problems = shapeProblems(shape);
@@ -129,6 +132,7 @@ const benchWith =
       standIns,
       bitSets,
       kept,
+      capacities,
     });
 
     const { frameScrews, sheetScrews, brackets, bracketScrews } = parameters.fixings;

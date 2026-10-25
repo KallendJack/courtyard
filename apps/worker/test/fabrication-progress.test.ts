@@ -230,6 +230,22 @@ describe("a Build's steps with Your tools (#777)", () => {
     expect(missing).toContain("Spanner");
   });
 
+  it("give a cut too wide for the owner's mitre saw back to the hand saw (#780)", async () => {
+    await ownTools(...theirs);
+    await writeFile(
+      join(contextDir, "things", "mitre-saw.md"),
+      '---\nname: "Mitre saw"\nstatus: have\nkind: tool\nsize: "120 × 60 mm"\n---\n',
+    );
+    const request = await owner();
+
+    const said = cut(await opened(request))?.actions.map((action) => action.howTo);
+    expect(said).toContainEqual(
+      expect.stringContaining(
+        "The 145 castor bases and top support are too wide for your mitre saw: hand saw for these.",
+      ),
+    );
+  });
+
   it("are the Build's own until the owner has saved any", async () => {
     const request = await owner();
 

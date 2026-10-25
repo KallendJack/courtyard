@@ -4,7 +4,6 @@ import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import {
   Chart,
-  type DocumentSave,
   Effort,
   endsTurn,
   ModelId,
@@ -20,7 +19,7 @@ import {
 } from "@courtyard/contract";
 import { HOUSE_SKILLS_FOLDER, readHouseManifest } from "@courtyard/skills";
 import { z } from "zod";
-import { DOCS_FOLDER, documentPath } from "../src/features/documents/index.ts";
+import { DOCS_FOLDER } from "../src/features/documents/index.ts";
 import { OWNER_FILE } from "../src/features/owner-context/index.ts";
 import { readThingText, thingPath } from "../src/features/things/index.ts";
 import { CONTEXT_FILE } from "../src/features/workspaces/index.ts";
@@ -40,11 +39,11 @@ import {
   writeSkill,
 } from "../test/testing.ts";
 import { judgeBuilds } from "./builds.ts";
+import { describeDocument, judgeDocuments } from "./documents.ts";
 import { planMiss, plansIn } from "./plans.ts";
 import { describeProject, judgeProjects } from "./projects.ts";
 import {
   contextFileFor,
-  type ExpectedDocument,
   type ExpectedSave,
   type ExpectedThing,
   ownerContextFor,
@@ -55,6 +54,7 @@ import {
   type Sections,
   type Turn,
 } from "./scenarios.ts";
+import { judgeSizes } from "./sizes.ts";
 import { judgeHeardTools } from "./tools.ts";
 import { type Check, describeWords, hasWords } from "./words.ts";
 
@@ -557,46 +557,6 @@ const judgeTurn = (judge: {
   ];
 };
 
-const describeDocument = (save: DocumentSave) =>
-  `${save.action === "save" ? "saved" : "updated"} ${documentPath(save.document.slug)}${save.summary === undefined ? "" : ` (${save.summary})`}`;
-
-/**
- * A turn's document checks (ADR 0020): one for each document it should save or update, judged on
- * the document's text afterwards, and one for saving no other. Nothing when the turn doesn't say.
- */
-const judgeDocuments = async (judge: {
-  expected: readonly ExpectedDocument[] | undefined;
-  saved: readonly DocumentSave[];
-  /** The workspace's folder, where the documents are. */
-  folder: string;
-}): Promise<Check[]> => {
-  const { expected, saved, folder } = judge;
-  if (expected === undefined) return [];
-  const left = [...saved];
-  const checks: Check[] = [];
-  for (const wanted of expected) {
-    const index = left.findLastIndex((save) => save.action === wanted.action);
-    const save = index === -1 ? undefined : left.splice(index, 1)[0];
-    if (save === undefined) {
-      checks.push({
-        miss: `expected to ${wanted.action} a document; ${saved.length === 0 ? "saved none" : saved.map(describeDocument).join("; ")}`,
-      });
-      continue;
-    }
-    const path = documentPath(save.document.slug);
-    const text = await readFile(join(folder, path), "utf8").catch(() => "");
-    checks.push({
-      miss: hasWords(text, { words: wanted.words })
-        ? null
-        : `expected ${path} to have ${describeWords(wanted.words)}; it reads "${text.replace(/\s+/g, " ").slice(0, 300)}"`,
-    });
-  }
-  checks.push({
-    miss: left.length === 0 ? null : `not expected: ${left.map(describeDocument).join("; ")}`,
-  });
-  return checks;
-};
-
 const describeThing = (save: ThingSave) => {
   const did = { add: "added", change: "changed", remove: "removed" }[save.action];
   const fields = Object.entries(save.fields ?? {}).map(([field, value]) =>
@@ -965,6 +925,9 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
       const built = await judgeBuilds({ scenario, index, events, answer, folder });
       notes.push(...built.notes.map((note) => prefix + note));
       judged.push(...built.checks);
+      const sized = await judgeSizes({ expected: turn.sizes, events, folder });
+      notes.push(...sized.notes.map((note) => prefix + note));
+      judged.push(...sized.checks);
       checks.push(...judged.map(({ miss }) => ({ miss: miss === null ? null : prefix + miss })));
 
       if (turn.undoSaves) {

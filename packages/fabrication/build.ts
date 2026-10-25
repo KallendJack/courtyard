@@ -1,4 +1,5 @@
 import type { BuildTemplate, SizeSource, SourcedSize } from "@courtyard/contract";
+import type { ToolSize } from "./capacity.ts";
 import type { CheckedRecipe } from "./print/recipe.ts";
 import type { Scene } from "./scene.ts";
 import type { Tool } from "./tools.ts";
@@ -89,10 +90,7 @@ export type CutPlan = {
   }[];
 };
 
-/**
- * A bolt's length worked out (#763): what it passes through, each with its thickness, then the two
- * threads past the nut, and their sum, for the curious.
- */
+/** A bolt's length worked out (#763): what it passes through, then two threads, and their sum. */
 export type BoltLength = {
   readonly needed: number;
   readonly through: readonly { readonly what: string; readonly mm: number }[];
@@ -214,16 +212,17 @@ export type KeptWay = { readonly step: string; readonly tool: string };
 /**
  * What a Build is worked out with besides its parameters (#777): the owner's tools as Your tools
  * saves them (each by its tile's name, or the owner's own), which the steps follow in place of the
- * parameters' own when given, and the ways the steps already started were done.
+ * parameters' own when given, their sizes (a mitre saw's cutting capacity, #780), and the ways the
+ * steps already started were done.
  */
 export type BuildSetting = {
   /** Left out, or undefined, when the owner has saved none: the steps follow the Build's own. */
   readonly tools?: readonly string[] | undefined;
+  /** The sizes the owner gave their tools, each by one of its names: a bit set's "3, 7 mm". */
+  readonly sizes?: readonly ToolSize[];
   readonly kept?: readonly KeptWay[];
   /** What else the owner has, by name (#763): a step stool for the long end, bolts too short. */
   readonly have?: readonly string[];
-  /** The sizes the owner's drill bit sets are kept with: "3, 5, 7 mm", "1–10 mm". */
-  readonly bitSets?: readonly string[];
   /** The tools the owner chose to buy for this Build, which its buy list lists until they have them. */
   readonly buying?: readonly Tool[];
 };

@@ -74,7 +74,6 @@ import {
 } from "../../lib/files.ts";
 import type { CommandEnv } from "../../lib/git.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
-import { BUILD_TOOL_NAME, buildReply } from "../../prompts/builds.ts";
 import {
   BUILDER_CARRY_ON_MESSAGE,
   BUILDER_LIMIT_RESET_MESSAGE,
@@ -102,18 +101,15 @@ import {
   suggestRepliesReply,
   TASK_STARTED,
   TASK_TAIL,
-  THING_TOOL_NAME,
   TITLING,
   TitleAnswer,
   TOO_MANY_TASKS,
   taskEndedMessage,
-  thingReply,
   titleMessage,
   USE_SKILL_TOOL_NAME,
   useSkillReply,
   withTaskOutput,
 } from "../../prompts/index.ts";
-import { PROJECT_TOOL_NAME, projectReply } from "../../prompts/projects.ts";
 import {
   type CodePlugin,
   type Framing,
@@ -173,12 +169,11 @@ import {
 } from "../documents/index.ts";
 import { readBuilds, undoBuildChange } from "../fabrication/index.ts";
 import { readTools } from "../fabrication/setting.ts";
-import { createTurnBuilds } from "../fabrication/tool.ts";
+import { readSizes, undoSizeChange } from "../fabrication/sizes.ts";
 import { savePlansFrom } from "../floor-plans/index.ts";
 import type { MattSkills } from "../matt-skills/index.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
 import { type ProjectRefusal, readProjects, undoProjectChange } from "../projects/index.ts";
-import { createTurnProjects } from "../projects/tool.ts";
 import {
   createTurnSaves,
   editSave,
@@ -197,7 +192,6 @@ import {
 import { createTurnReplies } from "../suggested-replies/index.ts";
 import { createTasks, type TaskRefusal } from "../tasks/index.ts";
 import {
-  createTurnThings,
   readThings,
   type ThingRefusal,
   type ThingUndoRefusal,
@@ -214,6 +208,7 @@ import {
   withoutStarterHint,
 } from "../workspaces/index.ts";
 import { type AddedInbox, createAddedInbox } from "./added.ts";
+import { fileSavingTools, ownerMessagesIn } from "./file-tools.ts";
 import { createClearingRetries, failedAgain, samePullRequest } from "./following.ts";
 import { createSessionNotes } from "./notes.ts";
 import { createQuietWorktrees } from "./quiet-worktrees.ts";
@@ -269,8 +264,8 @@ export type SessionError =
   | { readonly kind: "thing-refused"; readonly refusal: ThingRefusal | ThingUndoRefusal }
   /** Starting a session from a project, or undoing a project save, couldn't be done (#603). */
   | { readonly kind: "project-refused"; readonly refusal: ProjectRefusal | WholeFilesUndoRefusal }
-  /** Undoing a Build save couldn't be done (#697). */
-  | { readonly kind: "build-refused"; readonly refusal: WholeFilesUndoRefusal }
+  /** Undoing a Build (#697) or size (#708) save couldn't be done. */
+  | { readonly kind: "build-refused" | "size-refused"; readonly refusal: WholeFilesUndoRefusal }
   /** The model's provider can't code, so it can't work in a code workspace (ADR 0007). */
   | { readonly kind: "cannot-code"; readonly provider: string }
   /** A code session couldn't start its session branch (ADR 0007), and why. */
@@ -1084,17 +1079,18 @@ export const createSessions = (options: {
     const { summary, folder, contextMarkdown } = workspace.value;
     const where = { contextDir: options.contextDir, workspaceId };
     const planning = summary.mode === "planning";
-    const [documents, things, projects, builds, tools] = await Promise.all([
+    const [documents, things, projects, builds, sizes, tools] = await Promise.all([
       planning ? listDocuments(where) : ok([]),
       planning ? readThings(where) : ok({ things: [], problems: [] }),
       planning ? readProjects(where) : ok({ projects: [], problems: [] }),
       planning ? readBuilds(where) : ok({ builds: [], problems: [] }),
+      planning ? readSizes(where) : ok({ sizes: [], problems: [] }),
       planning ? readTools(options.contextDir) : ok({ tools: [], problems: [] }),
     ]);
     if (!documents.ok) return err("This session's workspace's documents can't be read.");
     if (!things.ok || !tools.ok) return err("Its Things or the owner's tools can't be read.");
     if (!projects.ok) return err("This session's workspace's projects can't be read.");
-    if (!builds.ok) return err("This session's workspace's Builds can't be read.");
+    if (!builds.ok || !sizes.ok) return err("Its Builds or sizes can't be read.");
     return ok({
       name: summary.name,
       mode: summary.mode,
@@ -1106,6 +1102,7 @@ export const createSessions = (options: {
       tools: tools.value.tools.map(({ summary }) => summary),
       projects: projects.value,
       builds: builds.value,
+      sizes: sizes.value,
       notes: planning ? await notes.forTurn(workspaceId, session) : [],
       skills: await skillsOf(workspace.value),
       allowlist: allowlistFor(workspace.value.allowlist),
@@ -1274,64 +1271,18 @@ export const createSessions = (options: {
           reply: documentReply,
           stoppedReply: () => documentReply(err({ kind: "stopped" }), true),
         });
-        const turnThings = createTurnThings({
-          ...targetOf(turn),
-          shown: workspace.value.things.things,
+        const fileTools = fileSavingTools({
+          target: targetOf(turn),
+          shown: workspace.value,
           photos: photosOf(framing.attachments),
-          now: options.now(),
-        });
-        const saveThingTool = savingTool({
-          stopped,
-          run: turnThings,
-          record: ({ save, change }) =>
-            recordSave({ type: "thing-saved", save, ...withChange(change) }),
-          reply: thingReply,
-          stoppedReply: () => thingReply(err({ kind: "stopped" }), true),
-        });
-        const turnProjects = createTurnProjects({
-          ...targetOf(turn),
-          shown: workspace.value.projects.projects,
-          now: options.now(),
-          // The session belongs to it from now on (#603).
-          attach: async (project) => (await updateFile(turn.id, { project })).ok,
-        });
-        const projectSaved = async (input: unknown) => {
-          const done = await turnProjects(input);
-          if (done.ok && done.value.kind === "saved") {
-            const { save, change } = done.value.saved;
-            await recordSave({ type: "project-saved", save, ...withChange(change) });
-          }
-          return done;
-        };
-        const saveProjectTool = savingTool({
-          stopped,
-          run: projectSaved,
-          record: async () => undefined,
-          reply: projectReply,
-          stoppedReply: () => projectReply(err({ kind: "stopped" }), true),
-        });
-        /** How giving a Build to its project's step went, for the Build tool's reply. */
-        let stepReply: ToolReply | undefined;
-        const saveBuildTool = savingTool({
-          stopped,
-          run: createTurnBuilds({
-            ...targetOf(turn),
-            shown: workspace.value.builds.builds,
-            now: options.now(),
-          }),
-          // One that changed nothing (its numbers read) has no save, and may still give its step.
-          record: async ({ step, build, ...done }) => {
-            if (done.kind === "saved") {
-              const { save, change } = done.saved;
-              await recordSave({ type: "build-saved", save, ...withChange(change) });
-            }
-            stepReply = undefined;
-            if (step === undefined) return;
-            const given = { step: step.id, step_build: build.summary.slug };
-            stepReply = projectReply(await projectSaved({ project: step.project, ...given }), true);
+          ownerMessages: async () => {
+            const read = await readEvents(turn.id);
+            return read.ok ? ownerMessagesIn(read.value) : [];
           },
-          reply: (done, retrying) => buildReply(done, { retrying, step: stepReply }),
-          stoppedReply: () => buildReply(err({ kind: "stopped" }), { retrying: true }),
+          now: options.now(),
+          stopped,
+          record: recordSave,
+          attach: async (project) => (await updateFile(turn.id, { project })).ok,
         });
         /** Records a piece of the answer. Anything after the owner stopped the turn is dropped. */
         const write = async (text: string) => {
@@ -1353,9 +1304,7 @@ export const createSessions = (options: {
         const answers: Readonly<Record<TurnToolName, (input: unknown) => Promise<ToolReply>>> = {
           [SAVE_TOOL_NAME]: save,
           [DOCUMENT_TOOL_NAME]: saveDocument,
-          [THING_TOOL_NAME]: saveThingTool,
-          [PROJECT_TOOL_NAME]: saveProjectTool,
-          [BUILD_TOOL_NAME]: saveBuildTool,
+          ...fileTools,
           [READ_SESSION_TOOL_NAME]: async (input) =>
             readSessionReply(
               await notes.read({ workspaceId: turn.workspaceId, session: turn.id, input }),
@@ -2668,7 +2617,7 @@ export const createSessions = (options: {
    */
   const undoFileSave = async (
     undo: { rawId: string; save: number | ChangeId },
-    of: "document" | "thing" | "project" | "build",
+    of: "document" | "thing" | "project" | "build" | "size",
   ): Promise<Result<null, SessionError>> => {
     const found = await findSession(undo.rawId);
     if (!found.ok) return found;
@@ -2701,6 +2650,7 @@ export const createSessions = (options: {
         thing: undoThingChange,
         project: undoProjectChange,
         build: undoBuildChange,
+        size: undoSizeChange,
       };
       const reversed = await undoes[of](targetOf(file), saved.change);
       if (!reversed.ok) return err(refused(reversed.error));
@@ -3476,6 +3426,7 @@ export const createSessions = (options: {
     undoProject: (undo: { rawId: string; save: number | ChangeId }) =>
       undoFileSave(undo, "project"),
     undoBuild: (undo: { rawId: string; save: number | ChangeId }) => undoFileSave(undo, "build"),
+    undoSize: (undo: { rawId: string; save: number | ChangeId }) => undoFileSave(undo, "size"),
 
     /** Undoes one of the session's saves, from wherever the owner is (ADR 0013). */
     undoSave: ({ rawId, save }: { rawId: string; save: number }) =>

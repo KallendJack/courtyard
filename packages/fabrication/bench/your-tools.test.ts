@@ -138,18 +138,21 @@ describe("a Build's steps with Your tools", () => {
     expect(bits({}, "end-frames")).toEqual([{ mm: 3, for: "pilot holes" }]);
     expect(bits({}, "fit-castors")).toEqual([{ mm: 7, for: "the M6 bolts" }]);
     // A set's sizes as kept on its Thing: listed, or a range.
-    expect(bits({ bitSets: ["3, 5, 7 mm"] }, "fit-castors")).toEqual([
+    const set = (size: string) => ({ sizes: [{ name: "Drill bits", size }] });
+    expect(bits(set("3, 5, 7 mm"), "fit-castors")).toEqual([
       { mm: 7, for: "the M6 bolts", have: true },
     ]);
-    expect(bits({ bitSets: ["1–6 mm"] }, "end-frames")).toEqual([
-      { mm: 3, for: "pilot holes", have: true },
-    ]);
-    expect(bits({ bitSets: ["1-6mm"] }, "fit-castors")).toEqual([
+    expect(bits(set("1–6 mm"), "end-frames")).toEqual([{ mm: 3, for: "pilot holes", have: true }]);
+    expect(bits(set("1-6mm"), "fit-castors")).toEqual([
       { mm: 7, for: "the M6 bolts", have: false },
     ]);
     // A size added from the Tools tab, after the range it was kept with.
-    expect(bits({ bitSets: ["1–6 mm, 7 mm"] }, "fit-castors")).toEqual([
+    expect(bits(set("1–6 mm, 7 mm"), "fit-castors")).toEqual([
       { mm: 7, for: "the M6 bolts", have: true },
+    ]);
+    // Another tool's size is no bit set's.
+    expect(bits({ sizes: [{ name: "Mitre saw", size: "305 × 90 mm" }] }, "end-frames")).toEqual([
+      { mm: 3, for: "pilot holes" },
     ]);
   });
 

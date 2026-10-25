@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ToolSize } from "./capacity.ts";
 
 // The tools and safety kit a step can need, which the owner's tools to hand are set against. Kit
 // is a tool like any other here, so a missing pair of glasses is listed as a missing saw is.
@@ -88,6 +89,13 @@ export const toolsFrom = (names: readonly string[]): Tool[] => {
 /** The first of the owner's Things, by name, that is a tool, or will do for it (#763). */
 export const thingFor = (tool: Tool, names: readonly string[]): string | undefined =>
   names.find((name) => TOOL_WORDS[tool].test(wordsOf(name)));
+
+/** The sizes the owner's drill bit sets are kept with ("3, 5, 7 mm", "1–10 mm"), among their tools'. */
+export const bitSetsFrom = (sizes: readonly ToolSize[]): string[] => [
+  ...new Set(
+    sizes.filter(({ name }) => toolsFrom([name]).includes("drill-bits")).map(({ size }) => size),
+  ),
+];
 
 /**
  * Whether the owner's drill bit sets have a bit, by the sizes each is kept with: listed ("3, 5,

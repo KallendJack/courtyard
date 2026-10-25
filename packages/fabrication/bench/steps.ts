@@ -1,19 +1,20 @@
-import type { CutPlan, Fitted, KeptWay, Part, Step, StepTool } from "../build.ts";
-import { bitInSets, TOOL_NAMES, type Tool } from "../tools.ts";
+import type { CutPlan, Fitted, KeptWay, Part, Step } from "../build.ts";
+import type { Capacities } from "../capacity.ts";
+import { TOOL_NAMES, type Tool } from "../tools.ts";
 import { castorsDraft } from "./castor-steps.ts";
 import {
   braceCloseUp,
   endFrameCloseUp,
   longSideCloseUp,
-  PILOT,
   SHEET_SCREWS_PER_BRACE,
   sheetCloseUp,
 } from "./close-ups.ts";
 import { type Shape, whole } from "./frame.ts";
 import type { BenchParameters } from "./parameters.ts";
-import { act, CUT_STEP, type Draft, preparingSteps, sawInUse } from "./preparing.ts";
-import { type SceneSetting, sectionOf } from "./scene-pieces.ts";
+import { act, CUT_STEP, type Draft, handedOn, preparingSteps, sawInUse } from "./preparing.ts";
+import { nameOf, type SceneSetting, sectionOf } from "./scene-pieces.ts";
 import { stepScene } from "./scenes.ts";
+import { stepToolsOf } from "./step-tools.ts";
 import { pilotWalk } from "./walk-throughs.ts";
 
 // The framed bench's steps, in the order it's built, each said twice: "show me how" for a
@@ -49,6 +50,8 @@ export const benchSteps = (options: {
   bitSets: readonly string[];
   /** The ways the steps already started were done, which they keep. */
   kept: readonly KeptWay[];
+  /** What the owner's powered saws can cut (#780). */
+  capacities: Capacities;
 }): Step[] => {
   const { parameters: p, shape: s, cutPlan, toHand, kept } = options;
   const castors = p.castors;
@@ -59,7 +62,8 @@ export const benchSteps = (options: {
     saw === planned || kept.some((way) => way.step === CUT_STEP)
       ? null
       : { was: TOOL_NAMES[planned], now: TOOL_NAMES[saw] };
-  const setting: SceneSetting = { ...options, saw };
+  const handed = handedOn({ ...options, saw, sectionOf: (stock) => sectionOf(options, stock) });
+  const setting: SceneSetting = { ...options, saw, handed };
   const frameScrews = p.fixings.frameScrews.name;
   const sheetScrews = p.fixings.sheetScrews.name;
   const brackets = p.fixings.brackets.name;
@@ -99,7 +103,14 @@ export const benchSteps = (options: {
   const rearInset = whole((s.frameLength - s.endRail) / 2);
 
   const drafts: Draft[] = [
-    ...preparingSteps({ cutPlan, toHand, saw, sectionOf: (stock) => sectionOf(setting, stock) }),
+    ...preparingSteps({
+      cutPlan,
+      toHand,
+      saw,
+      handed,
+      sectionOf: (stock) => sectionOf(setting, stock),
+      nameOf: (label) => nameOf(setting, label),
+    }),
     ...(castors ? [castorsDraft({ castors, shape: s, boltLength: options.boltLength })] : []),
     {
       id: "end-frames",
@@ -352,25 +363,7 @@ export const benchSteps = (options: {
     },
   ];
 
-  const stepTool =
-    (draft: Draft) =>
-    (tool: Tool): StepTool => {
-      const standIn = options.standIns.get(tool);
-      const bits =
-        tool === "drill-bits"
-          ? (draft.bits ?? [{ mm: PILOT, for: "pilot holes" }]).map((bit) => {
-              const have = bitInSets(options.bitSets, bit.mm);
-              return have === undefined ? bit : { ...bit, have };
-            })
-          : undefined;
-      return {
-        tool,
-        name: TOOL_NAMES[tool],
-        toHand: toHand.has(tool),
-        ...(standIn === undefined ? {} : { standIn }),
-        ...(bits === undefined ? {} : { bits }),
-      };
-    };
+  const stepTool = stepToolsOf(options);
   const on = drafts.filter((draft) => draft.on);
   return on.map((draft, at) => ({
     id: draft.id,
