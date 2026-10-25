@@ -16,6 +16,8 @@ const WORDS = {
   "lock nut": "A nut with a nylon ring inside, which stops it shaking loose.",
   countersink:
     "A cone-shaped dip cut into the top of a screw hole, so the screw's head sits flush.",
+  slice:
+    "Turn the 3D file into the printer's moves, layer by layer. Bambu Studio does it when you open the file.",
 } as const;
 
 export type Word = keyof typeof WORDS;

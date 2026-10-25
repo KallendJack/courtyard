@@ -1,6 +1,6 @@
 import type { BuildParameters, BuildStockPick, BuildTemplate } from "@courtyard/contract";
-import { type Build, deriveBench, pickBenchStock } from "@courtyard/fabrication";
-import type { Result } from "../../lib/result.ts";
+import { type Build, deriveBench, derivePrinted, pickBenchStock } from "@courtyard/fabrication";
+import { err, type Result } from "../../lib/result.ts";
 
 // A Build's parameters: worked out by its template's engine, changed by a merge patch, and what a
 // change did, in a few words for its note.
@@ -8,11 +8,18 @@ import type { Result } from "../../lib/result.ts";
 /** Each template's engine: its parameters in, everything its Build shows out, or what's wrong. */
 const ENGINES: Readonly<Record<BuildTemplate, (parameters: unknown) => Result<Build, string[]>>> = {
   "framed-bench": deriveBench,
+  "battery-holster": derivePrinted("battery-holster"),
+  "castor-shim": derivePrinted("castor-shim"),
+  bracket: derivePrinted("bracket"),
+  "printed-part": derivePrinted("printed-part"),
 };
 
 /** Everything a Build shows, worked out from its template and parameters (ADR 0036). */
 export const derive = (template: BuildTemplate, parameters: BuildParameters) =>
   ENGINES[template](parameters);
+
+/** A printed part is made of filament, so it has no stock to swap. */
+const noStock = err(["A printed part has no timber or sheets to pick from."]);
 
 /** Each template's way to swap one of its stocks for an option, in every part cut from it. */
 const PICKERS: Readonly<
@@ -22,6 +29,10 @@ const PICKERS: Readonly<
   >
 > = {
   "framed-bench": pickBenchStock,
+  "battery-holster": () => noStock,
+  "castor-shim": () => noStock,
+  bracket: () => noStock,
+  "printed-part": () => noStock,
 };
 
 /** A Build's parameters with one of its stocks swapped for an option (#704), or why not. */

@@ -14,16 +14,21 @@ import { BuyList } from "./buy-list.tsx";
 import { CloseUp } from "./close-up.tsx";
 import { CutPlan } from "./cut-plan.tsx";
 import { FINDINGS_ID, Findings } from "./findings.tsx";
+import { PrintPanel, PrintTab, useMaking } from "./print/print-panel.tsx";
 import { useProgress } from "./progress.ts";
 import { StepFoot, StepPanel } from "./step-panel.tsx";
 import { type JustPicked, type Pickable, StockOptionsPanel } from "./stock-options.tsx";
 import { ToolsList } from "./tools-list.tsx";
-import { sizeLine, toCheck } from "./words.ts";
+import { checkCards, printSizeLine, sizeLine } from "./words.ts";
 
-/** The side panel's tabs, as the board has them; on the cover screen, the 3D view and chat too. */
-const SIDE_TABS = ["Cut plan", "Buy list", "Tools", "Steps"] as const;
-const COVER_TABS = ["Bench", "Chat", ...SIDE_TABS] as const;
-type Tab = (typeof COVER_TABS)[number];
+/**
+ * The side panel's tabs, as the boards have them, for a bench and for a printed part (#702); on
+ * the cover screen, the 3D view and chat too.
+ */
+const BENCH_TABS = ["Cut plan", "Buy list", "Tools", "Steps"] as const;
+const PRINT_TABS = ["Print", "Buy list", "Steps"] as const;
+type SideTab = (typeof BENCH_TABS)[number] | (typeof PRINT_TABS)[number];
+type Tab = SideTab | "Bench" | "Part" | "Chat";
 
 /** A panel on the PC and the unfolded Fold: one of the board's three. */
 const PANEL = "flex min-h-0 flex-col rounded-card border border-border bg-surface p-4";
@@ -71,24 +76,30 @@ function Tabs(props: { tabs: readonly Tab[]; showing: Tab; show: (tab: Tab) => v
  * A Build's page (#698; Paper, 2 · Agreed, "Fabrication · A Build · Tablet (#698)" and
  * "· Desktop 1440×900 (#698)"): a top bar with the way back to its project in Courtyard, its name
  * and size, and what the making rules found; then three panels, its chat, the Build in 3D, and
- * its cut plan, buy list, tools and steps. On the cover screen the panels are tabs. A part tapped
- * anywhere is lit everywhere.
+ * its cut plan, buy list, tools and steps. A printed part (#702; "· Text to print · Tablet
+ * (#702)") shows itself on the printer's plate, and its Print tab before its buy list and steps.
+ * On the cover screen the panels are tabs. A part tapped anywhere is lit everywhere.
  */
 export function BuildPage(props: { build: BuildOpened }) {
   const { build } = props;
   const { derived, place } = build;
+  const { print } = derived;
   const router = useRouter();
   const cover = useLayout() === "cover";
+  const sideTabs: readonly SideTab[] = print === null ? BENCH_TABS : PRINT_TABS;
+  const coverTabs: readonly Tab[] = [print === null ? "Bench" : "Part", "Chat", ...sideTabs];
+  const firstSide = sideTabs[0] ?? "Buy list";
   const [lit, setLit] = useState<string>();
   // Once building has started, the Build opens on the steps, where the owner left off (#699).
   const started = buildStarted(derived.steps, build.progress);
-  const [side, setSide] = useState<(typeof SIDE_TABS)[number]>(started ? "Steps" : "Cut plan");
-  const [coverTab, setCoverTab] = useState<Tab>(started ? "Steps" : "Bench");
+  const [side, setSide] = useState<SideTab>(started ? "Steps" : firstSide);
+  const [coverTab, setCoverTab] = useState<Tab>(started ? "Steps" : (coverTabs[0] ?? "Chat"));
   const [draft, setDraft] = useState<{ text: string; files: File[]; key: number }>();
   const pick = (label: string) => setLit((now) => (now === label ? undefined : label));
   const reread = useCallback(() => void router.invalidate(), [router]);
   // The Build may change from Courtyard too: it's read again the shared way.
   useFresh({ ask: () => router.invalidate() });
+  const making = useMaking({ workspaceId: place.workspace.id, slug: build.slug, derived });
   const progress = useProgress(build, reread);
   const { step } = progress;
   // A part's card covers the picture, so a new step closes it (#754).
@@ -135,14 +146,14 @@ export function BuildPage(props: { build: BuildOpened }) {
   };
   const choosingOptions = derived.options.find((options) => options.stock === choosing);
 
-  const checks = toCheck(derived.findings).length;
+  const checks = checkCards(derived.findings, print).length;
   const back = courtyardPlace(place);
 
   const showFindings = () => {
-    if (cover && (coverTab === "Bench" || coverTab === "Chat" || coverTab === "Steps")) {
-      setCoverTab("Cut plan");
+    if (cover && (coverTab === "Steps" || !(sideTabs as readonly Tab[]).includes(coverTab))) {
+      setCoverTab(firstSide);
     }
-    if (!cover && side === "Steps") setSide("Cut plan");
+    if (!cover && side === "Steps") setSide(firstSide);
     requestAnimationFrame(() => document.getElementById(FINDINGS_ID)?.focus());
   };
 
@@ -158,8 +169,17 @@ export function BuildPage(props: { build: BuildOpened }) {
     if (cover) setCoverTab("Chat");
   };
 
-  const sideContent = (tab: (typeof SIDE_TABS)[number]): ReactNode => {
+  const sideContent = (tab: SideTab): ReactNode => {
     switch (tab) {
+      case "Print":
+        return print === null ? null : (
+          <PrintTab
+            print={print}
+            making={making}
+            workspaceId={place.workspace.id}
+            slug={build.slug}
+          />
+        );
       case "Cut plan":
         return <CutPlan derived={derived} lit={lit} pick={pick} openOptions={openOptions} />;
       case "Buy list":
@@ -196,13 +216,13 @@ export function BuildPage(props: { build: BuildOpened }) {
         <StepFoot derived={derived} step={step} progress={progress} />
       </>
     );
-  const sidePanel = (tab: (typeof SIDE_TABS)[number]) =>
+  const sidePanel = (tab: SideTab) =>
     tab === "Steps" && choosingOptions === undefined ? (
       steps(false)
     ) : (
       <Scroller className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-col gap-4 pb-2">
-          <Findings findings={derived.findings} />
+          <Findings findings={derived.findings} print={print} />
           {choosingOptions === undefined ? (
             sideContent(tab)
           ) : (
@@ -231,15 +251,20 @@ export function BuildPage(props: { build: BuildOpened }) {
       onDrafted={() => setDraft(undefined)}
     />
   );
-  const bench = (
-    <BenchPanel
-      name={`The ${derived.template.split("-").at(-1)}`}
-      derived={derived}
-      lit={lit}
-      pick={pick}
-      atStep={atStep}
-    />
-  );
+  /** The Build in 3D: the bench built up to the step reached, or the printed part on its plate. */
+  const inThreeD = (closeUp: boolean) =>
+    print === null ? (
+      <BenchPanel
+        name={`The ${derived.template.split("-").at(-1)}`}
+        derived={derived}
+        lit={lit}
+        pick={pick}
+        atStep={atStep}
+        closeUp={closeUp}
+      />
+    ) : (
+      <PrintPanel print={print} making={making} />
+    );
 
   const header = (
     <header
@@ -259,8 +284,10 @@ export function BuildPage(props: { build: BuildOpened }) {
       <div className="flex min-w-0 flex-1 items-baseline gap-3">
         <h1 className="display-title truncate text-title">{build.name}</h1>
         <p className="truncate font-mono text-meta text-muted-foreground">
-          {sizeLine(derived.size)}
-          {cover ? "" : ` · ${derived.template.replaceAll("-", " ")}`}
+          {print === null ? sizeLine(derived.size) : printSizeLine(derived.size)}
+          {cover
+            ? ""
+            : ` · ${print === null ? derived.template.replaceAll("-", " ") : "printed part"}`}
         </p>
       </div>
       {checks > 0 && (
@@ -285,7 +312,7 @@ export function BuildPage(props: { build: BuildOpened }) {
         {header}
         <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pt-3 pb-4">
           <Tabs
-            tabs={COVER_TABS}
+            tabs={coverTabs}
             showing={coverTab}
             show={(tab) => {
               setChoosing(undefined);
@@ -293,23 +320,14 @@ export function BuildPage(props: { build: BuildOpened }) {
             }}
           />
           <div className={classes(PANEL, "flex-1")}>
-            {coverTab === "Bench" ? (
-              bench
+            {coverTab === "Bench" || coverTab === "Part" ? (
+              inThreeD(true)
             ) : coverTab === "Chat" ? (
               chat
             ) : coverTab === "Steps" ? (
               // As the cover board has it: the step in 3D above, its words below.
               <>
-                <div className="flex h-56 shrink-0 flex-col pb-3">
-                  <BenchPanel
-                    name={`The ${derived.template.split("-").at(-1)}`}
-                    derived={derived}
-                    lit={lit}
-                    pick={pick}
-                    atStep={atStep}
-                    closeUp={false}
-                  />
-                </div>
+                <div className="flex h-56 shrink-0 flex-col pb-3">{inThreeD(false)}</div>
                 {steps(true)}
               </>
             ) : (
@@ -325,14 +343,14 @@ export function BuildPage(props: { build: BuildOpened }) {
       {header}
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.3fr)] gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,2.1fr)_minmax(0,1.2fr)] xl:gap-4 xl:p-4">
         <div className={PANEL}>{chat}</div>
-        <div className={PANEL}>{bench}</div>
+        <div className={PANEL}>{inThreeD(true)}</div>
         <div className={classes(PANEL, "gap-4")}>
           <Tabs
-            tabs={SIDE_TABS}
+            tabs={sideTabs}
             showing={side}
             show={(tab) => {
               setChoosing(undefined);
-              setSide(tab as typeof side);
+              setSide(tab as SideTab);
             }}
           />
           {sidePanel(side)}

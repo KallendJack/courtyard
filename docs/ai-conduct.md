@@ -1883,30 +1883,49 @@ With none yet:
 > web, with a suggested reply such as "Save these prices", and put them in its prices, each with its shop and link, only
 > once the owner asks. A size the owner measured is measured; one from a maker's page is specified, with the page; any
 > other is assumed, and the reply lists those to check before cutting. Tell the owner what the reply finds: a fixing too
-> short, a tool needed that isn't to hand, a size assumed. Some making rules code can't check, so say them: test-fit one
-> piece before cutting or fixing the rest, measure before buying, and say plainly when a step needs a pro. When a
-> project has a step for making it, give that step with the Build, so the step owns it. A Build's materials live in its
-> buy list, never as wanted Things: offer to remove the wanted Things its buy list now holds, and remove them once the
-> owner agrees. A material becomes a Thing only once the owner has it and it isn't used up in the Build, such as its
-> castors, not its screws. The owner sees each change as a note under your answer, so leave saves unmentioned.
+> short, a tool needed that isn't to hand, a size assumed, a part too big for the printer's plate, a wall too thin to
+> print. A part to 3D print is a Build too: battery-holster, castor-shim or bracket when one fits, and for any other
+> shape printed-part, whose part recipe you write as a base and the features cut into it or raised on it. Every size of
+> a real thing a part holds or takes, such as a battery or a screw, comes from the owner or a maker's page: never fill
+> one in from memory, but ask, or set it assumed only once the owner agrees to go ahead without it. Everything else on a
+> part is yours to choose, and to say: where its holes go, and a screw's name as the owner calls it, such as "4 mm
+> screws". So start the Build from what the owner gave, and ask only for a real thing's size they didn't give. Some
+> making rules code can't check, so say them: test-fit one piece before cutting or fixing the rest, measure before
+> buying, and say plainly when a step needs a pro. When a project has a step for making it, give that step with the
+> Build, so the step owns it. A Build's materials live in its buy list, never as wanted Things: offer to remove the
+> wanted Things its buy list now holds, and remove them once the owner agrees. A material becomes a Thing only once the
+> owner has it and it isn't used up in the Build, such as its castors, not its screws. The owner sees each change as a
+> note under your answer, so leave saves unmentioned.
 
-**The save_build tool,** offered beside the project tool, as a model reads it, and its inputs (`<schema>` is the
-template's parameters as JSON Schema, from `BenchParameters`). The parameters' shape is in the tool's own
-description, not the input's: Codex's tool format keeps no description of an input that's an object, so there it
-never reached the model, and Codex sent `{}` (#732):
+**The save_build tool,** offered beside the project tool, as a model reads it, and its inputs (`<schemas>` is each
+template's parameters as JSON Schema, `framed-bench: {…}` from `BenchParameters`, then each printed template's own
+from `PRINTED_PARAMETERS` (a recipe's features with each kind's fields, `PartRecipeShown`), then `and every printed
+template also: {…}` from `PRINTED_COMMON`, said once, separated by spaces, without `$schema` or Zod's
+largest-safe-integer maximums: `TEMPLATE_SCHEMAS`). The parameters' shape is in the tool's own description, not the input's: Codex's tool
+format keeps no description of an input that's an object, so there it never reached the model, and Codex sent `{}`
+(#732):
 
 > Starts or changes one of this workspace's Builds, and replies with everything code works out from it: its parts, cut
-> plan, buy list with its total, steps and findings. Given a Build's label, it renames it or changes the parameters
-> you give; without one, it starts a new Build. Given only a Build's label, or a change that changes nothing, it
-> changes nothing and replies with its numbers as they are, so call it that way whenever you need a Build's numbers.
-> Follow the rule for Builds in your instructions. Its parameters: a new Build's are all of them; a change gives only
-> what changes, merged into what's there (an object merges, null takes a value out, anything else replaces it). Every
-> size is {"value": 900, "unit": "mm", "source": {"kind": "measured"}}, its source measured, specified (with its
-> reference, the maker's page) or assumed. framed-bench's parameters, as JSON Schema: <schema>
+> plan, buy list with its total, steps and findings. Given a Build's label, it renames it or changes the parameters you
+> give; without one, it starts a new Build. Given only a Build's label, or a change that changes nothing, it changes
+> nothing and replies with its numbers as they are, so call it that way whenever you need a Build's numbers. Follow the
+> rule for Builds in your instructions. Its parameters: a new Build's are all of them; a change gives only what changes,
+> merged into what's there (an object merges, null takes a value out, anything else replaces it). Every size of a real
+> thing is {"value": 900, "unit": "mm", "source": {"kind": "measured"}}, its source measured, specified (with its
+> reference, the maker's page) or assumed; a size the owner chooses for a printed part, such as its walls, is a number
+> of mm. A printed part's places are mm from its front left bottom corner, and a feature on a face is placed by u across
+> and v up the face as you look at it. A printed-part's parameters look like this: {"part": "Shelf tag", "recipe":
+> {"base": {"kind": "plate", "width": 60, "depth": 20, "thickness": 3}, "features": [{"kind": "hole", "face": "top",
+> "at": {"u": 8, "v": 10}, "screw": {"name": "3 mm screws", "diameter": {"value": 3, "unit": "mm", "source": {"kind":
+> "measured"}}}, "countersunk": true}, {"kind": "text", "face": "top", "text": "TOOLS", "size": 6, "depth": 1, "style":
+> "raised"}]}}. Each template's parameters, as JSON Schema: <schemas>
 
 > - build: To change a Build, or read its numbers: its label, such as B1. Leave it out to start one.
 > - name: Its name, as the owner would say it, such as Workbench. A new Build needs one.
-> - template: What it's made from: framed-bench, a bench or table on a timber frame. A new Build needs one.
+> - template: What it's made from: framed-bench, a bench or table on a timber frame; battery-holster, a printed tray a
+>   battery or anything boxy slides into, screwed up through its back; castor-shim, a printed plate under a castor's
+>   that lifts it; bracket, a printed L-bracket; printed-part, any other printed shape, from its part recipe. A new
+>   Build needs one.
 > - parameters: A new Build's parameters, all of them; to change one, only what changes. Their shape is in this tool's
 >   description.
 > - project: The project whose step makes it, by its label, such as P1, given with step.
@@ -1954,6 +1973,21 @@ run again, each run guessing at keys for the screws' pack size before finding `p
 `build-option-price-from-shop` (#704) checks the answer instead: asked which sheet is cheapest for the bench's top, it
 gives each option's price only with its shop and link, from the tool's reply or the web, never one from memory, so
 every priced line has a link, and it saves no Build: a question changes nothing (`builds: { action: "none" }`).
+
+Printed parts (#702) are Builds from the same tool: `battery-holster`, `castor-shim` and `bracket`, each a few
+parameters, and `printed-part`, a part recipe the model writes (a base and its features). Code checks the recipe and
+makes the solid; nothing the model writes is run. A printed part's reply begins with its size, whether it fits the
+printer's plate, the clearance its holes allow, and each size with its source ("- Battery width: 76 mm, assumed"),
+then its buy list (the filament and screws), steps and findings, as a bench's does without the cut plan. Two more
+scenarios check the saved Build the same way: asked for a holster with its sizes, the model starts a
+`battery-holster` with them, every sourced size one the owner gave, and every size in its answer one the Build
+derives, which the made file's matches (`build-holster-sizes`); asked for a shelf tag no template covers, it writes a
+`printed-part` recipe, making up none of the sizes of real things in it (`build-recipe-no-template`). On Claude both
+missed 0 of 3 at first: it asked for a screw's head and name, sizes the owner hadn't given, and wrote the recipe's base
+with keys of its own, since the features were shown only as `{kind}`. With each feature's fields in the schema, a
+worked recipe in the tool's description, and the rule saying what's its to choose (where holes go, a screw's name as
+the owner calls it), the holster passed 2 of 3 and the tag 3 of 3, and the bench 3 of 3 once its tools, like a printed
+part's, default to none (it had sent none, then made some up). Not yet run on Codex.
 
 ## The move review
 

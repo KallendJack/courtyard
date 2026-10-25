@@ -14,7 +14,7 @@ const built = (parameters: unknown): Build => {
 
 const sceneOf = (build: Build, id: string): Scene => {
   const step = build.steps.find((each) => each.id === id);
-  if (step === undefined) throw new Error(`No step ${id}.`);
+  if (step?.scene == null) throw new Error(`No step ${id} with a scene.`);
   return step.scene;
 };
 
@@ -225,10 +225,12 @@ describe("an assembly step's scene", () => {
 });
 
 describe("every step's scene", () => {
-  it("opens between 15° and 60° above level", () => {
-    for (const step of built(goldenBench).steps) {
-      expect(step.scene.view.tilt).toBeGreaterThanOrEqual(15);
-      expect(step.scene.view.tilt).toBeLessThanOrEqual(60);
+  it("is there, and opens between 15° and 60° above level", () => {
+    const build = built(goldenBench);
+    for (const step of build.steps) {
+      const { tilt } = sceneOf(build, step.id).view;
+      expect(tilt).toBeGreaterThanOrEqual(15);
+      expect(tilt).toBeLessThanOrEqual(60);
     }
   });
 });

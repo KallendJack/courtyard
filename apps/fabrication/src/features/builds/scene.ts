@@ -5,7 +5,7 @@ import * as THREE from "three";
 // the marks over the scene and the waste side's hatching. Only `bench-view.tsx` imports it, so
 // `three` stays in the 3D view's own file.
 
-export type BuildScene = BuildStep["scene"];
+export type BuildScene = NonNullable<BuildStep["scene"]>;
 type BuildSceneMark = BuildScene["marks"][number];
 type At = { x: number; y: number; z: number };
 

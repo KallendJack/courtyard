@@ -98,7 +98,7 @@ export function BenchPanel(props: {
           <BenchView
             derived={derived}
             lit={lit}
-            scene={atStep?.step.scene}
+            scene={atStep?.step.scene ?? undefined}
             sceneId={atStep?.step.id ?? "whole"}
             pick={pick}
           />

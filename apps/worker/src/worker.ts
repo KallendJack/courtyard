@@ -293,6 +293,7 @@ export const createWorker = (options: {
     updateTask,
     githubClientId,
     buildsLock,
+    printing,
     paperCommand,
     previewPorts,
   } = settings.value;
@@ -626,7 +627,7 @@ export const createWorker = (options: {
   api.route("/", projectRoutes({ contextDir, contextFolder, now }));
   api.route(
     "/fabrication",
-    fabricationRoutes({ contextDir, contextFolder, now, sessions, providers }),
+    fabricationRoutes({ contextDir, contextFolder, now, sessions, providers, printing }),
   );
   api.route("/", moveReviewRoutes(reviews));
   api.route("/", statusLineRoutes(statusLines));
@@ -638,10 +639,8 @@ export const createWorker = (options: {
   api.route("/", repoRoutes(repos));
   const pullRequests = createPullRequests({ contextDir, code, sessions, bumps: versionBumps });
   api.route("/", pullRequestRoutes(pullRequests));
-  api.route(
-    "/",
-    quickQuestionRoutes(createQuickQuestions({ contextDir, providers, pullRequests })),
-  );
+  const quickQuestions = createQuickQuestions({ contextDir, providers, pullRequests });
+  api.route("/", quickQuestionRoutes(quickQuestions));
   api.route("/", connectionRoutes(connections));
   api.route("/", nextUpRoutes(nextUp));
   api.route("/", leadRoutes(lead));
