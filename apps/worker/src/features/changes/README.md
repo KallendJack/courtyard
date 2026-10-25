@@ -16,7 +16,7 @@ back as a new change.
 
 ## How it works
 
-- Lists a file's changes from `context-folder/`'s history, and its documents', Things', projects' (#603) and Builds'
-  (#697).
-- Undoes one from that page: a model's document, Thing, project or Build save through its session, as a save is
+- Lists a file's changes from `context-folder/`'s history, and its documents', Things', projects' (#603), Builds'
+  (#697) and sizes' (#708).
+- Undoes one from that page: a model's document, Thing, project, Build or size save through its session, as a save is
   (`whole-files.ts`, which also puts the owner's own changes back file by file).

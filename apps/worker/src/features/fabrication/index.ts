@@ -30,7 +30,7 @@ import {
   slugFor,
 } from "../planning-files/index.ts";
 import { derive, merged, parameterChanges, pickStockIn } from "./parameters.ts";
-import { NOT_STARTED, progressIn, toolsToHand } from "./setting.ts";
+import { NOT_STARTED, progressIn, type ToolsSetting, toolsToHand } from "./setting.ts";
 
 /**
  * Fabrication's Builds, hosted in a planning workspace (ADRs 0036, 0037; #697): a JSON file each in
@@ -128,7 +128,7 @@ export type BuildRefusal =
 /** The Builds in a planning folder, their steps following the owner's tools when they have any. */
 const readBuildsIn = async (
   folder: string,
-  tools: readonly string[] | undefined,
+  tools: ToolsSetting,
 ): Promise<Result<ReadBuilds, BuildRefusal>> => {
   const names = await listFolder(join(folder, BUILDS_FOLDER));
   if (!names.ok) return err({ kind: "storage" });
@@ -149,7 +149,7 @@ const readBuildsIn = async (
     const kept = await readTextFile(join(folder, progressPath(slug.data)));
     if (!kept.ok) return err({ kind: "storage" });
     const progress = progressIn(kept.value, () => readBuildText(build));
-    const read = readBuildText(build, { tools, kept: progress.ways });
+    const read = readBuildText(build, { ...tools, kept: progress.ways });
     if (!read.ok) {
       problems.push({ path, problem: read.error });
       continue;
@@ -278,7 +278,7 @@ export const saveBuild = async (
         return err({ kind: "invalid", problem: issue?.message ?? "" });
       }
       const progress = current?.progress ?? NOT_STARTED;
-      const derived = derive(template, file.data.parameters, { tools, kept: progress.ways });
+      const derived = derive(template, file.data.parameters, { ...tools, kept: progress.ways });
       if (!derived.ok) return err({ kind: "parameters", problems: derived.error });
 
       const slug =

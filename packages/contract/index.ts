@@ -275,7 +275,8 @@ export {
   skillTitle,
   UsableSkillSummary,
 } from "./lib/skills.ts";
-export { SizeSource, SourcedSize } from "./lib/sourced/size.ts";
+export * from "./lib/sourced/records.ts";
+export { SizeRecordId, SizeSource, SourcedSize } from "./lib/sourced/size.ts";
 export {
   STATUS_ITEM_MAX_LENGTH,
   StatusItem,

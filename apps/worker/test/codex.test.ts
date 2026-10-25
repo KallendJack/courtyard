@@ -1475,6 +1475,7 @@ describe("Courtyard's tools on a Codex turn", () => {
       "save_thing",
       "save_project",
       "save_build",
+      "save_size",
       "use_skill",
       "suggest_replies",
     ]);

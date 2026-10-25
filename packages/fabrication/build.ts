@@ -1,4 +1,5 @@
 import type { BuildTemplate, SizeSource, SourcedSize } from "@courtyard/contract";
+import type { ToolSize } from "./capacity.ts";
 import type { CheckedRecipe } from "./print/recipe.ts";
 import type { Scene } from "./scene.ts";
 import type { Tool } from "./tools.ts";
@@ -183,11 +184,14 @@ export type KeptWay = { readonly step: string; readonly tool: string };
 /**
  * What a Build is worked out with besides its parameters (#777): the owner's tools as Your tools
  * saves them (each by its tile's name, or the owner's own), which the steps follow in place of the
- * parameters' own when given, and the ways the steps already started were done.
+ * parameters' own when given, their sizes (a mitre saw's cutting capacity, #780), and the ways the
+ * steps already started were done.
  */
 export type BuildSetting = {
   /** Left out, or undefined, when the owner has saved none: the steps follow the Build's own. */
   readonly tools?: readonly string[] | undefined;
+  /** The sizes the owner gave their tools, each by one of its names. */
+  readonly sizes?: readonly ToolSize[];
   readonly kept?: readonly KeptWay[];
 };
 

@@ -3,7 +3,7 @@ import type { At, Scene, SceneMark, ScenePiece } from "../scene.ts";
 import { TOOL_NAMES, type Tool } from "../tools.ts";
 import type { Shape } from "./frame.ts";
 import type { BenchParameters } from "./parameters.ts";
-import type { Saw } from "./preparing.ts";
+import type { HandedOn, Saw } from "./preparing.ts";
 
 // What the steps' pictures (scenes.ts) are drawn with: the Build's parts as far as they're put
 // on, the tools as simple boxes, and where things sit. The tools are only pictures, not the
@@ -58,17 +58,19 @@ export type SceneSetting = {
   toHand: ReadonlySet<Tool>;
   /** The saw the timber is cut with: the best to hand, or the one it was cut with (#777). */
   saw: Saw;
+  /** The timber too big for `saw`, with the saw that cuts it instead (#780). */
+  handed: readonly HandedOn[];
   /** The castor bolts' length as the steps fit them: the length to use when those given are short. */
   boltLength: number;
 };
 
 /** A timber's section, by its stock's name: how wide and thick it lies flat. */
-export const sectionOf = (setting: SceneSetting, stock: string) =>
+export const sectionOf = (setting: Pick<SceneSetting, "parameters" | "shape">, stock: string) =>
   stock === setting.parameters.frame.wide.name
     ? { wide: setting.shape.wideWidth, thick: setting.shape.wideThick }
     : { wide: setting.shape.wide, thick: setting.shape.thick };
 
-export const nameOf = (setting: SceneSetting, label: string) =>
+export const nameOf = (setting: Pick<SceneSetting, "parts">, label: string) =>
   setting.parts.find((each) => each.label === label)?.name ?? label;
 
 /** The bench as far as it's built: the parts put on so far, this step's lit, the rest faint. */

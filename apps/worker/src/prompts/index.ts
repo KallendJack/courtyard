@@ -1,6 +1,5 @@
 import {
   type Activity,
-  type BuildSave,
   type Capabilities,
   CONTEXT_LINE_MAX_CHARACTERS,
   DOCUMENT_MAX_CHARACTERS,
@@ -83,6 +82,7 @@ import {
   projectsPart,
   sessionProjectPart,
 } from "./projects.ts";
+import { KEEPING_SIZES, type ReadSizes, SIZE_TOOL, sizeSaveLine, sizesPart } from "./sizes.ts";
 import { contained, quoted, textReply } from "./text.ts";
 import { toolsPart } from "./tools.ts";
 
@@ -109,8 +109,9 @@ export type FramingWorkspace = {
   readonly tools: readonly ThingSummary[];
   /** Its projects (#603): a planning workspace's, none in a code workspace. */
   readonly projects: ReadProjects;
-  /** Its Builds (#697): a planning workspace's, none in a code workspace. */
+  /** Its Builds (#697) and sizes (#708): a planning workspace's, none in a code workspace. */
   readonly builds: ReadBuilds;
+  readonly sizes: ReadSizes;
   /** The project the session belongs to (#603), by its file's name, if any. */
   readonly project?: ProjectSlug | undefined;
   /**
@@ -1097,6 +1098,7 @@ const instructionsFor = (turn: {
           // The project the session belongs to (#603), whole.
           ...sessionProjectPart(workspace),
           buildsPart(workspace.builds),
+          sizesPart(workspace.sizes, workspace.things),
           // What the workspace's latest sessions did and decided (#601), once any left a note.
           ...(workspace.notes.length === 0 ? [] : [notesPart(workspace.notes, turn.readsSessions)]),
         ]
@@ -1108,7 +1110,9 @@ const instructionsFor = (turn: {
       : []),
     ...(turn.previews ? [PREVIEWING] : []),
     ...(turn.documents ? [DOCUMENTING] : []),
-    ...(turn.things ? [KEEPING_THINGS, KEEPING_WANTED, KEEPING_PROJECTS, KEEPING_BUILDS] : []),
+    ...(turn.things
+      ? [KEEPING_THINGS, KEEPING_WANTED, KEEPING_PROJECTS, KEEPING_BUILDS, KEEPING_SIZES]
+      : []),
     ...(turn.skills.offered.length > 0 ? [skillsListPart(turn.skills.offered)] : []),
     ...(turn.skills.inUse.length > 0
       ? [
@@ -1167,28 +1171,30 @@ type Said =
       /** What it did (#186), told only once a restart cut it off. */
       readonly did: readonly Activity[];
       readonly saves: readonly SaidSave[];
-      readonly documents: readonly SaidFile<DocumentSave>[];
-      readonly things: readonly SaidFile<ThingSave>[];
-      readonly projects: readonly SaidFile<ProjectSave>[];
-      readonly builds: readonly SaidFile<BuildSave>[];
+      readonly files: readonly SaidFile[];
     }
   /** What Courtyard did between what was said: a task starting or ending (#182). */
   | { readonly speaker: "courtyard"; readonly text: string };
 
-/** A document, Thing, project or Build the model saved, and whether the owner has undone it since. */
-type SaidFile<Save> = { readonly save: Save; undone: boolean };
+/** A document, Thing, project, Build or size saved: its line, and whether the owner undid it. */
+type SaidFile = { readonly line: (undone: boolean) => string; undone: boolean };
 
 type ModelSaid = Extract<Said, { speaker: "model" }>;
 
 /** An answer's saves before it has made any. */
-const NO_SAVES = { saves: [], documents: [], things: [], projects: [], builds: [] } as const;
+const NO_SAVES = { saves: [], files: [] } as const;
 
 /** The session so far, from its events: each owner message and the answer to it. */
 const conversationOf = (events: readonly SessionEvent[]) => {
   const said: Said[] = [];
   const saves = new Map<number, SaidSave>();
-  /** Its document, Thing, project and Build saves, by their events' seq, which their Undo names. */
-  const fileSaves = new Map<number, { undone: boolean }>();
+  /** Its document, Thing, project, Build and size saves, by the seq their Undo names. */
+  const fileSaves = new Map<number, SaidFile>();
+  const savedFile = (seq: number, line: SaidFile["line"]) => {
+    const saved: SaidFile = { line, undone: false };
+    fileSaves.set(seq, saved);
+    answer((current) => ({ files: [...current.files, saved] }));
+  };
   // What the owner added while it answered and the model never read (#252).
   const unread = new Set(
     events.flatMap((event) => (event.type === "added-not-read" ? [event.added] : [])),
@@ -1305,35 +1311,29 @@ const conversationOf = (events: readonly SessionEvent[]) => {
       }
       case "document-saved": {
         // The owner's Save as document isn't the model's doing; the documents list shows it.
-        if (event.answer !== undefined) break;
-        const saved: SaidFile<DocumentSave> = { save: event.save, undone: false };
-        fileSaves.set(event.seq, saved);
-        answer((current) => ({ documents: [...current.documents, saved] }));
+        const { save } = event;
+        if (event.answer === undefined)
+          savedFile(event.seq, (undone) => documentLine(save, undone));
         break;
       }
-      case "thing-saved": {
-        const saved: SaidFile<ThingSave> = { save: event.save, undone: false };
-        fileSaves.set(event.seq, saved);
-        answer((current) => ({ things: [...current.things, saved] }));
+      case "thing-saved":
+        savedFile(event.seq, (undone) => thingSaveLine(event.save, undone));
         break;
-      }
-      case "project-saved": {
-        const saved: SaidFile<ProjectSave> = { save: event.save, undone: false };
-        fileSaves.set(event.seq, saved);
-        answer((current) => ({ projects: [...current.projects, saved] }));
+      case "project-saved":
+        savedFile(event.seq, (undone) => projectSaveLine(event.save, undone));
         break;
-      }
       // So the next turn knows a Build's size the owner undid isn't the Build's any more.
-      case "build-saved": {
-        const saved: SaidFile<BuildSave> = { save: event.save, undone: false };
-        fileSaves.set(event.seq, saved);
-        answer((current) => ({ builds: [...current.builds, saved] }));
+      case "build-saved":
+        savedFile(event.seq, (undone) => buildSaveLine({ save: event.save, undone }));
         break;
-      }
+      case "size-saved":
+        savedFile(event.seq, (undone) => sizeSaveLine({ save: event.save, undone }));
+        break;
       case "document-undone":
       case "thing-undone":
       case "project-undone":
-      case "build-undone": {
+      case "build-undone":
+      case "size-undone": {
         const saved = fileSaves.get(event.save);
         if (saved) saved.undone = true;
         break;
@@ -1371,15 +1371,15 @@ const saveLine = ({ save, outcome }: SaidSave) => {
 };
 
 /** A document save as the model reads it in the conversation, with what the owner did with it. */
-const documentLine = ({ save, undone }: SaidFile<DocumentSave>) =>
+const documentLine = (save: DocumentSave, undone: boolean) =>
   `- ${save.action === "save" ? "Saved" : "Updated"} the document ${documentPath(save.document.slug)} (${undone ? "the owner undid this" : "kept"})`;
 
 /** A Thing save as the model reads it in the conversation, with what the owner did with it. */
-const thingSaveLine = ({ save, undone }: SaidFile<ThingSave>) =>
+const thingSaveLine = (save: ThingSave, undone: boolean) =>
   `- ${{ add: "Added", change: "Changed", remove: "Removed" }[save.action]} the Thing ${save.thing.name} (${undone ? "the owner undid this" : "kept"})`;
 
 /** A project save as the model reads it in the conversation, with what the owner did with it. */
-const projectSaveLine = ({ save, undone }: SaidFile<ProjectSave>) =>
+const projectSaveLine = (save: ProjectSave, undone: boolean) =>
   `- ${save.action === "add" ? "Started" : "Changed"} the project ${save.project.name}${save.changes.length === 0 ? "" : `: ${save.changes.join("; ")}`} (${undone ? "the owner undid this" : "kept"})`;
 
 /** How an earlier answer reads to the model, so a stopped or failed one isn't taken as whole. */
@@ -1444,7 +1444,6 @@ const didLines = (did: readonly Activity[]) =>
 const attachedNote = (names: readonly string[]) =>
   names.length === 0 ? [] : [`attached ${names.map(quoted).join(", ")}`];
 
-/** A task's start or end as the conversation tells it (#182): "your task `pnpm dev` started". */
 /** A task's start or end as the model reads it (#182): its own, or the owner's preview (#183). */
 const taskLine = (command: string, how: string, preview: boolean) =>
   `${preview ? "the owner's preview" : "your task"} \`${command}\` ${how}.`;
@@ -1466,10 +1465,7 @@ const lineFor = (said: Said) => {
   }
   const saves = [
     ...said.saves.map(saveLine),
-    ...said.documents.map(documentLine),
-    ...said.things.map(thingSaveLine),
-    ...said.projects.map(projectSaveLine),
-    ...said.builds.map(buildSaveLine),
+    ...said.files.map(({ line, undone }) => line(undone)),
   ];
   const did = said.ended === "cut-off" && said.did.length > 0 ? didLines(said.did) : [];
   return [
@@ -1632,7 +1628,7 @@ export const framingFor = (turn: {
     ),
     tools: [
       ...(saves ? [SAVE_TOOLS[turn.workspace.mode]] : []),
-      ...(documents ? [DOCUMENT_TOOL, THING_TOOL, PROJECT_TOOL, BUILD_TOOL] : []),
+      ...(documents ? [DOCUMENT_TOOL, THING_TOOL, PROJECT_TOOL, BUILD_TOOL, SIZE_TOOL] : []),
       ...(readsSessions ? [READ_SESSION_TOOL] : []),
       ...(offersSkillTool ? [USE_SKILL_TOOL] : []),
       ...(suggests ? [SUGGEST_REPLIES_TOOL] : []),
