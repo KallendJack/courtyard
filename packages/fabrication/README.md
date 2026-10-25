@@ -99,12 +99,16 @@ if (recipe) {
 
 ## How a step reads
 
-Written for a beginner holding a Fold at the bench. The key details are always there, and the essays never are.
+Written for a beginner holding a Fold at the bench, whoever they are and whatever tools they have. The key details
+are always there, and the essays never are.
 
+- **Steps follow the user's own tools, whatever they are:** the kind and how many (a speed square or an L-square, two
+  clamps or four), with the technique and the picture for that kind, so the steps change as the kit grows. A tool
+  that isn't known yet gets asked about then, with picture tiles, and never assumed.
 - **The picture carries the key details:** what goes where, the order, the tool and the check. Each is drawn in 3D,
-  the way the wood actually lies (a leg end is ▯ not ▭), with the owner's own kind of tool (a triangle speed square,
-  two grip clamps). Labels are 2-3 words, as pills off the wood; numbered badges match the step's numbered lines. A
-  fixing of several parts is drawn exploded, so it's clear which side each piece goes.
+  the way the wood actually lies (a leg end is ▯ not ▭), with the tools as their real shape. Labels are 2-3 words, as
+  pills off the wood; numbered badges match the step's numbered lines. A fixing of several parts is drawn exploded,
+  so it's clear which side each piece goes.
 - **About 4 short lines a step,** one action each. The how and why sit behind "Show me how", and extras are tips.
 - **The order is said, never left to guess:** square, then clamp, then a screw; one piece or one joint at a time,
   and "together" only for identical setups. A picture that shows a square says when the clamp comes, and the other
