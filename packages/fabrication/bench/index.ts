@@ -69,7 +69,15 @@ const benchOf = (parameters: BenchParameters): Result<Omit<Build, "options">, st
     : null;
   // Bolts too short are never what the steps fit or the buy list buys: the length to use is.
   const boltLength = tooShort?.use ?? castors?.bolt.length.value ?? 0;
-  const steps = benchSteps({ parameters, shape, cutPlan: planned.cutPlan, boltLength });
+  const fitted = benchFitted(parameters, shape);
+  const steps = benchSteps({
+    parameters,
+    shape,
+    cutPlan: planned.cutPlan,
+    boltLength,
+    parts,
+    fitted,
+  });
 
   const { frameScrews, sheetScrews, brackets, bracketScrews } = parameters.fixings;
   const fixingPrices = new Map<string, Price | undefined>([
@@ -147,7 +155,7 @@ const benchOf = (parameters: BenchParameters): Result<Omit<Build, "options">, st
     template: "framed-bench",
     size: { length: shape.length, depth: shape.depth, height: shape.height },
     parts,
-    fitted: benchFitted(parameters, shape),
+    fitted,
     cutPlan: planned.cutPlan,
     buyList,
     steps,

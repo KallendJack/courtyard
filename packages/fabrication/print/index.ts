@@ -104,6 +104,7 @@ const stepsOf = (options: {
         },
       ],
       closeUp: null,
+      scene: null,
       check: {
         says: "It's whole, its edges are flat, and its holes are clean, with no strings across them.",
         photo: "The part from the side its holes are on",
@@ -131,6 +132,7 @@ const stepsOf = (options: {
               },
             ],
             closeUp: null,
+            scene: null,
             check: {
               says: "It goes in by hand and stays put.",
               photo: `The ${shaped.holds} in it`,
@@ -164,6 +166,7 @@ const stepsOf = (options: {
               },
             ],
             closeUp: null,
+            scene: null,
             check: {
               says: "It doesn't move when you push it, and every screw head is flush.",
               photo: "It fixed in place",

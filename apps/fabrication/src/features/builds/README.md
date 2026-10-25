@@ -23,15 +23,16 @@ turning in 3D, its cut plan with each offcut's length, and "M6 × 50 bolts too s
 | `chat/chat-dock.ts` | Where the Reply box sits in the chat, with no Handheld frame, and its mic listening |
 | `chat/hold-to-ask.tsx` | Hold to ask, and the answer it brings over the picture, or that it didn't answer, with Try again |
 | `bench-panel.tsx` | The 3D panel: its label, Reset view, what sits at its foot, and a part's card |
-| `bench-view.tsx` | The scene itself, `three`, loaded lazily so only this page loads it: fitted to its panel, its letters apart |
-| `cut-plan.tsx` | Each length of timber as a bar of its cuts and its offcut, and each sheet with its pieces where they sit, each with its size |
+| `bench-view.tsx` | The scene itself, `three`, loaded lazily so only this page loads it: the whole Build, or a step's picture with its marks, fitted to its panel, its letters apart |
+| `scene.ts` | What `bench-view.tsx` draws a scene with: where the camera goes and how far it may tilt, the marks' lines and words, the waste side's hatching, the letters kept apart |
+| `cut-plan.tsx` | Each length of timber as a bar of its cuts and its offcut, and each sheet with its pieces where they sit, each with its size; a length as it's marked, with the saw's cut between pieces |
 | `buy-list.tsx` | What to buy, from where, how many and for how much, with the total; a timber or sheet with options opens them |
 | `stock-options.tsx` | A stock's options (#704; "Fabrication · Choose materials · Tablet (#704)"): the recommended first, each costed, Pick, and Undo of the pick just made; `useStockOptions`, which stock's are open |
 | `tools-list.tsx` | The tools needed against what's to hand |
 | `step-panel.tsx` | The steps as an instruction manual (#699): one step, its checklist, its tools, the check before moving on |
 | `step-moves.tsx` | Moving between steps: Back and Done, a swipe, and the dots that show how far |
 | `close-up.tsx` | A step's close-up, drawn to scale: its sizes and where each fixing goes |
-| `progress.ts` | The step reached and the lines ticked, kept for every device; what the 3D view shows at a step |
+| `progress.ts` | The step reached and the lines ticked, kept for every device |
 | `print/print-panel.tsx` | A printed part's own (#702; "Fabrication · Text to print · Tablet (#702)"): the part on the plate, and the Print tab with its sizes and sources, its file, Open in Bambu Studio (its 3MF) and Send to printer, waiting for one |
 | `print/print-view.tsx` | The printed part's scene, `three`, on the printer's plate, loaded lazily as the bench's is |
 | `findings.tsx` | What the making rules found that needs the owner, in gold; for a printed part, each size assumed too |
@@ -57,12 +58,18 @@ Chat, and its cut plan, buy list and tools as tabs under what the making rules f
 right, open on its latest. Folded, it's At the bench alone, stacked: the step in 3D above, the step below.
 
 **Steps** (#699; Paper, 2 · Agreed, "Fabrication · Build steps v2, teaching · Tablet (#699)", "· Build steps, cutting
-by your tools · Tablet (#699)" and "· Build steps · Cover (#699)"): the step reached, and the 3D view built up to it:
-the parts put on before are faint, the step's own violet, the rest hidden. A step has its time, a checklist whose
-ticked lines go grey and whose next line is lit, words such as "flush" to tap for a line saying what they mean, its
-tools, its fixings, what the making rules found about it in gold (bolts too short, and the length the step uses
-instead), its close-up, "Before you move on" with Send a photo to check (the photo and what it's for go in the chat's
-Reply box, to send), how it's done ("Hand saw", "Circular saw · not yet") and "Show me how" or "Just the numbers"
-(kept on the device). On a computer the steps are the side panel's Steps tab, with the close-up under the 3D view.
-The page opens on the steps once building has started, and the Fold, the PC and a new session all carry on from
-where the owner left off.
+by your tools · Tablet (#699)" and "· Build steps · Cover (#699)"): the step reached, and in 3D its picture (#754;
+"Fabrication · At the bench · Fold 933×645"), the job as it's done, worked out by the engine: the length on the
+Workmate with a pencil tick at each piece, the length in its jaws with the line, the saw, the support under the long
+end and the offcut hatched on the waste side, an end frame flat on the floor with its diagonals, a castor base upside
+down with its bolts, or the frame so far (the parts put on before faint, the step's own violet, the rest hidden). Its
+marks are the Build's own numbers; only the tools to hand are drawn. Each step opens at its own angle, fitted to the
+view; turning stays between 15° and 60° above level, and Reset view (or another step) puts it back. Only the step's
+own parts have their letter, and a new step closes a part's card. A step has its time, a checklist whose ticked lines
+go grey and whose next line is lit (marking puts a bar under each length's line, "B 1450 · 3 mm saw cut · A 750 ·
+offcut 197"), words such as "flush" to tap for a line saying what they mean, its tools, its fixings, what the making
+rules found about it in gold (bolts too short, and the length the step uses instead), its close-up, "Before you move
+on" with Send a photo to check (the photo and what it's for go in the chat's Reply box, to send), how it's done ("Hand
+saw", "Circular saw · not yet") and "Show me how" or "Just the numbers" (kept on the device). On a computer the steps
+are the side panel's Steps tab, with the close-up under the 3D view. The page opens on the steps once building has
+started, and the Fold, the PC and a new session all carry on from where the owner left off.

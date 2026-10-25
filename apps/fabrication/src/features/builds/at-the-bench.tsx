@@ -4,7 +4,7 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import type { ReactNode } from "react";
 import { BenchPanel } from "./bench-panel.tsx";
 import { CloseUp } from "./close-up.tsx";
-import type { InView, Progress } from "./progress.ts";
+import type { Progress } from "./progress.ts";
 import { StepFoot, useSwipe } from "./step-moves.tsx";
 import { StepPanel } from "./step-panel.tsx";
 
@@ -53,7 +53,6 @@ function Printed(props: { printed: ReactNode; ask: ReactNode; answer: ReactNode 
 export function AtTheBench(
   props: Bench & {
     step: BuildStep;
-    view: InView;
     progress: Progress;
     sendPhoto: (photo: File) => void;
     cover: boolean;
@@ -68,7 +67,7 @@ export function AtTheBench(
         derived={derived}
         lit={props.lit}
         pick={props.pick}
-        atStep={{ step, view: props.view }}
+        atStep={{ step }}
         resettable={!cover}
         over={props.answer}
       >

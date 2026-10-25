@@ -1,18 +1,29 @@
-import type { BuildBox, BuildPart, DerivedBuild } from "@courtyard/contract";
+import type { DerivedBuild } from "@courtyard/contract";
+import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import type { InView } from "./progress.ts";
+import {
+  anchorOf,
+  type BuildScene,
+  drawMark,
+  hatching,
+  markWords,
+  placing,
+  spread,
+  TILT,
+  themed,
+  viewFrom,
+  viewOf,
+  wholeScene,
+} from "./scene.ts";
 
-// The Build in 3D (#698): its parts as the engine's boxes, turnable, each part labelled. Loaded
+// The Build in 3D (#698), and at a step the job as it's done (#754): the scene's pieces as boxes,
+// turnable within limits, its marks drawn over it, each part lit at the step labelled. Loaded
 // lazily (`bench-panel.tsx`), so `three` is in this view's own file and nowhere else.
 
-/** A colour by its name in the theme (packages/ui/theme.css), since a 3D scene can't read classes. */
-const themed = (name: string) =>
-  new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim());
-
-const KIND_COLOUR: Readonly<Record<BuildPart["material"]["kind"], string>> = {
+const KIND_COLOUR: Readonly<Record<"timber" | "sheet" | "printed", string>> = {
   timber: "timber",
   sheet: "sheet",
   printed: "printed",
@@ -21,109 +32,63 @@ const KIND_COLOUR: Readonly<Record<BuildPart["material"]["kind"], string>> = {
 /** How far a press may move and still be a tap on a part, not a turn, in pixels. */
 const TAP_SLOP = 6;
 
-/** Where the camera looks from, at first and after Reset view: front left, a little above. */
-const FROM = new THREE.Vector3(-1, 0.85, 1.35).normalize();
-
-/** How much of the view's shorter half the Build reaches, from its middle, once fitted (#753). */
+/** How much of the view's shorter half the scene reaches, from its middle, once fitted (#753). */
 const FILL = 0.9;
 
-/** The room a part's letter takes, its 32 px and a gap, so no two overlap (#753). */
-const LETTER_ROOM = 36;
-
-/** Where a letter may move to make room, nearest first: a little way each side, then further. */
-const NUDGES = [1, 2, 3, 4, 5, 6].flatMap((far) =>
-  [
-    [0, 1],
-    [0, -1],
-    [1, 0],
-    [-1, 0],
-    [1, 1],
-    [-1, 1],
-    [1, -1],
-    [-1, -1],
-  ].map(([across = 0, down = 0]) => ({
-    x: (across * far * LETTER_ROOM) / 2,
-    y: (down * far * LETTER_ROOM) / 2,
-  })),
-);
-
 /**
- * Where each letter goes, in order: on its part, or the nearest spot clear of those placed before
- * it, so G never sits on H.
+ * The parts with a letter over them: those lit at the step, or every part when none is, one
+ * letter a part so they don't pile up (#753).
  */
-const spread = (wanted: readonly { x: number; y: number }[]) => {
-  const placed: { x: number; y: number }[] = [];
-  const clear = (x: number, y: number) =>
-    placed.every(
-      (other) => Math.abs(other.x - x) >= LETTER_ROOM || Math.abs(other.y - y) >= LETTER_ROOM,
-    );
-  for (const { x, y } of wanted) {
-    const nudge = clear(x, y)
-      ? { x: 0, y: 0 }
-      : NUDGES.find((each) => clear(x + each.x, y + each.y));
-    placed.push(nudge === undefined ? { x, y } : { x: x + nudge.x, y: y + nudge.y });
-  }
-  return placed;
+const letteredOf = (scene: BuildScene) => {
+  const anyLit = scene.pieces.some((piece) => piece.tone === "lit");
+  return scene.pieces.flatMap((piece) =>
+    piece.kind === "part" && piece.label !== null && (!anyLit || piece.tone === "lit")
+      ? [{ label: piece.label, name: piece.name, lit: piece.tone === "lit" }]
+      : [],
+  );
 };
 
 /**
- * Where a box sits in the scene: the engine's `x` along, `y` back from the front and `z` up,
- * centred on the Build, with three's `y` up and its `z` towards the viewer.
- */
-const centreOf = (box: BuildBox, size: DerivedBuild["size"]) =>
-  new THREE.Vector3(
-    box.x + box.w / 2 - size.length / 2,
-    box.z + box.h / 2,
-    size.depth / 2 - (box.y + box.d / 2),
-  );
-
-/**
- * What the scene is built from, as text to compare: the Build's size and every box, with each
- * part's letter and kind. The page asks for the Build again every 30 seconds and gets the same
- * numbers in a new object; only new numbers build the scene again.
- */
-const shapeOf = (derived: DerivedBuild) =>
-  JSON.stringify([
-    derived.size,
-    derived.parts.map((part) => [part.label, part.material.kind, part.boxes]),
-    derived.fitted.map((each) => each.boxes),
-  ]);
-
-/**
- * The scene, drawn when something changes it (a turn, a part lit, a new size), never in a loop.
- * What shows is fitted to the view (#753): the whole Build, or at a step the parts put on so far,
- * turned as the owner left it; Reset view turns it back. The part labels are buttons over the
- * canvas, moved to where each part's first box is, and apart. Built again only when the Build's
- * numbers change, and then from where the owner had turned it.
+ * The scene, drawn when something changes it (a turn, a part lit, a new step), never in a loop.
+ * The part letters and the marks' words are over the canvas, moved to where each belongs. Built
+ * again only when the scene's numbers change: at the same step it stays as the owner turned it,
+ * and a new step opens at the angle that best shows it.
  */
 export default function BenchView(props: {
   derived: DerivedBuild;
   lit: string | undefined;
-  /** At a step (#699): the parts put on so far, and the step's own, lit; else the whole Build. */
-  view: InView | undefined;
+  /** The step's scene (#754); the whole Build when no step is showing. */
+  scene: BuildScene | undefined;
+  /** Which picture it is (a step's ID): the camera is kept only while it's the same. */
+  sceneId: string;
   pick: (label: string) => void;
   /** Changes when Reset view is tapped. */
   reset: number;
 }) {
-  const { derived, lit, view: atStep, reset } = props;
-  const host = useRef<HTMLDivElement>(null);
-  const labels = useRef(new Map<string, HTMLButtonElement>());
-  const scene = useRef<{
-    draw: () => void;
-    light: (label: string | undefined, view: InView | undefined) => void;
-    fit: (from?: THREE.Vector3) => void;
-  }>(undefined);
+  const { derived, lit, reset } = props;
+  const host = useRef<HTMLElement>(null);
+  const labels = useRef(new Map<string, HTMLElement>());
+  const scene = useRef<{ light: (label: string | undefined) => void; reset: () => void }>(
+    undefined,
+  );
   const pick = useRef(props.pick);
   pick.current = props.pick;
-  const litNow = useRef({ lit, atStep });
-  litNow.current = { lit, atStep };
+  const litNow = useRef(lit);
+  litNow.current = lit;
   const [cantDraw, setCantDraw] = useState(false);
-  const shape = shapeOf(derived);
-  const [drawn, setDrawn] = useState({ derived, shape });
-  if (drawn.shape !== shape) setDrawn({ derived, shape });
-  const built = drawn.derived;
-  // Which way the camera looked, for the next scene.
-  const view = useRef<THREE.Vector3>(undefined);
+  const wanted = props.scene ?? wholeScene(derived);
+  const shape = `${props.sceneId} ${JSON.stringify(wanted)}`;
+  const [drawn, setDrawn] = useState({ scene: wanted, id: props.sceneId, shape });
+  if (drawn.shape !== shape) setDrawn({ scene: wanted, id: props.sceneId, shape });
+  const { scene: built, id: builtId } = drawn;
+  // Which way the camera looked, and at which picture: kept only while it's the same.
+  const kept = useRef<{ id: string; from: THREE.Vector3 }>(undefined);
+
+  // The parts' materials, read when the scene is built: the Build is read again every 30 seconds
+  // as a new object, and only new numbers build the scene again.
+  const parts = useRef(derived.parts);
+  parts.current = derived.parts;
+  const lettered = letteredOf(built);
 
   useEffect(() => {
     const element = host.current;
@@ -139,15 +104,18 @@ export default function BenchView(props: {
     renderer.domElement.setAttribute("aria-hidden", "true");
     element.prepend(renderer.domElement);
 
-    const { size } = built;
-    const reach = Math.max(size.length, size.depth, size.height);
+    const { point, centreOf, reach } = placing(built);
     const world = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, 1, reach / 20, reach * 20);
-    camera.position.copy((view.current ?? FROM).clone().multiplyScalar(reach * 2.3));
-    world.add(new THREE.HemisphereLight(0xffffff, 0x202020, 2.2));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.4);
-    sun.position.set(-reach, reach * 2, reach * 1.5);
-    world.add(sun);
+    // The way the scene looks best, at first and after Reset view; how far away is fitted.
+    const start = () => viewFrom(built.view, 1).normalize();
+    camera.position.copy(kept.current?.id === builtId ? kept.current.from : start());
+    // Every face lit, so no side turns black: an even fill, the sky and floor, and a key light.
+    world.add(new THREE.AmbientLight(0xffffff, 1.1));
+    world.add(new THREE.HemisphereLight(0xffffff, 0x404040, 1.4));
+    const key = new THREE.DirectionalLight(0xffffff, 2);
+    key.position.set(-reach, reach * 2, reach * 1.5);
+    world.add(key);
 
     const edges = new THREE.LineBasicMaterial({
       color: themed("background"),
@@ -155,55 +123,71 @@ export default function BenchView(props: {
       transparent: true,
     });
     const glow = themed("primary");
+    const hatch = hatching();
+    const tool = themed("fitted");
     const meshes: {
-      /** The part's letter; none for something fitted. */
-      label: string | undefined;
-      /** The part it belongs with as the steps build it up: its own, or what it's fitted to. */
-      with: string;
+      label: string | null;
       colour: THREE.Color;
+      tone: BuildScene["pieces"][number]["tone"];
       mesh: THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial>;
     }[] = [];
-    const add = (box: BuildBox, colour: THREE.Color, part: { label?: string; with: string }) => {
-      const geometry = new THREE.BoxGeometry(box.w, box.h, box.d);
-      const mesh = new THREE.Mesh(
-        geometry,
-        new THREE.MeshStandardMaterial({ color: colour, roughness: 0.85 }),
-      );
-      mesh.position.copy(centreOf(box, size));
-      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edges));
-      world.add(mesh);
-      meshes.push({ label: part.label, with: part.with, colour, mesh });
-    };
-    for (const part of built.parts) {
-      const colour = themed(KIND_COLOUR[part.material.kind]);
-      for (const box of part.boxes) add(box, colour, { label: part.label, with: part.label });
+    for (const piece of built.pieces) {
+      const part = parts.current.find((each) => each.label === piece.label);
+      const colour =
+        piece.kind === "part" && part !== undefined
+          ? themed(KIND_COLOUR[part.material.kind])
+          : piece.kind === "offcut"
+            ? new THREE.Color(0xffffff)
+            : tool;
+      for (const box of piece.boxes) {
+        const geometry = new THREE.BoxGeometry(box.w, box.h, box.d);
+        const material = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.85 });
+        if (piece.kind === "offcut") material.map = hatch;
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.copy(centreOf(box));
+        mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edges));
+        world.add(mesh);
+        meshes.push({ label: piece.label, colour, tone: piece.tone, mesh });
+      }
     }
-    const fitted = themed("fitted");
-    for (const each of built.fitted) {
-      for (const box of each.boxes) add(box, fitted, { with: each.on });
-    }
+    const marked = built.marks.flatMap((mark) => drawMark(world, mark, point, reach));
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
+    // Polar angles run down from straight above: never flat on top, never under the floor.
+    controls.minPolarAngle = ((90 - TILT.most) * Math.PI) / 180;
+    controls.maxPolarAngle = ((90 - TILT.least) * Math.PI) / 180;
 
-    const anchors = built.parts.map((part) => ({
-      label: part.label,
-      at: part.boxes[0] === undefined ? undefined : centreOf(part.boxes[0], size),
+    const letters = letteredOf(built).map(({ label }) => {
+      const box = built.pieces.find((piece) => piece.label === label)?.boxes[0];
+      return { key: `part ${label}`, at: box === undefined ? undefined : centreOf(box) };
+    });
+    const marks = built.marks.map((mark, at) => ({
+      key: `mark ${at}`,
+      at: point(anchorOf(mark)),
     }));
     const draw = () => {
       renderer.render(world, camera);
       const { clientWidth: width, clientHeight: height } = element;
-      const shown = anchors.flatMap(({ label, at }) => {
-        const button = labels.current.get(label);
-        if (button === undefined || at === undefined) return [];
-        const onScreen = at.clone().project(camera);
-        return [
-          {
-            button,
-            x: ((onScreen.x + 1) / 2) * width,
-            y: ((1 - onScreen.y) / 2) * height,
-          },
-        ];
+      const view = viewOf(camera.position.clone().sub(controls.target));
+      element.dataset.turn = String(view.turn);
+      element.dataset.tilt = String(view.tilt);
+      const onScreen = (at: THREE.Vector3) => {
+        const projected = at.clone().project(camera);
+        return { x: ((projected.x + 1) / 2) * width, y: ((1 - projected.y) / 2) * height };
+      };
+      for (const { key, at } of marks) {
+        const label = labels.current.get(key);
+        if (label === undefined) continue;
+        const { x, y } = onScreen(at);
+        // Kept inside the picture, so words near its edge aren't cut off.
+        const half = label.offsetWidth / 2;
+        label.style.transform = `translate(${Math.min(Math.max(x, half), width - half)}px, ${y}px) translate(-50%, -50%)`;
+      }
+      // The parts' letters, apart.
+      const shown = letters.flatMap(({ key, at }) => {
+        const button = labels.current.get(key);
+        return button === undefined || at === undefined ? [] : [{ button, ...onScreen(at) }];
       });
       spread(shown).forEach(({ x, y }, at) => {
         const button = shown[at]?.button;
@@ -211,14 +195,13 @@ export default function BenchView(props: {
           button.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
       });
     };
-
     /**
-     * Turns the camera to look from `from` (else as it looks now) at what shows, near enough that
-     * it fills the view: moved in or out until the farthest corner of what shows is at `FILL`.
+     * Turns the camera to look from `from` (else as it looks now) at the scene, near enough that
+     * it fills the view: moved in or out until its farthest corner is at `FILL`.
      */
     const fit = (from?: THREE.Vector3) => {
       const shown = new THREE.Box3();
-      for (const { mesh } of meshes) if (mesh.visible) shown.expandByObject(mesh);
+      for (const { mesh } of meshes) shown.expandByObject(mesh);
       if (shown.isEmpty()) return;
       const direction = (from ?? camera.position.clone().sub(controls.target)).normalize();
       const centre = shown.getCenter(new THREE.Vector3());
@@ -283,100 +266,128 @@ export default function BenchView(props: {
       const ray = new THREE.Raycaster();
       ray.setFromCamera(pointer, camera);
       const hit = ray.intersectObjects(
-        meshes.flatMap(({ mesh }) => (mesh.visible ? [mesh] : [])),
+        meshes.map(({ mesh }) => mesh),
         false,
       )[0];
       const label = meshes.find(({ mesh }) => mesh === hit?.object)?.label;
-      if (label !== undefined) pick.current(label);
+      if (label !== undefined && label !== null) pick.current(label);
     };
     renderer.domElement.addEventListener("pointerdown", pressed);
     renderer.domElement.addEventListener("pointerup", released);
 
     scene.current = {
-      draw,
-      // At a step, the parts still to come are hidden, the step's own are violet, and those put
-      // on before are faint; the part whose card is open glows either way.
-      light: (label, view) => {
+      // The step's own parts are violet, those put on before faint; the part whose card is open
+      // glows either way.
+      light: (label) => {
         for (const each of meshes) {
           const { mesh } = each;
-          const shown = view?.shown === undefined || view.shown.has(each.with);
-          const current =
-            view !== undefined && each.label !== undefined && view.current.has(each.with);
-          const faint = view?.shown !== undefined && !view.current.has(each.with);
-          mesh.visible = shown;
-          mesh.material.color.copy(current ? glow : each.colour);
-          mesh.material.transparent = faint;
-          mesh.material.opacity = faint ? 0.35 : 1;
+          mesh.material.color.copy(each.tone === "lit" ? glow : each.colour);
+          mesh.material.transparent = each.tone === "built";
+          mesh.material.opacity = each.tone === "built" ? 0.35 : 1;
           mesh.material.emissive.copy(
-            each.label !== undefined && each.label === label ? glow : new THREE.Color(0),
+            each.label !== null && each.label === label ? glow : new THREE.Color(0),
           );
           mesh.material.emissiveIntensity = 0.35;
         }
         draw();
       },
-      fit: (from) => {
-        fit(from);
+      reset: () => {
+        fit(start());
         draw();
       },
     };
-    scene.current.light(litNow.current.lit, litNow.current.atStep);
+    scene.current.light(litNow.current);
 
     return () => {
       scene.current = undefined;
-      view.current = camera.position.clone().sub(controls.target).normalize();
+      kept.current = {
+        id: builtId,
+        from: camera.position.clone().sub(controls.target).normalize(),
+      };
       watch.disconnect();
       controls.dispose();
       for (const { mesh } of meshes) {
         mesh.geometry.dispose();
         mesh.material.dispose();
       }
+      for (const each of marked) each.dispose();
+      hatch.dispose();
       edges.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [built]);
+  }, [built, builtId]);
 
-  useEffect(() => scene.current?.light(lit, atStep), [lit, atStep]);
-  // Another step shows other parts: fitted to them, turned as the owner left it.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: fitted again as the step changes
-  useEffect(() => scene.current?.fit(), [atStep]);
+  useEffect(() => scene.current?.light(lit), [lit]);
   useEffect(() => {
-    if (reset > 0) scene.current?.fit(FROM.clone());
+    if (reset > 0) scene.current?.reset();
   }, [reset]);
 
+  const place = (key: string) => (element: HTMLElement | null) => {
+    if (element === null) labels.current.delete(key);
+    else labels.current.set(key, element);
+  };
+
+  if (cantDraw) {
+    return (
+      <p className="flex h-full items-center justify-center px-6 text-center text-meta text-muted-foreground">
+        This browser can't draw the Build in 3D. The cut plan and the buy list still work.
+      </p>
+    );
+  }
   return (
-    <div ref={host} className="relative h-full w-full touch-none select-none">
-      {cantDraw ? (
-        <p className="flex h-full items-center justify-center px-6 text-center text-meta text-muted-foreground">
-          This browser can't draw the Build in 3D. The cut plan and the buy list still work.
-        </p>
-      ) : (
-        // At a step, only the parts put on so far have their letter; the step's own are marked.
-        derived.parts
-          .filter((part) => atStep?.shown === undefined || atStep.shown.has(part.label))
-          .map((part) => (
-            <button
-              key={part.label}
-              ref={(button) => {
-                if (button === null) labels.current.delete(part.label);
-                else labels.current.set(part.label, button);
-              }}
-              type="button"
-              aria-label={`${part.label}, ${part.name}`}
-              aria-pressed={lit === part.label}
-              aria-current={atStep?.current.has(part.label) ? "step" : undefined}
-              onClick={() => props.pick(part.label)}
-              className={classes(
-                "absolute top-0 left-0 flex size-8 items-center justify-center rounded-full border-2 font-mono text-meta font-bold",
-                lit === part.label || atStep?.current.has(part.label)
-                  ? "border-primary-text bg-primary text-primary-foreground"
-                  : "border-primary bg-background text-foreground",
-              )}
-            >
-              {part.label}
-            </button>
-          ))
+    <figure
+      ref={host}
+      aria-label={`${built.title}, in 3D`}
+      className="relative h-full w-full touch-none overflow-hidden select-none"
+    >
+      {props.scene !== undefined && (
+        <CapsLabel tone="muted" className="pointer-events-none absolute top-0 left-0">
+          {built.title}
+        </CapsLabel>
       )}
-    </div>
+      {built.marks.map((mark, at) => (
+        <span
+          // biome-ignore lint/suspicious/noArrayIndexKey: a scene's marks are in a fixed order.
+          key={at}
+          ref={place(`mark ${at}`)}
+          className={classes(
+            "pointer-events-none absolute top-0 left-0 rounded-sm px-1 text-caption whitespace-nowrap",
+            mark.kind === "size" &&
+              "border border-warning/60 bg-background/80 font-mono text-warning",
+            mark.kind === "check" && "bg-background/80 font-mono text-success",
+            mark.kind === "line" && "font-mono text-foreground",
+            mark.kind === "arrow" && "text-primary-text",
+            mark.kind === "note" &&
+              (mark.tone === "waste"
+                ? "text-destructive-text"
+                : mark.tone === "check"
+                  ? "text-success"
+                  : "text-muted-foreground"),
+          )}
+        >
+          {markWords(mark)}
+        </span>
+      ))}
+      {lettered.map((part) => (
+        <button
+          key={part.label}
+          ref={place(`part ${part.label}`)}
+          type="button"
+          aria-label={`${part.label}, ${part.name}`}
+          aria-pressed={lit === part.label}
+          aria-current={part.lit ? "step" : undefined}
+          onClick={() => props.pick(part.label)}
+          className={classes(
+            "absolute top-0 left-0 flex size-8 items-center justify-center rounded-full border-2 font-mono text-meta font-bold",
+            lit === part.label || part.lit
+              ? "border-primary-text bg-primary text-primary-foreground"
+              : "border-primary bg-background text-foreground",
+          )}
+        >
+          {part.label}
+        </button>
+      ))}
+    </figure>
   );
 }

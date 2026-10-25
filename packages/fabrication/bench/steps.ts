@@ -1,4 +1,4 @@
-import type { CutPlan, Step } from "../build.ts";
+import type { CutPlan, Fitted, Part, Step } from "../build.ts";
 import { TOOL_NAMES, type Tool } from "../tools.ts";
 import {
   baseCloseUp,
@@ -11,6 +11,7 @@ import {
 import { type Shape, whole } from "./frame.ts";
 import { type BenchParameters, castorFixingNames } from "./parameters.ts";
 import { act, type Draft, preparingSteps } from "./preparing.ts";
+import { stepScene } from "./scenes.ts";
 
 // The framed bench's steps, in the order it's built, each said twice: "show me how" for a
 // beginner and "just the numbers" for someone who knows how. Both come from here, with the
@@ -34,6 +35,9 @@ export const benchSteps = (options: {
   cutPlan: CutPlan;
   /** The castor bolts' length to use: the parameters', or the length to use when theirs are short. */
   boltLength: number;
+  /** What each step's picture draws (#754). */
+  parts: readonly Part[];
+  fitted: readonly Fitted[];
 }): Step[] => {
   const { parameters: p, shape: s, cutPlan } = options;
   const castors = p.castors;
@@ -369,23 +373,28 @@ export const benchSteps = (options: {
   ];
 
   const stepTool = (tool: Tool) => ({ tool, name: TOOL_NAMES[tool], toHand: toHand.has(tool) });
-  return drafts
-    .filter((draft) => draft.on)
-    .map((draft, at) => ({
+  const setting = { ...options, toHand };
+  const on = drafts.filter((draft) => draft.on);
+  return on.map((draft, at) => ({
+    id: draft.id,
+    number: at + 1,
+    title: draft.title,
+    minutes: draft.minutes,
+    helper: draft.helper ?? false,
+    parts: draft.parts,
+    adds: draft.adds ?? draft.parts,
+    ways: draft.ways ?? [],
+    tools: draft.tools.map(stepTool),
+    safety: (draft.safety ?? []).map(stepTool),
+    fixings: draft.fixings ?? [],
+    actions: draft.actions,
+    closeUp: draft.closeUp ?? null,
+    scene: stepScene(setting, {
       id: draft.id,
-      number: at + 1,
-      title: draft.title,
-      minutes: draft.minutes,
-      helper: draft.helper ?? false,
-      parts: draft.parts,
-      adds: draft.adds ?? draft.parts,
-      ways: draft.ways ?? [],
-      tools: draft.tools.map(stepTool),
-      safety: (draft.safety ?? []).map(stepTool),
-      fixings: draft.fixings ?? [],
-      actions: draft.actions,
-      closeUp: draft.closeUp ?? null,
-      check: draft.check,
-      words: draft.words ?? [],
-    }));
+      shown: on.slice(0, at + 1).flatMap((each) => each.adds ?? each.parts),
+      lit: draft.parts,
+    }),
+    check: draft.check,
+    words: draft.words ?? [],
+  }));
 };

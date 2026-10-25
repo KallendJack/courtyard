@@ -5,7 +5,6 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import { RotateCcw, X } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useState } from "react";
 import { CloseUp } from "./close-up.tsx";
-import type { InView } from "./progress.ts";
 import { cutFrom, listed, partSize, stepsUsing } from "./words.ts";
 
 /** The 3D view, with `three`, in a file of its own: only a Build's page loads it. */
@@ -56,14 +55,14 @@ function PartCard(props: { derived: DerivedBuild; label: string; close: () => vo
   );
 }
 
-/** The Build at a step (#699): the step, and how it shows in 3D. */
-export type AtStep = { step: BuildStep; view: InView };
+/** The Build at a step (#699): the step, with its picture (#754). */
+export type AtStep = { step: BuildStep };
 
 /**
  * The Build in 3D (#698; #753's boards): fitted to its panel, drag to turn it, Reset view to turn
- * it back, and tap a part or its letter for its card. While the steps show (#699), it's the Build
- * up to the step reached. Along its foot, what the page puts there (Hold to ask) and Reset view;
- * on a computer, the step's close-up below it and the parts' key.
+ * it back, and tap a part or its letter for its card. While the steps show (#699), it's the step's
+ * picture (#754): the job as it's done. Along its foot, what the page puts there (Hold to ask)
+ * and Reset view; on a computer, the step's close-up below it and the parts' key.
  */
 export function BenchPanel(props: {
   name: string;
@@ -102,7 +101,14 @@ export function BenchPanel(props: {
       </div>
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={null}>
-          <BenchView derived={derived} lit={lit} view={atStep?.view} pick={pick} reset={reset} />
+          <BenchView
+            derived={derived}
+            lit={lit}
+            scene={atStep?.step.scene ?? undefined}
+            sceneId={atStep?.step.id ?? "whole"}
+            pick={pick}
+            reset={reset}
+          />
         </Suspense>
         {over !== undefined && over !== null && (
           // Over the view, clear of its foot, as tall as what's in it.

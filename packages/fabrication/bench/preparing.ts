@@ -1,4 +1,4 @@
-import type { Action, CloseUp, CutPlan, Way } from "../build.ts";
+import type { Action, CloseUp, CutPlan, MarkedLength, Way } from "../build.ts";
 import type { Word } from "../glossary.ts";
 import { TOOL_NAMES, type Tool } from "../tools.ts";
 
@@ -30,21 +30,63 @@ export type Draft = {
 /** One action: how to do it, for a beginner, and just the numbers. */
 export const act = (howTo: string, numbers: string): Action => ({ howTo, numbers });
 
-/** Lengths cut the same way, together: 4 lengths of "B 1450, A 750". */
-const lengthGroups = (cutPlan: CutPlan) =>
+/** Lengths cut the same way, together, as they're marked: 4 lengths of B 1450 and A 750. */
+export const markedLengths = (cutPlan: CutPlan): MarkedLength[] =>
   cutPlan.timber.flatMap((plan) => {
-    const groups = new Map<string, number>();
+    const groups = new Map<string, MarkedLength>();
     for (const length of plan.lengths) {
-      const cuts = length.cuts.map((cut) => `${cut.label} ${cut.length}`).join(", ");
-      groups.set(cuts, (groups.get(cuts) ?? 0) + 1);
+      const key = length.cuts.map((cut) => `${cut.label} ${cut.length}`).join(", ");
+      const same = groups.get(key);
+      groups.set(key, {
+        stock: plan.stock,
+        stockLength: plan.stockLength,
+        count: (same?.count ?? 0) + 1,
+        kerf: cutPlan.kerf,
+        cuts: length.cuts,
+        offcut: length.offcut,
+      });
     }
-    return [...groups].map(([cuts, count]) => ({ stock: plan.stock, cuts, count }));
+    return [...groups.values()];
   });
+
+/**
+ * Where each piece's end is ticked, from the length's square end: each piece's length on from
+ * the last, with the saw's cut between.
+ */
+export const ticksOf = (length: MarkedLength) => {
+  let at = 0;
+  return length.cuts.map((cut, index) => {
+    at += (index === 0 ? 0 : length.kerf) + cut.length;
+    return { label: cut.label, length: cut.length, at };
+  });
+};
+
+/**
+ * A shop's cut end is often out of square, and every mark is measured from it: the step a
+ * beginner misses.
+ */
+const squareEnd = act(
+  "First check the end is square: hold the square's stock tight against the edge and look along its blade. If there's a gap, square a line 10 mm in and saw off the end, then measure from there.",
+  "End square? If not, trim it.",
+);
+
+/** One length's marks, in the order they're made: the tape, a tick, the square, the line. */
+const marking = (length: MarkedLength): Action => {
+  const ticks = ticksOf(length);
+  const lengths = length.count === 1 ? "one length" : `${length.count} lengths`;
+  const each = ticks.map((tick) => `${tick.label} at ${tick.at}`).join(", ");
+  return {
+    howTo: `On ${lengths} of ${length.stock}, hook the tape over the end you checked and make a pencil tick at each piece's end: ${each}. Each counts the ${length.kerf} mm kerf the saw takes. Put the square on each tick, its stock against the edge, and draw the line across.`,
+    numbers: `${length.count} × ${length.stock}: ticks at ${ticks.map((tick) => tick.at).join(", ")}`,
+    length,
+  };
+};
 
 /** The saws the timber can be cut with, best first: the first to hand is the one in use. */
 const SAWS = ["circular-saw", "hand-saw"] as const satisfies readonly Tool[];
 
-const sawInUse = (toHand: ReadonlySet<Tool>) => SAWS.find((saw) => toHand.has(saw)) ?? "hand-saw";
+export const sawInUse = (toHand: ReadonlySet<Tool>) =>
+  SAWS.find((saw) => toHand.has(saw)) ?? "hand-saw";
 
 const sawWays = (toHand: ReadonlySet<Tool>): Way[] => {
   const using = sawInUse(toHand);
@@ -79,8 +121,8 @@ const cutting = (hasCircularSaw: boolean): Pick<Draft, "tools" | "safety" | "act
         safety: ["safety-glasses", "ear-defenders"],
         actions: [
           act(
-            "Clamp the length to something solid with the line just past its edge.",
-            "Clamped, line just past the edge.",
+            "Clamp the length to a bench, or something as solid, with the line just past its edge.",
+            "Clamped to a bench, line just past the edge.",
           ),
           longEnd("what it's clamped to"),
           act(
@@ -165,12 +207,7 @@ export const preparingSteps = (cutPlan: CutPlan, toHand: ReadonlySet<Tool>): Dra
       parts: timberLabels,
       adds: [],
       tools: ["tape-measure", "pencil", "square"],
-      actions: lengthGroups(cutPlan).map((group) =>
-        act(
-          `On ${group.count === 1 ? "one length" : `${group.count} lengths`} of ${group.stock}, measure and square a line across for each piece in turn: ${group.cuts}. Leave ${cutPlan.kerf} mm between pieces for the saw's cut.`,
-          `${group.count} × ${group.stock}: ${group.cuts}`,
-        ),
-      ),
+      actions: [squareEnd, ...markedLengths(cutPlan).map(marking)],
       check: {
         says: "Every line square across the face, each length's pieces marked from one end.",
         photo: "One marked length, close up.",

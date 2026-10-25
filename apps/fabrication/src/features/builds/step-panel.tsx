@@ -4,6 +4,7 @@ import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Camera, Check, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
+import { LengthBar } from "./cut-plan.tsx";
 import { Findings } from "./findings.tsx";
 import { type Detail, type Progress, useDetail } from "./progress.ts";
 import { listed, stepFindings } from "./words.ts";
@@ -166,6 +167,11 @@ function Checklist(props: {
                 <WithWords text={text} words={step.words} open={props.openWord} />
               </p>
             </div>
+            {action.length !== undefined && (
+              <div className="pt-1 pr-2.5 pb-2 pl-12">
+                <LengthBar length={action.length} />
+              </div>
+            )}
           </li>
         );
       })}

@@ -8,7 +8,7 @@ import { Sheet } from "@courtyard/ui/layout/sheet.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useRouter } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { AtTheBench, PANEL, Plan } from "./at-the-bench.tsx";
 import { BenchPanel } from "./bench-panel.tsx";
 import { BuyList } from "./buy-list.tsx";
@@ -17,7 +17,7 @@ import { type Asked, BenchAnswer, HoldToAsk } from "./chat/hold-to-ask.tsx";
 import { CutPlan } from "./cut-plan.tsx";
 import { FINDINGS_ID, Findings } from "./findings.tsx";
 import { PrintPanel, PrintTab, useMaking } from "./print/print-panel.tsx";
-import { inView, useProgress } from "./progress.ts";
+import { useProgress } from "./progress.ts";
 import { StepDots, StepFoot } from "./step-moves.tsx";
 import { StepPanel } from "./step-panel.tsx";
 import { useStockOptions } from "./stock-options.tsx";
@@ -117,11 +117,13 @@ export function BuildPage(props: { build: BuildOpened }) {
   const making = useMaking({ workspaceId: place.workspace.id, slug: build.slug, derived });
   const progress = useProgress(build, reread);
   const { step } = progress;
-  const view = useMemo(
-    () => (step === undefined ? undefined : inView(derived, step)),
-    [derived, step],
-  );
-  const atBench = !wide && step !== undefined && view !== undefined && (cover || mode === "bench");
+  // A part's card covers the picture, so a new step closes it (#754).
+  const [cardStep, setCardStep] = useState(step?.id);
+  if (cardStep !== step?.id) {
+    setCardStep(step?.id);
+    setLit(undefined);
+  }
+  const atBench = !wide && step !== undefined && (cover || mode === "bench");
 
   // A stock's options, open in the side panel in place of its tab (#704).
   const stock = useStockOptions({
@@ -283,11 +285,7 @@ export function BuildPage(props: { build: BuildOpened }) {
                 derived={derived}
                 lit={lit}
                 pick={pick}
-                atStep={
-                  side === "Steps" && step !== undefined && view !== undefined
-                    ? { step, view }
-                    : undefined
-                }
+                atStep={side === "Steps" && step !== undefined ? { step } : undefined}
                 closeUp
                 withKey
               />
@@ -339,7 +337,7 @@ export function BuildPage(props: { build: BuildOpened }) {
           />
         )}
       </header>
-      {atBench && step !== undefined && view !== undefined ? (
+      {atBench && step !== undefined ? (
         <AtTheBench
           name={name}
           derived={derived}
@@ -348,7 +346,6 @@ export function BuildPage(props: { build: BuildOpened }) {
           ask={ask(false)}
           answer={answer}
           step={step}
-          view={view}
           progress={progress}
           sendPhoto={sendPhoto}
           cover={cover}

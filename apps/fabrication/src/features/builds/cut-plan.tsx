@@ -1,9 +1,11 @@
-import type { BuildCutPlan, DerivedBuild } from "@courtyard/contract";
+import type { BuildCutPlan, BuildStep, DerivedBuild } from "@courtyard/contract";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { assumedSizes, metres } from "./words.ts";
 
 type Length = BuildCutPlan["timber"][number]["lengths"][number];
+/** A length as the marking step marks it (#754). */
+type BuildMarkedLength = NonNullable<BuildStep["actions"][number]["length"]>;
 
 /** The type a piece's words are in: the probe that measures them uses it too. */
 const PIECE_TYPE = "font-mono text-meta font-semibold";
@@ -134,6 +136,50 @@ function StockLine(props: {
         )}
       </span>
     </p>
+  );
+}
+
+/** A length as it's marked, in words: "B 1450 · 3 mm saw cut · A 750 · offcut 197". */
+const markedWords = (length: BuildMarkedLength) =>
+  [
+    ...length.cuts.flatMap((cut, at) => [
+      ...(at === 0 ? [] : [`${length.kerf} mm saw cut`]),
+      `${cut.label} ${cut.length}`,
+    ]),
+    `offcut ${length.offcut}`,
+  ].join(" · ");
+
+/**
+ * One length as it's marked (#754), as the cut plan draws it: its pieces end to end from the
+ * square end, the saw's cut between each two in red so the gap shows, and the offcut left over.
+ */
+export function LengthBar(props: { length: BuildMarkedLength }) {
+  const { length } = props;
+  const share = (mm: number) => `${(mm / length.stockLength) * 100}%`;
+  return (
+    <div className="flex flex-col gap-1">
+      <div
+        role="img"
+        aria-label={markedWords(length)}
+        className="flex h-7 overflow-hidden rounded-sm bg-muted"
+      >
+        {length.cuts.map((cut, at) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: a length's cuts are only ever in this order
+          <div key={at} className="flex min-w-0" style={{ width: share(cut.length) }}>
+            {at > 0 && <span className="w-0.5 shrink-0 bg-destructive" />}
+            <span className={classes(piece(false), "flex-1 bg-timber")}>
+              <span className="truncate px-1">
+                {cut.label} {cut.length}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+      {/* The bar's own words, for the eye: a screen reader has them as the bar's name. */}
+      <p aria-hidden className="font-mono text-meta text-muted-foreground">
+        {markedWords(length)}
+      </p>
+    </div>
   );
 }
 

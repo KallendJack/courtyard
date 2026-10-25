@@ -36,7 +36,7 @@ if (recipe) {
 | `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed |
 | `findings.ts` | The making rules code checks: a bolt long enough for what it passes through plus two threads, tools needed and not to hand, sizes assumed |
 | `tools.ts`, `glossary.ts` | The tools and kit a step can need, and the words a beginner may not know |
-| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `close-ups.ts`, `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`) |
+| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `close-ups.ts`, `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `scene-pieces.ts` (each step's picture, #754) |
 | `print/` | Printed parts (#702): `templates.ts` (the holster, shim and bracket, each made into a part recipe, and `printed-part`, a recipe as written), `recipe.ts` (each face's frame, and the checks that refuse a recipe before it's made), `index.ts` (a printed part's Build: its part, buy list, steps and findings), `make.ts` (the solid, with manifold-3d), `lettering.ts` (text as outlines, with opentype.js), `files.ts` (3MF, zipped with fflate, and STL) |
 | `print/font/` | Figtree Bold, for lettering: `figtree-bold.ttf` from Fontsource (`@fontsource/figtree` 5.2.10, latin 700), under the SIL Open Font License in `OFL.txt`, from github.com/erikdkennedy/figtree |
 
@@ -53,6 +53,13 @@ if (recipe) {
   (a castor) says the part it's fitted to, so the 3D view can build the Build up step by step (#699).
 - **Each step has an ID** saying what it does ("fit-castors"), the same whichever steps the Build has, so the
   owner's progress stays on its step when one before it comes or goes.
+- **Each step has a picture of the job as it's done** (#754): the length on the Workmate or in its jaws (on a bench
+  for a circular saw), an end frame flat on the floor, a castor base upside down, or the frame as far as it's built.
+  It says where it opens from (15° to 60° above level), and its marks (sizes, the pencil line, where the saw runs,
+  the diagonals to check, where the support goes, the waste side) are the Build's own numbers. Tools are drawn only
+  when they're to hand.
+- **Marking starts by checking the end is square,** then one line per length, each with its ticks from that end and
+  the kerf between pieces.
 - **A fixing found too short is never fitted:** the steps and the buy list use the length to use instead, unpriced
   until it's given a price, and the finding names the steps that fit it.
 - **Parts are cut to the whole mm below,** and the steps say every size to the whole mm; the Build keeps it exact.
@@ -77,10 +84,10 @@ if (recipe) {
 ## Tests
 
 `cut-plan.test.ts` (packing, whatever the pieces), `bench/bench.test.ts` (the golden bench, the garage workbench's
-hand-checked numbers with invented names, in `bench/fixtures/golden.ts`), `print/print.test.ts` (the golden holster
-and shim, `print/fixtures/golden.ts`: their size and volume worked out by hand, closed all round, the pocket allowing
-the clearance), `print/recipe.test.ts` (what a recipe is refused for) and `print/make.test.ts` (what a checked
-recipe still can't be made into).
+hand-checked numbers with invented names, in `bench/fixtures/golden.ts`), `bench/scenes.test.ts` (each step's picture
+for the golden bench, by the tools to hand), `print/print.test.ts` (the golden holster and shim, `print/fixtures/golden.ts`:
+their size and volume worked out by hand, closed all round, the pocket allowing the clearance), `print/recipe.test.ts`
+(what a recipe is refused for) and `print/make.test.ts` (what a checked recipe still can't be made into).
 
 ## Used by
 
