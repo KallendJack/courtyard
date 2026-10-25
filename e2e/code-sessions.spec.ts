@@ -65,7 +65,9 @@ test("an approval shows the exact command and why, Allow runs it, and the card g
   page,
   context,
 }) => {
-  await startOnPage(page, ["run command: git --version --build-options (for: To check which git runs here)"]);
+  await startOnPage(page, [
+    "run command: git --version --build-options (for: To check which git runs here)",
+  ]);
   const card = approvalOn(page);
   await expect(card).toContainText("Run a command? It isn't on the allowlist.");
   await expect(card.getByRole("code")).toHaveText("git --version --build-options");
