@@ -429,6 +429,10 @@ goes to Courtyard's login. It holds no state and does no model work, and calls o
   the unfolded Fold and tabs on the cover screen: its chat, the Build in 3D and its cut plan, buy list, tools and
   steps, under the making-rule findings. A part tapped anywhere lights everywhere and opens its card. The 3D view is
   `three` in a file of its own, loaded only by this page, so nothing of it reaches the web app's first load.
+- [`features/tools/`](../apps/fabrication/src/features/tools/README.md): Your tools (#707), the owner's tools as
+  tiles to tick, saved at the owner's level through `/api/fabrication/tools` with Undo. A Build's route sends the owner
+  there first until some are saved or it's skipped on this visit (kept in the tab's session storage, so nothing is kept
+  on the device beyond it), and a Build's Tools panel links back to it.
 - **The chat** is a session in Courtyard: the Build's project's latest, or else the latest that saved the Build;
   sending with none starts one that belongs to the project. The worker's `features/fabrication/chat.ts` reads its
   events into the chat's lines (what was said, each change saved, struck through once undone) and sends through
@@ -540,6 +544,11 @@ Where the rest fits:
   ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)). A Thing's
   **upcoming** one (#602, ADR 0032) is kept in its file the same way: set by the model's tool, or by Pick on an
   answer's `options` block (Find a replacement's answer), and swapped in by "… fitted" or the tool's `fitted`.
+  A Thing has a **kind** (item, space or tool, ADR 0037) and, once a size is recorded for it, a subject ID.
+- **The owner's tools** (#707, ADR 0037): Things of kind tool at the owner's level, so every planning turn lists them
+  and every Build reads them. Fabrication owns them: its API (`fabrication/tools.ts`) reads them, saves them all at
+  once as one change with Undo (moving a workspace's tools there, such as the garage's hand saw, with that Save), and
+  asks a cheap model to tick the tools the owner said, saving nothing.
 - **Projects** (#603, ADR 0032). The model calls the project tool by the labels its turn listed; `projects/` checks
   the call and writes the project's file as a change through `context-folder/`; the session records a
   `project-saved` event and the browser shows a note with Open (the project's place on the workspace's page,
@@ -767,7 +776,10 @@ things live only in the worker's memory and go when it restarts.
   its file by that name.
 - `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter (an upcoming
   replacement among them, its `upcoming …` lines, #602) and a dated history, each file named by the Thing's name when it was added; `<workspace>/things/photos/<slug>.jpg`: a Thing's
-  photo, resized to fit 1600 px and 300 KB, in plain git.
+  photo, resized to fit 1600 px and 300 KB, in plain git. A Thing's `kind` (item when left out), `count` and
+  `subject` ID (ADR 0037) are front matter too, and a tool's `tile` when its name isn't the tile's (#707).
+- `things/<slug>.md` at the top: the owner's tools (#707, ADR 0037), Things of kind tool kept as a workspace's are
+  (photos in `things/photos/`), so no workspace can be named `things`.
 - `<workspace>/projects/<slug>.md`: a planning workspace's projects (#603, ADR 0032): name, goal and status in front
   matter, then its steps, decisions and a dated history, each file named by the project's name when it was started.
   A step that makes a Build ends `[build: <slug>]`.

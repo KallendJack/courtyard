@@ -9,6 +9,12 @@ import {
   type Builds,
   NewMessage,
   type ProviderList,
+  ToolsChange,
+  type ToolsHeard,
+  ToolsSaid,
+  type ToolsSaved,
+  ToolsUndo,
+  type YourTools,
 } from "@courtyard/contract";
 import { type Context, Hono } from "hono";
 import { apiError, contextError, readBody } from "../../lib/http.ts";
@@ -28,6 +34,7 @@ import { readMessageWithAttachments, sessionError } from "../sessions/routes.ts"
 import { getWorkspace } from "../workspaces/index.ts";
 import { chatOf, chatSessionOf } from "./chat.ts";
 import { type BuildRefusal, readBuild, readBuilds, saveBuild, viewOf } from "./index.ts";
+import { hearTools, saveTools, type ToolsRefusal, undoToolsSave, yourTools } from "./tools.ts";
 
 // Fabrication's API (ADR 0037, #697): what the Fabrication app calls, never Courtyard's own
 // workspace or session routes, so a standalone Fabrication could answer the same with its own
@@ -85,17 +92,105 @@ export const buildUndoError = (c: Context, refusal: WholeFilesUndoRefusal) =>
       })
     : sharedFileError(c, refusal, BUILDS);
 
+/** Why the owner's tools weren't read or saved, as the API answers it. */
+const toolsError = (c: Context, refusal: ToolsRefusal) => {
+  switch (refusal.kind) {
+    case "invalid":
+      return apiError(c, { status: 400, error: refusal.problem });
+    case "twice":
+      return apiError(c, {
+        status: 400,
+        error: `${refusal.name} is there twice: give each tool once.`,
+      });
+    case "unchanged":
+      return apiError(c, { status: 400, error: "That changes nothing." });
+    case "gone":
+      return apiError(c, {
+        status: 409,
+        error: `${refusal.workspace} has no Thing ${refusal.thing} to move any more: tick your tools again.`,
+      });
+    case "has-parts":
+      return apiError(c, {
+        status: 409,
+        error: `${refusal.name} has parts, so it stays where it is: untick it, or add it as your own.`,
+      });
+    case "storage":
+      return apiError(c, { status: 500, error: "Your tools couldn't be read or saved just now." });
+  }
+};
+
+/** Why Undo of a save of the owner's tools wasn't done, as the API answers it. */
+const toolsUndoError = (c: Context, refusal: WholeFilesUndoRefusal) => {
+  switch (refusal.kind) {
+    case "not-found":
+    case "not-undoable":
+      return apiError(c, { status: 404, error: "There's no such save of your tools to undo." });
+    case "already-undone":
+      return apiError(c, { status: 409, error: "That's undone already." });
+    case "changed-since":
+      return apiError(c, {
+        status: 409,
+        error: "Your tools have changed since, so undoing this would lose the newer change.",
+      });
+    case "storage":
+      return apiError(c, { status: 500, error: "Your tools couldn't be read or saved just now." });
+  }
+};
+
 /** Fabrication's routes under `/api/fabrication`. */
 export const fabricationRoutes = (
   target: Pick<PlanningFilesTarget, "contextDir" | "contextFolder"> & {
     now: () => number;
-    /** What the Build's chat is: Courtyard's sessions, and the models they can answer with. */
+    /**
+     * What the Build's chat is: Courtyard's sessions, and the models they can answer with, which
+     * also tick Your tools from what the owner said.
+     */
     sessions: Pick<Sessions, "list" | "events" | "create" | "send">;
     providers: readonly Provider[];
   },
 ) => {
   const routes = new Hono();
   const { now, sessions, providers, ...where } = target;
+
+  // The owner's tools (#707): every Build's and every workspace's, with what to move.
+  routes.get("/tools", async (c) => {
+    const read = await yourTools(where.contextDir);
+    if (!read.ok) return toolsError(c, read.error);
+    return c.json(read.value satisfies YourTools);
+  });
+
+  // Your tools' Save: every tool the owner has now, as one change.
+  routes.put("/tools", async (c) => {
+    const body = await readBody(c, ToolsChange);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const saved = await saveTools(where, body.value.tools);
+    if (!saved.ok) return toolsError(c, saved.error);
+    const read = await yourTools(where.contextDir);
+    if (!read.ok) return toolsError(c, read.error);
+    return c.json({ change: saved.value.change ?? null, tools: read.value } satisfies ToolsSaved);
+  });
+
+  routes.post("/tools/undo", async (c) => {
+    const body = await readBody(c, ToolsUndo);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const undone = await undoToolsSave(where, body.value.change);
+    if (!undone.ok) return toolsUndoError(c, undone.error);
+    return c.body(null, 204);
+  });
+
+  // "Or just say it": the tools a model heard, ticked for the owner to check, saving nothing.
+  routes.post("/tools/heard", async (c) => {
+    const body = await readBody(c, ToolsSaid);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const heard = await hearTools(providers, body.value.said);
+    if (heard === undefined) {
+      return apiError(c, {
+        status: 503,
+        error: "No model could listen just now: tick your tools instead.",
+      });
+    }
+    return c.json(heard satisfies ToolsHeard);
+  });
 
   /** A Build as read, and where it is: its workspace, and the project whose step makes it. */
   const opened = async (c: Context) => {

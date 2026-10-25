@@ -92,7 +92,12 @@ export function BuildPage(props: { build: BuildOpened }) {
       case "Buy list":
         return <BuyList buyList={derived.buyList} />;
       case "Tools":
-        return <ToolsList derived={derived} />;
+        return (
+          <ToolsList
+            derived={derived}
+            build={`/workspaces/${encodeURIComponent(place.workspace.id)}/builds/${build.slug}`}
+          />
+        );
       case "Steps":
         return <StepsList derived={derived} lit={lit} pick={pick} />;
     }

@@ -27,6 +27,8 @@ None.
   code turn gets diagrams and the house process.
 - **Builds** (`builds.ts`, #697): the Builds list, the rule for the Build tool, the tool, and its reply, every
   number the engine worked out for the model to report.
+- **Your tools** (`tools.ts`, #707): the owner's tools in every planning turn, and the one question that ticks the
+  tools the owner said under "Or just say it".
 - **The replies** to Courtyard's tools, and the pieces they share (`text.ts`: the markers' guard, a quoted name, a
   reply in words).
 - **The text for** titling a session, writing a session's note, a pull request's quick questions, and the worker's own messages (Build's

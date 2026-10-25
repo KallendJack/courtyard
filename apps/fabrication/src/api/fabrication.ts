@@ -6,10 +6,15 @@ import {
   BuildChatSent,
   BuildOpened,
   type BuildSlug,
+  type ChangeId,
   MESSAGE_FIELD,
   type NewMessage,
   ProviderList,
+  type ToolPick,
+  ToolsHeard,
+  ToolsSaved,
   type WorkspaceId,
+  YourTools,
 } from "@courtyard/contract";
 import { z } from "zod/mini";
 import type { $ZodType } from "zod/v4/core";
@@ -62,6 +67,28 @@ export const buildChat = (workspaceId: WorkspaceId, slug: BuildSlug) =>
 
 /** The models the chat can answer with, for its Reply box. */
 export const chatModels = () => ask("/fabrication/models", ProviderList);
+
+/** The owner's tools, and the workspaces' Things that look like tools, to move. */
+export const yourTools = () => ask("/fabrication/tools", YourTools);
+
+const sendJson = <T>(path: string, schema: $ZodType<T>, method: string, body: unknown) =>
+  ask(path, schema, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+/** Your tools' Save: every tool the owner has now. */
+export const saveTools = (tools: readonly ToolPick[]) =>
+  sendJson("/fabrication/tools", ToolsSaved, "PUT", { tools });
+
+/** Undo of a Save of the owner's tools. */
+export const undoTools = (change: ChangeId) =>
+  sendJson("/fabrication/tools/undo", z.null(), "POST", { change });
+
+/** "Or just say it": the tools a model heard in what was said, to tick; nothing is saved. */
+export const hearTools = (said: string) =>
+  sendJson("/fabrication/tools/heard", ToolsHeard, "POST", { said });
 
 /** The owner's next message in a Build's chat, with any photos or PDFs attached. */
 export const sendToChat = (

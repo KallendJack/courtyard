@@ -55,6 +55,7 @@ import {
   type Sections,
   type Turn,
 } from "./scenarios.ts";
+import { judgeHeardTools } from "./tools.ts";
 import { type Check, describeWords, hasWords } from "./words.ts";
 
 /**
@@ -777,6 +778,10 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
       await mkdir(dirname(join(folder, path)), { recursive: true });
       await writeFile(join(folder, path), text);
     }
+    for (const [path, text] of Object.entries(scenario.ownerFiles ?? {})) {
+      await mkdir(dirname(join(root, "context", path)), { recursive: true });
+      await writeFile(join(root, "context", path), text);
+    }
     for (const skill of scenario.skills ?? []) {
       if (skill.where === "house") continue;
       const skillsDir =
@@ -791,6 +796,18 @@ const runScenario = async (scenario: Scenario, choice: Choice): Promise<Verdict>
     let sessionId: SessionId | undefined;
     let after = 0;
     for (const [index, turn] of scenario.turns.entries()) {
+      // Said under Your tools' "Or just say it" (#707), not in a session.
+      if (turn.heardTools !== undefined) {
+        const prefix = scenario.turns.length === 1 ? "" : `turn ${index + 1}: `;
+        const heard = await judgeHeardTools({
+          request,
+          said: turn.say,
+          expected: turn.heardTools,
+        });
+        checks.push(...heard.checks.map(({ miss }) => ({ miss: miss && prefix + miss })));
+        notes.push(...heard.notes.map((note) => prefix + note));
+        continue;
+      }
       // A new session in the workspace (#601): the one before it leaves its note as this starts.
       const before = turn.newSession === true ? sessionId : undefined;
       if (turn.newSession === true) {

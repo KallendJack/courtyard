@@ -26,16 +26,15 @@ import { suggestIcon } from "./icons.ts";
 
 export const CONTEXT_FILE = "CONTEXT.md";
 const CONFIG_FILE = "workspace.json";
-/**
- * The folder in the context folder that archived workspaces move to. Named like a workspace, so
- * it's kept out of the list by name, and no workspace can be called that.
- */
+/** Context folder folders that aren't workspaces, by what they hold: never listed, nor a name. */
 export const ARCHIVED_FOLDER = "archived";
+export const OWNER_THINGS_FOLDER = "things"; // The owner's tools (ADR 0037), as Things are kept.
+const KEPT_FOLDERS: ReadonlyMap<string, string> = new Map([
+  [ARCHIVED_FOLDER, "archived workspaces go"],
+  [OWNER_THINGS_FOLDER, "the owner's tools are kept"],
+]);
 
-/**
- * A command named by its first words, one space apart, with ` ...` at the end when more arguments
- * may follow them (`"cargo test ..."`).
- */
+/** A command by its first words, one space apart, ending ` ...` if more may follow (`"git log ..."`). */
 const CommandWords = z
   .string()
   .trim()
@@ -246,10 +245,10 @@ const readWorkspace = async (
   });
 };
 
-/** A folder name as a workspace id, unless it can't be one (`.git`, or the archived folder). */
+/** A folder name as a workspace id, unless it can't be one (`.git`, or a kept folder). */
 const workspaceIdFrom = (name: string): WorkspaceId | undefined => {
   const id = WorkspaceId.safeParse(name);
-  return id.success && id.data !== ARCHIVED_FOLDER ? id.data : undefined;
+  return id.success && !KEPT_FOLDERS.has(id.data) ? id.data : undefined;
 };
 
 /** The workspace ids in the context folder: folders named like one, not files. */
@@ -491,11 +490,9 @@ const folderNameFor = (name: string): Result<WorkspaceId, WorkspaceError> => {
       message: `"${id.data}" can't be a folder name on Windows. Choose another name.`,
     });
   }
-  if (id.data === ARCHIVED_FOLDER) {
-    return err({
-      kind: "invalid",
-      message: `"${ARCHIVED_FOLDER}" is where archived workspaces go. Choose another name.`,
-    });
+  const kept = KEPT_FOLDERS.get(id.data);
+  if (kept) {
+    return err({ kind: "invalid", message: `"${id.data}" is where ${kept}. Choose another name.` });
   }
   return ok(id.data);
 };

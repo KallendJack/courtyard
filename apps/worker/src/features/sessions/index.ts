@@ -173,6 +173,7 @@ import {
 } from "../documents/index.ts";
 import { readBuilds, undoBuildChange } from "../fabrication/index.ts";
 import { createTurnBuilds } from "../fabrication/tool.ts";
+import { readTools } from "../fabrication/tools.ts";
 import { savePlansFrom } from "../floor-plans/index.ts";
 import type { MattSkills } from "../matt-skills/index.ts";
 import { readOwnerContext } from "../owner-context/index.ts";
@@ -1083,17 +1084,17 @@ export const createSessions = (options: {
     const { summary, folder, contextMarkdown } = workspace.value;
     const where = { contextDir: options.contextDir, workspaceId };
     const planning = summary.mode === "planning";
-    const [documents, things, projects, builds] = await Promise.all([
+    const [documents, things, projects, builds, tools] = await Promise.all([
       planning ? listDocuments(where) : ok([]),
       planning ? readThings(where) : ok({ things: [], problems: [] }),
       planning ? readProjects(where) : ok({ projects: [], problems: [] }),
       planning ? readBuilds(where) : ok({ builds: [], problems: [] }),
+      planning ? readTools(options.contextDir) : ok({ tools: [], problems: [] }),
     ]);
     if (!documents.ok) return err("This session's workspace's documents can't be read.");
-    if (!things.ok) return err("This session's workspace's Things can't be read.");
+    if (!things.ok || !tools.ok) return err("Its Things or the owner's tools can't be read.");
     if (!projects.ok) return err("This session's workspace's projects can't be read.");
     if (!builds.ok) return err("This session's workspace's Builds can't be read.");
-    const sessionNotes = planning ? await notes.forTurn(workspaceId, session) : [];
     return ok({
       name: summary.name,
       mode: summary.mode,
@@ -1102,16 +1103,15 @@ export const createSessions = (options: {
       ownerContext: ownerContext.value,
       documents: documents.value,
       things: things.value,
+      tools: tools.value.tools.map(({ summary }) => summary),
       projects: projects.value,
       builds: builds.value,
-      notes: sessionNotes,
+      notes: planning ? await notes.forTurn(workspaceId, session) : [],
       skills: await skillsOf(workspace.value),
       allowlist: allowlistFor(workspace.value.allowlist),
       paper: workspace.value.paper,
       ...(workspace.value.paper === null ? {} : { paperFile: workspace.value.paper.fileId }),
-      ...(summary.mode === "code"
-        ? { connections: await options.connectionsOf(workspace.value) }
-        : {}),
+      ...(planning ? {} : { connections: await options.connectionsOf(workspace.value) }),
     });
   };
 

@@ -4,6 +4,8 @@ import { BUILDS, type ExpectedBuild } from "./builds.ts";
 import { GARAGE_BUILD } from "./garage-build.ts";
 import { PLANNING } from "./planning.ts";
 import { type ExpectedProject, PROJECTS } from "./projects.ts";
+import { REPLIES } from "./replies.ts";
+import { TOOLS } from "./tools.ts";
 
 /**
  * The context eval's scenarios (docs/ai-conduct.md, Saving context lines): short conversations
@@ -150,7 +152,15 @@ export type Turn = {
   readonly projects?: readonly ExpectedProject[];
   /** The Build it should start or change (#697), judged by the saved Build. */
   readonly builds?: ExpectedBuild;
+  /**
+   * Said under Your tools' "Or just say it" (#707) rather than in a session: the tools it should
+   * tick, each by name with its count when more than one, and none saved.
+   */
+  readonly heardTools?: readonly ExpectedTool[];
 };
+
+/** A tool "Or just say it" should tick: its name, and its count when it's more than one. */
+export type ExpectedTool = { readonly name: string; readonly count?: number };
 
 /**
  * A Thing a turn should add, change or remove: words its name has, and words each field it names
@@ -294,6 +304,8 @@ export type Scenario = {
   readonly mode?: "code";
   /** Other files in the workspace's folder, by path. */
   readonly files?: Readonly<Record<string, string>>;
+  /** Files at the context folder's top, by path, such as the owner's tools (`things/…`, #707). */
+  readonly ownerFiles?: Readonly<Record<string, string>>;
   /** Skills it adds to the workspace's, beyond Courtyard's house skills (ADR 0016). */
   readonly skills?: readonly ScenarioSkill[];
   /** The conversation. */
@@ -596,6 +608,7 @@ export const SCENARIOS: readonly Scenario[] = [
   ...GARAGE_BUILD,
   ...BUILDS,
   ...PROJECTS,
+  ...TOOLS,
   {
     name: "attached-pdf",
     rule: "A PDF the owner attaches is read and its contents used (#78)",
@@ -1229,61 +1242,7 @@ export const SCENARIOS: readonly Scenario[] = [
       },
     ],
   },
-  {
-    name: "replies-which-day",
-    rule: "a question with a few likely answers comes with two or three suggested replies",
-    workspace: "Running",
-    context: { facts: ["Does a long run once a week, building up to a half marathon in Apr 2027"] },
-    turns: [
-      {
-        say: "Help me pick a day for the weekly long run. Ask me first which days I'm free.",
-        expect: [],
-        questions: { atLeast: 1, atMost: 2 },
-        suggests: true,
-      },
-    ],
-  },
-  {
-    name: "replies-check-a-plan",
-    rule: "checking a plan one question at a time suggests replies to the question",
-    workspace: "Garden",
-    context: { facts: ["Is painting the shed this weekend"] },
-    turns: [
-      {
-        say: "Check my plan to paint the shed with me, one question at a time.",
-        expect: [],
-        questions: { atLeast: 1, atMost: 2 },
-        suggests: true,
-      },
-    ],
-  },
-  {
-    name: "replies-none-with-an-answer",
-    rule: "an ordinary answer comes with no suggested replies",
-    workspace: "Garage gym",
-    context: { facts: ["Squat rack bolted to the back wall"] },
-    turns: [
-      {
-        say: "What's a good warm-up before squats? Just the warm-up, please.",
-        expect: [],
-        suggests: false,
-      },
-    ],
-  },
-  {
-    name: "replies-none-for-an-open-question",
-    rule: "a question only the owner can answer in their own words comes with no suggested replies",
-    workspace: "Family",
-    context: { facts: ["Is giving a short toast at their sister Amy's wedding on 12 Dec 2026"] },
-    turns: [
-      {
-        say: "Help me write a short toast for Amy's wedding. First, ask me for a favourite memory of her.",
-        expect: [],
-        questions: { atLeast: 1, atMost: 2 },
-        suggests: false,
-      },
-    ],
-  },
+  ...REPLIES,
   {
     name: "document-saved-when-asked",
     rule: "a model offers to save a longer answer as a document, but saves it only once the owner asks",
