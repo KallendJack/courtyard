@@ -56,13 +56,20 @@ export const useProgress = (
   const [progress, setProgress] = useState(build.progress);
   // What the worker was last known to have, so only a change made elsewhere is taken up.
   const [known, setKnown] = useState(build.progress);
+  // The progress last read from the worker. Only a new read is taken up: the page drawn again
+  // with the read from before a save (as the save ends and the Build is asked for again) must not
+  // take the owner back to where they were then.
+  const [read, setRead] = useState(build.progress);
   const [problem, setProblem] = useState<string>();
   const sending = useRef(false);
   const waiting = useRef<BuildProgress | undefined>(undefined);
 
-  if (!sending.current && !same(build.progress, known)) {
-    setKnown(build.progress);
-    setProgress(build.progress);
+  if (build.progress !== read) {
+    setRead(build.progress);
+    if (!sending.current && !same(build.progress, known)) {
+      setKnown(build.progress);
+      setProgress(build.progress);
+    }
   }
 
   const keep = useCallback(
