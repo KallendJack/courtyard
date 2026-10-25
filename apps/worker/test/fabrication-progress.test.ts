@@ -93,7 +93,7 @@ describe("a Build's progress", () => {
 
   it("stays on its steps when one before them goes, as the castors do when taken off (#699)", async () => {
     const request = await owner();
-    const progress = { step: "end-frames", ticked: [{ step: "end-frames", lines: [0] }] };
+    const progress = { step: "fit-supports", ticked: [{ step: "fit-supports", lines: [0] }] };
     await keep(request, progress);
 
     await writeFile(
@@ -107,7 +107,7 @@ describe("a Build's progress", () => {
 
     const build = await opened(request);
     expect(build.progress).toEqual({ ...progress, ways: [] });
-    expect(build.derived.steps.find((step) => step.id === "end-frames")?.number).toBe(4);
+    expect(build.derived.steps.find((step) => step.id === "fit-supports")?.number).toBe(6);
   });
 
   it("opens as not started from a file kept by step number, before steps had IDs", async () => {

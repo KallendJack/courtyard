@@ -1,7 +1,7 @@
 import type { Scene, SceneMark } from "../scene.ts";
 import { baseCloseUp } from "./close-ups.ts";
 import { cutScene, markScene } from "./cut-scenes.ts";
-import { castorFixingNames } from "./parameters.ts";
+import { boltStack, castorFixingNames } from "./parameters.ts";
 import {
   at,
   box,
@@ -22,7 +22,10 @@ import {
 // long and 780 high) and only drawn when they're to hand; where one isn't, its place is still
 // marked.
 
-/** One castor base upside down on the floor, its castors on it and a bolt through each hole. */
+/**
+ * One castor base upside down, its castors on it: a bolt through each hole but the last, where
+ * the bit goes through the plate's own hole (#783).
+ */
 const castorScene = (setting: SceneSetting): Scene => {
   const castors = setting.parameters.castors;
   const s = setting.shape;
@@ -32,8 +35,9 @@ const castorScene = (setting: SceneSetting): Scene => {
   const plate = castors.plate.thickness.value;
   const bolt = castors.bolt.diameter.value;
   const head = plate + castors.washer.thickness.value + 4;
-  // The arrow at the far castor's last hole, its words clear of the near castor's note.
+  // The bit at the far castor's last hole, its arrow's words clear of the near castor's note.
   const hole = closeUp.fixings.at(-1);
+  const bolted = closeUp.fixings.slice(0, -1);
   const near = plates[0];
   return {
     title: "A castor base, upside down",
@@ -65,10 +69,17 @@ const castorScene = (setting: SceneSetting): Scene => {
         name: castorFixingNames(castors, setting.boltLength).bolts,
         label: null,
         tone: "plain",
-        boxes: closeUp.fixings.map((each) =>
+        boxes: bolted.map((each) =>
           box(each.x - bolt / 2, each.y - bolt / 2, 0, bolt, bolt, s.wideThick + head),
         ),
       },
+      ...(hole === undefined
+        ? []
+        : toolIf(setting.toHand, "drill-driver", [
+            // The bit down through the plate's hole, and the drill's body above it.
+            box(hole.x - bolt / 2, hole.y - bolt / 2, 0, bolt + 1, bolt + 1, s.wideThick + 120),
+            box(hole.x - 25, hole.y - 30, s.wideThick + 120, 50, 60, 160),
+          ])),
     ],
     marks: [
       {
@@ -88,15 +99,21 @@ const castorScene = (setting: SceneSetting): Scene => {
         : [
             {
               kind: "arrow",
-              from: at(hole.x, hole.y, s.wideThick + 250),
-              to: at(hole.x, hole.y, s.wideThick + head),
-              says: "bolt down through the plate and the base",
+              from: at(hole.x, hole.y, s.wideThick + 350),
+              to: at(hole.x, hole.y, s.wideThick + plate),
+              says: "drill through the plate's own hole",
             } satisfies SceneMark,
           ]),
       {
         kind: "note",
         at: at((near?.x ?? 0) + (near?.w ?? 0) / 2, s.wideWidth / 2, s.wideThick + s.castor + 60),
-        says: "washer, plate, base, washer, nut",
+        says: "bolt down through the plate and the base",
+        tone: "plain",
+      },
+      {
+        kind: "note",
+        at: at((near?.x ?? 0) + (near?.w ?? 0) / 2, s.wideWidth / 2, s.wideThick + s.castor + 20),
+        says: boltStack(castors),
         tone: "plain",
       },
     ],

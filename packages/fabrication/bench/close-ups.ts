@@ -33,11 +33,14 @@ const line = (x1: number, y1: number, x2: number, y2: number) => ({
   mm: Math.round(Math.hypot(x2 - x1, y2 - y1) * 10) / 10,
 });
 
+/** How far in from each end of its base a castor sits, mm. */
+export const CASTOR_INSET = 10;
+
 /** A castor base from above, with its castors' plates and bolt holes. */
 export const baseCloseUp = (s: Shape, castors: Castors): CloseUp => {
   const plateLength = castors.plate.length.value;
   const plateWidth = castors.plate.width.value;
-  const inset = 10;
+  const inset = CASTOR_INSET;
   const plateY = (s.wideWidth - plateWidth) / 2;
   const plates = [inset, s.frameDepth - inset - plateLength];
   const corner = 10;
@@ -236,6 +239,91 @@ export const pilotCloseUp = (s: Shape, depth: number): CloseUp => {
     notes: [
       `Mark the bit ${whole(depth)} mm from its tip, as long as the screw.`,
       "Stop drilling when the mark reaches the wood.",
+    ],
+  };
+};
+
+// Fitting a castor (#783): the hole drilled through the plate's own, and the bolt's head held
+// while its nut is turned. The spanners are only pictures; the plate, base and bolt are the
+// Build's own.
+
+/** How much of the base shows either side of a castor's plate, from the side. */
+const BESIDE = 40;
+/** How far a spanner's handle reaches out from what it holds, in a close-up. */
+const HANDLE = 120;
+/** A bolt head's height, and a spanner's thickness, as drawn. */
+const HEAD = 4;
+
+/** The base upside down, a castor's plate on it and the bit through the plate's hole, from the side. */
+export const plateDrillCloseUp = (s: Shape, castors: Castors): CloseUp => {
+  const plate = castors.plate.thickness.value;
+  const plateLength = castors.plate.length.value;
+  const hole = castors.bolt.diameter.value + 1;
+  const width = plateLength + 2 * BESIDE;
+  const below = BIT_ABOVE + plate + s.wideThick;
+  return {
+    title: "Drilling through the plate's hole",
+    width,
+    height: below + ROOM,
+    pieces: [
+      { label: "castor", x: BESIDE, y: BIT_ABOVE, w: plateLength, h: plate },
+      { label: "E", x: 0, y: BIT_ABOVE + plate, w: width, h: s.wideThick },
+      // The bit in the plate's first hole, out through the base into the offcut's gap below.
+      { label: "bit", x: BESIDE + 10 - hole / 2, y: 0, w: hole, h: below + ROOM / 2 },
+    ],
+    dimensions: [line(width - 10, BIT_ABOVE, width - 10, below)],
+    fixings: [],
+    notes: [
+      `A ${hole} mm bit, straight down through the plate's own hole and the base.`,
+      "One hole, then its bolt, loosely, then the next.",
+    ],
+  };
+};
+
+/**
+ * A bolt through the plate and the base, from the side: one spanner holding its head still, the
+ * other turning its nut, their handles out opposite ways.
+ */
+export const boltHoldCloseUp = (
+  s: Shape,
+  castors: Castors,
+  spanner: { size: number | undefined; boltLength: number },
+): CloseUp => {
+  const plate = castors.plate.thickness.value;
+  const washer = castors.washer.thickness.value;
+  const nut = castors.nut.height.value;
+  const bolt = castors.bolt.diameter.value;
+  const across = spanner.size ?? 2 * bolt;
+  const width = 2 * HANDLE + across;
+  const middle = width / 2;
+  const headWasher = castors.washer.perBolt > 1 ? washer : 0;
+  const nutWasher = castors.washer.perBolt > 0 ? washer : 0;
+  const plateY = ROOM + HEAD + headWasher;
+  const baseY = plateY + plate;
+  const nutY = baseY + s.wideThick + nutWasher;
+  const named = spanner.size === undefined ? "spanner" : `${spanner.size} mm spanner`;
+  return {
+    title: "Holding the bolt's head",
+    width,
+    height: ROOM + HEAD + spanner.boltLength + ROOM,
+    pieces: [
+      { label: "castor", x: middle - HANDLE / 2, y: plateY, w: HANDLE, h: plate },
+      { label: "E", x: middle - HANDLE / 2, y: baseY, w: HANDLE, h: s.wideThick },
+      { label: "bolt", x: middle - bolt / 2, y: ROOM + HEAD, w: bolt, h: spanner.boltLength },
+      { label: "bolt", x: middle - across / 2, y: ROOM, w: across, h: HEAD },
+      { label: "nut", x: middle - across / 2, y: nutY, w: across, h: nut },
+      // One spanner on the head, its handle out to the left; the other on the nut, to the right.
+      { label: "spanner", x: middle - across / 2 - HANDLE, y: ROOM, w: HANDLE + across, h: HEAD },
+      { label: "spanner", x: middle - across / 2, y: nutY, w: HANDLE + across, h: nut },
+    ],
+    dimensions: [line(middle - across / 2, ROOM - 10, middle + across / 2, ROOM - 10)],
+    fixings: [],
+    notes: [
+      `Hold the head still with a ${named}, or pliers, so the bolt can't spin.`,
+      `Turn the nut with another ${named} or a socket.`,
+      ...(spanner.size === undefined
+        ? []
+        : [`A spanner's size is stamped on it: look for ${spanner.size}.`]),
     ],
   };
 };

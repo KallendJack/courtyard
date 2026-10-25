@@ -1931,7 +1931,7 @@ describe("Builds (#697, ADR 0036)", () => {
     const saver = await savingTurns([[]]);
 
     expect(saver.framings[0]?.instructions).toContain(
-      "<builds>\n[B1] Workbench, framed-bench, 1500 × 600 × 900 mm, on step 5 of 12: Make the two end frames (builds/workbench.json)\n</builds>",
+      "<builds>\n[B1] Workbench, framed-bench, 1500 × 600 × 900 mm, on step 4 of 12: Make the two end frames (builds/workbench.json)\n</builds>",
     );
   });
 
@@ -1947,12 +1947,12 @@ describe("Builds (#697, ADR 0036)", () => {
     );
     await writeFile(
       join(builds(), "progress", "workbench.json"),
-      JSON.stringify({ step: "end-frames", ticked: [{ step: "end-frames", lines: [0, 1] }] }),
+      JSON.stringify({ step: "fit-supports", ticked: [{ step: "fit-supports", lines: [0, 1] }] }),
     );
     const saver = await savingTurns([[]]);
 
     expect(saver.framings[0]?.instructions).toContain(
-      "<builds>\n[B1] Workbench, framed-bench, 1500 × 600 × 900 mm, on step 4 of 10: Make the two end frames (builds/workbench.json)\n</builds>",
+      "<builds>\n[B1] Workbench, framed-bench, 1500 × 600 × 900 mm, on step 6 of 10: Fit the supports (builds/workbench.json)\n</builds>",
     );
   });
 

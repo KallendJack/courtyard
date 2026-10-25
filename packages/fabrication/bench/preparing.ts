@@ -19,7 +19,8 @@ export type Draft = {
   /** The parts it puts on the Build: its parts, unless it only prepares or checks them. */
   adds?: readonly string[];
   ways?: readonly Way[];
-  tools: readonly Tool[];
+  /** Each tool, or a tool with what this step calls it ("10 mm spanner × 2"). */
+  tools: readonly (Tool | { tool: Tool; name: string })[];
   safety?: readonly Tool[];
   fixings?: readonly { name: string; count: number }[];
   actions: readonly Action[];

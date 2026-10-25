@@ -62,7 +62,7 @@ by your tools · Tablet (#699)" and "· Build steps · Cover (#699)"): the step 
 "Fabrication · At the bench · Fold 933×645"), the job as it's done, worked out by the engine: the length on the
 Workmate with a pencil tick at each piece, the length in its jaws with the line, the saw, the support under the long
 end and the offcut hatched on the waste side, an end frame flat on the floor with its diagonals, a castor base upside
-down with its bolts, or the frame so far (the parts put on before faint, the step's own violet, the rest hidden). Its
+down with its bolts and the drill in a plate's hole (#783), or the frame so far (the parts put on before faint, the step's own violet, the rest hidden). Its
 marks are the Build's own numbers; only the tools to hand are drawn. Each step opens at its own angle, fitted to the
 view; turning stays between 15° and 60° above level, and Reset view (or another step) puts it back. Only the step's
 own parts have their letter, and a new step closes a part's card. The marks' words are the step's own type size (20 px
@@ -70,7 +70,7 @@ beside a step in big type, 16 px otherwise), and none sits on another or on a le
 line in violet when Your tools have changed how a step is done ("Cut and label the timber now uses your mitre saw, not
 the hand saw.", #777); under "Show me how", a walk-through the first time a move comes up (marking as 1. Tape,
 2. Tick, 3. Square, 4. Line, with close-ups of the tape's hook and the square's stock; a pilot hole's depth on the end
-frames); a checklist whose ticked lines
+frames; drilling through a castor's plate and holding the bolt's head); a checklist whose ticked lines
 go grey and whose next line is lit (marking puts a bar under each length's line, "B 1450 · 3 mm saw cut · A 750 ·
 offcut 197"), words such as "flush" to tap for a line saying what they mean, its tools, its fixings, what the making
 rules found about it in gold (bolts too short, and the length the step uses instead), its close-up, "Before you move

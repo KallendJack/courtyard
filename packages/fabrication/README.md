@@ -39,7 +39,7 @@ if (recipe) {
 | `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed |
 | `findings.ts` | The making rules code checks: a bolt long enough for what it passes through plus two threads, tools needed and not to hand, sizes assumed |
 | `tools.ts`, `glossary.ts` | The tools and kit a step can need, which of them each of Your tools is by the words in its name, one tool or several ("Drill and drill bits", `toolsFrom`), and the words a beginner may not know |
-| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `walk-throughs.ts` (marking as tape, tick, square and line, and a pilot hole's depth, #777), `close-ups.ts`, `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
+| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `walk-throughs.ts` (marking as tape, tick, square and line, a pilot hole's depth, #777, and fitting a castor, #783), `close-ups.ts`, `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
 | `print/` | Printed parts (#702): `templates.ts` (the holster, shim and bracket, each made into a part recipe, and `printed-part`, a recipe as written), `recipe.ts` (each face's frame, and the checks that refuse a recipe before it's made), `index.ts` (a printed part's Build: its part, buy list, steps and findings), `make.ts` (the solid, with manifold-3d), `lettering.ts` (text as outlines, with opentype.js), `files.ts` (3MF, zipped with fflate, and STL) |
 | `print/font/` | Figtree Bold, for lettering: `figtree-bold.ttf` from Fontsource (`@fontsource/figtree` 5.2.10, latin 700), under the SIL Open Font License in `OFL.txt`, from github.com/erikdkennedy/figtree |
 
@@ -60,7 +60,7 @@ if (recipe) {
 - **Each step has an ID** saying what it does ("fit-castors"), the same whichever steps the Build has, so the
   owner's progress stays on its step when one before it comes or goes.
 - **Each step has a picture of the job as it's done** (#754): the length on the Workmate or in its jaws (clamped on the
-  Workmate for a circular saw, or on a mitre saw's bed), an end frame flat on the floor, a castor base upside down, or the frame as far as it's built.
+  Workmate for a circular saw, or on a mitre saw's bed), an end frame flat on the floor, a castor base upside down with the drill in a plate's hole, or the frame as far as it's built.
   It says where it opens from (15° to 60° above level), and its marks (sizes, the pencil line, where the saw runs,
   the diagonals to check, where the support goes, where the brackets go, the waste side) are the Build's own numbers.
   Tools are drawn only when they're to hand, and nothing the owner doesn't have is drawn as if they did.
@@ -68,6 +68,10 @@ if (recipe) {
   the kerf between pieces. Show me how walks through the first length's tape, tick, square and line, with close-ups
   of the tape's hook over the end and the square's stock against the edge; the first step that drills shows a pilot
   hole's depth, a mark on the bit at the screw's length (#777).
+- **The castors go on after the frames** (#783), so a spanner still to get doesn't hold up the day. Each hole is
+  drilled through the plate's own hole and bolted loosely before the next, so none is off; the step lists two
+  spanners of the bolts' size (or a spanner and a socket), says the washers the Build has and how tight is tight,
+  and walks through drilling through the plate and holding the bolt's head, each with its close-up.
 - **A fixing found too short is never fitted:** the steps and the buy list use the length to use instead, unpriced
   until it's given a price, and the finding names the steps that fit it.
 - **Parts are cut to the whole mm below,** and the steps say every size to the whole mm; the Build keeps it exact.

@@ -230,6 +230,41 @@ describe("show me how (#777)", () => {
     expect((mark?.y ?? 0) + (mark?.h ?? 0)).toBe(rail?.y);
     expect(walkOf("long-rails")).toEqual([]);
   });
+
+  it("drills a castor's holes through its plate's own, then shows holding the bolt's head close up (#783)", () => {
+    const [drill, hold] = walkOf("fit-castors");
+
+    expect([drill?.title, hold?.title]).toEqual(["Drill through the plate", "Hold the head"]);
+    expect(drill?.says).toContain("turn the collar behind the chuck to the drill symbol");
+    // The 7 mm bit down through the 4 mm plate and the 45 mm base.
+    const drilled = drill?.closeUp?.pieces ?? [];
+    expect(drilled.map((piece) => piece.label)).toEqual(["castor", "E", "bit"]);
+    expect(drilled[2]?.w).toBe(7);
+    expect(drill?.closeUp?.dimensions.map((line) => line.mm)).toEqual([49]);
+
+    expect(hold?.says).toContain("look for 10");
+    expect(hold?.says).toContain("Lock nuts are stiff all the way");
+    expect(hold?.closeUp?.title).toBe("Holding the bolt's head");
+    const held = hold?.closeUp?.pieces ?? [];
+    expect(held.map((piece) => piece.label)).toEqual([
+      "castor",
+      "E",
+      "bolt",
+      "bolt",
+      "nut",
+      "spanner",
+      "spanner",
+    ]);
+    // A spanner on the head and one on the nut, their handles out opposite ways; the bolt the
+    // 60 mm to use, and 10 mm across its head.
+    const [, , shank, head, nut, onHead, onNut] = held;
+    expect(onHead?.y).toBe(head?.y);
+    expect(onNut?.y).toBe(nut?.y);
+    expect((onHead?.x ?? 0) < (head?.x ?? 0)).toBe(true);
+    expect((onNut?.x ?? 0) + (onNut?.w ?? 0)).toBeGreaterThan((nut?.x ?? 0) + (nut?.w ?? 0));
+    expect(shank?.h).toBe(60);
+    expect(hold?.closeUp?.dimensions.map((line) => line.mm)).toEqual([10]);
+  });
 });
 
 describe("where the brackets go (#777)", () => {
@@ -277,17 +312,26 @@ describe("the end frames' scene", () => {
 });
 
 describe("the castors' scene", () => {
-  it("is a base upside down, its castors' plates and every bolt through them", () => {
+  it("is a base upside down, its castors' plates, the drill in the last hole and a bolt in each before (#783)", () => {
     const scene = sceneOf(built(goldenBench), "fit-castors");
 
     expect(pieces(scene)).toEqual([
       "part E lit ×1",
       // Each castor's plate and its wheel's housing.
       "fitted Wheelwright TD60 castors plain ×4",
-      "fitted M6 × 60 bolts plain ×8",
+      "fitted M6 × 60 bolts plain ×7",
+      // The bit through the plate's hole, and the drill's body.
+      "tool Drill driver plain ×2",
     ]);
     expect(marks(scene, "size").map((size) => size.mm)).toEqual([550, 10]);
-    expect(marks(scene, "arrow")[0]?.says).toBe("bolt down through the plate and the base");
+    expect(marks(scene, "arrow").map((arrow) => arrow.says)).toEqual([
+      "drill through the plate's own hole",
+    ]);
+    // The words and the picture agree: the bolt goes down through the plate, as the step says.
+    expect(marks(scene, "note").map((note) => note.says)).toEqual([
+      "bolt down through the plate and the base",
+      "washer, plate, base, washer, nut",
+    ]);
   });
 });
 
@@ -299,8 +343,6 @@ describe("an assembly step's scene", () => {
       "part A built ×4",
       "part B lit ×4",
       "part C built ×4",
-      "part E built ×2",
-      "fitted Wheelwright TD60 castors built ×4",
     ]);
     const top = pieces(sceneOf(build, "fit-top"));
     expect(top).toContain("part G lit ×1");

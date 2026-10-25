@@ -146,7 +146,7 @@ describe("the Build tool", () => {
     expect(reply?.reply).toContain("1500 × 600 × 900 mm");
     expect(reply?.reply).toContain("Total: £177.02, leaving out 1 line with no price");
     expect(reply?.reply).toContain(
-      "- M6 × 50 bolts are too short: they need 59 mm, through the castor plate, castor base, M6 washer, M6 lock nut, two threads. The steps and buy list use 60 mm ones instead (step 4).",
+      "- M6 × 50 bolts are too short: they need 59 mm, through the castor plate, castor base, M6 washer, M6 lock nut, two threads. The steps and buy list use 60 mm ones instead (step 6).",
     );
     expect(reply?.reply).toContain(
       "Stock options, the recommended first:\n- Frame timber, now 45 × 95 C16, for legs, long rails, end rails and shelf support:\n  - Sawn C16, 45 × 95 (recommended, picked): 5 lengths of 2.4 m, £34.00 at Woodstore (https://shop.example/c16-45x95). Strong, kiln-dried, rough faces. Right for a bench. Fine in a garage.\n  - CLS, 38 × 89: 5 lengths of 2.4 m, £31.50 at Woodstore (https://shop.example/cls-38x89). Smooth, with rounded edges, but 7 mm slimmer than C16, so each screw has less to grip. Less wood for screws.",

@@ -95,7 +95,6 @@ export const benchSteps = (options: {
 
   const drafts: Draft[] = [
     ...preparingSteps({ cutPlan, toHand, saw, sectionOf: (stock) => sectionOf(setting, stock) }),
-    ...(castors ? [castorsDraft({ castors, shape: s, boltLength: options.boltLength })] : []),
     {
       id: "end-frames",
       on: true,
@@ -163,8 +162,10 @@ export const benchSteps = (options: {
       },
       words: ["flush", "pilot hole"],
     },
+    // The castors after the frames, so a spanner still to get doesn't hold up the day (#783).
     ...(castors
       ? [
+          castorsDraft({ castors, shape: s, boltLength: options.boltLength }),
           {
             id: "stand-on-bases",
             on: true,
@@ -347,7 +348,10 @@ export const benchSteps = (options: {
     },
   ];
 
-  const stepTool = (tool: Tool) => ({ tool, name: TOOL_NAMES[tool], toHand: toHand.has(tool) });
+  const stepTool = (tool: Tool | { tool: Tool; name: string }) =>
+    typeof tool === "string"
+      ? { tool, name: TOOL_NAMES[tool], toHand: toHand.has(tool) }
+      : { ...tool, toHand: toHand.has(tool.tool) };
   const on = drafts.filter((draft) => draft.on);
   return on.map((draft, at) => ({
     id: draft.id,
