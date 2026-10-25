@@ -42,7 +42,7 @@ const garageWithBuild = async (page: Page) => {
       template: "framed-bench",
       parameters: goldenBench,
       project: "P1",
-      step: 1,
+      step: "s1",
     })}`,
   );
   await expect(page.getByRole("list", { name: "Builds saved" })).toContainText("Started Build");
