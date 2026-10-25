@@ -192,6 +192,17 @@ const STILL_ASKS: readonly (readonly [{ run: string } | { edit: string }, unknow
     `node -e "require('fs').writeFileSync('/*x', '')"`,
     `node -e "[]['constructor']['constructor']('return 1')()"`,
     `node -e "require('node:child_process/x')"`,
+    // Read with a parser (#747): the root, a path beside a regular expression, a module or member
+    // worked out or reached by a string, and code that doesn't parse.
+    `node -e "require('fs').rmSync('/', {recursive:true})"`,
+    `node -e "const r=/x/;require('fs').readFileSync('/etc/hosts')"`,
+    `node -e "require('child_'+'process')"`,
+    `node -e "this.constructor.constructor('return 1')()"`,
+    `node -e "[]['constructor']['constructor']('x')()"`,
+    `node -e "globalThis['req'+'uire']('child_process')"`,
+    `node -e "import('node:child_process')"`,
+    `node -e "process['binding']('fs')"`,
+    `node -e "const x = ;"`,
     // Or one of the setup files Allow all never edits (#730).
     `node -e "require('fs').rmSync('.github', { recursive: true })"`,
     // Removing them asks however it's done.
