@@ -11,7 +11,7 @@ import { ChevronLeft } from "lucide-react";
 import { useState } from "react";
 import { saveTools, undoTools, yourTools } from "@/api/fabrication";
 import {
-  describePrinter,
+  describe,
   type Picks,
   recount,
   startingPicks,
@@ -85,7 +85,7 @@ export function ToolsPage(props: { tools: YourTools; back: string | undefined })
     toggle: (name) => changeTo(toggle(picks, name)),
     recount: (name, by) => changeTo(recount(picks, name, by)),
     add: (name) => changeTo(tickHeard(picks, [{ name }])),
-    describePrinter: (printer) => changeTo(describePrinter(picks, printer)),
+    describe: (name, described) => changeTo(describe(picks, name, described)),
     noteOf: (pick) => tileNote(tools, pick),
   };
 

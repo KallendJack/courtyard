@@ -16,10 +16,11 @@ Build opens next, and its Tools panel's Your tools comes back here.
 | File | What it is |
 |---|---|
 | `tools-page.tsx` | The page: the top bar with Skip for now (or Done), what it's for with "Or just say it", the tiles, and Save with its Undo |
-| `tiles.tsx` | The common tools in their four groups, a ticked tile's count, Add your own, and which 3D printer |
+| `tiles.tsx` | The common tools in their four groups, a ticked tile's count, Add your own, and which 3D printer, mitre saw or circular saw |
 | `say-it.tsx` | "Or just say it": the words said or typed, ticked by a model for the owner to check |
 | `picks.ts` | What's ticked: from the tools saved and the workspaces' tools to move, and each change to it |
 
 **Screens:** tapping a tile ticks or unticks it; a ticked one has + and − for how many, and one small line saying what
 Save moves and from where ("F-clamps · from Garage"), or the owner's own name for a saved one. Ticking 3D printer asks for its
-make and plate size. Nothing is saved until Save, which is greyed out while the ticks are the tools as saved.
+make and plate size; ticking Mitre saw or Circular saw asks for its make and what it cuts at 90° (from its label or
+the maker's page), so a Build's cuts too big for it go to another saw (#780). Nothing is saved until Save, which is greyed out while the ticks are the tools as saved.

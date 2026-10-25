@@ -19,7 +19,8 @@ export type Ticking = {
   toggle: (name: string) => void;
   recount: (name: string, by: 1 | -1) => void;
   add: (name: string) => void;
-  describePrinter: (printer: { brand: string; size: string }) => void;
+  /** A ticked tool's make and size, by its name. */
+  describe: (name: string, described: { brand: string; size: string }) => void;
   /** The line under a ticked tile: what Save keeps or moves, if it says more than the tile. */
   noteOf: (pick: ToolPick) => string | undefined;
 };
@@ -151,20 +152,51 @@ function AddYourOwn(props: { add: (name: string) => void }) {
   );
 }
 
-/** Which 3D printer, asked once it's ticked, so printed parts fit its plate (#702). */
-function WhichPrinter(props: { picks: Picks; ticking: Ticking }) {
-  const printer = pickOf(props.picks, PRINTER_TOOL);
-  if (printer === undefined) return null;
+/**
+ * The tools asked about once they're ticked, each with its size and an example of it: the 3D
+ * printer, so printed parts fit its plate (#702), and the powered saws, so a cut too big for one
+ * goes to a saw that takes it (#780).
+ */
+const ASKED = [
+  {
+    tool: PRINTER_TOOL,
+    brand: "Bambu Lab P1S",
+    size: "Plate size",
+    example: "256 × 256 × 256 mm",
+    from: undefined,
+  },
+  {
+    tool: "Mitre saw",
+    brand: "Evolution R210SMS",
+    size: "Cuts at 90°, wide × deep",
+    example: "120 × 60 mm",
+    from: "On its label, or the maker's page.",
+  },
+  {
+    tool: "Circular saw",
+    brand: "Makita HS6601",
+    size: "Cuts at 90°, deep",
+    example: "54 mm",
+    from: "On its label, or the maker's page.",
+  },
+] as const;
+
+/** Which one a ticked tool is, and its size, asked once it's ticked. */
+function Which(props: { asked: (typeof ASKED)[number]; picks: Picks; ticking: Ticking }) {
+  const { asked } = props;
+  const pick = pickOf(props.picks, asked.tool);
+  if (pick === undefined) return null;
+  const question = `Which ${asked.tool === PRINTER_TOOL ? asked.tool : asked.tool.toLowerCase()}?`;
   const field = (what: "brand" | "size", label: string, example: string) => (
     <label className="flex min-w-0 flex-1 flex-col gap-1 text-meta text-muted-foreground">
       {label}
       <input
-        value={printer[what] ?? ""}
+        value={pick[what] ?? ""}
         maxLength={THING_FIELD_MAX_CHARACTERS}
         onChange={(event) =>
-          props.ticking.describePrinter({
-            brand: printer.brand ?? "",
-            size: printer.size ?? "",
+          props.ticking.describe(asked.tool, {
+            brand: pick.brand ?? "",
+            size: pick.size ?? "",
             [what]: event.target.value,
           })
         }
@@ -175,14 +207,15 @@ function WhichPrinter(props: { picks: Picks; ticking: Ticking }) {
   );
   return (
     <fieldset className="flex flex-col gap-2 rounded-row bg-secondary p-3">
-      <legend className="sr-only">Which 3D printer?</legend>
+      <legend className="sr-only">{question}</legend>
       <p aria-hidden className="text-interface font-semibold text-foreground">
-        Which 3D printer?
+        {question}
       </p>
       <div className="flex flex-col gap-2 md:flex-row">
-        {field("brand", "Make and model", "Bambu Lab P1S")}
-        {field("size", "Plate size", "256 × 256 × 256 mm")}
+        {field("brand", "Make and model", asked.brand)}
+        {field("size", asked.size, asked.example)}
       </div>
+      {asked.from !== undefined && <p className="text-meta text-muted-foreground">{asked.from}</p>}
     </fieldset>
   );
 }
@@ -215,7 +248,9 @@ export function ToolTiles(props: { picks: Picks; ticking: Ticking }) {
           )}
         </Group>
       ))}
-      <WhichPrinter picks={props.picks} ticking={props.ticking} />
+      {ASKED.map((asked) => (
+        <Which key={asked.tool} asked={asked} picks={props.picks} ticking={props.ticking} />
+      ))}
     </div>
   );
 }

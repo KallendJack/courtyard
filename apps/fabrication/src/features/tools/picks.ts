@@ -1,6 +1,5 @@
 import {
   COMMON_TOOLS,
-  PRINTER_TOOL,
   THING_COUNT_MAX,
   type ThingSummary,
   type ToolPick,
@@ -76,13 +75,17 @@ export const recount = (picks: Picks, name: string, by: 1 | -1): Picks =>
     return count === 1 ? rest : { ...rest, count };
   });
 
-/** The 3D printer's make and plate, as the owner is typing them (the worker trims them). */
-export const describePrinter = (
+/**
+ * A ticked tool's make and size, as the owner is typing them (the worker trims them): the 3D
+ * printer's plate, a saw's cutting capacity (#780).
+ */
+export const describe = (
   picks: Picks,
+  name: string,
   { brand, size }: { brand: string; size: string },
 ): Picks =>
   picks.map((pick) => {
-    if (keyOf(pick.name) !== keyOf(PRINTER_TOOL)) return pick;
+    if (keyOf(pick.name) !== keyOf(name)) return pick;
     const { brand: _brand, size: _size, ...rest } = pick;
     return {
       ...rest,

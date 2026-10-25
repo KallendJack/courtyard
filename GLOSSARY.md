@@ -237,7 +237,9 @@ A Build's instruction manual in Fabrication (#699), worked out by code from its 
 far), with marks drawn from the Build's numbers. A move a beginner may never have made gets a **walk-through** in
 "show me how" the first time it comes up (#777): marking as tape, tick, square and line, or a pilot hole's depth, each
 with its close-up where one shows it. A step that can be done more than one **way** (a hand saw, a circular saw, a
-mitre saw) uses the best to hand, and says so in a line when that's changed.
+mitre saw) uses the best to hand, and says so in a line when that's changed. A saw's **cutting capacity** (how wide
+and deep it cuts at 90°, asked once in Your tools) decides which cuts it takes: one too big for it goes to a saw that
+takes it, the step saying why in one line (#780).
 Its **progress**, the step reached and the lines ticked, is kept on the Build for every device and session, each
 step by its ID ("fit-castors") rather than its number, so ticks stay put when a step before comes or goes; a step
 started keeps the way it was started, so its ticks stay on the lines they were ticked on.

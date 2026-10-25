@@ -1,5 +1,5 @@
-import { BuildProgress, type BuildStep, tickedIn } from "@courtyard/contract";
-import type { Build } from "@courtyard/fabrication";
+import { BuildProgress, type BuildStep, type ThingSummary, tickedIn } from "@courtyard/contract";
+import type { Build, BuildSetting } from "@courtyard/fabrication";
 import { err, ok, type Result } from "../../lib/result.ts";
 import { readThingsIn } from "../things/index.ts";
 import type { ToolsRefusal } from "./tools.ts";
@@ -22,17 +22,28 @@ export const readTools = async (contextDir: string) => {
   });
 };
 
+/** The owner's tools as a Build is worked out with them, without the ways its steps were done. */
+export type ToolsSetting = Pick<BuildSetting, "tools" | "sizes">;
+
 /**
- * The owner's tools as a Build's steps follow them: each by its name and its tile's, or none when
- * they've saved none (or they can't be read just now), so a Build follows its own.
+ * The owner's tools as a Build's steps follow them: each by its name and its tile's, with the
+ * sizes they gave (a mitre saw's cutting capacity, #780); or none when they've saved none (or they
+ * can't be read just now), so a Build follows its own.
  */
-export const toolsToHand = async (contextDir: string): Promise<string[] | undefined> => {
+export const toolsToHand = async (contextDir: string): Promise<ToolsSetting> => {
   const read = await readTools(contextDir);
-  if (!read.ok || read.value.tools.length === 0) return undefined;
-  return read.value.tools.flatMap(({ summary }) => [
+  if (!read.ok || read.value.tools.length === 0) return {};
+  const namesOf = ({ summary }: { summary: ThingSummary }) => [
     summary.name,
     ...(summary.tile === undefined ? [] : [summary.tile]),
-  ]);
+  ];
+  return {
+    tools: read.value.tools.flatMap(namesOf),
+    sizes: read.value.tools.flatMap((tool) => {
+      const { size } = tool.summary;
+      return size === undefined ? [] : namesOf(tool).map((name) => ({ name, size }));
+    }),
+  };
 };
 
 /** Where a Build's steps start. */

@@ -1,4 +1,5 @@
 import type { CutPlan, Fitted, KeptWay, Part, Step } from "../build.ts";
+import type { Capacities } from "../capacity.ts";
 import { TOOL_NAMES, type Tool } from "../tools.ts";
 import { castorsDraft } from "./castor-steps.ts";
 import {
@@ -11,7 +12,7 @@ import {
 import { type Shape, whole } from "./frame.ts";
 import type { BenchParameters } from "./parameters.ts";
 import { act, CUT_STEP, type Draft, preparingSteps, sawInUse } from "./preparing.ts";
-import { type SceneSetting, sectionOf } from "./scene-pieces.ts";
+import { nameOf, type SceneSetting, sectionOf } from "./scene-pieces.ts";
 import { stepScene } from "./scenes.ts";
 import { pilotWalk } from "./walk-throughs.ts";
 
@@ -44,6 +45,8 @@ export const benchSteps = (options: {
   toHand: ReadonlySet<Tool>;
   /** The ways the steps already started were done, which they keep. */
   kept: readonly KeptWay[];
+  /** What the owner's powered saws can cut (#780). */
+  capacities: Capacities;
 }): Step[] => {
   const { parameters: p, shape: s, cutPlan, toHand, kept } = options;
   const castors = p.castors;
@@ -94,7 +97,14 @@ export const benchSteps = (options: {
   const rearInset = whole((s.frameLength - s.endRail) / 2);
 
   const drafts: Draft[] = [
-    ...preparingSteps({ cutPlan, toHand, saw, sectionOf: (stock) => sectionOf(setting, stock) }),
+    ...preparingSteps({
+      cutPlan,
+      toHand,
+      saw,
+      capacities: options.capacities,
+      sectionOf: (stock) => sectionOf(setting, stock),
+      nameOf: (label) => nameOf(setting, label),
+    }),
     ...(castors ? [castorsDraft({ castors, shape: s, boltLength: options.boltLength })] : []),
     {
       id: "end-frames",

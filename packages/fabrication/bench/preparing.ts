@@ -1,4 +1,5 @@
 import type { Action, CloseUp, CutPlan, KeptWay, MarkedLength, WalkStep, Way } from "../build.ts";
+import { type Capacities, capacityFor, tooBig } from "../capacity.ts";
 import type { Word } from "../glossary.ts";
 import { TOOL_NAMES, type Tool } from "../tools.ts";
 import { markingWalk, type Section } from "./walk-throughs.ts";
@@ -183,15 +184,91 @@ const CUTTING: Readonly<Record<Saw, Pick<Draft, "tools" | "safety" | "actions">>
   },
 };
 
+/** How a saw that takes some of the timber's cuts, but not all, cuts the rest. */
+const OTHER_SAW: Readonly<Record<Saw, string>> = {
+  "mitre-saw": "Lay each on the mitre saw's bed against the fence, and cut on the waste side.",
+  "circular-saw":
+    "Clamp each length down with the line just past the edge, set the blade about 5 mm deeper than the timber, and cut on the waste side.",
+  "hand-saw":
+    "Clamp each length in the folding workbench's jaws with the line just past the edge, and saw on the waste side.",
+};
+
+/** "A, B and C". */
+const listed = (items: readonly string[]) =>
+  items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+
+/**
+ * The timber too big for the saw in use, each stock with the next best saw to hand that takes it
+ * (the hand saw takes anything), and the line saying why (#780): "The 145 castor bases and top
+ * support are too wide for your mitre saw: hand saw for these." A saw whose capacity isn't given
+ * says what's assumed.
+ */
+const handedOn = (options: {
+  cutPlan: CutPlan;
+  toHand: ReadonlySet<Tool>;
+  saw: Saw;
+  capacities: Capacities;
+  sectionOf: (stock: string) => Section;
+  nameOf: (label: string) => string;
+}): { saw: Saw; action: Action }[] => {
+  const { saw, toHand, capacities } = options;
+  /** Why a stock is too big for a saw, or `null` when it takes it. */
+  const tooBigFor = (each: Saw, stock: string) =>
+    each === "hand-saw" ? null : tooBig(capacityFor(capacities, each), options.sectionOf(stock));
+  return options.cutPlan.timber.flatMap((plan) => {
+    const why = tooBigFor(saw, plan.stock);
+    if (why === null) return [];
+    const other =
+      SAWS.slice(SAWS.indexOf(saw) + 1).find(
+        (each) => (each === "hand-saw" || toHand.has(each)) && tooBigFor(each, plan.stock) === null,
+      ) ?? "hand-saw";
+    const labels = [
+      ...new Set(plan.lengths.flatMap((length) => length.cuts.map((cut) => cut.label))),
+    ].sort();
+    const section = options.sectionOf(plan.stock);
+    const these =
+      why.way === "wide"
+        ? `${Math.round(section.wide)} ${listed(labels.map((label) => options.nameOf(label).toLowerCase()))}`
+        : `${Math.round(section.thick)} mm thick ${listed(labels.map((label) => options.nameOf(label).toLowerCase()))}`;
+    const yours = TOOL_NAMES[saw].toLowerCase();
+    const using = TOOL_NAMES[other].toLowerCase();
+    const line =
+      why.limit.source.kind === "assumed"
+        ? `Your ${yours}'s cutting capacity isn't known, so it's assumed to cut ${why.limit.value} mm ${why.way}: ${using} for the ${these}. Give its capacity in Your tools to check.`
+        : `The ${these} are too ${why.way} for your ${yours}: ${using} for these.`;
+    return [
+      {
+        saw: other,
+        action: act(
+          `${line} ${OTHER_SAW[other]}`,
+          `${labels.join(", ")}: ${using}${why.limit.source.kind === "assumed" ? " (capacity assumed)" : `, too ${why.way}`}.`,
+        ),
+      },
+    ];
+  });
+};
+
+/** The tools of the saw in use, then those of any saw it hands cuts on to, each once. */
+const sawTools = (saw: Saw, others: readonly Saw[], of: "tools" | "safety") => [
+  ...new Set([saw, ...others].flatMap((each) => CUTTING[each][of] ?? [])),
+];
+
 /** The steps before anything is joined, the timber cut with `saw`. */
 export const preparingSteps = (options: {
   cutPlan: CutPlan;
   toHand: ReadonlySet<Tool>;
   saw: Saw;
+  /** The powered saws' cutting capacities, as given in Your tools (#780). */
+  capacities: Capacities;
   /** A timber's section, by its stock's name, for the marking close-ups. */
   sectionOf: (stock: string) => Section;
+  /** A part's name, by its label. */
+  nameOf: (label: string) => string;
 }): Draft[] => {
   const { cutPlan, toHand, saw } = options;
+  const handed = handedOn(options);
+  const others = handed.map((each) => each.saw);
+  const cutting = CUTTING[saw];
   const marked = markedLengths(cutPlan);
   const first = marked[0];
   const timberLabels = [
@@ -260,7 +337,14 @@ export const preparingSteps = (options: {
       parts: timberLabels,
       adds: [],
       ways: sawWays(toHand, saw),
-      ...CUTTING[saw],
+      tools: sawTools(saw, others, "tools"),
+      safety: sawTools(saw, others, "safety"),
+      // The cuts handed on go before the labelling, which every piece gets.
+      actions: [
+        ...cutting.actions.slice(0, -1),
+        ...handed.map((each) => each.action),
+        ...cutting.actions.slice(-1),
+      ],
       check: {
         says: "Each piece within 1 mm of its length, and its letter on it.",
         photo: "The pieces in rows by letter.",

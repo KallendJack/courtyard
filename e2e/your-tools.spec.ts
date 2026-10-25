@@ -158,4 +158,24 @@ test.describe("on a desktop", () => {
     await page.getByRole("link", { name: "Back to the Build" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Tools bench" })).toBeVisible();
   });
+
+  test("a mitre saw asks what it cuts, once, and keeps it (#780)", async ({ page }) => {
+    await noToolsSaved(page);
+    await garageWithBuild(page);
+
+    await tile(page, "Mitre saw").click();
+    const which = page.getByRole("group", { name: "Which mitre saw?" });
+    await expect(which).toContainText("On its label, or the maker's page.");
+    await which.getByLabel("Cuts at 90°, wide × deep").fill("120 × 60 mm");
+    await page.getByRole("button", { name: "Save 2 tools" }).click();
+    await expect(page.getByRole("status")).toContainText("Saved your tools.");
+
+    // Opened again, it's kept: nothing to save.
+    await page.reload();
+    await expect(
+      page.getByRole("group", { name: "Which mitre saw?" }).getByLabel("Cuts at 90°, wide × deep"),
+    ).toHaveValue("120 × 60 mm");
+    await expect(page.getByRole("button", { name: "Save 2 tools" })).toBeDisabled();
+    await noToolsSaved(page);
+  });
 });
