@@ -1,4 +1,4 @@
-import { type BuildSave, BuildTemplate } from "@courtyard/contract";
+import { type BuildSave, BuildTemplate, buildStarted, stepReached } from "@courtyard/contract";
 import { BenchParameters, type Build, type Finding } from "@courtyard/fabrication";
 import { z } from "zod";
 import { buildPath, type ReadBuilds } from "../features/fabrication/index.ts";
@@ -68,21 +68,22 @@ export const BUILD_TOOL: TurnTool = {
 
 /** The step the owner has reached in a Build they've started building (#699), for its line. */
 const reached = ({ progress, derived }: LabelledBuild["build"]) => {
-  const step = derived.steps[progress.step - 1];
-  const started = progress.step > 1 || progress.ticked.some(({ lines }) => lines.length > 0);
-  return started && step !== undefined
+  const step = stepReached(derived.steps, progress);
+  return buildStarted(derived.steps, progress) && step !== undefined
     ? `, on step ${step.number} of ${derived.steps.length}: ${step.title}`
     : "";
 };
+
+/** A Build's size as the owner is told it: to the whole mm, though it's kept exact. */
+const sizeLine = ({ size }: Build) =>
+  `${Math.round(size.length)} × ${Math.round(size.depth)} × ${Math.round(size.height)} mm`;
 
 /**
  * A Build as a model reads it in the list: its label, name, template, size, the step reached once
  * the owner has started building, and its file.
  */
-const buildLine = ({ label, build }: LabelledBuild) => {
-  const { length, depth, height } = build.derived.size;
-  return `[${label}] ${build.file.name.replace(/\s+/g, " ").trim()}, ${build.file.template}, ${length} × ${depth} × ${height} mm${reached(build)} (${build.summary.path})`;
-};
+const buildLine = ({ label, build }: LabelledBuild) =>
+  `[${label}] ${build.file.name.replace(/\s+/g, " ").trim()}, ${build.file.template}, ${sizeLine(build.derived)}${reached(build)} (${build.summary.path})`;
 
 /** A planning workspace's Builds, one labelled line each between their markers. */
 export const buildsPart = (builds: ReadBuilds) => {
@@ -141,7 +142,7 @@ const pounds = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 const findingLine = (finding: Finding) => {
   switch (finding.kind) {
     case "fixing-too-short":
-      return `${finding.fixing} are too short: ${finding.needed} mm needed through ${finding.through.map(({ what, mm }) => `${what} ${mm}`).join(" + ")}; use ${finding.use} mm.`;
+      return `${finding.fixing} are too short: they need ${Math.round(finding.needed)} mm, through the ${[...new Set(finding.through.map(({ what }) => what))].join(", ")}. The steps and buy list use ${finding.use} mm ones instead (step ${finding.steps.join(", ")}).`;
     case "tools-missing":
       return `Tools needed and not to hand: ${finding.tools.map(({ name, steps }) => `${name} (step ${steps.join(", ")})`).join("; ")}.`;
     case "too-big-for-stock":
@@ -153,10 +154,9 @@ const findingLine = (finding: Finding) => {
 
 /** Everything code worked out for a Build, for the model to report as it is. */
 const numbersOf = (build: Build) => {
-  const { length, depth, height } = build.size;
   const { cutPlan, buyList } = build;
   return [
-    `A framed bench, ${length} × ${depth} × ${height} mm.`,
+    `A framed bench, ${sizeLine(build)}.`,
     "Parts:",
     ...build.parts.map(
       (part) =>

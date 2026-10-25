@@ -37,7 +37,8 @@ by your tools · Tablet (#699)" and "· Build steps · Cover (#699)"): the Steps
 view builds the Build up to it: the parts put on before are faint, the step's own violet, the rest hidden. A step has
 its time, how it's done ("Hand saw", "Circular saw · not yet"), "Show me how" or "Just the numbers" (kept on the
 device), a checklist whose ticked lines go grey and whose next line is lit, words such as "flush" to tap for a line
-saying what they mean, its fixings, "Before you move on" with Send a photo to check (the photo and what it's for go
+saying what they mean, its fixings, what the making rules found about it in gold (bolts too short, and the length
+the step uses instead), "Before you move on" with Send a photo to check (the photo and what it's for go
 in the chat's Reply box, to send), and its tools on one line ("5 tools ready · 1 to check") that opens to each. Back
 and Done, next step are pinned at the foot; the strip of dots above the 3D view (done · now · to go) jumps to a
 step. The page opens on the steps once building has started, and the Fold, the PC and a new session all carry on

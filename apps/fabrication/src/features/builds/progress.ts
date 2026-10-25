@@ -1,29 +1,27 @@
-import type { BuildOpened, BuildProgress, BuildStep, DerivedBuild } from "@courtyard/contract";
+import {
+  type BuildOpened,
+  type BuildProgress,
+  type BuildStep,
+  type DerivedBuild,
+  stepReached,
+  tickedIn,
+} from "@courtyard/contract";
 import { useCallback, useRef, useState } from "react";
 import { keepProgress } from "@/api/fabrication";
 
 // How far the owner has got with a Build's steps (#699): the step reached and the lines ticked,
 // changed on the page at once and kept by the worker, in order, so the Fold, the PC and a new
-// session open where they left off.
-
-/** The lines ticked in a step, by their place in it. */
-export const tickedIn = (progress: BuildProgress, step: number): readonly number[] =>
-  progress.ticked.find((each) => each.step === step)?.lines ?? [];
+// session open where they left off. Steps go by their IDs, so ticks stay on their steps when the
+// Build changes.
 
 /** Progress with a step's ticked lines replaced. */
-const withLines = (progress: BuildProgress, step: number, lines: readonly number[]) => ({
+const withLines = (progress: BuildProgress, step: string, lines: readonly number[]) => ({
   ...progress,
   ticked: [
     ...progress.ticked.filter((each) => each.step !== step),
     ...(lines.length === 0 ? [] : [{ step, lines: [...lines].sort((a, b) => a - b) }]),
-  ].sort((a, b) => a.step - b.step),
+  ],
 });
-
-/** The step reached, as the Build is now: one it no longer has (castors taken off) is its last. */
-export const stepReached = (
-  derived: DerivedBuild,
-  progress: BuildProgress,
-): BuildStep | undefined => derived.steps[Math.min(progress.step, derived.steps.length) - 1];
 
 /**
  * What the 3D view shows at a step: the parts put on the Build up to it, with what they're fitted
@@ -94,23 +92,25 @@ export const useProgress = (
     setProgress(next);
     void keep(next);
   };
-  const steps = build.derived.steps.length;
-  const step = stepReached(build.derived, progress);
+  const { steps } = build.derived;
+  const step = stepReached(steps, progress);
+  /** The step at a number, kept by its ID. */
+  const at = (number: number) => steps[Math.max(1, Math.min(number, steps.length)) - 1]?.id ?? null;
 
   return {
     progress,
     step,
     problem,
     /** Moves to a step, by its number. */
-    go: (number: number) => change({ ...progress, step: Math.max(1, Math.min(number, steps)) }),
+    go: (number: number) => change({ ...progress, step: at(number) }),
     /** Ticks a line of the step reached, or unticks it. */
     tick: (line: number) => {
       if (step === undefined) return;
-      const lines = tickedIn(progress, step.number);
+      const lines = tickedIn(progress, step.id);
       change(
         withLines(
           progress,
-          step.number,
+          step.id,
           lines.includes(line) ? lines.filter((each) => each !== line) : [...lines, line],
         ),
       );
@@ -119,8 +119,8 @@ export const useProgress = (
     done: () => {
       if (step === undefined) return;
       const all = step.actions.map((_, line) => line);
-      const ticked = withLines(progress, step.number, all);
-      change({ ...ticked, step: Math.min(step.number + 1, steps) });
+      const ticked = withLines(progress, step.id, all);
+      change({ ...ticked, step: at(step.number + 1) });
     },
   };
 };

@@ -134,17 +134,20 @@ describe("the Build tool", () => {
     });
 
     // Its numbers are the engine's, the golden bench's hand-checked ones: 899.6 mm high on its
-    // castors, and £172.06 in all.
+    // castors, told to the owner to the whole mm, and £177.02 in all, the longer bolts unpriced.
     const view = await viewOf(request, "workbench");
     expect(view.derived).toMatchObject({
       size: { length: 1500, depth: 600, height: 899.6 },
-      buyList: { total: 17206, unpriced: 0 },
+      buyList: { total: 17702, unpriced: 1 },
     });
     const [reply] = saver.replies[0] ?? [];
     expect(reply?.ok).toBe(true);
     expect(reply?.reply).toMatch(/^Started \[B1\] Workbench \(builds\/workbench\.json\)/);
-    expect(reply?.reply).toContain("1500 × 600 × 899.6 mm");
-    expect(reply?.reply).toContain("Total: £172.06");
+    expect(reply?.reply).toContain("1500 × 600 × 900 mm");
+    expect(reply?.reply).toContain("Total: £177.02, leaving out 1 line with no price");
+    expect(reply?.reply).toContain(
+      "- M6 × 50 bolts are too short: they need 59 mm, through the castor plate, castor base, M6 washer, M6 lock nut, two threads. The steps and buy list use 60 mm ones instead (step 4).",
+    );
   });
 
   it("changes one size by its label, leaving every other parameter, and the Build works the rest out again", async () => {
@@ -165,7 +168,7 @@ describe("the Build tool", () => {
     });
     const [reply] = saver.replies[1] ?? [];
     expect(reply?.reply).toMatch(/^Changed \[B1\] Workbench/);
-    expect(reply?.reply).toContain("1500 × 600 × 849.6 mm");
+    expect(reply?.reply).toContain("1500 × 600 × 850 mm");
   });
 
   it("gives a Build's numbers as they are for only its label, or a change of nothing, writing nothing", async () => {
@@ -182,9 +185,9 @@ describe("the Build tool", () => {
     expect(replies.map(({ ok }) => ok)).toEqual([true, true]);
     for (const { reply } of replies) {
       expect(reply).toMatch(
-        /^\[B1\] Workbench \(builds\/workbench\.json\) is as it was: nothing changed\. Its numbers as they are now:\n\nA framed bench, 1500 × 600 × 899\.6 mm\./,
+        /^\[B1\] Workbench \(builds\/workbench\.json\) is as it was: nothing changed\. Its numbers as they are now:\n\nA framed bench, 1500 × 600 × 900 mm\./,
       );
-      expect(reply).toContain("Total: £172.06");
+      expect(reply).toContain("Total: £177.02");
     }
     expect(buildSaves(events)).toHaveLength(1);
     expect((await changesIn(contextDir)).map(({ title }) => title)).not.toContain(

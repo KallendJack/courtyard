@@ -227,7 +227,8 @@ _Avoid_: shopping list, BOM, wanted list (that's Things the owner wants)
 A Build's instruction manual in Fabrication (#699), worked out by code from its parameters and the tools to hand: one
 step at a time, a **checklist** of one action a line ("show me how" for a beginner, or "just the numbers"), a
 close-up with its sizes and screw positions, a check **before you move on**, and the 3D view built up to the step.
-Its **progress**, the step reached and the lines ticked, is kept on the Build for every device and session.
+Its **progress**, the step reached and the lines ticked, is kept on the Build for every device and session, each
+step by its ID ("fit-castors") rather than its number, so ticks stay put when a step before comes or goes.
 _Avoid_: instructions (that's what a model is given), tasks, project steps (those are a project's)
 
 **Sourced size**:

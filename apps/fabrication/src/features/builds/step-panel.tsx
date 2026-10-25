@@ -1,11 +1,12 @@
-import type { BuildStep, DerivedBuild } from "@courtyard/contract";
+import { type BuildStep, type DerivedBuild, tickedIn } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Camera, Check, ChevronRight, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
-import { type Detail, type Progress, tickedIn, useDetail } from "./progress.ts";
-import { listed } from "./words.ts";
+import { Findings } from "./findings.tsx";
+import { type Detail, type Progress, useDetail } from "./progress.ts";
+import { listed, stepFindings } from "./words.ts";
 
 // A Build's steps as an instruction manual (#699; Paper, 2 · Agreed, "Fabrication · Build steps
 // v2, teaching · Tablet (#699)" and "· Build steps, cutting by your tools · Tablet (#699)"): one
@@ -288,7 +289,7 @@ export function StepPanel(props: {
       <Checklist
         step={step}
         detail={detail}
-        ticked={tickedIn(progress.progress, step.number)}
+        ticked={tickedIn(progress.progress, step.id)}
         tick={progress.tick}
         openWord={setWord}
       />
@@ -319,6 +320,7 @@ export function StepPanel(props: {
           </span>
         </p>
       )}
+      <Findings findings={stepFindings(derived, step)} label="To check in this step" />
       <BeforeMovingOn step={step} sendPhoto={props.sendPhoto} />
       <ToolsLine step={step} />
     </section>

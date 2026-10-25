@@ -789,8 +789,9 @@ things live only in the worker's memory and go when it restarts.
   parameters only, every size with its source; the parts, cut plan, buy list, steps and findings are worked out on
   read, never stored. Each file is named by the Build's name when it was started.
   `<workspace>/builds/progress/<slug>.json` is how far the owner has got with its steps (#699): the step reached and
-  the lines ticked, beside the Build so ticking never stands in the way of undoing a change to it. Each write is a
-  `build-progress` change, kept and backed up but never listed in Recent changes.
+  the lines ticked, each step by its ID (a file kept by step number reads as not started), beside the Build so
+  ticking never stands in the way of undoing a change to it. Each write is a `build-progress` change, kept and backed
+  up but never listed in Recent changes.
 - `.agents/skills/<skill>/` at the top: the owner's skills for every workspace; `<workspace>/.agents/skills/<skill>/`:
   their skills for one workspace (ADR 0016). Added by hand, so they're kept and backed up like everything else.
 - `archived/<workspace>/`: archived workspaces.

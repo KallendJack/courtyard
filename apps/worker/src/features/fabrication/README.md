@@ -6,7 +6,7 @@ time it's read. And Fabrication's API, which the Fabrication app (#698) calls ra
 standalone Fabrication could answer it with storage of its own.
 
 **Example:** the owner asks for a workbench. The model's Build tool starts "Workbench" from the framed bench's
-parameters; the engine works out its parts, cut plan and buy list (total £172.06), the file is one change with one
+parameters; the engine works out its parts, cut plan and buy list (total £177.02), the file is one change with one
 Undo, and the tool's reply gives the model those numbers to report. "Make it 850 high" changes `height` alone, and the
 rest is worked out again.
 

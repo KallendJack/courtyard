@@ -1,4 +1,4 @@
-import type { BuildOpened } from "@courtyard/contract";
+import { type BuildOpened, buildStarted } from "@courtyard/contract";
 import { useLayout } from "@courtyard/ui/frame/handheld.ts";
 import { useFresh } from "@courtyard/ui/layout/kept.tsx";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
@@ -74,7 +74,7 @@ export function BuildPage(props: { build: BuildOpened }) {
   const cover = useLayout() === "cover";
   const [lit, setLit] = useState<string>();
   // Once building has started, the Build opens on the steps, where the owner left off (#699).
-  const started = build.progress.step > 1 || build.progress.ticked.length > 0;
+  const started = buildStarted(derived.steps, build.progress);
   const [side, setSide] = useState<(typeof SIDE_TABS)[number]>(started ? "Steps" : "Cut plan");
   const [coverTab, setCoverTab] = useState<Tab>(started ? "Steps" : "Bench");
   const [draft, setDraft] = useState<{ text: string; files: File[]; key: number }>();

@@ -18,6 +18,8 @@ const CASTOR_INSET = 10;
 const cutSize = (mm: number) => Math.floor(mm + 1e-9);
 /** A worked-out height, to a tenth of a mm. */
 const tenth = (mm: number) => Math.round(mm * 10) / 10;
+/** A size as a step says it to the owner: to the whole mm, though the Build keeps it exact. */
+export const whole = (mm: number) => Math.round(mm);
 
 export type Shape = ReturnType<typeof shapeOf>;
 

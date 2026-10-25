@@ -1,4 +1,4 @@
-import type { BuildFinding, BuildPart, DerivedBuild } from "@courtyard/contract";
+import type { BuildFinding, BuildPart, BuildStep, DerivedBuild } from "@courtyard/contract";
 
 // How a Build's numbers read (#698): money, stock, findings and a part's details, worked out from
 // what the engine derived, never by the page itself.
@@ -9,8 +9,8 @@ export const pounds = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 /** A length in metres, as timber is sold: "2.4 m". */
 export const metres = (mm: number) => `${mm / 1000} m`;
 
-/** A size in mm, without trailing noughts: "899.6". */
-export const mm = (value: number) => `${Math.round(value * 10) / 10}`;
+/** A size in mm, to the whole mm as the owner works to it: 899.6 is "900". */
+export const mm = (value: number) => `${Math.round(value)}`;
 
 /** The Build's size, as its title's line says it: "1500 × 600 × 900 mm". */
 export const sizeLine = (size: DerivedBuild["size"]) =>
@@ -33,7 +33,7 @@ export const findingWords = (
       const through = [...new Set(finding.through.map((layer) => layer.what))];
       return {
         title: `${finding.fixing} too short`,
-        detail: `They need ${mm(finding.needed)} mm, through the ${listed(through)}. Use ones ${finding.use} mm long.`,
+        detail: `They need ${mm(finding.needed)} mm, through the ${listed(through)}. The steps and buy list use ones ${finding.use} mm long.`,
       };
     }
     case "tools-missing":
@@ -50,6 +50,17 @@ export const findingWords = (
       };
   }
 };
+
+/**
+ * What the making rules found about one step, for its gold card: a fixing it fits too short, or a
+ * part it uses too big for its stock. Its tools not to hand are marked in its tools.
+ */
+export const stepFindings = (derived: DerivedBuild, step: BuildStep) =>
+  derived.findings.filter(
+    (finding) =>
+      (finding.kind === "fixing-too-short" && finding.steps.includes(step.number)) ||
+      (finding.kind === "too-big-for-stock" && step.parts.includes(finding.label)),
+  );
 
 /** The sizes the engine assumed rather than was given, as people say them. */
 const ASSUMED: Readonly<Record<string, string>> = {

@@ -70,11 +70,12 @@ export const readBuildText = (
 export const progressPath = (slug: BuildSlug) => `${BUILDS_FOLDER}/progress/${slug}.json`;
 
 /** Where a Build's steps start. */
-const NOT_STARTED: BuildProgress = { step: 1, ticked: [] };
+const NOT_STARTED: BuildProgress = { step: null, ticked: [] };
 
 /**
  * A Build's progress as kept: where it starts when there's none, or its file can't be read as
- * progress (a hand edit, say), since the steps are still there to follow.
+ * progress (a hand edit, say, or one kept by step number before steps had IDs), since the steps
+ * are still there to follow and re-ticking a few lines is no loss.
  */
 const progressOf = (text: string | undefined): BuildProgress => {
   if (text === undefined) return NOT_STARTED;

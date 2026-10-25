@@ -14,9 +14,12 @@ import { type BuildRefusal, progressPath, readBuild } from "./index.ts";
 /** Why progress wasn't kept: as a Build's, or a step the Build doesn't have. */
 export type ProgressRefusal =
   | BuildRefusal
-  | { readonly kind: "no-such-step"; readonly name: string; readonly steps: number };
+  | { readonly kind: "no-such-step"; readonly name: string; readonly step: string };
 
-/** Keeps a Build's progress, once the Build has the step it names. */
+/**
+ * Keeps a Build's progress, once the Build has the step it's reached. Lines ticked in a step it
+ * doesn't have now are kept, for when that step comes back (castors put on again).
+ */
 export const keepProgress = async (
   target: PlanningFilesTarget,
   slug: BuildSlug,
@@ -28,8 +31,10 @@ export const keepProgress = async (
       const read = await readBuild(target, slug);
       if (!read.ok) return read;
       name = read.value.file.name;
-      const steps = read.value.derived.steps.length;
-      if (progress.step > steps) return err({ kind: "no-such-step", name, steps });
+      const { step } = progress;
+      if (step !== null && !read.value.derived.steps.some(({ id }) => id === step)) {
+        return err({ kind: "no-such-step", name, step });
+      }
       const folder = await planningFolder(target);
       if (!folder.ok) return folder;
       const text = `${JSON.stringify(progress, null, 2)}\n`;

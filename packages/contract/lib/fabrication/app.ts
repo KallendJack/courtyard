@@ -3,6 +3,7 @@ import { ProjectSlug } from "../projects.ts";
 import { ModelRef, SessionId } from "../session.ts";
 import { WorkspaceId } from "../workspace.ts";
 import { BuildView } from "./builds.ts";
+import { BuildProgress } from "./progress.ts";
 
 // What the Fabrication app's Build page reads (#698, ADR 0037): the Build where it is, and its
 // chat. Fabrication owns these shapes; Courtyard answers them from a planning workspace and its
@@ -14,27 +15,6 @@ export const BuildPlace = z.object({
   project: z.object({ slug: ProjectSlug, name: z.string() }).nullable(),
 });
 export type BuildPlace = z.infer<typeof BuildPlace>;
-
-/** The most steps, and lines in a step, progress keeps: far more than any Build has. */
-const MOST_STEPS = 200;
-
-/**
- * How far the owner has got with a Build's steps (#699): the step reached, and the lines ticked in
- * each step by their place in it (0 is the first), so every device and a new session open where
- * they left off. A Build not started is at step 1 with nothing ticked.
- */
-export const BuildProgress = z.object({
-  step: z.number().int().min(1).max(MOST_STEPS),
-  ticked: z
-    .array(
-      z.object({
-        step: z.number().int().min(1).max(MOST_STEPS),
-        lines: z.array(z.number().int().min(0).max(MOST_STEPS)).max(MOST_STEPS),
-      }),
-    )
-    .max(MOST_STEPS),
-});
-export type BuildProgress = z.infer<typeof BuildProgress>;
 
 /** A Build as Fabrication opens it: everything derived, where it is, and how far it's got. */
 export const BuildOpened = BuildView.extend({ place: BuildPlace, progress: BuildProgress });

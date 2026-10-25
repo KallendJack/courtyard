@@ -146,6 +146,11 @@ export type CloseUp = {
 export type Way = { readonly name: string; readonly using: boolean; readonly toHand: boolean };
 
 export type Step = {
+  /**
+   * What the step does, as a slug ("fit-castors"): the same whatever else the Build has, so
+   * progress kept by it stays on its step when one before it comes or goes.
+   */
+  readonly id: string;
   readonly number: number;
   readonly title: string;
   readonly minutes: number;
@@ -169,18 +174,24 @@ export type Step = {
 
 export type GlossaryWord = { readonly word: string; readonly means: string };
 
+/** A fixing found too short, as its parameters give it. */
+export type TooShort = {
+  readonly kind: "fixing-too-short";
+  readonly fixing: string;
+  readonly length: number;
+  readonly needed: number;
+  /** What it passes through, each with its thickness, then the two threads past the nut. */
+  readonly through: readonly { readonly what: string; readonly mm: number }[];
+  /** The shortest usual length that's long enough, which the steps and buy list use instead. */
+  readonly use: number;
+};
+
 /** What the making rules found (ADR 0036). */
 export type Finding =
-  | {
-      readonly kind: "fixing-too-short";
-      readonly fixing: string;
-      readonly length: number;
-      readonly needed: number;
-      /** What it passes through, each with its thickness, then the two threads past the nut. */
-      readonly through: readonly { readonly what: string; readonly mm: number }[];
-      /** The shortest usual length that's long enough. */
-      readonly use: number;
-    }
+  | (TooShort & {
+      /** The steps that fit it, by number, so each step shows what was found about it. */
+      readonly steps: readonly number[];
+    })
   | {
       readonly kind: "tools-missing";
       readonly tools: readonly {

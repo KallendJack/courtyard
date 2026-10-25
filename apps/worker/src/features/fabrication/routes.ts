@@ -251,7 +251,7 @@ export const fabricationRoutes = (
       return kept.error.kind === "no-such-step"
         ? apiError(c, {
             status: 400,
-            error: `${kept.error.name} has ${kept.error.steps} steps.`,
+            error: `${kept.error.name} has no step ${kept.error.step}.`,
           })
         : buildError(c, kept.error);
     }

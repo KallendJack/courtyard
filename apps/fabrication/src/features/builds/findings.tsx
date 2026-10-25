@@ -5,16 +5,18 @@ import { findingWords, toCheck } from "./words.ts";
 export const FINDINGS_ID = "build-findings";
 
 /**
- * What the making rules found that needs the owner (ADR 0036; the board's gold card), above the
- * panel's tab: a fixing too short, a tool not to hand, a part too big for its stock.
+ * What the making rules found that needs the owner (ADR 0036; the board's gold card): above the
+ * panel's tab, a fixing too short, a tool not to hand, a part too big for its stock; and in a
+ * step, what was found about it (#699), labelled as its own.
  */
-export function Findings(props: { findings: readonly BuildFinding[] }) {
+export function Findings(props: { findings: readonly BuildFinding[]; label?: string }) {
   const found = toCheck(props.findings);
   if (found.length === 0) return null;
+  const all = props.label === undefined;
   return (
     <ul
-      id={FINDINGS_ID}
-      aria-label="To check"
+      id={all ? FINDINGS_ID : undefined}
+      aria-label={props.label ?? "To check"}
       tabIndex={-1}
       className="flex flex-col gap-2 outline-none"
     >

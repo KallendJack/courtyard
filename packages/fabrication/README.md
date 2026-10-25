@@ -38,7 +38,11 @@ else derived.error; // ["height.source: Invalid input…"]
   way lists its ways, the one in use and the others not yet to hand (a hand saw until there's a circular saw).
 - **Each step says which parts it puts on the Build** (none for checking, marking and cutting), and something fitted
   (a castor) says the part it's fitted to, so the 3D view can build the Build up step by step (#699).
-- **Parts are cut to the whole mm below.**
+- **Each step has an ID** saying what it does ("fit-castors"), the same whichever steps the Build has, so the
+  owner's progress stays on its step when one before it comes or goes.
+- **A fixing found too short is never fitted:** the steps and the buy list use the length to use instead, unpriced
+  until it's given a price, and the finding names the steps that fit it.
+- **Parts are cut to the whole mm below,** and the steps say every size to the whole mm; the Build keeps it exact.
 
 ## Tests
 

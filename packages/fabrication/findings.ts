@@ -1,4 +1,4 @@
-import type { Finding, Step } from "./build.ts";
+import type { Finding, Step, TooShort } from "./build.ts";
 import { TOOL_NAMES, type Tool } from "./tools.ts";
 
 // The making rules code can check, for every template (ADR 0036). The rest are in
@@ -20,7 +20,7 @@ export const boltCheck = (bolt: {
   length: number;
   pitch: number;
   through: readonly { what: string; mm: number }[];
-}): Finding | null => {
+}): TooShort | null => {
   const through = [...bolt.through, { what: "two threads", mm: THREADS_PAST * bolt.pitch }];
   const needed = tenth(through.reduce((sum, layer) => sum + layer.mm, 0));
   if (bolt.length >= needed) return null;

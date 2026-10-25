@@ -105,12 +105,19 @@ const BuildCloseUp = z.object({
   notes: list(z.string()),
 });
 
+/** A step's ID, the slug of what it does ("fit-castors"), the same whatever else a Build has. */
+export const BuildStepId = z
+  .string()
+  .max(60)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+
 /**
  * A step, as the instruction manual shows it (#699): its parts and the ones it puts on the Build,
  * the ways it can be done, its tools and fixings, each action said for a beginner ("show me how")
  * and as just the numbers, its close-up, the check before moving on, and the words it uses.
  */
 export const BuildStep = z.object({
+  id: BuildStepId,
   number: z.number().int(),
   title: z.string(),
   minutes: z.number(),
@@ -136,7 +143,10 @@ export const BuildFinding = z.discriminatedUnion("kind", [
     length: z.number(),
     needed: z.number(),
     through: list(z.object({ what: z.string(), mm: z.number() })),
+    /** The length to use, which the steps fit and the buy list buys instead. */
     use: z.number(),
+    /** The steps that fit it, by number. */
+    steps: list(z.number().int()),
   }),
   z.object({
     kind: z.literal("tools-missing"),
