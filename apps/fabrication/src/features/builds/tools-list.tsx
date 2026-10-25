@@ -1,5 +1,6 @@
 import type { ChangeId, DerivedBuild } from "@courtyard/contract";
 import { Button, buttonLook } from "@courtyard/ui/buttons/button.tsx";
+import { Chip } from "@courtyard/ui/buttons/chip.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { Link } from "@tanstack/react-router";
 import { Check } from "lucide-react";
@@ -23,6 +24,7 @@ function ToSort(props: {
   buying: boolean;
   have: (tool: ToolNeeded, bits: ToolNeeded["bits"]) => Promise<void>;
   buy: (tool: string) => void;
+  unbuy: (tool: string) => void;
 }) {
   const { tool } = props;
   const [help, setHelp] = useState(false);
@@ -38,7 +40,7 @@ function ToSort(props: {
     : undefined;
   return (
     <li className="flex items-start gap-3 border-b border-border py-3">
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
         <p className="text-interface font-bold text-foreground">
           {tool.name}
           {bits.length > 0 && `: ${bitSizes(bits)}`}
@@ -50,14 +52,14 @@ function ToSort(props: {
         )}
         {bits.length > 0 && (
           <>
-            <button
-              type="button"
+            <Button
+              variant="quietPrimary"
+              size="words"
               aria-expanded={help}
               onClick={() => setHelp((open) => !open)}
-              className="self-start text-meta font-semibold text-primary-text"
             >
               How do I tell a bit's size?
-            </button>
+            </Button>
             {help && <p className="text-meta text-foreground/90">{BIT_SIZE_HELP}</p>}
           </>
         )}
@@ -67,10 +69,15 @@ function ToSort(props: {
           {plural ? "Have them" : "Have it"}
         </Button>
         {props.buying ? (
-          <p className="text-center text-meta text-muted-foreground">On the buy list</p>
+          <p className="flex flex-col items-center text-meta text-muted-foreground">
+            On the buy list
+            <Button variant="quiet" size="xs" onClick={() => props.unbuy(tool.tool)}>
+              Undo
+            </Button>
+          </p>
         ) : (
-          // A bit missing from a set the owner has is bought at the shop, not as a tool.
-          !tool.toHand && (
+          // A set's sizes not known yet are checked first, not bought.
+          !toCheck && (
             <Button variant="soft" size="md" onClick={() => props.buy(tool.tool)}>
               Add to list
             </Button>
@@ -106,7 +113,11 @@ export function ToolsList(props: {
       return;
     }
     const sizes = bits.map((bit) => bit.mm);
-    const done = await saveTools(withHad(read.data, tool.name, sizes));
+    // Before Your tools is saved, the Build's own tools to hand are theirs, so they stay.
+    const builds = tools.filter((each) => each.toHand && each.standIn === undefined);
+    const done = await saveTools(
+      withHad(read.data, { name: tool.name, sizes, builds: builds.map((each) => each.name) }),
+    );
     if (done.kind !== "loaded") {
       setProblem("It couldn't be saved just now. Try again in a moment.");
       return;
@@ -165,6 +176,7 @@ export function ToolsList(props: {
               buying={props.progress.progress.buying.includes(tool.tool)}
               have={have}
               buy={props.progress.buy}
+              unbuy={props.progress.unbuy}
             />
           ))}
         </ul>
@@ -190,11 +202,8 @@ export function ToolsList(props: {
           {toHand
             .filter((tool) => tool.standIn === undefined)
             .map((tool) => (
-              <li
-                key={tool.tool}
-                className="flex h-9 items-center rounded-full bg-muted px-4 text-meta font-semibold text-foreground"
-              >
-                {tool.name}
+              <li key={tool.tool}>
+                <Chip tone="plain">{tool.name}</Chip>
               </li>
             ))}
         </ul>

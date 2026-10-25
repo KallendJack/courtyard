@@ -14,7 +14,7 @@ import { assumedSizes, boltLength, toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
 import { stockOptions, wrongStock } from "../options.ts";
 import type { Price } from "../stock.ts";
-import { bitSetsFrom, Tool, thingFor, toolsFrom } from "../tools.ts";
+import { bitSetsFrom, standInFor, Tool, toolsFrom } from "../tools.ts";
 import { benchFitted, benchParts, shapeOf, shapeProblems } from "./frame.ts";
 import { BenchParameters, castorFixingNames } from "./parameters.ts";
 import { benchSteps } from "./steps.ts";
@@ -44,7 +44,7 @@ export const deriveBench = (
   const have = setting.have ?? [];
   const standIns = new Map(
     Tool.options.flatMap((tool) => {
-      const thing = own.has(tool) ? undefined : thingFor(tool, have);
+      const thing = own.has(tool) ? undefined : standInFor(tool, have);
       return thing === undefined ? [] : [[tool, thing] as const];
     }),
   );

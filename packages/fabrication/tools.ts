@@ -86,9 +86,20 @@ export const toolsFrom = (names: readonly string[]): Tool[] => {
   return Tool.options.filter((tool) => said.some((name) => TOOL_WORDS[tool].test(name)));
 };
 
-/** The first of the owner's Things, by name, that is a tool, or will do for it (#763). */
-export const thingFor = (tool: Tool, names: readonly string[]): string | undefined =>
-  names.find((name) => TOOL_WORDS[tool].test(wordsOf(name)));
+/**
+ * The only tools something else the owner has can stand in for (#763), by the words in its name.
+ * Any other tool counts only from Your tools (#777): a mitre saw in the garage never changes how a
+ * step is done until it's saved there.
+ */
+const STAND_INS: Partial<Record<Tool, RegExp>> = {
+  "long-end-support": /\b(saw ?horse|trestle|stool|step ?ladder|kick ?step)/,
+};
+
+/** The first of the owner's Things, by name, that will do for a tool, when it's one that can (#763). */
+export const standInFor = (tool: Tool, names: readonly string[]): string | undefined => {
+  const words = STAND_INS[tool];
+  return words && names.find((name) => words.test(wordsOf(name)));
+};
 
 /** The sizes the owner's drill bit sets are kept with ("3, 5, 7 mm", "1–10 mm"), among their tools'. */
 export const bitSetsFrom = (sizes: readonly ToolSize[]): string[] => [

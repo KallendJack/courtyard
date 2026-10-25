@@ -230,9 +230,13 @@ describe("the castor bolts", () => {
 
     expect(short(["Castor bolts M6 × 60", "Step stool"])).toEqual({ name: "M6 × 60", by: 0.2 });
     expect(short(["M6x60 bolts"])).toEqual({ name: "M6 × 60", by: 0.2 });
-    // Long enough, another thread, or none: nothing to say.
+    // Every one they have short: the longest, the nearest to doing.
+    expect(short(["M6 × 40 bolts", "M6 × 60 set screws"])).toEqual({ name: "M6 × 60", by: 0.2 });
+    // Long enough, one of them long enough, another thread, not bolts, or none: nothing to say.
     expect(short(["M6 × 65 bolts"])).toBeUndefined();
+    expect(short(["M6 × 50 bolts", "M6 × 65 bolts"])).toBeUndefined();
     expect(short(["M8 × 60 bolts"])).toBeUndefined();
+    expect(short(["M6 × 16 screws"])).toBeUndefined();
     expect(short([])).toBeUndefined();
   });
 

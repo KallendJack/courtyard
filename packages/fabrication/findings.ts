@@ -13,13 +13,25 @@ const tenth = (mm: number) => Math.round(mm * 10) / 10;
 
 /** Bolts as a Thing's name says them: "Castor bolts M6 × 60", "M6x60 bolts". */
 const BOLT_NAMED = /\bm(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i;
+/** What a bolt can be swapped for: a bolt or a set screw, never a wood or machine screw. */
+const BOLT_KIND = /\b(bolts?|set ?screws?)\b/i;
+
+/**
+ * The lengths of the owner's own bolts of a thread, by their Things' names: "M6 × 16 screws"
+ * aren't bolts, and an M8 isn't an M6.
+ */
+const boltsHad = (have: readonly string[], thread: number) =>
+  have.flatMap((name) => {
+    const named = BOLT_KIND.test(name) ? BOLT_NAMED.exec(name) : null;
+    return named && Number(named[1]) === thread ? [Number(named[2])] : [];
+  });
 
 /**
  * A bolt worked out against what it passes through: long enough for every layer and the nut,
  * with two threads past it. The length to use is the one given when that's enough, else the
  * shortest usual length that is, which the steps fit and the buy list buys (#699); the old one is
- * never said (#763). The owner's own bolts of its thread that are too short (`have`, their Things'
- * names) are said, with by how much, so they don't fit them.
+ * never said (#763). The owner's own bolts of its thread (`have`, their Things' names) are said
+ * short, by how much, only when every one they have is: the longest, the nearest to doing.
  */
 export const boltLength = (bolt: {
   thread: number;
@@ -34,22 +46,15 @@ export const boltLength = (bolt: {
     bolt.length >= needed
       ? bolt.length
       : (BOLT_LENGTHS.find((length) => length >= needed) ?? Math.ceil(needed / 10) * 10);
-  const short = bolt.have
-    .map((name) => BOLT_NAMED.exec(name))
-    .map((named) => named && { thread: Number(named[1]), length: Number(named[2]) })
-    .find((held) => held && held.thread === bolt.thread && held.length < needed);
+  const had = boltsHad(bolt.have, bolt.thread);
+  const longest = had.length === 0 ? undefined : Math.max(...had);
   return {
     use,
     length: {
       needed,
       through,
-      ...(short
-        ? {
-            yoursShort: {
-              name: `M${short.thread} × ${short.length}`,
-              by: tenth(needed - short.length),
-            },
-          }
+      ...(longest !== undefined && longest < needed
+        ? { yoursShort: { name: `M${bolt.thread} × ${longest}`, by: tenth(needed - longest) } }
         : {}),
     },
   };

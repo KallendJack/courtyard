@@ -405,6 +405,39 @@ test.describe("on the unfolded Fold", () => {
     const buyList = page.getByRole("region", { name: "Buy list" });
     await expect(buyList).toContainText("To buy · 12");
     await expect(buyList).toContainText("Spannerstep 4");
+
+    // Its Undo takes it off the list again.
+    await page.getByRole("tab", { name: "Tools" }).click();
+    await spanner.getByRole("button", { name: "Undo" }).click();
+    await expect(spanner.getByRole("button", { name: "Add to list" })).toBeVisible();
+  });
+
+  test("Tools: Have it adds to the tools the Build has, before Your tools is saved (#763)", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await toPlan(page);
+
+    await page.getByRole("tab", { name: "Tools" }).click();
+    const tools = page.getByRole("region", { name: "Tools" });
+    const toSort = tools.getByRole("list", { name: "To sort" });
+    await toSort
+      .getByRole("listitem")
+      .filter({ hasText: "Spirit level" })
+      .getByRole("button", { name: "Have it" })
+      .click();
+
+    // The level's had, and what was to hand stays to hand.
+    await expect(tools.getByRole("status")).toContainText("Spirit level saved to Your tools");
+    await expect(tools.getByRole("heading", { name: "4 to sort" })).toBeVisible();
+    const also = tools.getByRole("list", { name: "Also to hand" });
+    for (const tool of ["Hand saw", "Clamps", "Drill driver", "Spirit level"]) {
+      await expect(also).toContainText(tool);
+    }
+
+    await tools.getByRole("button", { name: "Undo" }).click();
+    await expect(tools.getByRole("heading", { name: "5 to sort" })).toBeVisible();
   });
 
   test("a printed part shows in Plan on the plate with its size, its sources and its file (#702)", async ({

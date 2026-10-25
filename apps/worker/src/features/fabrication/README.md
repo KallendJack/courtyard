@@ -88,7 +88,7 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   tile, which its steps and pictures follow once they've saved any (its own `tools` until then), the sizes given them
   (a saw's cutting capacity, #780; a bit set's sizes, #763), and the ways its steps started were done. And (#763) the
   names of the Things the owner has in their planning workspaces (a step stool stands in for the long end's support;
-  bolts too short are said on their line), and the tools its progress keeps to buy. Every read of a Build, the
+  bolts too short are said on their line when every one of its thread they have is), and the tools its progress keeps to buy. Every read of a Build, the
   model's and Fabrication's, works it out the same way.
 - **The owner's tools** (`tools.ts`, ADR 0037): Things of kind tool in the context folder's own `things/`, so every
   workspace and Build sees the same ones; `sessions/` lists them in every planning turn. A Save writes them all as one

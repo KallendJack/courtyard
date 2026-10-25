@@ -1,4 +1,5 @@
 import type { BuildBuyLine, DerivedBuild } from "@courtyard/contract";
+import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
@@ -24,21 +25,21 @@ function BoltLength(props: { line: BuildBuyLine; length: NonNullable<BuildBuyLin
   const [open, setOpen] = useState(false);
   const bought = lengthBought(line);
   return (
-    <div className="flex flex-col gap-1 pb-2.5">
+    <div className="flex flex-col items-start gap-1 pb-2.5">
       {length.yoursShort && (
         <p className="text-meta text-warning">
           Your {length.yoursShort.name}s are {tenths(length.yoursShort.by)} mm short: you need{" "}
           {bought}s.
         </p>
       )}
-      <button
-        type="button"
+      <Button
+        variant="quietPrimary"
+        size="words"
         aria-expanded={open}
         onClick={() => setOpen((now) => !now)}
-        className="self-start text-meta font-semibold text-primary-text"
       >
         Why {bought} mm?
-      </button>
+      </Button>
       {open && (
         <p className="font-mono text-meta text-muted-foreground">
           {length.through.map(({ what, mm }) => `${what} ${tenths(mm)}`).join(" + ")} ={" "}
