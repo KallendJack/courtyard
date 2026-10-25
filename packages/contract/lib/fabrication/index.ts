@@ -1,12 +1,12 @@
 // Fabrication's part of the contract (ADR 0037): its Builds, what they derive, part recipes
-// (#702), its app's pages and the owner's tools, all exported from the contract's index.
+// (#702), its app's pages, progress through a Build's steps (#699) and the owner's tools, all
+// exported from the contract's index.
 
 export {
   BuildChat,
   BuildChatEntry,
   BuildChatSent,
   BuildOpened,
-  BuildPlace,
 } from "./app.ts";
 export {
   BUILD_NAME_MAX_CHARACTERS,
@@ -34,6 +34,7 @@ export {
   DerivedBuild,
   MadePart,
 } from "./derived.ts";
+export { BuildProgress, buildStarted, stepReached, tickedIn } from "./progress.ts";
 export {
   Face,
   PART_FEATURES,

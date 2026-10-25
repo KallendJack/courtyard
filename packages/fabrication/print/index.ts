@@ -73,10 +73,13 @@ const stepsOf = (options: {
   const toHand = new Set(common.tools);
   const drafts: Omit<Step, "number">[] = [
     {
+      id: "print",
       title: common.count === 1 ? "Print it" : `Print ${common.count}`,
       minutes: 10,
       helper: false,
       parts: ["A"],
+      adds: ["A"],
+      ways: [],
       tools: [],
       safety: [],
       fixings: [],
@@ -102,10 +105,13 @@ const stepsOf = (options: {
       ? []
       : [
           {
+            id: "try-it",
             title: `Try the ${shaped.holds} in it`,
             minutes: 2,
             helper: false,
             parts: ["A"],
+            adds: [],
+            ways: [],
             tools: [],
             safety: [],
             fixings: [],
@@ -127,10 +133,13 @@ const stepsOf = (options: {
       ? []
       : [
           {
+            id: "fix-it",
             title: "Fix it",
             minutes: 15,
             helper: false,
             parts: ["A"],
+            adds: [],
+            ways: [],
             tools: toolsOf(["pencil", "drill-driver", "drill-bits"], toHand),
             safety: toolsOf(["safety-glasses"], toHand),
             fixings: [...screws].map(([name, count]) => ({ name, count: count * common.count })),
@@ -150,7 +159,7 @@ const stepsOf = (options: {
               says: "It doesn't move when you push it, and every screw head is flush.",
               photo: "It fixed in place",
             },
-            words: ["pilot hole", "countersunk"],
+            words: ["pilot hole", "countersink"],
           },
         ]),
   ];

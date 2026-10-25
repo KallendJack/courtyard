@@ -6,7 +6,7 @@ time it's read. And Fabrication's API, which the Fabrication app (#698) calls ra
 standalone Fabrication could answer it with storage of its own.
 
 **Example:** the owner asks for a workbench. The model's Build tool starts "Workbench" from the framed bench's
-parameters; the engine works out its parts, cut plan and buy list (total £172.06), the file is one change with one
+parameters; the engine works out its parts, cut plan and buy list (total £177.02), the file is one change with one
 Undo, and the tool's reply gives the model those numbers to report. "Make it 850 high" changes `height` alone, and the
 rest is worked out again.
 
@@ -21,8 +21,11 @@ rest is worked out again.
 
 - `GET /api/fabrication/workspaces/:id/builds`: the workspace's Builds by name, and each file that can't be read as
   one with what's wrong. Answers `Builds`.
-- `GET /api/fabrication/workspaces/:id/builds/:slug`: one Build with everything derived, and where it is: its
-  workspace and the project whose step makes it (#698). Answers `BuildOpened`.
+- `GET /api/fabrication/workspaces/:id/builds/:slug`: one Build with everything derived, where it is (its workspace
+  and the project whose step makes it, #698), and how far the owner has got with its steps (#699). Answers
+  `BuildOpened`.
+- `PUT /api/fabrication/workspaces/:id/builds/:slug/progress`: `BuildProgress`, the step reached and the lines
+  ticked (#699); a step the Build doesn't have is refused (400). Answers it as kept.
 - `GET /api/fabrication/workspaces/:id/builds/:slug/chat`: its chat (#698), from its project's latest session, or
   else the latest that saved it: what was said and each change saved, and whether an answer is coming. Answers
   `BuildChat`.
@@ -57,6 +60,10 @@ or Recent changes.
   into the Build's (`parameters.ts`). The engine works them out first, and parameters it refuses save nothing. Each
   save is one change through `context-folder/`, its note listing each parameter changed ("height: 900 mm → 850
   mm"); Undo (`undoBuildChange`) puts the file back whole, unless it's changed since.
+- **Progress** (`progress.ts`, #699): `builds/progress/<slug>.json`, the step reached and the lines ticked, read with
+  the Build. It sits beside the Build's file, so ticking a line never stands in the way of undoing a change to the
+  Build. Each write is a `build-progress` change: backed up, never listed in Recent changes. The model's list of
+  Builds says the step reached once building has started, so a new session carries on there.
 - **The tool** (`tool.ts`): one turn's `save_build`, by the labels the turn was shown (`B1`), keeping each file as
   shown or last saved, so a change to one edited since is refused with the Builds as they are now. Given only a
   label, or a change of nothing, it writes nothing and gives the Build as it is, so a later turn reads its numbers

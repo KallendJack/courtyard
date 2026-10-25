@@ -39,6 +39,12 @@ export function BuildChat(props: {
   slug: BuildSlug;
   /** What changed the Build, so the page reads it again: a change saved in the chat. */
   onChanged: () => void;
+  placeholder: string;
+  /** Words and a photo to put in the Reply box, for the owner to send (#699's photo to check). */
+  draft:
+    | { readonly text: string; readonly files: readonly File[]; readonly key: number }
+    | undefined;
+  onDrafted: () => void;
 }) {
   const { workspaceId, slug, onChanged } = props;
   const [asked, setAsked] = useState(0);
@@ -112,7 +118,9 @@ export function BuildChat(props: {
             choices={NoChoices}
             providers={providers}
             {...(chat?.model === undefined ? {} : { initialModel: chat.model })}
-            placeholder="Change something…"
+            placeholder={props.placeholder}
+            {...(props.draft === undefined ? {} : { draft: props.draft })}
+            onDrafted={props.onDrafted}
             send={send}
           />
         )}

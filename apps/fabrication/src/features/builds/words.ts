@@ -1,4 +1,4 @@
-import type { BuildFinding, BuildPart, DerivedBuild } from "@courtyard/contract";
+import type { BuildFinding, BuildPart, BuildStep, DerivedBuild } from "@courtyard/contract";
 
 // How a Build's numbers read (#698): money, stock, findings and a part's details, worked out from
 // what the engine derived, never by the page itself.
@@ -9,12 +9,22 @@ export const pounds = (pence: number) => `£${(pence / 100).toFixed(2)}`;
 /** A length in metres, as timber is sold: "2.4 m". */
 export const metres = (mm: number) => `${mm / 1000} m`;
 
-/** A size in mm, without trailing noughts: "899.6". */
-export const mm = (value: number) => `${Math.round(value * 10) / 10}`;
+/** A size in mm, to the whole mm as the owner works to it: 899.6 is "900". */
+export const mm = (value: number) => `${Math.round(value)}`;
 
 /** The Build's size, as its title's line says it: "1500 × 600 × 900 mm". */
 export const sizeLine = (size: DerivedBuild["size"]) =>
   `${mm(size.length)} × ${mm(size.depth)} × ${mm(size.height)} mm`;
+
+/**
+ * A printed part's size in mm, to the tenth (#702): a printer works finer than a saw, and its
+ * clearance is a fraction of a mm. 0.2 is "0.2", 84.4 is "84.4".
+ */
+export const tenths = (value: number) => `${Math.round(value * 10) / 10}`;
+
+/** A printed part's size, as its title's line says it: "84.4 × 119.2 × 70.2 mm". */
+export const printSizeLine = (size: DerivedBuild["size"]) =>
+  `${tenths(size.length)} × ${tenths(size.depth)} × ${tenths(size.height)} mm`;
 
 /** "A, B and C". */
 export const listed = (items: readonly string[]) =>
@@ -28,10 +38,12 @@ type Card = { readonly title: string; readonly detail: string };
  * but the sizes assumed, which its cut plan says; for a printed part (#702), each size assumed
  * too, since nothing else shows it before it's printed.
  */
-export const checkCards = (derived: Pick<DerivedBuild, "findings" | "print">): Card[] =>
-  derived.findings.flatMap((finding) => {
+export const checkCards = (
+  findings: readonly BuildFinding[],
+  print: DerivedBuild["print"],
+): Card[] =>
+  findings.flatMap((finding) => {
     if (finding.kind !== "assumed") return [findingWords(finding)];
-    const { print } = derived;
     if (print === null) return [];
     return finding.sizes.map((name) => {
       const says = print.sizes.find((size) => size.name === name)?.says ?? "It";
@@ -48,7 +60,7 @@ const findingWords = (finding: Exclude<BuildFinding, { kind: "assumed" }>): Card
       const through = [...new Set(finding.through.map((layer) => layer.what))];
       return {
         title: `${finding.fixing} too short`,
-        detail: `They need ${mm(finding.needed)} mm, through the ${listed(through)}. Use ones ${finding.use} mm long.`,
+        detail: `They need ${mm(finding.needed)} mm, through the ${listed(through)}. The steps and buy list use ones ${finding.use} mm long.`,
       };
     }
     case "tools-missing":
@@ -68,19 +80,30 @@ const findingWords = (finding: Exclude<BuildFinding, { kind: "assumed" }>): Card
     case "too-big-for-plate":
       return {
         title: "Too big for the plate",
-        detail: `It's ${sizeLine(finding.size)}, and the plate takes ${sizeLine({ length: finding.plate.width, depth: finding.plate.depth, height: finding.plate.height })}. Make it smaller, or print it in parts.`,
+        detail: `It's ${printSizeLine(finding.size)}, and the plate takes ${printSizeLine({ length: finding.plate.width, depth: finding.plate.depth, height: finding.plate.height })}. Make it smaller, or print it in parts.`,
       };
     case "wall-too-thin":
       return {
         title: `${finding.where} is too thin`,
-        detail: `${mm(finding.mm)} mm, less than the ${mm(finding.least)} mm the nozzle prints well. Make it thicker.`,
+        detail: `${tenths(finding.mm)} mm, less than the ${tenths(finding.least)} mm the nozzle prints well. Make it thicker.`,
       };
   }
 };
 
 /** The printer's clearance, as the plate's foot says it (#702). */
 export const clearanceLine = (print: NonNullable<DerivedBuild["print"]>) =>
-  `holes allow ${mm(print.clearance.value)} mm${print.clearance.source.kind === "assumed" ? " (assumed until the printer's calibrated)" : ""}`;
+  `holes allow ${tenths(print.clearance.value)} mm${print.clearance.source.kind === "assumed" ? " (assumed until the printer's calibrated)" : ""}`;
+
+/**
+ * What the making rules found about one step, for its gold card: a fixing it fits too short, or a
+ * part it uses too big for its stock. Its tools not to hand are marked in its tools.
+ */
+export const stepFindings = (derived: DerivedBuild, step: BuildStep) =>
+  derived.findings.filter(
+    (finding) =>
+      (finding.kind === "fixing-too-short" && finding.steps.includes(step.number)) ||
+      (finding.kind === "too-big-for-stock" && step.parts.includes(finding.label)),
+  );
 
 /** The sizes the engine assumed rather than was given, as people say them. */
 const ASSUMED: Readonly<Record<string, string>> = {

@@ -12,7 +12,7 @@ import { createKept, PlaceholderRows, useKept } from "@courtyard/ui/layout/kept.
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { lazy, Suspense } from "react";
 import { madePart, printFile } from "@/api/fabrication";
-import { clearanceLine, mm, sizeLine } from "./words.ts";
+import { clearanceLine, mm, printSizeLine } from "./words.ts";
 
 // A printed part's own (#702; Paper, 2 · Agreed, "Fabrication · Text to print · Tablet (#702)"):
 // the part in 3D on the printer's plate, and the Print tab with its sizes, its file, and the way
@@ -144,7 +144,7 @@ export function PrintTab(props: {
         </p>
         {made && (
           <p className="text-meta text-muted-foreground">
-            {sizeLine(made.size)} · about {made.grams} g of filament at most
+            {printSizeLine(made.size)} · about {made.grams} g of filament at most
           </p>
         )}
         {made ? (

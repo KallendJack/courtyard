@@ -1,5 +1,5 @@
 import type { CloseUp } from "../build.ts";
-import type { Shape } from "./frame.ts";
+import { type Shape, whole } from "./frame.ts";
 import type { Castors } from "./parameters.ts";
 
 // Each assembly step's close-up: a flat view of what it makes, its key sizes as dimension lines
@@ -87,7 +87,7 @@ export const endFrameCloseUp = (s: Shape): CloseUp => {
     ]),
     notes: [
       "Top rail flush with the leg tops.",
-      `Bottom rail ${s.shelfHeight} up from the floor end.`,
+      `Bottom rail ${whole(s.shelfHeight)} up from the floor end.`,
       "2 screws a joint, one above the other.",
     ],
   };
@@ -116,7 +116,7 @@ export const longSideCloseUp = (s: Shape): CloseUp => {
     ]),
     notes: [
       "Rails flush with the frame's ends and the leg tops.",
-      `${s.between} between the end frames.`,
+      `${whole(s.between)} between the end frames.`,
     ],
   };
 };

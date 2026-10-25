@@ -433,8 +433,10 @@ goes to Courtyard's login. It holds no state and does no model work, and calls o
 
 - [`features/builds/`](../apps/fabrication/src/features/builds/README.md): a Build's page, three panels on the PC and
   the unfolded Fold and tabs on the cover screen: its chat, the Build in 3D and its cut plan, buy list, tools and
-  steps, under the making-rule findings. A part tapped anywhere lights everywhere and opens its card. The 3D view is
-  `three` in a file of its own, loaded only by this page, so nothing of it reaches the web app's first load.
+  steps, under the making-rule findings. A part tapped anywhere lights everywhere and opens its card. The steps are an
+  instruction manual (#699): one step at a time, the 3D view built up to it, and the step reached and lines ticked
+  kept through `/api/fabrication`, so every device opens where the owner left off. The 3D view is `three` in a file
+  of its own, loaded only by this page, so nothing of it reaches the web app's first load.
 - [`features/tools/`](../apps/fabrication/src/features/tools/README.md): Your tools (#707), the owner's tools as
   tiles to tick, saved at the owner's level through `/api/fabrication/tools` with Undo. A Build's route sends the owner
   there first until some are saved or it's skipped on this visit (kept in the tab's session storage, so nothing is kept
@@ -792,6 +794,10 @@ things live only in the worker's memory and go when it restarts.
 - `<workspace>/builds/<slug>.json`: a planning workspace's Builds (#697, ADRs 0036, 0037): name, template and
   parameters only, every size with its source; the parts, cut plan, buy list, steps and findings are worked out on
   read, never stored. Each file is named by the Build's name when it was started.
+  `<workspace>/builds/progress/<slug>.json` is how far the owner has got with its steps (#699): the step reached and
+  the lines ticked, each step by its ID (a file kept by step number reads as not started), beside the Build so
+  ticking never stands in the way of undoing a change to it. Each write is a `build-progress` change, kept and backed
+  up but never listed in Recent changes.
 - `.agents/skills/<skill>/` at the top: the owner's skills for every workspace; `<workspace>/.agents/skills/<skill>/`:
   their skills for one workspace (ADR 0016). Added by hand, so they're kept and backed up like everything else.
 - `archived/<workspace>/`: archived workspaces.

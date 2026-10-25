@@ -71,6 +71,12 @@ const inThread = (recipe: CheckedRecipe, name: string, timeLimitMs: number) =>
     thread.once("exit", () => done(err({ kind: "failed" })));
   });
 
+/** A printed part's files' names: its Build's file name, as a 3MF and an STL. */
+export const filesOf = (slug: string): MadePart["files"] => ({
+  threeMf: `${slug}.3mf`,
+  stl: `${slug}.stl`,
+});
+
 /** A made part as the Fabrication API answers it, its corners to the hundredth of a mm. */
 export const madePartOf = (print: MadePrint, files: MadePart["files"]): MadePart => {
   const { made } = print;

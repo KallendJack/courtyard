@@ -4,7 +4,7 @@ import {
   type BuildChatSent,
   type BuildOpened,
   BuildParametersChange,
-  type BuildPlace,
+  BuildProgress,
   BuildSlug,
   type Builds,
   type MadePart,
@@ -35,7 +35,8 @@ import { readMessageWithAttachments, sessionError } from "../sessions/routes.ts"
 import { getWorkspace } from "../workspaces/index.ts";
 import { chatOf, chatSessionOf } from "./chat.ts";
 import { type BuildRefusal, readBuild, readBuilds, saveBuild, viewOf } from "./index.ts";
-import { createPrints, madePartOf, type PrintRefusal } from "./print.ts";
+import { createPrints, filesOf, madePartOf, type PrintRefusal } from "./print.ts";
+import { keepProgress } from "./progress.ts";
 import { hearTools, saveTools, type ToolsRefusal, undoToolsSave, yourTools } from "./tools.ts";
 
 // Fabrication's API (ADR 0037, #697): what the Fabrication app calls, never Courtyard's own
@@ -93,12 +94,6 @@ export const buildUndoError = (c: Context, refusal: WholeFilesUndoRefusal) =>
         error: "That Build has changed since, so undoing this would lose the newer change.",
       })
     : sharedFileError(c, refusal, BUILDS);
-
-/** A printed part's files' names: its Build's file name, as a 3MF and an STL. */
-const filesOf = (slug: string): MadePart["files"] => ({
-  threeMf: `${slug}.3mf`,
-  stl: `${slug}.stl`,
-});
 
 /** Why a printed part wasn't made, as the API answers it. */
 const printError = (c: Context, refusal: PrintRefusal) => {
@@ -238,7 +233,7 @@ export const fabricationRoutes = (
     const project = projects.value.projects.find(({ project }) =>
       project.steps.some((step) => step.build === named.slug),
     )?.project;
-    const place: BuildPlace = {
+    const place: BuildOpened["place"] = {
       workspace: { id: workspace.value.summary.id, name: workspace.value.summary.name },
       project: project === undefined ? null : { slug: project.slug, name: project.name },
     };
@@ -269,7 +264,25 @@ export const fabricationRoutes = (
     const found = await opened(c);
     if (!found.ok) return found.error;
     const { build, place } = found.value;
-    return c.json({ ...viewOf(build), place } satisfies BuildOpened);
+    return c.json({ ...viewOf(build), place, progress: build.progress } satisfies BuildOpened);
+  });
+
+  // How far the owner has got with its steps (#699), kept so every device opens there.
+  routes.put("/workspaces/:id/builds/:slug/progress", async (c) => {
+    const named = fileIn(c, where, BuildSlug);
+    if (named === undefined) return sharedFileError(c, { kind: "not-found" }, BUILDS);
+    const body = await readBody(c, BuildProgress);
+    if (!body.ok) return apiError(c, { status: 400, error: body.error });
+    const kept = await keepProgress(named.workspace, named.slug, body.value);
+    if (!kept.ok) {
+      return kept.error.kind === "no-such-step"
+        ? apiError(c, {
+            status: 400,
+            error: `${kept.error.name} has no step ${kept.error.step}.`,
+          })
+        : buildError(c, kept.error);
+    }
+    return c.json(kept.value satisfies BuildProgress);
   });
 
   // Its chat: the session it's in, as Fabrication shows it.

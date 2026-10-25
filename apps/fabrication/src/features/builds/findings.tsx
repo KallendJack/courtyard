@@ -1,20 +1,27 @@
-import type { DerivedBuild } from "@courtyard/contract";
+import type { BuildFinding, DerivedBuild } from "@courtyard/contract";
 import { checkCards } from "./words.ts";
 
 /** Where the findings are, so the top bar's "to check" can take the owner there. */
 export const FINDINGS_ID = "build-findings";
 
 /**
- * What the making rules found that needs the owner (ADR 0036; the board's gold card), above the
- * panel's tab: a fixing too short, a tool not to hand, a part too big for its stock or the plate.
+ * What the making rules found that needs the owner (ADR 0036; the board's gold card): above the
+ * panel's tab, a fixing too short, a tool not to hand, a part too big for its stock or the plate,
+ * and a printed part's sizes assumed (#702, from its `print`); and in a step, what was found
+ * about it (#699), labelled as its own.
  */
-export function Findings(props: { derived: Pick<DerivedBuild, "findings" | "print"> }) {
-  const found = checkCards(props.derived);
+export function Findings(props: {
+  findings: readonly BuildFinding[];
+  print?: DerivedBuild["print"];
+  label?: string;
+}) {
+  const found = checkCards(props.findings, props.print ?? null);
   if (found.length === 0) return null;
+  const all = props.label === undefined;
   return (
     <ul
-      id={FINDINGS_ID}
-      aria-label="To check"
+      id={all ? FINDINGS_ID : undefined}
+      aria-label={props.label ?? "To check"}
       tabIndex={-1}
       className="flex flex-col gap-2 outline-none"
     >

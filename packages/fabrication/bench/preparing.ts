@@ -1,6 +1,6 @@
-import type { Action, CloseUp, CutPlan } from "../build.ts";
+import type { Action, CloseUp, CutPlan, Way } from "../build.ts";
 import type { Word } from "../glossary.ts";
-import type { Tool } from "../tools.ts";
+import { TOOL_NAMES, type Tool } from "../tools.ts";
 
 // The bench's first steps, before anything is joined: check the stock, mark it and cut it. They
 // read the cut plan, and the cutting step reads the tools to hand: a hand saw on a folding
@@ -8,11 +8,16 @@ import type { Tool } from "../tools.ts";
 
 /** A step as the template writes it, before it's numbered and its tools are checked. */
 export type Draft = {
+  /** What it does, as a slug: the step's ID, the same whichever steps the Build has. */
+  id: string;
   on: boolean;
   title: string;
   minutes: number;
   helper?: boolean;
   parts: readonly string[];
+  /** The parts it puts on the Build: its parts, unless it only prepares or checks them. */
+  adds?: readonly string[];
+  ways?: readonly Way[];
   tools: readonly Tool[];
   safety?: readonly Tool[];
   fixings?: readonly { name: string; count: number }[];
@@ -36,26 +41,76 @@ const lengthGroups = (cutPlan: CutPlan) =>
     return [...groups].map(([cuts, count]) => ({ stock: plan.stock, cuts, count }));
   });
 
+/** The saws the timber can be cut with, best first: the first to hand is the one in use. */
+const SAWS = ["circular-saw", "hand-saw"] as const satisfies readonly Tool[];
+
+const sawInUse = (toHand: ReadonlySet<Tool>) => SAWS.find((saw) => toHand.has(saw)) ?? "hand-saw";
+
+const sawWays = (toHand: ReadonlySet<Tool>): Way[] => {
+  const using = sawInUse(toHand);
+  // As the board has them: the simplest first.
+  return [...SAWS].reverse().map((saw) => ({
+    name: TOOL_NAMES[saw],
+    using: saw === using,
+    toHand: toHand.has(saw),
+  }));
+};
+
+/** Each piece's letter on it as it comes off, whichever saw cut it. */
+const labelling = act(
+  "As each piece comes off, write its letter on it in pencil, and stand it with the others of its letter.",
+  "Letter on each piece.",
+);
+
+/**
+ * A length held at one end sags at the other as the cut goes through, which pinches the saw and
+ * snaps the last of the cut, so the long end rests on something level with where it's held.
+ */
+const longEnd = (holding: string) =>
+  act(
+    `Rest the long end on a support as high as ${holding} (a sawhorse, a stool or the stack of timber), so it stays level and can't sag and pinch the saw.`,
+    "Long end supported, level.",
+  );
+
 const cutting = (hasCircularSaw: boolean): Pick<Draft, "tools" | "safety" | "actions"> =>
   hasCircularSaw
     ? {
-        tools: ["circular-saw", "clamps", "square", "tape-measure", "pencil"],
+        tools: ["circular-saw", "clamps", "long-end-support", "square", "tape-measure", "pencil"],
         safety: ["safety-glasses", "ear-defenders"],
         actions: [
           act(
-            "Clamp the length to something solid with the line just past its edge. Set the blade about 5 mm deeper than the timber, line it up on the waste side of the line and cut in one steady push, letting the offcut fall clear.",
+            "Clamp the length to something solid with the line just past its edge.",
+            "Clamped, line just past the edge.",
+          ),
+          longEnd("what it's clamped to"),
+          act(
+            "Set the blade about 5 mm deeper than the timber, line it up on the waste side of the line and cut in one steady push, letting the offcut fall clear.",
             "Circular saw, blade 5 mm past the timber, waste side.",
           ),
+          labelling,
         ],
       }
     : {
-        tools: ["hand-saw", "folding-workbench", "square", "tape-measure", "pencil"],
+        tools: [
+          "hand-saw",
+          "folding-workbench",
+          "long-end-support",
+          "square",
+          "tape-measure",
+          "pencil",
+        ],
         safety: ["safety-glasses"],
         actions: [
           act(
-            "Clamp the length in the folding workbench's jaws with the line just past the edge. Saw on the waste side of the line, and hold the offcut so it doesn't snap off.",
-            "Hand saw, in the jaws, waste side.",
+            "Clamp the length in the folding workbench's jaws with the line just past the edge.",
+            "In the jaws, line just past the edge.",
           ),
+          longEnd("the jaws"),
+          act(
+            "Saw on the waste side of the line. Near the end of the cut, hold the offcut so it doesn't snap off.",
+            "Hand saw, waste side.",
+          ),
+          labelling,
         ],
       };
 
@@ -74,10 +129,12 @@ export const preparingSteps = (cutPlan: CutPlan, toHand: ReadonlySet<Tool>): Dra
   );
   return [
     {
+      id: "check-delivery",
       on: true,
       title: "Check what's arrived",
       minutes: 10,
       parts: [],
+      adds: [],
       tools: ["tape-measure"],
       actions: [
         ...cutPlan.timber.map((plan) =>
@@ -101,10 +158,12 @@ export const preparingSteps = (cutPlan: CutPlan, toHand: ReadonlySet<Tool>): Dra
       },
     },
     {
+      id: "mark-lengths",
       on: true,
       title: "Mark the lengths",
       minutes: 20,
       parts: timberLabels,
+      adds: [],
       tools: ["tape-measure", "pencil", "square"],
       actions: lengthGroups(cutPlan).map((group) =>
         act(
@@ -119,11 +178,14 @@ export const preparingSteps = (cutPlan: CutPlan, toHand: ReadonlySet<Tool>): Dra
       words: ["kerf", "square"],
     },
     {
+      id: "cut-timber",
       on: true,
       title: "Cut and label the timber",
       minutes: 40,
       parts: timberLabels,
-      ...cutting(toHand.has("circular-saw")),
+      adds: [],
+      ways: sawWays(toHand),
+      ...cutting(sawInUse(toHand) === "circular-saw"),
       check: {
         says: "Each piece within 1 mm of its length, and its letter on it.",
         photo: "The pieces in rows by letter.",

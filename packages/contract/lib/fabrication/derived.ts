@@ -3,9 +3,7 @@ import { SizeSource, SourcedSize } from "../sourced/size.ts";
 
 // What `packages/fabrication` derives for a Build, as Fabrication shows it (#698): the engine's
 // `Build` (its `build.ts`), checked here so the app parses what crosses rather than trusting it,
-// and the worker's compiler checks the engine still gives it. Only what a screen reads is named;
-// the rest (each step's actions, close-ups, the glossary) crosses too, and is added here when a
-// screen first needs it (#699).
+// and the worker's compiler checks the engine still gives it. Only what a screen reads is named.
 
 /** A list as the engine gives it, never changed once worked out. */
 const list = <T extends z.ZodType>(item: T) => z.array(item).readonly();
@@ -90,14 +88,51 @@ export type BuildBuyLine = z.infer<typeof BuildBuyLine>;
 
 const StepTool = z.object({ tool: z.string(), name: z.string(), toHand: z.boolean() });
 
+const Point = z.object({ x: z.number(), y: z.number() });
+
+/**
+ * A step's close-up (#699): a flat view of what it makes, in mm from its top left (`y` down), its
+ * key sizes as dimension lines and a dot where each fixing goes.
+ */
+const BuildCloseUp = z.object({
+  title: z.string(),
+  width: z.number(),
+  height: z.number(),
+  pieces: list(
+    z.object({ label: z.string(), x: z.number(), y: z.number(), w: z.number(), h: z.number() }),
+  ),
+  dimensions: list(z.object({ from: Point, to: Point, mm: z.number() })),
+  fixings: list(Point),
+  notes: list(z.string()),
+});
+
+/** A step's ID, the slug of what it does ("fit-castors"), the same whatever else a Build has. */
+export const BuildStepId = z
+  .string()
+  .max(60)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+
+/**
+ * A step, as the instruction manual shows it (#699): its parts and the ones it puts on the Build,
+ * the ways it can be done, its tools and fixings, each action said for a beginner ("show me how")
+ * and as just the numbers, its close-up, the check before moving on, and the words it uses.
+ */
 export const BuildStep = z.object({
+  id: BuildStepId,
   number: z.number().int(),
   title: z.string(),
   minutes: z.number(),
   helper: z.boolean(),
   parts: list(z.string()),
+  adds: list(z.string()),
+  ways: list(z.object({ name: z.string(), using: z.boolean(), toHand: z.boolean() })),
   tools: list(StepTool),
   safety: list(StepTool),
+  fixings: list(z.object({ name: z.string(), count: z.number() })),
+  actions: list(z.object({ howTo: z.string(), numbers: z.string() })),
+  closeUp: BuildCloseUp.nullable(),
+  check: z.object({ says: z.string(), photo: z.string() }),
+  words: list(z.string()),
 });
 export type BuildStep = z.infer<typeof BuildStep>;
 
@@ -109,7 +144,10 @@ export const BuildFinding = z.discriminatedUnion("kind", [
     length: z.number(),
     needed: z.number(),
     through: list(z.object({ what: z.string(), mm: z.number() })),
+    /** The length to use, which the steps fit and the buy list buys instead. */
     use: z.number(),
+    /** The steps that fit it, by number. */
+    steps: list(z.number().int()),
   }),
   z.object({
     kind: z.literal("tools-missing"),
@@ -151,10 +189,12 @@ export const DerivedBuild = z.object({
   template: z.string(),
   size: z.object({ length: z.number(), depth: z.number(), height: z.number() }),
   parts: list(BuildPart),
-  fitted: list(z.object({ name: z.string(), boxes: list(BuildBox) })),
+  fitted: list(z.object({ name: z.string(), on: z.string(), boxes: list(BuildBox) })),
   cutPlan: BuildCutPlan,
   buyList: z.object({ lines: list(BuildBuyLine), total: z.number(), unpriced: z.number() }),
   steps: list(BuildStep),
+  /** The words the steps use that a beginner may not know, each with a line saying what it means. */
+  glossary: list(z.object({ word: z.string(), means: z.string() })),
   findings: list(BuildFinding),
   /** A printed part's own; `null` for a Build cut from timber and sheets. */
   print: BuildPrint.nullable(),

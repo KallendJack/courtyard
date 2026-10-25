@@ -3,6 +3,7 @@ import { ProjectSlug } from "../projects.ts";
 import { ModelRef, SessionId } from "../session.ts";
 import { WorkspaceId } from "../workspace.ts";
 import { BuildView } from "./builds.ts";
+import { BuildProgress } from "./progress.ts";
 
 // What the Fabrication app's Build page reads (#698, ADR 0037): the Build where it is, and its
 // chat. Fabrication owns these shapes; Courtyard answers them from a planning workspace and its
@@ -15,8 +16,8 @@ export const BuildPlace = z.object({
 });
 export type BuildPlace = z.infer<typeof BuildPlace>;
 
-/** A Build as Fabrication opens it: everything derived, and where it is. */
-export const BuildOpened = BuildView.extend({ place: BuildPlace });
+/** A Build as Fabrication opens it: everything derived, where it is, and how far it's got. */
+export const BuildOpened = BuildView.extend({ place: BuildPlace, progress: BuildProgress });
 export type BuildOpened = z.infer<typeof BuildOpened>;
 
 /**

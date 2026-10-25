@@ -75,6 +75,10 @@ export const goldenBench = {
       price: { pence: 420, packOf: 200, shop: "Woodstore" },
     },
     brackets: { name: "40 mm angle brackets", price: { pence: 89, shop: "Fixings Direct" } },
+    bracketScrews: {
+      name: "4 × 30 screws",
+      price: { pence: 380, packOf: 200, shop: "Woodstore" },
+    },
   },
   tools: [
     "tape-measure",

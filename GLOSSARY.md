@@ -229,6 +229,14 @@ _Avoid_: cutting list, cut sheet
 What a Build needs bought: each item, how many, its price and where it's sold, from the Build's parts and fixings.
 _Avoid_: shopping list, BOM, wanted list (that's Things the owner wants)
 
+**Build steps**:
+A Build's instruction manual in Fabrication (#699), worked out by code from its parameters and the tools to hand: one
+step at a time, a **checklist** of one action a line ("show me how" for a beginner, or "just the numbers"), a
+close-up with its sizes and screw positions, a check **before you move on**, and the 3D view built up to the step.
+Its **progress**, the step reached and the lines ticked, is kept on the Build for every device and session, each
+step by its ID ("fit-castors") rather than its number, so ticks stay put when a step before comes or goes.
+_Avoid_: instructions (that's what a model is given), tasks, project steps (those are a project's)
+
 **Sourced size**:
 A size as a Build takes it (#696): a number, its unit and its source, `measured`, `specified` (with the maker's page
 or spec it came from) or `assumed`. Never free text. The sourced Facts of #701 will use the same shape.

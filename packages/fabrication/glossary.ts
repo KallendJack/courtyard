@@ -14,8 +14,8 @@ const WORDS = {
   square: "At a right angle. Also the tool you check one with.",
   "clearance hole": "A hole a little wider than the bolt, so the bolt slides through.",
   "lock nut": "A nut with a nylon ring inside, which stops it shaking loose.",
-  countersunk:
-    "A hole widened into a cone where the screw goes in, so the screw's head sits level with the face.",
+  countersink:
+    "A cone-shaped dip cut into the top of a screw hole, so the screw's head sits flush.",
   slice:
     "Turn the 3D file into the printer's moves, layer by layer. Bambu Studio does it when you open the file.",
 } as const;

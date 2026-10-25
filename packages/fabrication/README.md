@@ -45,8 +45,15 @@ if (recipe) {
 - **Castors left out are none,** so a change that takes them out (a merge patch's `null`) leaves a bench on its legs.
 - **A cut plan never overruns** a length or a sheet, with the kerf counted between pieces; a part bigger than its
   stock is found and left out.
-- **The steps depend on the tools to hand;** the parts and the cut plan don't.
-- **Parts are cut to the whole mm below.**
+- **The steps depend on the tools to hand;** the parts and the cut plan don't. A step that can be done more than one
+  way lists its ways, the one in use and the others not yet to hand (a hand saw until there's a circular saw).
+- **Each step says which parts it puts on the Build** (none for checking, marking and cutting), and something fitted
+  (a castor) says the part it's fitted to, so the 3D view can build the Build up step by step (#699).
+- **Each step has an ID** saying what it does ("fit-castors"), the same whichever steps the Build has, so the
+  owner's progress stays on its step when one before it comes or goes.
+- **A fixing found too short is never fitted:** the steps and the buy list use the length to use instead, unpriced
+  until it's given a price, and the finding names the steps that fit it.
+- **Parts are cut to the whole mm below,** and the steps say every size to the whole mm; the Build keeps it exact.
 - **A part recipe is checked before it's made:** a feature of a kind no recipe knows, a hole or slot off its face, or
   a pocket running out of the part where it isn't open is refused with a finding, and nothing is made. Holes, slots
   and pockets allow the printer's clearance (0.2 mm, assumed, until it's calibrated); a wall thinner than two lines
@@ -65,4 +72,5 @@ the clearance) and `print/recipe.test.ts` (what a recipe is refused for).
 
 The worker's `features/fabrication/` (#697), which keeps a planning workspace's Builds, works each out with it, and
 makes a printed part in a thread of its own (#702); its `prompts/builds.ts`, which gives a model each template's
-parameters as JSON Schema; and Fabrication (`apps/fabrication`, #698), through the worker's API.
+parameters as JSON Schema; and Fabrication (`apps/fabrication`, #698, #699), which shows all it works out, the steps
+as an instruction manual, and a printed part on its plate.
