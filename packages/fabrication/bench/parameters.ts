@@ -90,3 +90,10 @@ export const castorFixingNames = (castors: Castors, boltLength: number) => {
     nuts: `${thread} lock nuts`,
   };
 };
+
+/** The spanner that fits a bolt's head and nut, by its thread (the usual hex sizes). */
+const SPANNERS: Readonly<Record<number, number>> = { 4: 7, 5: 8, 6: 10, 8: 13, 10: 17, 12: 19 };
+
+/** The castor bolts' spanner size, mm; none for a thread not listed. */
+export const spannerFor = (castors: Castors): number | undefined =>
+  SPANNERS[castors.bolt.diameter.value];

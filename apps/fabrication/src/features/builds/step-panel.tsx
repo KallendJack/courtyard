@@ -245,7 +245,8 @@ function ToolChips(props: { step: BuildStep; big: boolean }) {
         const { says, ready } = chipOf(tool);
         return (
           <li
-            key={tool.tool}
+            // Two chips can be one tool: a spanner on the head, another on the nut (#783).
+            key={`${tool.tool} ${tool.name}`}
             className={classes(
               "flex items-center gap-2 rounded-full border px-4 font-semibold",
               props.big ? "h-11 text-interface" : "h-9 text-meta",

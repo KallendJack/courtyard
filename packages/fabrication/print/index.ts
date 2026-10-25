@@ -104,7 +104,7 @@ const stepsOf = (options: {
           numbers: "Cool, then off.",
         },
       ],
-      closeUp: null,
+      closeUps: [],
       walkThrough: [],
       scene: null,
       check: {
@@ -134,7 +134,7 @@ const stepsOf = (options: {
                 numbers: `${clearance} mm to spare each side.`,
               },
             ],
-            closeUp: null,
+            closeUps: [],
             walkThrough: [],
             scene: null,
             check: {
@@ -170,7 +170,7 @@ const stepsOf = (options: {
                 numbers: "Pilot holes, screws flush.",
               },
             ],
-            closeUp: null,
+            closeUps: [],
             walkThrough: [],
             scene: null,
             check: {
