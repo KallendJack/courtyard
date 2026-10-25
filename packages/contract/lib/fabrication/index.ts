@@ -41,6 +41,7 @@ export {
   PartBase,
   PartFeature,
   PartRecipe,
+  PartRecipeShown,
   PartScrew,
   PrinterSpec,
 } from "./recipe.ts";

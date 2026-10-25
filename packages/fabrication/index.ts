@@ -31,6 +31,7 @@ export {
   FONT_FILE,
   type Made,
   makePart,
+  PRINTED_COMMON,
   PRINTED_PARAMETERS,
   readFont,
   to3mf,

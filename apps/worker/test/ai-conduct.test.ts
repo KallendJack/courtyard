@@ -1913,8 +1913,8 @@ describe("Builds (#697, ADR 0036)", () => {
       }),
     );
     // Every template's JSON Schema is in it (#732), so it grows with each: past this, choose to.
-    // 19,000 since the bench's prices (#704) took it just past 18,000.
-    expect(tool?.description.length).toBeLessThan(19_000);
+    // 17,144 with each recipe feature's fields and the printed templates' shared parameters said once.
+    expect(tool?.description.length).toBeLessThan(18_000);
     expect(inputsOf(tool)).toBe(await quotedInGuide("- build: To change a Build"));
   });
 

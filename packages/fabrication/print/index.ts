@@ -1,4 +1,4 @@
-import type { BuildTemplate, PartFeature } from "@courtyard/contract";
+import { type BuildTemplate, type PartFeature, PartRecipeShown } from "@courtyard/contract";
 import type { z } from "zod";
 import { type Build, err, type Finding, ok, type Result, type Step } from "../build.ts";
 import { buyLine, buyListOf } from "../buy-list.ts";
@@ -12,6 +12,7 @@ import {
   HolsterParameters,
   holsterShape,
   isAssumed,
+  PrintedCommon,
   PrintedPartParameters,
   printedPartShape,
   type Shaped,
@@ -34,13 +35,21 @@ const TEMPLATES = {
   "printed-part": { parameters: PrintedPartParameters, shape: printedPartShape },
 } as const;
 
-/** A printed template's parameters, as JSON Schema gives them to a model. */
+const COMMON = { count: true, printer: true, filament: true, prices: true, tools: true } as const;
+
+/**
+ * A printed template's own parameters, as JSON Schema gives them to a model: what every printed
+ * template also takes is `PRINTED_COMMON`, said once, and a recipe's features have their fields.
+ */
 export const PRINTED_PARAMETERS: Readonly<Record<Printed, z.ZodType>> = {
-  "battery-holster": HolsterParameters,
-  "castor-shim": ShimParameters,
-  bracket: BracketParameters,
-  "printed-part": PrintedPartParameters,
+  "battery-holster": HolsterParameters.omit(COMMON),
+  "castor-shim": ShimParameters.omit(COMMON),
+  bracket: BracketParameters.omit(COMMON),
+  "printed-part": PrintedPartParameters.omit(COMMON).extend({ recipe: PartRecipeShown }),
 };
+
+/** What every printed template takes besides its own, as JSON Schema gives it to a model. */
+export const PRINTED_COMMON: z.ZodType = PrintedCommon;
 
 const issues = (error: z.ZodError) =>
   error.issues.map((issue) => `${issue.path.join(".") || "parameters"}: ${issue.message}`);

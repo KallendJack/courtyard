@@ -30,6 +30,9 @@ const printed = {
   tools: z.array(Tool).default([]),
 };
 
+/** What every printed template takes besides its shape, as one schema. */
+export const PrintedCommon = z.object(printed);
+
 /** Screws through the part: which, how many, and whether their heads sit flush. */
 const Screws = z.object({
   screw: PartScrew,

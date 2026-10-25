@@ -174,3 +174,18 @@ export const PartRecipe = z
     }
   });
 export type PartRecipe = z.infer<typeof PartRecipe>;
+
+/**
+ * A part recipe as a model is shown it, in the Build tool's description: each feature with its
+ * kind's fields, where `PartRecipe` reads them as any object so a feature it doesn't know is named.
+ */
+export const PartRecipeShown = z.strictObject({
+  base: PartBase,
+  features: z
+    .array(PartFeature)
+    .max(PART_FEATURES_MOST)
+    .default([])
+    .describe(
+      `At most ${PART_FEATURES_MOST}, of which at most ${LETTERING_MOST.lines} are lettering, ${LETTERING_MOST.letters} letters in all.`,
+    ),
+});
