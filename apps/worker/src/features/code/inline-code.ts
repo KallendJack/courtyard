@@ -1,12 +1,14 @@
 import { dirname, isAbsolute, resolve } from "node:path";
+import { readJavaScript } from "./javascript.ts";
 import { outside, pathsIn } from "./paths.ts";
 
 /**
  * Code given on the line (`node -e`, `python -c`, #464), read by its text: the paths it names,
  * and whether it could run another program or reach the network, so routine code (#730) and
- * Allow all (#428) never cover that. A check of words, not of what the code does: it catches a
- * model's mistakes, never code written to slip past it, and a script the session writes and runs
- * is its own code either way (ADR 0038).
+ * Allow all (#428) never cover that. JavaScript is read with a parser (`readJavaScript`, #747),
+ * other code by its words. A check of what the code says, not of what it does: it catches a model's
+ * mistakes, never code written to slip past it, and a script the session writes and runs is its
+ * own code either way (ADR 0038).
  */
 
 /** Programs that run code given on the line, by the options that give it (`python -c`, #428). */
@@ -56,124 +58,108 @@ export const codeWordsOf = (words: readonly string[]) => {
   return code === undefined ? undefined : wordsIn(code);
 };
 
-/** The programs whose code is JavaScript. */
+/** The programs whose code is JavaScript, read with a parser (`readJavaScript`, #747). */
 const JAVASCRIPT = new Set(["node", "deno", "bun"]);
 
 /**
- * JavaScript's string literals, by where their text starts and ends; `undefined` where the code
- * could hide where one starts from a reader this simple: a `/` outside them (a comment or a
- * regular expression), an HTML-like comment, a template's `${`, a line break in a quote, or a
- * quote that doesn't close.
+ * JavaScript given on the line, apart from the command's other words: the word after each of its
+ * options (`-e <code>`) or the value of one (`--eval=<code>`), and for `deno eval`, every word
+ * after it that isn't an option, so its options' values (`--ext ts`) are read as code too.
  */
-const stringsIn = (code: string) => {
-  const found: { readonly start: number; readonly end: number }[] = [];
-  for (let at = 0; at < code.length; at += 1) {
-    const quote = code[at] ?? "";
-    if (quote === "/" || code.startsWith("<!--", at) || code.startsWith("-->", at))
-      return undefined;
-    if (quote !== "'" && quote !== '"' && quote !== "`") continue;
-    let end = at + 1;
-    for (; end < code.length && code[end] !== quote; end += 1) {
-      if (code[end] === "\\") end += 1;
-      else if (quote === "`" && code.startsWith("${", end)) return undefined;
-      else if (quote !== "`" && code[end] === "\n") return undefined;
+const javaScriptOf = (words: readonly string[]) => {
+  const [program = "", ...rest] = words;
+  const code: string[] = [];
+  const others: string[] = [];
+  let deno = false;
+  for (let at = 0; at < rest.length; at += 1) {
+    const word = rest[at] ?? "";
+    if (deno && !word.startsWith("-")) code.push(word);
+    else if (!givesCode(program, word)) others.push(word);
+    else if (program === "deno") deno = true;
+    else if (word.includes("=")) code.push(word.slice(word.indexOf("=") + 1));
+    else {
+      code.push(rest[at + 1] ?? "");
+      at += 1;
     }
-    if (end >= code.length) return undefined;
-    found.push({ start: at + 1, end });
-    at = end;
   }
-  return found;
+  return { code, others };
 };
 
-/** An import's module, in code or in text: `from "../x.ts"`, `import("./y")`, `require('z')`. */
+/** An import's module in text: `from "../x.ts"`, `import("./y")`, `require('z')`. */
 const IMPORT = /(?<![.\w$])(?:from|import|require)\s*\(?\s*\\?(['"`])([^'"`\\\s]*)\\?\1/dg;
 
-/**
- * Code without the imports it writes into a file whose module `keeps` (#730): each import inside
- * one of its JavaScript strings, so text it writes, not one it loads. Nothing is taken out of code
- * that could hide its strings (`stringsIn`).
- */
-const withoutWrittenImports = (code: string, keeps: (module: string) => boolean) => {
-  const strings = stringsIn(code);
-  if (strings === undefined) return code;
-  let kept = code;
-  for (const found of code.matchAll(IMPORT)) {
+/** Text without the imports in it whose module `keeps` (#730), as one it writes into a file. */
+const withoutImports = (text: string, keeps: (module: string) => boolean) => {
+  let kept = text;
+  for (const found of text.matchAll(IMPORT)) {
     const [start, end] = found.indices?.[2] ?? [0, 0];
-    const written = strings.some((text) => text.start <= found.index && end <= text.end);
-    if (written && keeps(found[2] ?? ""))
+    if (keeps(found[2] ?? ""))
       kept = `${kept.slice(0, start)}${" ".repeat(end - start)}${kept.slice(end)}`;
   }
   return kept;
+};
+
+/** A comment's opening or closing marker standing alone in text: no path, though `/*x` stays one. */
+const COMMENT_MARKER = /(?<![^\s'"`])(?:\/\*+|\*+\/)(?![^\s'"`])/g;
+
+/**
+ * The paths a string in JavaScript could name: the whole of one without spaces (`'/'`, `'/;x'`),
+ * comment markers aside, and each of its words, but not a lone `/` beside others in text, as a
+ * tag's end (`'<Tabs tabs={A} />'`, #747).
+ */
+const pathsInString = (text: string) => {
+  const whole = /\s/.test(text) || /^[/*]*\*[/*]*$/.test(text) ? [] : [text];
+  const words = wordsIn(text.replace(COMMENT_MARKER, " ")).filter((word) => word !== "");
+  const named = words.length > 1 ? words.filter((word) => !/^\/+$/.test(word)) : words;
+  return [...whole, ...named].flatMap(pathsIn);
 };
 
 /** A path in code that names a file of the worktree: `apps/web/src/home.tsx`, not `..` or a name. */
 const FILE_IN_CODE = /^(?!\.\.)[\w.-]+(?:\/[\w.-]+)+\.\w+$/;
 
 /**
- * Whether code given on the line names a path outside the worktree, every path taken from the
- * worktree, which it runs in. One exception (#730): a relative import written into a file, inside
- * one of JavaScript's strings, that stays inside from the folder of a file the code names (`import
- * { ok } from "../../lib/result.ts"` into `apps/worker/src/features/code/x.ts`): a path that file
- * loads, not one this code opens. Paths given to the file system's or path's functions never are.
+ * Whether JavaScript given on the line names a path outside the worktree, which it runs in: in
+ * its strings, the only place code names one (`readJavaScript`), or in the command's other words;
+ * or a folder outside by the function that gives it (`os.homedir()`). One exception (#730): a
+ * relative import in a string, so one it writes into a file, that stays inside from the folder of
+ * a file the code names (`import { ok } from "../../lib/result.ts"` into
+ * `apps/worker/src/features/code/x.ts`): a path that file loads, not one this code opens. Code
+ * that doesn't parse names what it might.
  */
-export const codeReachesOut = (worktree: string, words: readonly string[]) => {
-  const code = codeOf(words);
-  if (code === undefined) return false;
-  const folders = wordsIn(code)
+const javaScriptReachesOut = (worktree: string, words: readonly string[]) => {
+  const { code, others } = javaScriptOf(words);
+  const reads = code.map(readJavaScript);
+  if (reads.some((read) => read === undefined || read.reachesOut)) return true;
+  const strings = reads.flatMap((read) => read?.strings ?? []);
+  const folders = strings
+    .flatMap(wordsIn)
     .filter((word) => FILE_IN_CODE.test(word) && !outside(worktree, word))
     .map((file) => resolve(worktree, dirname(file)));
   const relativeInside = (module: string) =>
     /^\.\.?\//.test(module) &&
     !isAbsolute(module) &&
     folders.some((from) => !outside(worktree, module, from));
-  const opened = JAVASCRIPT.has(words[0] ?? "")
-    ? withoutWrittenImports(code, relativeInside)
-    : code;
-  // A comment marker in its text (`"/** How many"`) is no path: `/` alone would read as the root
-  // (#747). Only a marker standing alone, so `"/*x"` stays the path it is.
-  return wordsIn(opened.replace(/(?<![^\s'"`])(?:\/\*+|\*+\/)(?![^\s'"`])/g, " "))
+  return [
+    ...others.flatMap(pathsIn),
+    ...strings.flatMap((text) => pathsInString(withoutImports(text, relativeInside))),
+  ].some((path) => outside(worktree, path));
+};
+
+/**
+ * Whether code given on the line names a path outside the worktree, every path taken from the
+ * worktree, which it runs in: JavaScript's as `javaScriptReachesOut` reads it, any other's by its
+ * words, comment markers aside.
+ */
+export const codeReachesOut = (worktree: string, words: readonly string[]) => {
+  const code = codeOf(words);
+  if (code === undefined) return false;
+  if (JAVASCRIPT.has(words[0] ?? "")) return javaScriptReachesOut(worktree, words);
+  return wordsIn(code.replace(COMMENT_MARKER, " "))
     .flatMap(pathsIn)
     .some((path) => outside(worktree, path));
 };
 
-/**
- * What in JavaScript runs another program, reaches the network or loads code it can't be read for
- * (#730): child processes and workers, `fetch` and sockets, node's bindings and native modules,
- * `vm` and `eval`, a `require` or `import` of a name it works out, and escapes that spell a name.
- */
-const JAVASCRIPT_RUNS = [
-  /child_process|worker_threads|\bcluster\b/,
-  /\b(?:spawn|fork)\w*|(?<!\.)\bexec\w*|\.exec(?:Sync|File|FileSync|a)\b/,
-  /\b(?:fetch|WebSocket|XMLHttpRequest|EventSource)\b/,
-  /(['"`])(?:node:)?(?:https?|http2|net|dgram|tls|dns|inspector|vm|module|process)\1/,
-  /\bprocess\s*(?:\[|\.\s*(?:binding|_linkedBinding|dlopen|getBuiltinModule|mainModule|env|kill|execve))/,
-  /\b(?:vm|eval|Function|Reflect|globalThis|global|constructor|createRequire|dlopen)\b/,
-  /\b(?:Bun|Deno)\s*[.[]/,
-  /\brequire\b(?!\s*\(\s*(['"])[^'"`\\]*\1\s*\))/,
-  /\bimport\s*\((?!\s*(['"])[^'"`\\]*\1\s*\))/,
-  /\\[ux0-7]/,
-];
-
-/** The rules above that find a module by its name in a string (`"child_process"`, `"node:net"`). */
-const MODULE_NAMES = new Set([JAVASCRIPT_RUNS[0], JAVASCRIPT_RUNS[3]]);
-
-/**
- * Code with the text of each string that holds a path blanked (`"apps/worker/eval/x.ts"`), so a
- * folder named `eval` or `exec` isn't read as code that runs (#747). Any other string stays, so a
- * name spelled in one (`[]["constructor"]`) still asks; nothing is blanked in code whose strings
- * can't be told apart (`stringsIn`).
- */
-const withoutPathText = (code: string) => {
-  const strings = stringsIn(code);
-  if (strings === undefined) return code;
-  let kept = code;
-  for (const { start, end } of strings)
-    if (/^[\w.@-]*\/[\w./@-]*$/.test(code.slice(start, end)))
-      kept = `${kept.slice(0, start)}${" ".repeat(end - start)}${kept.slice(end)}`;
-  return kept;
-};
-
-/** The same for Python: processes, sockets and the web, and code it loads or runs by a name. */
+/** What in Python runs others: processes, sockets and the web, and code it loads or runs by name. */
 const PYTHON_RUNS = [
   /\b(?:subprocess|pty|multiprocessing|socket|ssl|urllib|http|requests|ftplib|smtplib|ctypes)\b/,
   /\b(?:system|popen|spawn\w*|fork\w*|exec\w*|eval|compile|getattr|importlib|environ)\b/,
@@ -182,20 +168,16 @@ const PYTHON_RUNS = [
 
 /**
  * Whether code given on the line could run another program, reach the network or load code by a
- * name it works out (#730), so it asks whoever's session it is, Allow all or not. Perl's, Ruby's
+ * name it works out (#730), so it asks whoever's session it is, Allow all or not: JavaScript's as
+ * `readJavaScript` reads it (and any that doesn't parse), Python's by its words. Perl's, Ruby's
  * and PHP's always could (backticks, `system`, a pipe to `open`), so theirs always asks.
  */
 export const codeRunsOthers = (words: readonly string[]) => {
   const [program = ""] = words;
   const code = codeOf(words);
   if (code === undefined) return false;
-  if (JAVASCRIPT.has(program)) {
-    // Modules are named in strings, so those rules read the whole code, path text and all.
-    const named = withoutPathText(code);
-    return JAVASCRIPT_RUNS.some(
-      (runs) => runs.test(named) || (MODULE_NAMES.has(runs) && runs.test(code)),
-    );
-  }
+  if (JAVASCRIPT.has(program))
+    return javaScriptOf(words).code.some((given) => readJavaScript(given)?.runs !== false);
   if (program.startsWith("py")) return PYTHON_RUNS.some((runs) => runs.test(code));
   return true;
 };

@@ -54,7 +54,9 @@ So:
   (`http`, `https`, `net`, `dgram`, `tls`), node's bindings and native modules, `vm`, `eval`, a `require` or
   `import` of a name it works out, Bun's and Deno's own calls; Python's `subprocess`, `os.system`, sockets and the
   web. Perl's, Ruby's and PHP's always ask. Under Allow all the same code asks.
-- That is a check of words, not of what the code does. Code that builds a path from parts (`'.' + './x'`) or
+- That is a check of what the code says, not of what it does. JavaScript is read with a parser since #747 (paths
+  only from its strings, what runs only from its names, members and calls; code that doesn't parse asks), other
+  code by its words. Code that builds a path from parts it works out (`path.dirname(process.cwd())`) or
   reaches a function by a route the lists don't name can still read, write or delete outside the worktree, or run a
   program, without asking. So can a script or test the session writes and runs (`node scripts/x.ts`, `pnpm test`),
   as before this decision. The checks catch a model's mistakes; they don't hold a model trying to get past them.

@@ -237,6 +237,9 @@ const ROUTINE = [
   // A comment marker in its text isn't the root, nor a folder named eval code that runs (#747).
   `node -e "const fs=require('fs');const p='apps/worker/src/x.ts';const L=fs.readFileSync(p,'utf8').split('\\n');if(!L[3].startsWith('/** How many'))throw new Error('moved');L.splice(4,2);fs.writeFileSync(p,L.join('\\n'))"`,
   `node -e "const fs=require('fs');const p='apps/worker/eval/context.ts';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace('a','b'))"`,
+  // Read with a parser: a regular expression isn't the root, nor a tag's end in a string (#747).
+  `node -e "const f='packages/x/options.ts';const fs=require('fs');fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace(/\\n  return a/,'b'))"`,
+  `node -e "const f='apps/x/page.tsx';const fs=require('fs');let t=fs.readFileSync(f,'utf8');t=t.replace('<Tabs tabs={A} />','<Tabs tabs={B} />');fs.writeFileSync(f,t)"`,
   // Moving, copying, making and removing files and folders.
   "git mv apps/web/src/block.tsx apps/web/src/components/block.tsx",
   "git rm -q apps/web/src/old-view.tsx",
@@ -276,6 +279,12 @@ const ROUTINE = [
   "sleep 5",
   "file docs/van.jpg",
   "cmp docs/a.png docs/b.png",
+  // A program's version or help (#747).
+  "node --version",
+  "node -v",
+  "pnpm --version",
+  "git --version",
+  "npm --help",
   // GitHub, read, and this repository's issues named by its name.
   'gh search issues "All sessions" --json number,title,state',
   "gh release list --limit 3",
