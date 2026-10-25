@@ -8,131 +8,20 @@ import {
   type StockChoice,
   type StockOptions,
 } from "./build.ts";
-import { type OptionPrices, type Price, type Sheet, StockOptionId, type Timber } from "./stock.ts";
+import { type Role, STOCK_OPTIONS, type StockOption, saysOf, wrongs } from "./catalog.ts";
+import {
+  type OptionPrice,
+  type OptionPrices,
+  type Price,
+  type Sheet,
+  StockOptionId,
+  type Timber,
+} from "./stock.ts";
 
-// The stock a Build's timber and sheets can be (#704): each option's sizes, what it's like, and
-// the jobs it suits, for any template. A template names its slots (the bench's frame timber, its
-// top), each with the job it does; an option is offered for a slot whose job it suits, costed by
-// working the Build out again with it, and flagged when it's wrong for its slot. Prices are never
-// here: they come from shops' pages, through the Build's parameters.
-
-/** The job a slot's stock does: the frame's legs and rails, wide pieces that take bolts, sheets. */
-export type Role = "frame" | "wide" | "sheet";
-
-type StockOption = {
-  readonly kind: "timber" | "sheet";
-  readonly title: string;
-  readonly stock: string;
-  /** A word in its name as written without its id ("45 × 95 C16"), to know it by. */
-  readonly known: RegExp;
-  readonly thickness: number;
-  readonly width: number;
-  readonly length: number;
-  /** Where its sizes come from. */
-  readonly reference: string;
-  readonly why: string;
-  readonly finish: "rough" | "smooth";
-  /** In a damp place: fine, swells, or treated for outdoors, which a garage doesn't need. */
-  readonly damp: "fine" | "swells" | "treated";
-  readonly suits: readonly Role[];
-  /** Something to know whatever it's for. */
-  readonly caveat?: string;
-  /** The jobs it's wrong for: a chip's words, and the finding's. */
-  readonly wrongFor?: Partial<Record<Role, { readonly chip: string; readonly why: string }>>;
-};
-
-const TIMBER = { kind: "timber", length: 2400, finish: "rough", damp: "fine" } as const;
-const SHEET = {
-  kind: "sheet",
-  thickness: 18,
-  width: 1220,
-  length: 2440,
-  finish: "smooth",
-  damp: "fine",
-  suits: ["sheet"],
-} as const;
-
-export const STOCK_OPTIONS: Readonly<Record<StockOptionId, StockOption>> = {
-  "c16-45x95": {
-    ...TIMBER,
-    title: "Sawn C16, 45 × 95",
-    stock: "45 × 95 C16",
-    known: /c16/i,
-    thickness: 45,
-    width: 95,
-    reference: "C16 sawn timber, 45 × 95",
-    why: "Strong, kiln-dried, rough faces. Right for a bench.",
-    suits: ["frame"],
-  },
-  "cls-38x89": {
-    ...TIMBER,
-    title: "CLS, 38 × 89",
-    stock: "38 × 89 CLS",
-    known: /cls/i,
-    thickness: 38,
-    width: 89,
-    reference: "CLS timber, 38 × 89",
-    why: "Smooth and rounded, but slimmer: less wood for screws.",
-    finish: "smooth",
-    suits: ["frame"],
-    caveat: "Less wood for screws",
-    wrongFor: {
-      wide: {
-        chip: "Too slim for the castor bases",
-        why: "It's too slim for the castor bases' bolts and the top's support.",
-      },
-    },
-  },
-  "treated-47x100": {
-    ...TIMBER,
-    title: "Treated, 47 × 100",
-    stock: "47 × 100 treated",
-    known: /treated/i,
-    thickness: 47,
-    width: 100,
-    reference: "Treated sawn timber, 47 × 100",
-    why: "Made for outdoors. Wetter, so it can twist as it dries inside.",
-    damp: "treated",
-    suits: ["frame"],
-  },
-  "c16-45x145": {
-    ...TIMBER,
-    title: "Sawn C16, 45 × 145",
-    stock: "45 × 145 C16",
-    known: /c16/i,
-    thickness: 45,
-    width: 145,
-    reference: "C16 sawn timber, 45 × 145",
-    why: "Wide and thick enough to take the castors' bolts.",
-    suits: ["wide"],
-  },
-  "plywood-18": {
-    ...SHEET,
-    title: "Plywood, 18 mm",
-    stock: "18 mm plywood",
-    known: /ply/i,
-    reference: "18 mm plywood, a full sheet",
-    why: "Strong and smooth on top, and holds screws near its edges.",
-  },
-  "osb-18": {
-    ...SHEET,
-    title: "OSB, 18 mm",
-    stock: "18 mm OSB",
-    known: /osb/i,
-    reference: "18 mm OSB3, a full sheet",
-    why: "Cheaper and strong enough, but rough on top.",
-    finish: "rough",
-  },
-  "mdf-18": {
-    ...SHEET,
-    title: "MDF, 18 mm",
-    stock: "18 mm MDF",
-    known: /mdf/i,
-    reference: "18 mm MDF, a full sheet",
-    why: "Smooth and cheap, but heavy, and splits at screws near its edges.",
-    damp: "swells",
-  },
-};
+// A Build's timber and sheets offered their options (#704, the options in `catalog.ts`), for any
+// template. A template names its slots (the bench's frame timber, its top), each with the job it
+// does; an option is offered for a slot whose job it suits, costed by working the Build out again
+// with it, and flagged when it's wrong for its slot. The stock in use is costed as it is.
 
 const IDS = StockOptionId.options;
 
@@ -163,8 +52,19 @@ const optionOf = (stock: Timber | Sheet, kind: StockOption["kind"]) =>
 
 const kindOf = (role: Role) => (role === "sheet" ? "sheet" : "timber");
 
-/** An option as a slot's stock, its sizes from its reference. */
-const stockOf = (id: StockOptionId, price: Price | undefined): Timber | Sheet => {
+/** An option's price as a stock's: what it costs, without the size it's sold in. */
+const paidOf = (price: OptionPrice): Price => ({
+  pence: price.pence,
+  packOf: price.packOf,
+  ...(price.shop === undefined ? {} : { shop: price.shop }),
+  ...(price.link === undefined ? {} : { link: price.link }),
+});
+
+/**
+ * An option as a slot's stock: its section from its reference, and its length (and a sheet's
+ * width) the size its price is for, where that isn't the option's own.
+ */
+const stockOf = (id: StockOptionId, price: OptionPrice | undefined): Timber | Sheet => {
   const option = STOCK_OPTIONS[id];
   const size = (value: number) =>
     ({ value, unit: "mm", source: { kind: "specified", reference: option.reference } }) as const;
@@ -172,9 +72,22 @@ const stockOf = (id: StockOptionId, price: Price | undefined): Timber | Sheet =>
     name: option.stock,
     option: id,
     thickness: size(option.thickness),
-    width: size(option.width),
-    length: size(option.length),
-    ...(price === undefined ? {} : { price }),
+    width: (option.kind === "sheet" ? price?.width : undefined) ?? size(option.width),
+    length: price?.length ?? size(option.length),
+    ...(price === undefined ? {} : { price: paidOf(price) }),
+  };
+};
+
+/** A stock's price as an option's, with the size it's sold in where that isn't the option's own. */
+const optionPriceOf = (stock: Timber | Sheet, id: StockOptionId): OptionPrice | undefined => {
+  if (stock.price === undefined) return undefined;
+  const option = STOCK_OPTIONS[id];
+  return {
+    ...stock.price,
+    ...(stock.length.value === option.length ? {} : { length: stock.length }),
+    ...(option.kind === "sheet" && stock.width.value !== option.width
+      ? { width: stock.width }
+      : {}),
   };
 };
 
@@ -188,14 +101,6 @@ const sayParts = (names: readonly string[]) => {
 
 const partNames = (build: Pick<Build, "parts">, labels: readonly string[]) =>
   build.parts.filter((part) => labels.includes(part.label)).map((part) => part.name);
-
-/** Why an option is wrong for its slot, if it is: the job's, then the damp's. */
-const wrongs = (option: StockOption, role: Role, damp: boolean) => [
-  ...(option.wrongFor?.[role] === undefined ? [] : [option.wrongFor[role]]),
-  ...(damp && option.damp === "swells"
-    ? [{ chip: "Swells in a damp garage", why: "It swells in a damp garage." }]
-    : []),
-];
 
 /** The making rule for stock: each one wrong for what it's used for, with its parts. */
 export const wrongStock = <P>(options: {
@@ -220,21 +125,6 @@ export const wrongStock = <P>(options: {
     }
   }
   return [...found.values()].map((one) => ({ kind: "wrong-stock", ...one }));
-};
-
-/** What an option is like for these slots, as chips: what to know, or that it's fine. */
-const saysOf = (option: StockOption, roles: readonly Role[], damp: boolean): Said[] => {
-  const warns = [
-    ...new Set([
-      ...roles.flatMap((role) => wrongs(option, role, damp).map(({ chip }) => chip)),
-      ...(option.caveat === undefined ? [] : [option.caveat]),
-      ...(option.damp === "treated" ? ["Not needed indoors"] : []),
-      ...(option.damp === "swells" && !damp ? ["Keep it dry"] : []),
-    ]),
-  ];
-  return warns.length > 0
-    ? warns.map((text) => ({ text, tone: "warn" }))
-    : [{ text: "Fine in a garage", tone: "fine" }];
 };
 
 /** What a Build buys of a stock: "5 lengths of 2.4 m", "1 sheet of 2440 × 1220". */
@@ -293,27 +183,22 @@ export const stockOptions = <P>(options: {
         (STOCK_OPTIONS[id].kind === kind &&
           STOCK_OPTIONS[id].suits.some((role) => roles.includes(role))),
     ).sort((a, b) => Number(b === first.recommended) - Number(a === first.recommended));
-    if (offered.length < 2) return [];
-    const choices = offered.map((id): StockChoice => {
-      const option = STOCK_OPTIONS[id];
-      const price = options.prices[id] ?? (id === picked ? current.price : undefined);
-      const swapped = options.derive(withOption(options.parameters, group, stockOf(id, price)));
-      const lines = swapped.ok
-        ? swapped.value.buyList.lines.filter((line) => line.stock === option.stock)
-        : [];
+    // Stock that's no option is what the Build uses still, its own row first, so it shows Picked.
+    if (offered.length + (picked === undefined ? 1 : 0) < 2) return [];
+    /** A stock in every slot of this one's: what the Build would buy of it, and its cost. */
+    const costed = (stock: Timber | Sheet, says: Said[]) => {
+      const swapped = options.derive(withOption(options.parameters, group, stock));
+      if (!swapped.ok) {
+        return { says: [{ text: "Doesn't fit these sizes", tone: "warn" } as const], buys: "" };
+      }
+      const lines = swapped.value.buyList.lines.filter((line) => line.stock === stock.name);
       const total = lines.every((line) => line.total !== undefined)
         ? lines.reduce((sum, line) => sum + (line.total ?? 0), 0)
         : undefined;
+      const { price } = stock;
       return {
-        option: id,
-        title: option.title,
-        stock: option.stock,
-        why: option.why,
-        finish: option.finish,
-        says: swapped.ok
-          ? saysOf(option, roles, options.damp)
-          : [{ text: "Doesn't fit these sizes", tone: "warn" }],
-        buys: swapped.ok ? buysOf(swapped.value, option.stock) : "",
+        says,
+        buys: buysOf(swapped.value, stock.name),
         ...(price === undefined
           ? {}
           : {
@@ -323,7 +208,35 @@ export const stockOptions = <P>(options: {
                 ...(price.link === undefined ? {} : { link: price.link }),
               },
             }),
-        ...(swapped.ok && total !== undefined && lines.length > 0 ? { total } : {}),
+        ...(total !== undefined && lines.length > 0 ? { total } : {}),
+      };
+    };
+    const own: StockChoice[] =
+      picked === undefined
+        ? [
+            {
+              title: current.name,
+              stock: current.name,
+              why: "What the Build uses.",
+              ...costed(current, []),
+              picked: true,
+              recommended: false,
+            },
+          ]
+        : [];
+    const choices = offered.map((id): StockChoice => {
+      const option = STOCK_OPTIONS[id];
+      return {
+        option: id,
+        title: option.title,
+        stock: option.stock,
+        why: option.why,
+        finish: option.finish,
+        // What the Build uses is costed as it is, at its own length and price.
+        ...costed(
+          id === picked ? current : stockOf(id, options.prices[id]),
+          saysOf(option, roles, options.damp),
+        ),
         picked: id === picked,
         recommended: id === first.recommended,
       };
@@ -338,14 +251,14 @@ export const stockOptions = <P>(options: {
             group.flatMap((slot) => slot.parts),
           ),
         ),
-        choices,
+        choices: [...own, ...choices],
       },
     ];
   });
 
 /**
- * A stock swapped for one of its options in every slot cut from it, its price from the options'
- * prices; the price it had is kept there, so picking it again finds it.
+ * A stock swapped for one of its options in every slot cut from it, its price and size from the
+ * options' prices; the price and size it had are kept there, so picking it again puts it back.
  */
 export const pickStock = <P>(options: {
   parameters: P;
@@ -369,9 +282,8 @@ export const pickStock = <P>(options: {
   for (const slot of group) {
     const stock = slot.stock(parameters);
     const was = optionOf(stock, option.kind);
-    if (was !== undefined && stock.price !== undefined && prices[was] === undefined) {
-      prices[was] = stock.price;
-    }
+    const kept = was === undefined ? undefined : optionPriceOf(stock, was);
+    if (was !== undefined && kept !== undefined) prices[was] = kept;
   }
   return ok(
     withOption(options.setPrices(parameters, prices), group, stockOf(id.data, prices[id.data])),

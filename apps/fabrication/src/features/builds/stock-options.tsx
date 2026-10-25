@@ -1,5 +1,7 @@
 import type { BuildStockChoice, BuildStockOptions } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { Chip } from "@courtyard/ui/buttons/chip.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { ChevronLeft } from "lucide-react";
 import { pounds } from "./words.ts";
@@ -7,7 +9,8 @@ import { pounds } from "./words.ts";
 /** The pick just made, while Undo can take it back. */
 export type JustPicked = { readonly stock: string; readonly title: string };
 
-const CHIP = "flex h-5.5 items-center rounded-full px-2 text-caption";
+/** A choice that can be picked: one of the options, not stock that's no option. */
+export type Pickable = BuildStockChoice & { readonly option: string };
 
 /** What a choice is now: picked, recommended, both, or neither. */
 const markOf = (choice: BuildStockChoice) =>
@@ -15,16 +18,39 @@ const markOf = (choice: BuildStockChoice) =>
     .filter(Boolean)
     .join(" · ");
 
+/** Where a choice's price is from: its shop, linked to its page, or that no shop was given. */
+function Shop(props: { price: BuildStockChoice["price"] }) {
+  const { price } = props;
+  if (price === undefined) return null;
+  if (price.shop === undefined) return " · no shop given";
+  return (
+    <>
+      {" · "}
+      {price.link === undefined ? (
+        price.shop
+      ) : (
+        <a
+          href={price.link}
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary-text hover:underline"
+        >
+          {price.shop}
+        </a>
+      )}
+    </>
+  );
+}
+
 function Choice(props: {
   choice: BuildStockChoice;
-  pick: () => void;
+  pick: (choice: Pickable) => void;
   busy: boolean;
   waiting: boolean;
 }) {
   const { choice } = props;
+  const { option } = choice;
   const mark = markOf(choice);
-  const shop = choice.price?.shop;
-  const link = choice.price?.link;
   return (
     <li
       className={classes(
@@ -41,45 +67,20 @@ function Choice(props: {
       <p className="text-meta text-foreground">{choice.why}</p>
       <p className="text-label text-muted-foreground">
         {choice.buys}
-        {shop !== undefined && " · "}
-        {shop !== undefined &&
-          (link === undefined ? (
-            shop
-          ) : (
-            <a
-              href={link}
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary-text hover:underline"
-            >
-              {shop}
-            </a>
-          ))}
+        <Shop price={choice.price} />
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
         {mark !== "" && (
-          <span
-            className={classes(
-              CHIP,
-              "font-bold",
-              choice.picked ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
-            )}
-          >
+          <Chip tone={choice.picked ? "chosen" : "plain"} size="sm" strong>
             {mark}
-          </span>
+          </Chip>
         )}
         {choice.says.map((said) => (
-          <span
-            key={said.text}
-            className={classes(
-              CHIP,
-              said.tone === "fine" ? "bg-muted text-success" : "bg-warning/10 text-warning",
-            )}
-          >
+          <Chip key={said.text} tone={said.tone === "fine" ? "fine" : "needs"} size="sm">
             {said.text}
-          </span>
+          </Chip>
         ))}
-        {!choice.picked && (
+        {!choice.picked && option !== undefined && (
           <Button
             variant="soft"
             size="xs"
@@ -87,7 +88,7 @@ function Choice(props: {
             busy={props.busy}
             busyLabel="Picking…"
             waiting={props.waiting}
-            onClick={props.pick}
+            onClick={() => props.pick({ ...choice, option })}
           >
             Pick
           </Button>
@@ -99,14 +100,16 @@ function Choice(props: {
 
 /**
  * A timber's or sheet's options (#704; Paper, 2 · Agreed, "Fabrication · Choose materials · Tablet
- * (#704)"), opened from its buy-list or cut-plan row: the recommended first, each with what this
- * Build would buy of it, its cost, a line on why, and chips for what to know. Pick swaps it in
- * every part cut from it, and the pick just made can be undone.
+ * (#704)"), opened from its buy-list or cut-plan row, and back to it: the recommended first, each
+ * with what this Build would buy of it, its cost, a line on why, and chips for what to know. Pick
+ * swaps it in every part cut from it, and the pick just made can be undone.
  */
 export function StockOptionsPanel(props: {
   options: BuildStockOptions;
+  /** The tab it was opened from, which back goes to: "Buy list" or "Cut plan". */
+  backTo: string;
   back: () => void;
-  pick: (choice: BuildStockChoice) => void;
+  pick: (choice: Pickable) => void;
   /** The option being picked, while it is. */
   picking: string | undefined;
   justPicked: JustPicked | undefined;
@@ -126,7 +129,7 @@ export function StockOptionsPanel(props: {
           className="flex items-center gap-0.5 self-start text-meta font-medium text-primary-text hover:underline"
         >
           <ChevronLeft aria-hidden className="size-4" />
-          Buy list
+          {props.backTo}
         </button>
         <h2 className="display-title text-sheet-title">{options.name}</h2>
         <p className="text-label text-muted-foreground">
@@ -149,19 +152,15 @@ export function StockOptionsPanel(props: {
           </Button>
         </p>
       )}
-      {props.error !== undefined && (
-        <p role="alert" className="text-meta text-destructive-text">
-          {props.error}
-        </p>
-      )}
+      <FormError message={props.error} />
       <ul className="flex flex-col gap-2">
         {options.choices.map((choice) => (
           <Choice
-            key={choice.option}
+            key={choice.option ?? choice.stock}
             choice={choice}
-            pick={() => props.pick(choice)}
-            busy={props.picking === choice.option}
-            waiting={busy && props.picking !== choice.option}
+            pick={props.pick}
+            busy={choice.option !== undefined && props.picking === choice.option}
+            waiting={busy && (choice.option === undefined || props.picking !== choice.option)}
           />
         ))}
       </ul>

@@ -1,9 +1,4 @@
-import {
-  type BuildOpened,
-  type BuildStockChoice,
-  buildStarted,
-  type ChangeId,
-} from "@courtyard/contract";
+import { type BuildOpened, buildStarted, type ChangeId } from "@courtyard/contract";
 import { useLayout } from "@courtyard/ui/frame/handheld.ts";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { useFresh } from "@courtyard/ui/layout/kept.tsx";
@@ -21,7 +16,7 @@ import { CutPlan } from "./cut-plan.tsx";
 import { FINDINGS_ID, Findings } from "./findings.tsx";
 import { inView, useProgress } from "./progress.ts";
 import { StepFoot, StepPanel } from "./step-panel.tsx";
-import { type JustPicked, StockOptionsPanel } from "./stock-options.tsx";
+import { type JustPicked, type Pickable, StockOptionsPanel } from "./stock-options.tsx";
 import { ToolsList } from "./tools-list.tsx";
 import { sizeLine, toCheck } from "./words.ts";
 
@@ -110,7 +105,7 @@ export function BuildPage(props: { build: BuildOpened }) {
     JustPicked & { readonly change: ChangeId; readonly before: string }
   >();
   const where = { workspaceId: place.workspace.id, slug: build.slug };
-  const picking = useAction(async (stock: string, choice: BuildStockChoice) => {
+  const picking = useAction(async (stock: string, choice: Pickable) => {
     const done = await pickStock(where, { stock, option: choice.option });
     if (done.kind !== "loaded") return problemOf(done);
     const { change } = done.data;
@@ -212,11 +207,8 @@ export function BuildPage(props: { build: BuildOpened }) {
           ) : (
             <StockOptionsPanel
               options={choosingOptions}
-              back={() => {
-                setChoosing(undefined);
-                setSide("Buy list");
-                if (cover) setCoverTab("Buy list");
-              }}
+              backTo={tab}
+              back={() => setChoosing(undefined)}
               pick={(choice) => void picking.run(choosingOptions.stock, choice)}
               picking={picking.running?.[1].option}
               justPicked={justPicked?.stock === choosingOptions.stock ? justPicked : undefined}

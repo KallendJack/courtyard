@@ -105,7 +105,10 @@ const pickTheFrameTimber = async (page: Page) => {
     .click();
   await options.getByRole("button", { name: "Undo" }).click();
   await expect(choices.first()).toContainText("Picked · recommended");
-  await options.getByRole("button", { name: "Buy list" }).click();
+  // Back goes where they were opened from.
+  await options.getByRole("button", { name: "Cut plan" }).click();
+  await expect(page.getByRole("region", { name: "Cut plan" })).toBeVisible();
+  await page.getByRole("tab", { name: "Buy list" }).click();
   await expect(page.getByRole("region", { name: "Buy list" })).toContainText("Total £177.02");
 };
 

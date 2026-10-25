@@ -7,6 +7,7 @@ import {
   type WorkspaceId,
 } from "@courtyard/contract";
 import { buttonLook } from "@courtyard/ui/buttons/button.tsx";
+import { Chip, type ChipTone } from "@courtyard/ui/buttons/chip.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useId, useState } from "react";
@@ -26,10 +27,10 @@ export function OpenInFabrication(props: { workspaceId: WorkspaceId; build: Buil
 }
 
 /** Who does a step, as its chip says it, by what its colour means (AGENTS.md): violet the owner's, gold a pro. */
-export const WHO: Readonly<Record<StepWho, { label: string; look: string }>> = {
-  you: { label: "You", look: "bg-primary/12 text-primary-text" },
-  "a pro": { label: "A pro", look: "bg-warning/10 text-warning" },
-  courtyard: { label: "Courtyard", look: "bg-secondary text-muted-foreground" },
+export const WHO: Readonly<Record<StepWho, { label: string; tone: ChipTone }>> = {
+  you: { label: "You", tone: "owner" },
+  "a pro": { label: "A pro", tone: "needs" },
+  courtyard: { label: "Courtyard", tone: "quiet" },
 };
 
 /** What a step still needs before it's ready, in a line: "Not ready yet: needs the wall's construction". */
@@ -118,14 +119,7 @@ function StepRow(props: { workspaceId: WorkspaceId; step: ProjectStep; next: boo
             {step.doneOn === undefined ? "Done" : `Done ${dayWords(step.doneOn)}`}
           </span>
         ) : (
-          <span
-            className={classes(
-              "flex h-6 items-center rounded-full px-2.5 text-label font-semibold",
-              WHO[step.who].look,
-            )}
-          >
-            {WHO[step.who].label}
-          </span>
+          <Chip tone={WHO[step.who].tone}>{WHO[step.who].label}</Chip>
         )}
       </span>
     </li>

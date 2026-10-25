@@ -22,7 +22,8 @@ else derived.error; // ["height.source: Invalid input…"]
 | `index.ts` | What callers import |
 | `build.ts` | What a template derives: parts with a box each for the 3D view, the cut plan, the buy list, steps, findings |
 | `stock.ts` | What parts are cut from and fixed with: timber, sheets, fixings and their prices. A template takes each slot's stock as a parameter, so a slot can be swapped |
-| `options.ts` | The stock options (#704): each timber's and sheet's sizes, what it's like, and the jobs it suits; a template's slots offered them, each costed by working the Build out again with it; a pick swapped in; and the making rule that flags stock wrong for its slot |
+| `catalog.ts` | The stock options (#704): each timber's and sheet's sizes, what it's like, and the jobs it suits, and what each is like for the slots it would fill, judged by the strictest |
+| `options.ts` | A template's slots offered those options, each costed by working the Build out again with it, the stock in use as it is; a pick swapped in, keeping the old one's price and size; and the making rule that flags stock wrong for its slot |
 | `cut-plan.ts` | Packing: timber pieces into lengths and sheet pieces into sheets, the kerf between every two, each sheet's first cut along it or across it, whichever needs fewer sheets |
 | `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed |
 | `findings.ts` | The making rules code checks: a bolt long enough for what it passes through plus two threads, tools needed and not to hand, sizes assumed |
@@ -45,9 +46,12 @@ else derived.error; // ["height.source: Invalid input…"]
   until it's given a price, and the finding names the steps that fit it.
 - **Parts are cut to the whole mm below,** and the steps say every size to the whole mm; the Build keeps it exact.
 - **Prices are never here.** An option's price comes from its shop's page, in the Build's `prices`, set through the
-  Build tool; one without a price is offered unpriced.
-- **A pick changes only what it swaps:** the parts, cut plan and buy list follow the new section; its old price is
-  kept in `prices`, so picking it again finds it.
+  Build tool, with the length (or sheet size) it's for when that isn't the option's own; one without a price is offered
+  unpriced, and one without a shop is offered as such, never as sourced.
+- **The stock in use is costed as it is,** at its own length and price, and stock that's no option is offered first,
+  picked.
+- **A pick changes only what it swaps:** the parts, cut plan and buy list follow the new section; its old price and
+  length are kept in `prices`, so picking it again puts it back as it was.
 
 ## Tests
 

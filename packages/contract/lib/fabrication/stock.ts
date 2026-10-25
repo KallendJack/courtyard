@@ -6,11 +6,12 @@ import { z } from "zod";
 
 /** One stock a timber or sheet could be swapped for, costed for this Build. */
 export const BuildStockChoice = z.object({
-  option: z.string(),
+  /** None for what the Build uses when that's no option, shown first as picked. */
+  option: z.string().optional(),
   title: z.string(),
   stock: z.string(),
   why: z.string(),
-  finish: z.enum(["rough", "smooth"]),
+  finish: z.enum(["rough", "smooth"]).optional(),
   says: z.array(z.object({ text: z.string(), tone: z.enum(["fine", "warn"]) })).readonly(),
   buys: z.string(),
   price: z

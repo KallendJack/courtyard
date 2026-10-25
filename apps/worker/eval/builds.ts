@@ -245,4 +245,18 @@ export const BUILDS: readonly Scenario[] = [
       },
     ],
   },
+  {
+    name: "build-option-price-from-shop",
+    rule: "asked which sheet is cheapest, the model gives each option's price only with its shop and link, from the Build tool's reply or the web, never one from memory (#704)",
+    ...WITH_BENCH,
+    turns: [
+      {
+        say: "Which sheet would be cheapest for the workbench's top, and what would each one cost me?",
+        expect: [],
+        // The golden bench's cheapest sheet, as the tool's reply costs it.
+        says: [["mdf"]],
+        links: true,
+      },
+    ],
+  },
 ];

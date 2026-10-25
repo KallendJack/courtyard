@@ -30,8 +30,21 @@ export const StockOptionId = z.enum([
 ]);
 export type StockOptionId = z.infer<typeof StockOptionId>;
 
+/**
+ * An option's price from its shop's page, and the size it's sold in at that price where that isn't
+ * the option's own (a 3 m length, a half sheet). A stock swapped out keeps its price and size here,
+ * so picking it again puts it back as it was.
+ */
+export const OptionPrice = Price.extend({
+  /** A timber's length, or a sheet's. */
+  length: SourcedSize.optional(),
+  /** A sheet's width; a timber's section is its option's. */
+  width: SourcedSize.optional(),
+});
+export type OptionPrice = z.infer<typeof OptionPrice>;
+
 /** The options' prices, each from its shop's page, so each option's cost can be shown. */
-export const OptionPrices = z.partialRecord(StockOptionId, Price);
+export const OptionPrices = z.partialRecord(StockOptionId, OptionPrice);
 export type OptionPrices = z.infer<typeof OptionPrices>;
 
 /** A timber sold in lengths: its section and its length. */

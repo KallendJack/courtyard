@@ -222,14 +222,19 @@ export type Said = { readonly text: string; readonly tone: "fine" | "warn" };
 
 /** One stock a Build's timber or sheet could be swapped for, costed for this Build (#704). */
 export type StockChoice = {
-  readonly option: string;
+  /**
+   * The option it is; none for what the Build uses when that's no option ("45 × 95 C24"), shown
+   * first as picked and never offered again once swapped out.
+   */
+  readonly option?: string;
   /** As a beginner reads it: "CLS, 38 × 89". */
   readonly title: string;
   /** Its name as the parts, cut plan and buy list give it: "38 × 89 CLS". */
   readonly stock: string;
   /** Why pick it, or not, in a line: its strength for the job and its finish. */
   readonly why: string;
-  readonly finish: "rough" | "smooth";
+  /** Its faces, when it's an option. */
+  readonly finish?: "rough" | "smooth";
   readonly says: readonly Said[];
   /** What this Build would buy of it: "5 lengths of 2.4 m". */
   readonly buys: string;

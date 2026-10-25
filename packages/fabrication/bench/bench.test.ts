@@ -448,6 +448,89 @@ describe("choosing the stock (#704)", () => {
     });
   });
 
+  /** The golden bench with its frame timber changed: its name, length or price. */
+  const withFrame = (timber: Record<string, unknown>) => ({
+    ...goldenBench,
+    frame: { ...goldenBench.frame, timber: { ...goldenBench.frame.timber, ...timber } },
+  });
+  const frameOf = (parameters: unknown) =>
+    built(parameters).options.find((options) => options.name === "Frame timber");
+  // In 3 m lengths, B and B fit one, and A, A, A and C another: 4 lengths at £9.00.
+  const inThreeMetres = withFrame({
+    length: {
+      value: 3000,
+      unit: "mm",
+      source: { kind: "specified", reference: "Woodstore's page" },
+    },
+    price: { pence: 900, shop: "Woodstore", link: "https://shop.example/c16-45x95-3m" },
+  });
+
+  it("costs the timber the bench uses as it is, at its own length and price", () => {
+    const [c16] = frameOf(inThreeMetres)?.choices ?? [];
+
+    expect(built(inThreeMetres).buyList.lines[0]).toMatchObject({ packs: 4, total: 3600 });
+    expect(c16).toMatchObject({
+      option: "c16-45x95",
+      picked: true,
+      buys: "4 lengths of 3 m",
+      total: 3600,
+      price: { pence: 900, shop: "Woodstore", link: "https://shop.example/c16-45x95-3m" },
+    });
+  });
+
+  it("picking another and then the first again puts back its own length and price", () => {
+    const away = picked(inThreeMetres, { stock: "45 × 95 C16", option: "cls-38x89" });
+    // Offered while it's swapped out, it's still the 3 m lengths at £9.00.
+    expect(frameOf(away)?.choices.find((choice) => choice.option === "c16-45x95")).toMatchObject({
+      buys: "4 lengths of 3 m",
+      total: 3600,
+    });
+
+    const back = built(picked(away, { stock: "38 × 89 CLS", option: "c16-45x95" }));
+    expect(back.buyList.lines[0]).toMatchObject({
+      item: "45 × 95 C16, 3 m",
+      packs: 4,
+      total: 3600,
+    });
+    expect(back.buyList.total).toBe(built(inThreeMetres).buyList.total);
+  });
+
+  it("offers a price with no shop as one, so it shows as unsourced", () => {
+    const noShop = { ...goldenBench, prices: { ...goldenBench.prices, "osb-18": { pence: 3200 } } };
+    const osb = built(noShop)
+      .options.find((options) => options.stock === "18 mm plywood")
+      ?.choices.find((choice) => choice.option === "osb-18");
+
+    expect(osb?.price).toEqual({ pence: 3200 });
+    expect(osb?.total).toBe(3200);
+  });
+
+  it("shows stock that's no option as its own first choice, picked", () => {
+    const frame = frameOf(withFrame({ name: "45 × 95 C24" }));
+
+    expect(frame?.choices.map((choice) => [choice.title, choice.option, choice.picked])).toEqual([
+      ["45 × 95 C24", undefined, true],
+      ["Sawn C16, 45 × 95", "c16-45x95", false],
+      ["CLS, 38 × 89", "cls-38x89", false],
+      ["Treated, 47 × 100", "treated-47x100", false],
+    ]);
+    expect(frame?.choices[0]).toMatchObject({ why: "What the Build uses.", total: 3400 });
+  });
+
+  it("judges an option for every slot its stock fills: the frame and wide timber the same", () => {
+    const { timber } = goldenBench.frame;
+    const shared = built({ ...goldenBench, frame: { ...goldenBench.frame, wide: timber } });
+    const says = Object.fromEntries(
+      (shared.options.find((options) => options.stock === "45 × 95 C16")?.choices ?? []).map(
+        (choice) => [choice.option, choice.says.map(({ text }) => text)],
+      ),
+    );
+
+    expect(says["c16-45x145"]).toEqual(["Not made for the frame"]);
+    expect(says["c16-45x95"]).toEqual(["Not made for the wide pieces"]);
+    expect(says["cls-38x89"]).toEqual(["Too slim for the castor bases", "Less wood for screws"]);
+  });
+
   it("refuses a pick of stock the bench doesn't use, or of an option it doesn't know", () => {
     expect(pickBenchStock(goldenBench, { stock: "Oak", option: "cls-38x89" }).ok).toBe(false);
     expect(pickBenchStock(goldenBench, { stock: "45 × 95 C16", option: "oak" }).ok).toBe(false);
