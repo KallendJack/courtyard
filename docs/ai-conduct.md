@@ -1784,7 +1784,10 @@ The eval's `project-*` scenarios check it on both providers, by the saved file: 
 garage project, is a step for a pro, with an electrician; a decision the owner makes is recorded under Decisions with
 its pick and why, and comes back as no step (#710); `project-steps-current` (#700, after two sessions opened on a next
 step the work had overtaken) marks the steps the owner says they've done, kept and ticked, and adds the one they're on
-as what's next (#710); and `project-step-done` marks a step done when the owner says so.
+as what's next (#710); and `project-step-done` marks a step done when the owner says so. Run 3 times on each provider
+with #710: Codex passed `plan-is-no-line` 2 of 6, starting a project from "I'm going to put rubber flooring down" with
+a step for choosing its thickness, until the rule said a project starts once the owner asks for it or agrees to an
+offer, never from what they say they're going to do alone, then 6 of 6; Claude passed 3 of 3 before and after.
 
 ## Builds
 
