@@ -176,6 +176,18 @@ const GH_READS = [
   ]),
 ];
 
+/** Programs asked their version or how they're used (#747), each by the options that ask it. */
+const ASKED_ABOUT = [
+  ...["node", "pnpm", "npm", "yarn", "bun", "git"].map((program) => ({
+    program,
+    options: ["--version", "-v", "--help", "-h"],
+  })),
+  ...["deno", "python", "python3", "py"].map((program) => ({
+    program,
+    options: ["--version", "-V", "--help", "-h"],
+  })),
+];
+
 export const ROUTINE: readonly CommandRule[] = [
   // Moving, copying, making and removing the worktree's files.
   ...["rm", "mkdir", "mv", "cp"].map((program) => ({
@@ -218,5 +230,9 @@ export const ROUTINE: readonly CommandRule[] = [
   { words: ["date"], more: true, never: [/^-s/, /^--set/] },
   ...["echo", "sleep", "cmp", "cut"].map((program) => ({ words: [program], more: true })),
   { words: ["file"], more: true, never: [/^-C$/, /^--compile/] },
+  // A program's version or help, and nothing more: `node --version`, `git -v`, `pnpm --help`.
+  ...ASKED_ABOUT.flatMap(({ program, options }) =>
+    options.map((option) => ({ words: [program, option], more: false })),
+  ),
   ...GH_READS.map((look) => ({ words: ["gh", ...look], more: true, never: GH_NEVER })),
 ];
