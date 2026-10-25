@@ -89,6 +89,7 @@ const stepsOf = (options: {
       parts: ["A"],
       adds: ["A"],
       ways: [],
+      wayChanged: null,
       tools: [],
       safety: [],
       fixings: [],
@@ -104,6 +105,7 @@ const stepsOf = (options: {
         },
       ],
       closeUp: null,
+      walkThrough: [],
       scene: null,
       check: {
         says: "It's whole, its edges are flat, and its holes are clean, with no strings across them.",
@@ -122,6 +124,7 @@ const stepsOf = (options: {
             parts: ["A"],
             adds: [],
             ways: [],
+            wayChanged: null,
             tools: [],
             safety: [],
             fixings: [],
@@ -132,6 +135,7 @@ const stepsOf = (options: {
               },
             ],
             closeUp: null,
+            walkThrough: [],
             scene: null,
             check: {
               says: "It goes in by hand and stays put.",
@@ -151,6 +155,7 @@ const stepsOf = (options: {
             parts: ["A"],
             adds: [],
             ways: [],
+            wayChanged: null,
             tools: toolsOf(["pencil", "drill-driver", "drill-bits"], toHand),
             safety: toolsOf(["safety-glasses"], toHand),
             fixings: [...screws].map(([name, count]) => ({ name, count: count * common.count })),
@@ -166,6 +171,7 @@ const stepsOf = (options: {
               },
             ],
             closeUp: null,
+            walkThrough: [],
             scene: null,
             check: {
               says: "It doesn't move when you push it, and every screw head is flush.",

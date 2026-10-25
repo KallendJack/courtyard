@@ -76,6 +76,8 @@ export function BenchPanel(props: {
   withKey?: boolean;
   /** Whether it has Reset view: not on the cover screen, where the panel is small. */
   resettable?: boolean;
+  /** Whether the marks' words are at the bench's size: beside a step in big type (#777). */
+  big?: boolean;
   /** What sits at the view's foot, left of Reset view: Hold to ask. */
   children?: ReactNode;
   /** What shows over the top of the view in place of a part's card: an answer. */
@@ -108,6 +110,7 @@ export function BenchPanel(props: {
             sceneId={atStep?.step.id ?? "whole"}
             pick={pick}
             reset={reset}
+            big={props.big === true}
           />
         </Suspense>
         {over !== undefined && over !== null && (

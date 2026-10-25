@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Build, Scene, SceneMark } from "../build.ts";
+import type { Build } from "../build.ts";
+import type { Scene, SceneMark } from "../scene.ts";
 import { goldenBench } from "./fixtures/golden.ts";
 import { deriveBench } from "./index.ts";
 
@@ -81,14 +82,38 @@ describe("the cut step's scene", () => {
     expect(support?.boxes[0]?.x).toBeLessThan(1450);
   });
 
-  it("gives a hand-saw owner the Workmate, and a circular-saw owner the bench", () => {
+  it("gives a hand-saw owner the Workmate's jaws, and clamps a circular saw's length on it", () => {
     expect(tools(sceneOf(built(goldenBench), "cut-timber"))).toEqual([
       "Folding workbench",
       "Hand saw",
     ]);
     const circular = sceneOf(built(withTools("circular-saw")), "cut-timber");
-    expect(circular.title).toBe("Clamped to the bench");
-    expect(tools(circular)).toEqual(["Bench", "Circular saw"]);
+    expect(circular.title).toBe("Clamped on the Workmate");
+    expect(tools(circular)).toEqual(["Folding workbench", "Circular saw"]);
+  });
+
+  it("draws no tool the owner doesn't have, not even a bench for a circular saw (#777)", () => {
+    const owned = goldenBench.tools.filter((tool) => tool !== "folding-workbench");
+    const circular = sceneOf(
+      built({ ...goldenBench, tools: [...owned, "circular-saw"] }),
+      "cut-timber",
+    );
+
+    expect(circular.title).toBe("Clamped down");
+    expect(tools(circular)).toEqual(["Circular saw"]);
+    // Where it's held is still marked.
+    expect(marks(circular, "note").map((note) => note.says)).toContain("clamp here");
+  });
+
+  it("lays the length on a mitre saw's bed against its fence, the blade on the waste side", () => {
+    const scene = sceneOf(built(withTools("mitre-saw")), "cut-timber");
+
+    expect(scene.title).toBe("On the mitre saw");
+    expect(tools(scene)).toEqual(["Folding workbench", "Mitre saw"]);
+    const [saw] = marks(scene, "arrow");
+    expect(saw?.says).toBe("blade on the waste side of the line");
+    expect(saw?.to.x).toBe(1451.5);
+    expect(marks(scene, "line")[0]?.says).toBe("cut at 1450");
   });
 
   it("draws only the tools the owner has", () => {
@@ -97,6 +122,17 @@ describe("the cut step's scene", () => {
 
     expect(tools(scene)).toEqual([]);
     expect(scene.title).toBe("Cutting the length");
+  });
+
+  it("says jaws only when there's a Workmate to have them", () => {
+    const owned = goldenBench.tools.filter((tool) => tool !== "folding-workbench");
+    const says = (parameters: unknown) =>
+      marks(sceneOf(built(parameters), "cut-timber"), "note").map((note) => note.says);
+
+    expect(says(goldenBench)).toContain("clamped in the jaws");
+    const without = says({ ...goldenBench, tools: owned });
+    expect(without).not.toContain("clamped in the jaws");
+    expect(without).toContain("clamped down, line past the edge");
   });
 });
 
@@ -154,6 +190,77 @@ describe("the marking step", () => {
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(lengths[0]?.numbers).toBe("4 × 45 × 95 C16: ticks at 1450, 2203");
+  });
+});
+
+describe("show me how (#777)", () => {
+  const walkOf = (id: string) =>
+    built(goldenBench).steps.find((step) => step.id === id)?.walkThrough ?? [];
+
+  it("walks through marking: the tape, the tick, the square, the line, with two close-ups", () => {
+    const walk = walkOf("mark-lengths");
+
+    expect(walk.map((move) => move.title)).toEqual(["Tape", "Tick", "Square", "Line"]);
+    expect(walk.map((move) => move.closeUp?.title ?? null)).toEqual([
+      "The tape's hook over the end",
+      null,
+      "The square's stock against the edge",
+      null,
+    ]);
+    // The tick at B's 1450, the first piece marked.
+    expect(walk[1]?.says).toContain("At 1450");
+    // The line drawn across B's 95 mm face, along the square's blade.
+    const [across] = walk[2]?.closeUp?.dimensions ?? [];
+    expect(across?.mm).toBe(95);
+    // The hook over the end of the 45 mm length.
+    const [length, ...tape] = walk[0]?.closeUp?.pieces ?? [];
+    expect(length).toMatchObject({ label: "B", x: 0, h: 45 });
+    expect(tape.every((piece) => piece.label === "tape" && piece.x < 0)).toBe(true);
+  });
+
+  it("shows how deep a pilot hole goes the first time one's drilled: a mark on the bit at the screw's length", () => {
+    const [pilot] = walkOf("end-frames");
+
+    expect(pilot?.says).toContain("3 mm bit 80 mm from its tip");
+    expect(pilot?.closeUp?.dimensions.map((line) => line.mm)).toEqual([80]);
+    const pieces = pilot?.closeUp?.pieces ?? [];
+    expect(pieces.map((piece) => piece.label)).toEqual(["C", "A", "bit", "bit"]);
+    // The mark sits where the bit meets the rail's face.
+    const [rail, , , mark] = pieces;
+    expect((mark?.y ?? 0) + (mark?.h ?? 0)).toBe(rail?.y);
+    expect(walkOf("long-rails")).toEqual([]);
+  });
+});
+
+describe("where the brackets go (#777)", () => {
+  it("points to both faces of a leg's foot when the frame stands on its bases", () => {
+    const build = built(goldenBench);
+    const arrows = marks(sceneOf(build, "stand-on-bases"), "arrow");
+    const leg = build.parts.find((part) => part.label === "A")?.boxes[0];
+
+    expect(arrows.map((arrow) => arrow.says)).toEqual([
+      "bracket on the face to the middle",
+      "bracket on the face to the other leg",
+    ]);
+    // At the leg's foot, on its face towards the middle and its face towards the back leg.
+    expect(arrows[0]?.to.x).toBe((leg?.x ?? 0) + (leg?.w ?? 0));
+    expect(arrows[1]?.to.y).toBe((leg?.y ?? 0) + (leg?.d ?? 0));
+    for (const arrow of arrows) expect(arrow.to.z).toBeGreaterThan(leg?.z ?? 0);
+  });
+
+  it("points to the end of each support when they're fitted", () => {
+    const build = built(goldenBench);
+    const arrows = marks(sceneOf(build, "fit-supports"), "arrow");
+    const end = (label: string) => {
+      const box = build.parts.find((part) => part.label === label)?.boxes[0];
+      return box && { x: box.x + box.w, y: box.y };
+    };
+
+    expect(arrows.map((arrow) => arrow.says)).toEqual([
+      "a bracket at each end",
+      "and at each end of D",
+    ]);
+    expect(arrows.map((arrow) => ({ x: arrow.to.x, y: arrow.to.y }))).toEqual([end("F"), end("D")]);
   });
 });
 

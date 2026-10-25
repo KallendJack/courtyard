@@ -159,3 +159,83 @@ export const braceCloseUp = (s: Shape): CloseUp => ({
 });
 
 export const SHEET_SCREWS_PER_BRACE = 4;
+
+// The moves a beginner may never have made (#777), each drawn close: the tape's hook over the
+// length's end, and the square's stock against its edge. The tools are only pictures, their
+// sizes a usual tape's and square's; every size marked is the Build's own.
+
+/** How much of a length a marking close-up shows, either side of what it's about. */
+const NEAR = 150;
+/** Room above and below a length, for the tool on it. */
+const ROOM = 30;
+
+/** The tape hooked over the length's square end, from the side: the hook is the tape's 0. */
+export const tapeHookCloseUp = (label: string, thick: number): CloseUp => ({
+  title: "The tape's hook over the end",
+  width: NEAR,
+  height: thick + 2 * ROOM,
+  pieces: [
+    { label, x: 0, y: ROOM, w: NEAR, h: thick },
+    // The tape's blade along the top, and its hook down over the end.
+    { label: "tape", x: -3, y: ROOM - 4, w: NEAR + 3, h: 4 },
+    { label: "tape", x: -3, y: ROOM - 4, w: 3, h: 16 },
+  ],
+  dimensions: [line(0, ROOM + thick, 100, ROOM + thick)],
+  fixings: [],
+  notes: [
+    "The hook is the tape's 0: hook it tight over the end you checked.",
+    "Pull the tape straight along one edge, not across the face.",
+  ],
+});
+
+/** The square at a tick, from above: its stock tight on the edge, its blade across the face. */
+export const squareStockCloseUp = (label: string, wide: number): CloseUp => ({
+  title: "The square's stock against the edge",
+  width: 2 * NEAR,
+  height: wide + 2 * ROOM,
+  pieces: [
+    { label, x: 0, y: ROOM, w: 2 * NEAR, h: wide },
+    // The stock along the near edge, off the face, and the blade from it across the face.
+    { label: "square", x: NEAR, y: ROOM - 20, w: NEAR, h: 20 },
+    { label: "square", x: NEAR, y: ROOM, w: 25, h: wide + ROOM / 2 },
+  ],
+  // The line drawn along the blade's edge, right across the face.
+  dimensions: [line(NEAR, ROOM, NEAR, ROOM + wide)],
+  fixings: [],
+  notes: [
+    "Hold the stock tight against the edge and slide it until the blade touches the tick.",
+    `Draw along the blade, right across the ${whole(wide)} mm face.`,
+  ],
+});
+
+/** How much of a drill bit shows above the wood, in a pilot hole's close-up. */
+const BIT_ABOVE = 40;
+/** A pilot hole's width, mm: a 3 mm bit for the frame's screws. */
+export const PILOT = 3;
+
+/**
+ * A pilot hole drilled through a rail into a leg, from the side: the bit in to `depth`, a mark on
+ * it where it meets the wood.
+ */
+export const pilotCloseUp = (s: Shape, depth: number): CloseUp => {
+  const width = 2 * s.wide;
+  const bit = width / 2 - PILOT / 2;
+  return {
+    title: "A pilot hole's depth",
+    width,
+    height: BIT_ABOVE + s.thick + s.wide,
+    pieces: [
+      { label: "C", x: 0, y: BIT_ABOVE, w: width, h: s.thick },
+      { label: "A", x: 0, y: BIT_ABOVE + s.thick, w: width, h: s.wide },
+      { label: "bit", x: bit, y: 0, w: PILOT, h: BIT_ABOVE + depth },
+      // The depth mark: a strip of tape round the bit, at the wood once it's deep enough.
+      { label: "bit", x: bit - 6, y: BIT_ABOVE - 6, w: PILOT + 12, h: 6 },
+    ],
+    dimensions: [line(width - 10, BIT_ABOVE, width - 10, BIT_ABOVE + depth)],
+    fixings: [],
+    notes: [
+      `Mark the bit ${whole(depth)} mm from its tip, as long as the screw.`,
+      "Stop drilling when the mark reaches the wood.",
+    ],
+  };
+};

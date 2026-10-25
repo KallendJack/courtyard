@@ -49,7 +49,7 @@ describe("a Build's progress", () => {
   it("starts with no step reached and nothing ticked", async () => {
     const request = await owner();
 
-    expect((await opened(request)).progress).toEqual({ step: null, ticked: [] });
+    expect((await opened(request)).progress).toEqual({ step: null, ticked: [], ways: [] });
   });
 
   it("is kept, so the Build opens at the step reached with its lines ticked", async () => {
@@ -65,9 +65,9 @@ describe("a Build's progress", () => {
     const kept = await keep(request, progress);
 
     expect(kept.status).toBe(200);
-    expect(BuildProgress.parse(await kept.json())).toEqual(progress);
+    expect(BuildProgress.parse(await kept.json())).toEqual({ ...progress, ways: [] });
     // Read from the Build again, as another device opening it would.
-    expect((await opened(request)).progress).toEqual(progress);
+    expect((await opened(request)).progress).toEqual({ ...progress, ways: [] });
   });
 
   it("isn't a change to undo: it's kept in git without a Recent changes entry", async () => {
@@ -106,7 +106,7 @@ describe("a Build's progress", () => {
     );
 
     const build = await opened(request);
-    expect(build.progress).toEqual(progress);
+    expect(build.progress).toEqual({ ...progress, ways: [] });
     expect(build.derived.steps.find((step) => step.id === "end-frames")?.number).toBe(4);
   });
 
@@ -118,13 +118,39 @@ describe("a Build's progress", () => {
     );
     const request = await owner();
 
-    expect((await opened(request)).progress).toEqual({ step: null, ticked: [] });
+    expect((await opened(request)).progress).toEqual({ step: null, ticked: [], ways: [] });
     // And it's kept the new way from the next tick.
     const kept = await keep(request, {
       step: null,
       ticked: [{ step: "check-delivery", lines: [0] }],
     });
     expect(kept.status).toBe(200);
+  });
+
+  it("keeps the saw a step was started with once a line is ticked, whatever's sent (#777)", async () => {
+    const request = await owner();
+    const cutDone = { step: "cut-timber", lines: [0, 1, 2, 3] };
+
+    const kept = await keep(request, { step: "fit-castors", ticked: [cutDone], ways: [] });
+    expect(BuildProgress.parse(await kept.json()).ways).toEqual([
+      { step: "cut-timber", tool: "hand-saw" },
+    ]);
+    // A tick sent without them, as a page with an older read would, keeps them.
+    await keep(request, {
+      step: "fit-castors",
+      ticked: [cutDone, { step: "fit-castors", lines: [0] }],
+    });
+    expect((await opened(request)).progress.ways).toEqual([
+      { step: "cut-timber", tool: "hand-saw" },
+    ]);
+    // Part ticked, it's still started, so its ticks stay on the lines they were ticked on.
+    await keep(request, { step: "cut-timber", ticked: [{ step: "cut-timber", lines: [0, 1] }] });
+    expect((await opened(request)).progress.ways).toEqual([
+      { step: "cut-timber", tool: "hand-saw" },
+    ]);
+    // Every line unticked, it follows the tools again.
+    await keep(request, { step: "cut-timber", ticked: [] });
+    expect((await opened(request)).progress.ways).toEqual([]);
   });
 
   it("refuses a Build that isn't there", async () => {
@@ -138,5 +164,118 @@ describe("a Build's progress", () => {
     );
 
     expect(refused.status).toBe(404);
+  });
+});
+
+/** The owner's tools as Your tools saves them, at the context folder's top (#707). */
+const ownTools = async (...names: string[]) => {
+  await mkdir(join(contextDir, "things"), { recursive: true });
+  for (const name of names) {
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/-$/, "");
+    await writeFile(
+      join(contextDir, "things", `${slug}.md`),
+      `---\nname: ${JSON.stringify(name)}\nstatus: have\nkind: tool\n---\n`,
+    );
+  }
+};
+
+describe("a Build's steps with Your tools (#777)", () => {
+  const cut = (build: BuildOpened) => build.derived.steps.find((step) => step.id === "cut-timber");
+  const sawOf = (build: BuildOpened) => cut(build)?.ways.find((way) => way.using)?.tool;
+  const theirs = ["Tape, pencil", "Square", "Hand saw", "Workmate", "Clamps", "Drill / driver"];
+  /** The tools the Build's findings say aren't to hand, by name. */
+  const missingOf = (build: BuildOpened) =>
+    build.derived.findings.flatMap((finding) =>
+      finding.kind === "tools-missing" ? finding.tools.map((tool) => tool.name) : [],
+    );
+
+  it("follow the owner's tools rather than the Build's own, saying what changed", async () => {
+    await ownTools(...theirs, "Mitre saw");
+    const request = await owner();
+
+    const build = await opened(request);
+    expect(sawOf(build)).toBe("mitre-saw");
+    expect(cut(build)?.wayChanged).toEqual({ was: "Hand saw", now: "Mitre saw" });
+    expect(cut(build)?.scene?.title).toBe("On the mitre saw");
+    // Their drill bits aren't among them, so the steps that drill say so.
+    expect(missingOf(build)).toContain("Drill bits");
+  });
+
+  it("find the kit no tile has by the words in its name, so it's no longer missing", async () => {
+    await ownTools(...theirs, "Electric drill and drill bits", "Safety specs", "Countersink");
+    const request = await owner();
+
+    const missing = missingOf(await opened(request));
+    expect(missing).not.toContain("Drill bits");
+    expect(missing).not.toContain("Safety glasses");
+    expect(missing).not.toContain("Countersink bit");
+    expect(missing).toContain("Spanner");
+  });
+
+  it("are the Build's own until the owner has saved any", async () => {
+    const request = await owner();
+
+    expect(sawOf(await opened(request))).toBe("hand-saw");
+    expect(cut(await opened(request))?.wayChanged).toBeNull();
+  });
+
+  it("keep a step done as it was done when a better tool comes", async () => {
+    await ownTools(...theirs);
+    const request = await owner();
+    await keep(request, {
+      step: "fit-castors",
+      ticked: [{ step: "cut-timber", lines: [0, 1, 2, 3] }],
+    });
+
+    await ownTools("Mitre saw");
+
+    const build = await opened(request);
+    expect(sawOf(build)).toBe("hand-saw");
+    expect(cut(build)?.wayChanged).toBeNull();
+    expect(cut(build)?.scene?.title).toBe("In the Workmate");
+  });
+
+  it("keep a step only part done as it was started, its ticks on the lines they were ticked on", async () => {
+    await ownTools(...theirs);
+    const request = await owner();
+    await keep(request, { step: "cut-timber", ticked: [{ step: "cut-timber", lines: [0] }] });
+
+    await ownTools("Mitre saw");
+
+    const build = await opened(request);
+    expect(sawOf(build)).toBe("hand-saw");
+    expect(cut(build)?.actions[0]?.numbers).toBe("In the jaws, line just past the edge.");
+  });
+
+  it("keep a step done before the ways were kept as the Build's own tools did it", async () => {
+    // As kept before #777: the cut step done, no ways.
+    await mkdir(join(contextDir, "garage", "builds", "progress"), { recursive: true });
+    await writeFile(
+      join(contextDir, "garage", "builds", "progress", "workbench.json"),
+      JSON.stringify({
+        step: "fit-castors",
+        ticked: [{ step: "cut-timber", lines: [0, 1, 2, 3] }],
+      }),
+    );
+    await ownTools(...theirs, "Mitre saw");
+    const request = await owner();
+
+    const build = await opened(request);
+    expect(sawOf(build)).toBe("hand-saw");
+    expect(cut(build)?.wayChanged).toBeNull();
+    // And the next tick keeps it so.
+    await keep(request, {
+      step: "fit-castors",
+      ticked: [
+        { step: "cut-timber", lines: [0, 1, 2, 3] },
+        { step: "fit-castors", lines: [0] },
+      ],
+    });
+    expect((await opened(request)).progress.ways).toEqual([
+      { step: "cut-timber", tool: "hand-saw" },
+    ]);
   });
 });

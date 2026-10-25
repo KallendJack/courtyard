@@ -110,6 +110,19 @@ export const stepFindings = (derived: DerivedBuild, step: BuildStep) =>
       (finding.kind === "too-big-for-stock" && step.parts.includes(finding.label)),
   );
 
+/**
+ * What's changed in how the steps are done since the owner's tools did (#777), a line a step:
+ * "Cut and label the timber now uses your mitre saw, not the hand saw."
+ */
+export const wayChanges = (derived: DerivedBuild) =>
+  derived.steps.flatMap((step) =>
+    step.wayChanged === null
+      ? []
+      : [
+          `${step.title} now uses your ${step.wayChanged.now.toLowerCase()}, not the ${step.wayChanged.was.toLowerCase()}.`,
+        ],
+  );
+
 /** The sizes the engine assumed rather than was given, as people say them. */
 const ASSUMED: Readonly<Record<string, string>> = {
   kerf: "saw cut",

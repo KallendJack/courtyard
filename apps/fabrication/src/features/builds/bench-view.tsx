@@ -64,6 +64,8 @@ export default function BenchView(props: {
   pick: (label: string) => void;
   /** Changes when Reset view is tapped. */
   reset: number;
+  /** Whether the marks' words are at the bench's size, as the step beside it is. */
+  big: boolean;
 }) {
   const { derived, lit, reset } = props;
   const host = useRef<HTMLElement>(null);
@@ -176,23 +178,17 @@ export default function BenchView(props: {
         const projected = at.clone().project(camera);
         return { x: ((projected.x + 1) / 2) * width, y: ((1 - projected.y) / 2) * height };
       };
-      for (const { key, at } of marks) {
+      // The marks' words, then the parts' letters, each clear of the others and inside the
+      // picture (#777).
+      const shown = [...marks, ...letters].flatMap(({ key, at }) => {
         const label = labels.current.get(key);
-        if (label === undefined) continue;
-        const { x, y } = onScreen(at);
-        // Kept inside the picture, so words near its edge aren't cut off.
-        const half = label.offsetWidth / 2;
-        label.style.transform = `translate(${Math.min(Math.max(x, half), width - half)}px, ${y}px) translate(-50%, -50%)`;
-      }
-      // The parts' letters, apart.
-      const shown = letters.flatMap(({ key, at }) => {
-        const button = labels.current.get(key);
-        return button === undefined || at === undefined ? [] : [{ button, ...onScreen(at) }];
+        if (label === undefined || at === undefined) return [];
+        return [{ label, ...onScreen(at), w: label.offsetWidth, h: label.offsetHeight }];
       });
-      spread(shown).forEach(({ x, y }, at) => {
-        const button = shown[at]?.button;
-        if (button !== undefined)
-          button.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+      spread(shown, { width, height }).forEach(({ x, y }, at) => {
+        const label = shown[at]?.label;
+        if (label !== undefined)
+          label.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
       });
     };
     /**
@@ -352,7 +348,9 @@ export default function BenchView(props: {
           key={at}
           ref={place(`mark ${at}`)}
           className={classes(
-            "pointer-events-none absolute top-0 left-0 rounded-sm px-1 text-caption whitespace-nowrap",
+            // As big as the step's own lines, read at arm's length (#777).
+            "pointer-events-none absolute top-0 left-0 rounded-sm px-1 whitespace-nowrap",
+            props.big ? "text-bench" : "text-answer",
             mark.kind === "size" &&
               "border border-warning/60 bg-background/80 font-mono text-warning",
             mark.kind === "check" && "bg-background/80 font-mono text-success",

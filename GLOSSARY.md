@@ -230,13 +230,17 @@ What a Build needs bought: each item, how many, its price and where it's sold, f
 _Avoid_: shopping list, BOM, wanted list (that's Things the owner wants)
 
 **Build steps**:
-A Build's instruction manual in Fabrication (#699), worked out by code from its parameters and the tools to hand: one
-step at a time, a **checklist** of one action a line ("show me how" for a beginner, or "just the numbers"), a
-close-up with its sizes and screw positions, a check **before you move on**, and the step's **picture** (#754): the
-job in 3D as it's done (the length in the Workmate, an end frame on the floor, the frame so far), with marks drawn
-from the Build's numbers.
+A Build's instruction manual in Fabrication (#699), worked out by code from its parameters and the tools to hand
+(Your tools, once saved): one step at a time, a **checklist** of one action a line ("show me how" for a beginner, or
+"just the numbers"), a close-up with its sizes and screw positions, a check **before you move on**, and the step's
+**picture** (#754): the job in 3D as it's done (the length in the Workmate, an end frame on the floor, the frame so
+far), with marks drawn from the Build's numbers. A move a beginner may never have made gets a **walk-through** in
+"show me how" the first time it comes up (#777): marking as tape, tick, square and line, or a pilot hole's depth, each
+with its close-up where one shows it. A step that can be done more than one **way** (a hand saw, a circular saw, a
+mitre saw) uses the best to hand, and says so in a line when that's changed.
 Its **progress**, the step reached and the lines ticked, is kept on the Build for every device and session, each
-step by its ID ("fit-castors") rather than its number, so ticks stay put when a step before comes or goes.
+step by its ID ("fit-castors") rather than its number, so ticks stay put when a step before comes or goes; a step
+started keeps the way it was started, so its ticks stay on the lines they were ticked on.
 _Avoid_: instructions (that's what a model is given), tasks, project steps (those are a project's)
 
 **Stock options**:

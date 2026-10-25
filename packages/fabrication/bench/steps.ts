@@ -1,7 +1,7 @@
-import type { CutPlan, Fitted, Part, Step } from "../build.ts";
+import type { CutPlan, Fitted, KeptWay, Part, Step } from "../build.ts";
 import { TOOL_NAMES, type Tool } from "../tools.ts";
+import { castorsDraft } from "./castor-steps.ts";
 import {
-  baseCloseUp,
   braceCloseUp,
   endFrameCloseUp,
   longSideCloseUp,
@@ -9,9 +9,11 @@ import {
   sheetCloseUp,
 } from "./close-ups.ts";
 import { type Shape, whole } from "./frame.ts";
-import { type BenchParameters, castorFixingNames } from "./parameters.ts";
-import { act, type Draft, preparingSteps } from "./preparing.ts";
+import type { BenchParameters } from "./parameters.ts";
+import { act, CUT_STEP, type Draft, preparingSteps, sawInUse } from "./preparing.ts";
+import { type SceneSetting, sectionOf } from "./scene-pieces.ts";
 import { stepScene } from "./scenes.ts";
+import { pilotWalk } from "./walk-throughs.ts";
 
 // The framed bench's steps, in the order it's built, each said twice: "show me how" for a
 // beginner and "just the numbers" for someone who knows how. Both come from here, with the
@@ -38,10 +40,21 @@ export const benchSteps = (options: {
   /** What each step's picture draws (#754). */
   parts: readonly Part[];
   fitted: readonly Fitted[];
+  /** The tools to hand: the owner's, from Your tools, or else the parameters' own (#777). */
+  toHand: ReadonlySet<Tool>;
+  /** The ways the steps already started were done, which they keep. */
+  kept: readonly KeptWay[];
 }): Step[] => {
-  const { parameters: p, shape: s, cutPlan } = options;
+  const { parameters: p, shape: s, cutPlan, toHand, kept } = options;
   const castors = p.castors;
-  const toHand = new Set(p.tools);
+  const saw = sawInUse(toHand, kept);
+  // The saw the Build's own tools would cut with: a change from it is said, until cutting starts.
+  const planned = sawInUse(new Set(p.tools));
+  const sawChanged =
+    saw === planned || kept.some((way) => way.step === CUT_STEP)
+      ? null
+      : { was: TOOL_NAMES[planned], now: TOOL_NAMES[saw] };
+  const setting: SceneSetting = { ...options, saw };
   const frameScrews = p.fixings.frameScrews.name;
   const sheetScrews = p.fixings.sheetScrews.name;
   const brackets = p.fixings.brackets.name;
@@ -81,48 +94,8 @@ export const benchSteps = (options: {
   const rearInset = whole((s.frameLength - s.endRail) / 2);
 
   const drafts: Draft[] = [
-    ...preparingSteps(cutPlan, toHand),
-    ...(castors
-      ? [
-          {
-            id: "fit-castors",
-            on: true,
-            title: "Fit the castors to the bases",
-            minutes: 30,
-            parts: ["E"],
-            tools: ["tape-measure", "pencil", "drill-driver", "drill-bits", "spanner"],
-            safety: ["safety-glasses"],
-            fixings: [
-              fixing(castorFixingNames(castors, options.boltLength).bolts, 4 * castors.boltsEach),
-              fixing(
-                castorFixingNames(castors, options.boltLength).washers,
-                4 * castors.boltsEach * castors.washer.perBolt,
-              ),
-              fixing(castorFixingNames(castors, options.boltLength).nuts, 4 * castors.boltsEach),
-            ],
-            actions: [
-              act(
-                "Set a castor on the base 10 mm in from each end, centred across it, and mark its holes.",
-                "10 from each end, centred.",
-              ),
-              act(
-                `Drill a ${castors.bolt.diameter.value + 1} mm clearance hole straight through at each mark.`,
-                `${castors.bolt.diameter.value + 1} mm through.`,
-              ),
-              act(
-                "Push each bolt up through a washer, the castor plate and the base, then add a washer and a lock nut, and tighten with the spanner.",
-                "Washer, plate, base, washer, nut.",
-              ),
-            ],
-            closeUp: baseCloseUp(s, castors),
-            check: {
-              says: "Each castor turns and swivels freely, and every nut is tight.",
-              photo: "Both bases from below, castors on.",
-            },
-            words: ["clearance hole", "lock nut"],
-          } satisfies Draft,
-        ]
-      : []),
+    ...preparingSteps({ cutPlan, toHand, saw, sectionOf: (stock) => sectionOf(setting, stock) }),
+    ...(castors ? [castorsDraft({ castors, shape: s, boltLength: options.boltLength })] : []),
     {
       id: "end-frames",
       on: true,
@@ -150,6 +123,8 @@ export const benchSteps = (options: {
         ),
       ],
       closeUp: endFrameCloseUp(s),
+      // The first step that drills a pilot hole shows how deep it goes.
+      walkThrough: pilotWalk(s, frameScrews),
       check: {
         says: "Measure corner to corner both ways. The same within 2 mm means it's square.",
         photo: "Both end frames, flat, from above.",
@@ -373,7 +348,6 @@ export const benchSteps = (options: {
   ];
 
   const stepTool = (tool: Tool) => ({ tool, name: TOOL_NAMES[tool], toHand: toHand.has(tool) });
-  const setting = { ...options, toHand };
   const on = drafts.filter((draft) => draft.on);
   return on.map((draft, at) => ({
     id: draft.id,
@@ -384,11 +358,13 @@ export const benchSteps = (options: {
     parts: draft.parts,
     adds: draft.adds ?? draft.parts,
     ways: draft.ways ?? [],
+    wayChanged: draft.id === CUT_STEP ? sawChanged : null,
     tools: draft.tools.map(stepTool),
     safety: (draft.safety ?? []).map(stepTool),
     fixings: draft.fixings ?? [],
     actions: draft.actions,
     closeUp: draft.closeUp ?? null,
+    walkThrough: draft.walkThrough ?? [],
     scene: stepScene(setting, {
       id: draft.id,
       shown: on.slice(0, at + 1).flatMap((each) => each.adds ?? each.parts),

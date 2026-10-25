@@ -162,41 +162,64 @@ export const drawMark = (
   return [geometry, material, head, headMaterial];
 };
 
-/** The room a part's letter takes, its 32 px and a gap, so no two overlap (#753). */
-const LETTER_ROOM = 36;
+/** The room kept between two words or letters over the picture, in px, so none touch (#753). */
+const GAP = 4;
 
-/** Where a letter may move to make room, nearest first: a little way each side, then further. */
-const NUDGES = [1, 2, 3, 4, 5, 6].flatMap((far) =>
-  [
-    [0, 1],
-    [0, -1],
-    [1, 0],
-    [-1, 0],
-    [1, 1],
-    [-1, 1],
-    [1, -1],
-    [-1, -1],
-  ].map(([across = 0, down = 0]) => ({
-    x: (across * far * LETTER_ROOM) / 2,
-    y: (down * far * LETTER_ROOM) / 2,
-  })),
-);
+/** Which ways a word may move to make room, nearest first: down, up, then each side. */
+const DIRECTIONS = [
+  [0, 1],
+  [0, -1],
+  [1, 0],
+  [-1, 0],
+  [1, 1],
+  [-1, 1],
+  [1, -1],
+  [-1, -1],
+] as const;
+
+/** How many half-sizes away a word may move to make room. */
+const FURTHEST = 8;
+
+/** Something to place over the picture: its middle where it belongs, and its size, in px. */
+type Placing = { x: number; y: number; w: number; h: number };
 
 /**
- * Where each letter goes, in order: on its part, or the nearest spot clear of those placed before
- * it, so G never sits on H.
+ * Where each word or letter goes, in order: where it belongs, or the nearest spot clear of those
+ * placed before it, so G never sits on H and "cut at 1450" never on "saw here" (#777). Each is
+ * kept inside the picture, so words near its edge aren't cut off.
  */
-export const spread = (wanted: readonly { x: number; y: number }[]) => {
-  const placed: { x: number; y: number }[] = [];
-  const clear = (x: number, y: number) =>
+export const spread = (
+  wanted: readonly Placing[],
+  bounds: { width: number; height: number },
+): { x: number; y: number }[] => {
+  const placed: Placing[] = [];
+  const within = (value: number, half: number, most: number) =>
+    Math.min(Math.max(value, half), Math.max(most - half, half));
+  const inside = (at: Placing): Placing => ({
+    ...at,
+    x: within(at.x, at.w / 2, bounds.width),
+    y: within(at.y, at.h / 2, bounds.height),
+  });
+  const clear = (at: Placing) =>
     placed.every(
-      (other) => Math.abs(other.x - x) >= LETTER_ROOM || Math.abs(other.y - y) >= LETTER_ROOM,
+      (other) =>
+        Math.abs(other.x - at.x) >= (other.w + at.w) / 2 + GAP ||
+        Math.abs(other.y - at.y) >= (other.h + at.h) / 2 + GAP,
     );
-  for (const { x, y } of wanted) {
-    const nudge = clear(x, y)
-      ? { x: 0, y: 0 }
-      : NUDGES.find((each) => clear(x + each.x, y + each.y));
-    placed.push(nudge === undefined ? { x, y } : { x: x + nudge.x, y: y + nudge.y });
+  for (const want of wanted) {
+    const spots = [
+      inside(want),
+      ...Array.from({ length: FURTHEST }, (_, at) => at + 1).flatMap((far) =>
+        DIRECTIONS.map(([across, down]) =>
+          inside({
+            ...want,
+            x: want.x + (across * far * (want.w + GAP)) / 2,
+            y: want.y + (down * far * (want.h + GAP)) / 2,
+          }),
+        ),
+      ),
+    ];
+    placed.push(spots.find(clear) ?? inside(want));
   }
-  return placed;
+  return placed.map(({ x, y }) => ({ x, y }));
 };

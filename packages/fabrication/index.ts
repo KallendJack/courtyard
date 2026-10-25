@@ -6,6 +6,7 @@ export type {
   Box,
   Build,
   BuildPrint,
+  BuildSetting,
   BuyLine,
   BuyList,
   CloseUp,
@@ -14,6 +15,7 @@ export type {
   Finding,
   Fitted,
   GlossaryWord,
+  KeptWay,
   MarkedLength,
   Material,
   Part,
@@ -21,13 +23,12 @@ export type {
   PrintSize,
   Result,
   Said,
-  Scene,
-  SceneMark,
-  ScenePiece,
   Step,
   StepTool,
   StockChoice,
   StockOptions,
+  WalkStep,
+  Way,
 } from "./build.ts";
 export { planLengths, planSheets } from "./cut-plan.ts";
 export {
@@ -48,5 +49,6 @@ export {
   PrintedPartParameters,
   ShimParameters,
 } from "./print/templates.ts";
+export type { Scene, SceneMark, ScenePiece } from "./scene.ts";
 export { Fixing, OptionPrices, Price, Sheet, StockOptionId, Timber } from "./stock.ts";
 export { TOOL_NAMES, Tool } from "./tools.ts";

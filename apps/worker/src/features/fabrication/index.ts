@@ -3,7 +3,7 @@ import { join } from "node:path";
 import {
   BuildFile,
   type BuildParameters,
-  BuildProgress,
+  type BuildProgress,
   type BuildSave,
   BuildSlug,
   type BuildStockPick,
@@ -12,7 +12,7 @@ import {
   type BuildView,
   type ChangeId,
 } from "@courtyard/contract";
-import type { Build } from "@courtyard/fabrication";
+import type { Build, BuildSetting } from "@courtyard/fabrication";
 import { listFolder, readTextFile, writeTextFileIn } from "../../lib/files.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 import {
@@ -30,6 +30,7 @@ import {
   slugFor,
 } from "../planning-files/index.ts";
 import { derive, merged, parameterChanges, pickStockIn } from "./parameters.ts";
+import { NOT_STARTED, progressIn, toolsToHand } from "./setting.ts";
 
 /**
  * Fabrication's Builds, hosted in a planning workspace (ADRs 0036, 0037; #697): a JSON file each in
@@ -49,9 +50,13 @@ const fileOf = (folder: string, slug: BuildSlug) => join(folder, BUILDS_FOLDER, 
 /** A Build's file as written: its fields in order, two spaces in, a line ending at the end. */
 const buildText = (file: BuildFile) => `${JSON.stringify(file, null, 2)}\n`;
 
-/** A Build's file read and worked out, or what's wrong with it. */
+/**
+ * A Build's file read and worked out, or what's wrong with it: with the owner's tools and the ways
+ * its steps were done, when given (#777).
+ */
 export const readBuildText = (
   text: string,
+  setting?: BuildSetting,
 ): Result<{ file: BuildFile; derived: Build }, string> => {
   let json: unknown;
   try {
@@ -64,7 +69,7 @@ export const readBuildText = (
     const [issue] = file.error.issues;
     return err(`It isn't a Build: ${issue?.path.join(".") || "its file"}: ${issue?.message ?? ""}`);
   }
-  const derived = derive(file.data.template, file.data.parameters);
+  const derived = derive(file.data.template, file.data.parameters, setting);
   if (!derived.ok) return err(`Its parameters can't be worked out: ${derived.error.join("; ")}`);
   return ok({ file: file.data, derived: derived.value });
 };
@@ -74,23 +79,6 @@ export const readBuildText = (
  * the way of undoing a change to the Build (`progress.ts` keeps it).
  */
 export const progressPath = (slug: BuildSlug) => `${BUILDS_FOLDER}/progress/${slug}.json`;
-
-/** Where a Build's steps start. */
-const NOT_STARTED: BuildProgress = { step: null, ticked: [] };
-
-/**
- * A Build's progress as kept: where it starts when there's none, or its file can't be read as
- * progress (a hand edit, say, or one kept by step number before steps had IDs), since the steps
- * are still there to follow and re-ticking a few lines is no loss.
- */
-const progressOf = (text: string | undefined): BuildProgress => {
-  if (text === undefined) return NOT_STARTED;
-  try {
-    return BuildProgress.safeParse(JSON.parse(text)).data ?? NOT_STARTED;
-  } catch {
-    return NOT_STARTED;
-  }
-};
 
 /**
  * A Build as read: its summary, its file, what's derived from it, its file's text, and how far the
@@ -137,7 +125,11 @@ export type BuildRefusal =
   | { readonly kind: "stale" }
   | { readonly kind: "storage" };
 
-const readBuildsIn = async (folder: string): Promise<Result<ReadBuilds, BuildRefusal>> => {
+/** The Builds in a planning folder, their steps following the owner's tools when they have any. */
+const readBuildsIn = async (
+  folder: string,
+  tools: readonly string[] | undefined,
+): Promise<Result<ReadBuilds, BuildRefusal>> => {
   const names = await listFolder(join(folder, BUILDS_FOLDER));
   if (!names.ok) return err({ kind: "storage" });
   const builds: ReadBuild[] = [];
@@ -152,8 +144,12 @@ const readBuildsIn = async (folder: string): Promise<Result<ReadBuilds, BuildRef
     }
     const text = await readTextFile(fileOf(folder, slug.data));
     if (!text.ok) return err({ kind: "storage" });
-    if (text.value === undefined) continue;
-    const read = readBuildText(text.value);
+    const build = text.value;
+    if (build === undefined) continue;
+    const kept = await readTextFile(join(folder, progressPath(slug.data)));
+    if (!kept.ok) return err({ kind: "storage" });
+    const progress = progressIn(kept.value, () => readBuildText(build));
+    const read = readBuildText(build, { tools, kept: progress.ways });
     if (!read.ok) {
       problems.push({ path, problem: read.error });
       continue;
@@ -164,15 +160,13 @@ const readBuildsIn = async (folder: string): Promise<Result<ReadBuilds, BuildRef
     } catch {
       return err({ kind: "storage" });
     }
-    const progress = await readTextFile(join(folder, progressPath(slug.data)));
-    if (!progress.ok) return err({ kind: "storage" });
     const { file, derived } = read.value;
     builds.push({
       summary: { slug: slug.data, name: file.name, template: file.template, path, updatedAt },
       file,
       derived,
-      text: text.value,
-      progress: progressOf(progress.value),
+      text: build,
+      progress,
     });
   }
   builds.sort((a, b) => a.file.name.localeCompare(b.file.name, "en-GB", { sensitivity: "base" }));
@@ -184,7 +178,7 @@ export const readBuilds = async (
   target: Pick<PlanningFilesTarget, "contextDir" | "workspaceId">,
 ): Promise<Result<ReadBuilds, BuildRefusal>> => {
   const folder = await planningFolder(target);
-  return folder.ok ? readBuildsIn(folder.value) : folder;
+  return folder.ok ? readBuildsIn(folder.value, await toolsToHand(target.contextDir)) : folder;
 };
 
 /** One of a planning workspace's Builds, or why it can't be read. */
@@ -244,7 +238,8 @@ export const saveBuild = async (
     async (): Promise<Result<Omit<BuildSaved, "change">, BuildRefusal>> => {
       const folder = await planningFolder(target);
       if (!folder.ok) return folder;
-      const read = await readBuildsIn(folder.value);
+      const tools = await toolsToHand(target.contextDir);
+      const read = await readBuildsIn(folder.value, tools);
       if (!read.ok) return read;
       const { builds, problems } = read.value;
       const editing = edit.slug;
@@ -282,7 +277,8 @@ export const saveBuild = async (
         const [issue] = file.error.issues;
         return err({ kind: "invalid", problem: issue?.message ?? "" });
       }
-      const derived = derive(template, file.data.parameters);
+      const progress = current?.progress ?? NOT_STARTED;
+      const derived = derive(template, file.data.parameters, { tools, kept: progress.ways });
       if (!derived.ok) return err({ kind: "parameters", problems: derived.error });
 
       const slug =
@@ -333,7 +329,7 @@ export const saveBuild = async (
           file: file.data,
           derived: derived.value,
           text,
-          progress: current?.progress ?? NOT_STARTED,
+          progress,
         },
       });
     },

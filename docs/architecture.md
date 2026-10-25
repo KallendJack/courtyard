@@ -807,8 +807,11 @@ things live only in the worker's memory and go when it restarts.
   read, never stored. Each file is named by the Build's name when it was started.
   `<workspace>/builds/progress/<slug>.json` is how far the owner has got with its steps (#699): the step reached and
   the lines ticked, each step by its ID (a file kept by step number reads as not started), beside the Build so
-  ticking never stands in the way of undoing a change to it. Each write is a `build-progress` change, kept and backed
-  up but never listed in Recent changes.
+  ticking never stands in the way of undoing a change to it, and the tool each step started was done with (#777), which
+  the worker keeps as lines are ticked so a started step stays as it was started when the owner's tools change (a file
+  kept before then gets the ways the Build's own tools gave). Each write is
+  a `build-progress` change, kept and backed up but never listed in Recent changes. A Build's steps follow the owner's
+  tools (`things/` at the top) once they've saved any, and its own `tools` parameter until then.
 - `.agents/skills/<skill>/` at the top: the owner's skills for every workspace; `<workspace>/.agents/skills/<skill>/`:
   their skills for one workspace (ADR 0016). Added by hand, so they're kept and backed up like everything else.
 - `archived/<workspace>/`: archived workspaces.

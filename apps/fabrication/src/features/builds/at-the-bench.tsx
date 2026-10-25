@@ -69,6 +69,7 @@ export function AtTheBench(
         pick={props.pick}
         atStep={{ step }}
         resettable={!cover}
+        big={!cover}
         over={props.answer}
       >
         {props.ask}

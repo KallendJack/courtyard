@@ -33,6 +33,7 @@ import {
   thingText,
 } from "../things/index.ts";
 import { getWorkspace, listWorkspaces, OWNER_THINGS_FOLDER } from "../workspaces/index.ts";
+import { readTools } from "./setting.ts";
 
 // The owner's tools (ADR 0037, #707): Things of kind tool at the owner's level, in the context
 // folder's own `things` folder, read by every workspace's turns and every Build. Your tools, in
@@ -63,17 +64,6 @@ const keyOf = (name: string) => slugFor(name, { slug: ThingSlug, kind: "thing" }
 
 /** A path in the owner's tools' folder, from the context folder's top, as changes name it. */
 const ownerPath = (path: string) => `${OWNER_THINGS_FOLDER}/${path}`;
-
-/** The owner's tools, in order of name, and the files there that can't be read as a Thing. */
-export const readTools = async (contextDir: string) => {
-  // `readThingsIn` reads a folder's `things`, which for the context folder is the owner's.
-  const read = await readThingsIn(contextDir);
-  if (!read.ok) return err<ToolsRefusal>({ kind: "storage" });
-  return ok({
-    tools: read.value.things.filter(({ summary }) => summary.kind === "tool"),
-    problems: read.value.problems,
-  });
-};
 
 /** Words a Thing's name has that make it one of Your tools' tiles, the most particular first. */
 const TILE_WORDS: readonly (readonly [string, readonly string[]])[] = [
