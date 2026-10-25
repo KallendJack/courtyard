@@ -14,7 +14,7 @@ import { assumedSizes, boltCheck, toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
 import { stockOptions, wrongStock } from "../options.ts";
 import type { Price } from "../stock.ts";
-import { type Tool, toolsFrom } from "../tools.ts";
+import { NO_SPANNERS, type SpannerKit, spannerKitFrom, type Tool, toolsFrom } from "../tools.ts";
 import { benchFitted, benchParts, shapeOf, shapeProblems } from "./frame.ts";
 import { BenchParameters, castorFixingNames } from "./parameters.ts";
 import { benchSteps } from "./steps.ts";
@@ -40,9 +40,18 @@ export const deriveBench = (
   }
   const parameters = parsed.data;
   const toHand = new Set(setting.tools === undefined ? parameters.tools : toolsFrom(setting.tools));
+  // With no Your tools saved, the Build's own spanner is two of them, as its steps first said.
+  const kit =
+    setting.tools !== undefined
+      ? spannerKitFrom(setting.tools)
+      : parameters.tools.includes("spanner")
+        ? { ...NO_SPANNERS, spanners: 2 }
+        : NO_SPANNERS;
   const benchOf = benchWith({
     toHand,
+    kit,
     kept: setting.kept ?? [],
+    started: setting.started ?? [],
     capacities: capacitiesFrom(setting.sizes ?? []),
   });
   const build = benchOf(parameters);
@@ -67,11 +76,15 @@ export const deriveBench = (
 const benchWith =
   ({
     toHand,
+    kit,
     kept,
+    started,
     capacities,
   }: {
     toHand: ReadonlySet<Tool>;
+    kit: SpannerKit;
     kept: readonly KeptWay[];
+    started: readonly string[];
     capacities: Capacities;
   }) =>
   (parameters: BenchParameters): Result<Omit<Build, "options">, string[]> => {
@@ -112,7 +125,9 @@ const benchWith =
       parts,
       fitted,
       toHand,
+      kit,
       kept,
+      started,
       capacities,
     });
 

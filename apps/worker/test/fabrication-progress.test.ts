@@ -65,9 +65,11 @@ describe("a Build's progress", () => {
     const kept = await keep(request, progress);
 
     expect(kept.status).toBe(200);
-    expect(BuildProgress.parse(await kept.json())).toEqual({ ...progress, ways: [] });
+    // The castor step started keeps the lines it was started on (#783).
+    const ways = [{ step: "fit-castors", tool: "through-plate" }];
+    expect(BuildProgress.parse(await kept.json())).toEqual({ ...progress, ways });
     // Read from the Build again, as another device opening it would.
-    expect((await opened(request)).progress).toEqual({ ...progress, ways: [] });
+    expect((await opened(request)).progress).toEqual({ ...progress, ways });
   });
 
   it("isn't a change to undo: it's kept in git without a Recent changes entry", async () => {
@@ -142,6 +144,7 @@ describe("a Build's progress", () => {
     });
     expect((await opened(request)).progress.ways).toEqual([
       { step: "cut-timber", tool: "hand-saw" },
+      { step: "fit-castors", tool: "through-plate" },
     ]);
     // Part ticked, it's still started, so its ticks stay on the lines they were ticked on.
     await keep(request, { step: "cut-timber", ticked: [{ step: "cut-timber", lines: [0, 1] }] });
@@ -292,6 +295,59 @@ describe("a Build's steps with Your tools (#777)", () => {
     });
     expect((await opened(request)).progress.ways).toEqual([
       { step: "cut-timber", tool: "hand-saw" },
+      { step: "fit-castors", tool: "through-plate" },
     ]);
+  });
+});
+
+describe("the castor step started on its old lines (#783)", () => {
+  const castors = (build: BuildOpened) =>
+    build.derived.steps.find((step) => step.id === "fit-castors");
+  const keptAs = async (progress: unknown) => {
+    await mkdir(join(contextDir, "garage", "builds", "progress"), { recursive: true });
+    await writeFile(
+      join(contextDir, "garage", "builds", "progress", "workbench.json"),
+      JSON.stringify(progress),
+    );
+  };
+  const OLD = [
+    "Set a castor on the base 10 mm in from each end, centred across it, and mark its holes.",
+    "Drill a 7 mm clearance hole straight through at each mark.",
+    "Push each bolt up through a washer, the castor plate and the base, then add a washer and a lock nut, and tighten with the spanner.",
+  ];
+
+  it("keeps those lines, done, its ticks where they were, and stays so as more is ticked", async () => {
+    const done = { step: "fit-castors", lines: [0, 1, 2] };
+    await keptAs({ step: "fit-castors", ticked: [done], ways: [] });
+    const request = await owner();
+
+    const build = await opened(request);
+    expect(castors(build)?.actions.map((action) => action.howTo)).toEqual(OLD);
+    // Every line ticked: still done, not three of four.
+    expect(build.progress.ticked).toEqual([done]);
+    expect(castors(build)?.actions).toHaveLength(done.lines.length);
+    await keep(request, {
+      step: "stand-on-bases",
+      ticked: [done, { step: "stand-on-bases", lines: [0] }],
+    });
+    const after = await opened(request);
+    expect(castors(after)?.actions.map((action) => action.howTo)).toEqual(OLD);
+    expect(after.progress.ways).toEqual([]);
+  });
+
+  it("keeps a step part done on its old lines too, as kept before the ways were", async () => {
+    await keptAs({ step: "fit-castors", ticked: [{ step: "fit-castors", lines: [0] }] });
+    const request = await owner();
+
+    expect(castors(await opened(request))?.actions.map((action) => action.howTo)).toEqual(OLD);
+  });
+
+  it("gives the new lines once its ticks are taken off", async () => {
+    await keptAs({ step: "fit-castors", ticked: [{ step: "fit-castors", lines: [0] }], ways: [] });
+    const request = await owner();
+
+    await keep(request, { step: "fit-castors", ticked: [] });
+
+    expect(castors(await opened(request))?.actions).toHaveLength(4);
   });
 });

@@ -46,6 +46,16 @@ export const toolsToHand = async (contextDir: string): Promise<ToolsSetting> => 
   };
 };
 
+/**
+ * What a Build is worked out with: the owner's tools, the ways its steps started were done and
+ * the steps started, which keep their lines (#783).
+ */
+export const settingFor = (tools: ToolsSetting, progress: BuildProgress): BuildSetting => ({
+  ...tools,
+  kept: progress.ways,
+  started: startedIn(progress),
+});
+
 /** Where a Build's steps start. */
 export const NOT_STARTED: BuildProgress = { step: null, ticked: [], ways: [] };
 
@@ -75,11 +85,11 @@ const progressOf = (text: string | undefined): { progress: BuildProgress; waysKe
  */
 export const progressIn = (
   text: string | undefined,
-  own: () => Result<{ derived: Pick<Build, "steps"> }, string>,
+  own: (started: readonly string[]) => Result<{ derived: Pick<Build, "steps"> }, string>,
 ): BuildProgress => {
   const { progress, waysKept } = progressOf(text);
   if (waysKept || progress.ticked.length === 0) return progress;
-  const built = own();
+  const built = own(startedIn(progress));
   if (!built.ok) return progress;
   return {
     ...progress,
@@ -87,22 +97,27 @@ export const progressIn = (
   };
 };
 
+/** The steps with a line ticked, by ID: each keeps the lines it was started on (#783). */
+export const startedIn = (progress: BuildProgress): string[] =>
+  progress.ticked.filter(({ lines }) => lines.length > 0).map(({ step }) => step);
+
 /**
  * The ways the steps started were done, as `progress` ticks them: each step with a line ticked
- * keeps the way the Build now does it (which, once kept, is the way it was started), so its ticks
- * stay on the lines they were ticked on; a step with none ticked follows the tools again. A step
- * the Build doesn't have now keeps its way, for when it comes back.
+ * keeps the way the Build now does it (which, once kept, is the way it was started), or the lines
+ * it has now when they're ones it keeps (#783), so its ticks stay on the lines they were ticked
+ * on; a step with none ticked follows the tools again. A step the Build doesn't have now keeps
+ * its way, for when it comes back.
  */
 export const keptWays = (options: {
-  steps: readonly Pick<BuildStep, "id" | "ways">[];
+  steps: readonly (Pick<BuildStep, "id" | "ways"> & { readonly lines?: string | undefined })[];
   progress: BuildProgress;
   before: BuildProgress["ways"];
 }): BuildProgress["ways"] => [
   ...options.before.filter(({ step }) => !options.steps.some(({ id }) => id === step)),
   ...options.steps.flatMap((step) => {
-    const using = step.ways.find((way) => way.using);
-    return using !== undefined && tickedIn(options.progress, step.id).length > 0
-      ? [{ step: step.id, tool: using.tool }]
+    const kept = step.ways.find((way) => way.using)?.tool ?? step.lines;
+    return kept !== undefined && tickedIn(options.progress, step.id).length > 0
+      ? [{ step: step.id, tool: kept }]
       : [];
   }),
 ];

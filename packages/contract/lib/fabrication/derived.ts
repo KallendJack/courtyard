@@ -94,8 +94,27 @@ const StepTool = z.object({ tool: z.string(), name: z.string(), toHand: z.boolea
 const Point = z.object({ x: z.number(), y: z.number() });
 
 /**
+ * What a close-up draws as its shape rather than a block (#783): a nut or a bolt's head (a hex,
+ * `across` its flats), a tool on one, its jaw at `x`, `y` and its handle `length` out at
+ * `turn` degrees (0 to the right, clockwise), or a clockwise arrow round one.
+ */
+const CloseUpShape = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("hex"), x: z.number(), y: z.number(), across: z.number() }),
+  z.object({
+    kind: z.enum(["open-spanner", "adjustable", "pliers", "socket"]),
+    x: z.number(),
+    y: z.number(),
+    jaw: z.number(),
+    length: z.number(),
+    turn: z.number(),
+  }),
+  z.object({ kind: z.literal("clockwise"), x: z.number(), y: z.number(), r: z.number() }),
+]);
+
+/**
  * A step's close-up (#699): a flat view of what it makes, in mm from its top left (`y` down), its
- * key sizes as dimension lines and a dot where each fixing goes.
+ * key sizes as dimension lines and a dot where each fixing goes; tools drawn as their shape and
+ * words on the drawing where it has them (#783).
  */
 const BuildCloseUp = z.object({
   title: z.string(),
@@ -107,6 +126,10 @@ const BuildCloseUp = z.object({
   dimensions: list(z.object({ from: Point, to: Point, mm: z.number() })),
   fixings: list(Point),
   notes: list(z.string()),
+  shapes: list(CloseUpShape).optional(),
+  labels: list(
+    z.object({ x: z.number(), y: z.number(), says: z.string(), heading: z.boolean().optional() }),
+  ).optional(),
 });
 
 /** A length of timber as it's marked: its cuts from the square end, the saw's cut, the offcut. */

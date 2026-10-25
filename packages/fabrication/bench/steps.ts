@@ -1,6 +1,6 @@
 import type { CutPlan, Fitted, KeptWay, Part, Step } from "../build.ts";
 import type { Capacities } from "../capacity.ts";
-import { TOOL_NAMES, type Tool } from "../tools.ts";
+import { type SpannerKit, TOOL_NAMES, type Tool } from "../tools.ts";
 import { castorsDraft } from "./castor-steps.ts";
 import {
   braceCloseUp,
@@ -45,6 +45,10 @@ export const benchSteps = (options: {
   toHand: ReadonlySet<Tool>;
   /** The ways the steps already started were done, which they keep. */
   kept: readonly KeptWay[];
+  /** The steps with a line ticked, by ID: a step started keeps its lines (#783). */
+  started: readonly string[];
+  /** What the owner has that holds a bolt's head and turns its nut (#783). */
+  kit: SpannerKit;
   /** What the owner's powered saws can cut (#780). */
   capacities: Capacities;
 }): Step[] => {
@@ -176,7 +180,7 @@ export const benchSteps = (options: {
     // The castors after the frames, so a spanner still to get doesn't hold up the day (#783).
     ...(castors
       ? [
-          castorsDraft({ castors, shape: s, boltLength: options.boltLength }),
+          castorsDraft({ ...options, castors, shape: s }),
           {
             id: "stand-on-bases",
             on: true,
@@ -359,10 +363,10 @@ export const benchSteps = (options: {
     },
   ];
 
-  const stepTool = (tool: Tool | { tool: Tool; name: string }) =>
+  const stepTool = (tool: Draft["tools"][number]) =>
     typeof tool === "string"
       ? { tool, name: TOOL_NAMES[tool], toHand: toHand.has(tool) }
-      : { ...tool, toHand: toHand.has(tool.tool) };
+      : { tool: tool.tool, name: tool.name, toHand: tool.toHand ?? toHand.has(tool.tool) };
   const on = drafts.filter((draft) => draft.on);
   return on.map((draft, at) => ({
     id: draft.id,
@@ -373,6 +377,7 @@ export const benchSteps = (options: {
     parts: draft.parts,
     adds: draft.adds ?? draft.parts,
     ways: draft.ways ?? [],
+    ...(draft.lines === undefined ? {} : { lines: draft.lines }),
     wayChanged: draft.id === CUT_STEP ? sawChanged : null,
     tools: draft.tools.map(stepTool),
     safety: (draft.safety ?? []).map(stepTool),

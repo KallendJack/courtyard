@@ -1,8 +1,11 @@
 import type { BuildTemplate, SizeSource, SourcedSize } from "@courtyard/contract";
 import type { ToolSize } from "./capacity.ts";
+import type { CloseUp } from "./close-up.ts";
 import type { CheckedRecipe } from "./print/recipe.ts";
 import type { Scene } from "./scene.ts";
 import type { Tool } from "./tools.ts";
+
+export type { CloseUp, CloseUpShape } from "./close-up.ts";
 
 // What any template derives from its parameters (ADR 0036): everything a Build shows. Code works
 // every number out; a model only reads them.
@@ -143,30 +146,6 @@ export type Action = {
 };
 
 /**
- * A step's close-up: a flat view of what it makes, in mm from the view's top left corner (`y`
- * down), with its key sizes as dimension lines and where each fixing goes.
- */
-export type CloseUp = {
-  readonly title: string;
-  readonly width: number;
-  readonly height: number;
-  readonly pieces: readonly {
-    readonly label: string;
-    readonly x: number;
-    readonly y: number;
-    readonly w: number;
-    readonly h: number;
-  }[];
-  readonly dimensions: readonly {
-    readonly from: { readonly x: number; readonly y: number };
-    readonly to: { readonly x: number; readonly y: number };
-    readonly mm: number;
-  }[];
-  readonly fixings: readonly { readonly x: number; readonly y: number }[];
-  readonly notes: readonly string[];
-};
-
-/**
  * A way a step can be done (a hand saw, a circular saw or a mitre saw): its tool, the one in use,
  * and whether its tool is to hand. The steps use the best way whose tools are to hand, unless the
  * step was done another way.
@@ -178,7 +157,10 @@ export type Way = {
   readonly toHand: boolean;
 };
 
-/** A step started, and the tool it was done with: it stays as it was started (#777). */
+/**
+ * A step started, and the tool it was done with (#777), or the lines it was started on (#783): it
+ * stays as it was started.
+ */
 export type KeptWay = { readonly step: string; readonly tool: string };
 
 /**
@@ -193,6 +175,8 @@ export type BuildSetting = {
   /** The sizes the owner gave their tools, each by one of its names. */
   readonly sizes?: readonly ToolSize[];
   readonly kept?: readonly KeptWay[];
+  /** The steps with a line ticked, by ID: a step started keeps the lines it had (#783). */
+  readonly started?: readonly string[];
 };
 
 /**
@@ -221,6 +205,11 @@ export type Step = {
   readonly adds: readonly string[];
   /** The ways it can be done, when there's more than one; none otherwise. */
   readonly ways: readonly Way[];
+  /**
+   * What its lines are, for a step that keeps them once started (#783): kept beside the ways its
+   * steps were done, so a step started on other lines keeps those.
+   */
+  readonly lines?: string;
   /**
    * The way the Build's own tools would do it, and the way the owner's do now, when they differ
    * and it isn't started yet: "Now uses your mitre saw" (#777).

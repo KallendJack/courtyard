@@ -30,7 +30,7 @@ import {
   slugFor,
 } from "../planning-files/index.ts";
 import { derive, merged, parameterChanges, pickStockIn } from "./parameters.ts";
-import { NOT_STARTED, progressIn, type ToolsSetting, toolsToHand } from "./setting.ts";
+import { NOT_STARTED, progressIn, settingFor, type ToolsSetting, toolsToHand } from "./setting.ts";
 
 /**
  * Fabrication's Builds, hosted in a planning workspace (ADRs 0036, 0037; #697): a JSON file each in
@@ -148,8 +148,8 @@ const readBuildsIn = async (
     if (build === undefined) continue;
     const kept = await readTextFile(join(folder, progressPath(slug.data)));
     if (!kept.ok) return err({ kind: "storage" });
-    const progress = progressIn(kept.value, () => readBuildText(build));
-    const read = readBuildText(build, { ...tools, kept: progress.ways });
+    const progress = progressIn(kept.value, (started) => readBuildText(build, { started }));
+    const read = readBuildText(build, settingFor(tools, progress));
     if (!read.ok) {
       problems.push({ path, problem: read.error });
       continue;
@@ -278,7 +278,7 @@ export const saveBuild = async (
         return err({ kind: "invalid", problem: issue?.message ?? "" });
       }
       const progress = current?.progress ?? NOT_STARTED;
-      const derived = derive(template, file.data.parameters, { ...tools, kept: progress.ways });
+      const derived = derive(template, file.data.parameters, settingFor(tools, progress));
       if (!derived.ok) return err({ kind: "parameters", problems: derived.error });
 
       const slug =

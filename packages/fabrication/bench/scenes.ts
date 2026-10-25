@@ -1,10 +1,12 @@
 import type { Scene, SceneMark } from "../scene.ts";
-import { baseCloseUp } from "./close-ups.ts";
+import { TOOL_NAMES } from "../tools.ts";
+import { CASTOR_INSET } from "./close-ups.ts";
 import { cutScene, markScene } from "./cut-scenes.ts";
-import { boltStack, castorFixingNames } from "./parameters.ts";
+import { castorFixingNames } from "./parameters.ts";
 import {
   at,
   box,
+  JAWS,
   nameOf,
   OUT,
   part,
@@ -13,6 +15,7 @@ import {
   tenth,
   toolIf,
   whole,
+  workmate,
 } from "./scene-pieces.ts";
 
 // Each step's picture (#754; Paper, 2 · Agreed, "Fabrication · At the bench · Fold 933×645"): the
@@ -23,99 +26,124 @@ import {
 // marked.
 
 /**
- * One castor base upside down, its castors on it: a bolt through each hole but the last, where
- * the bit goes through the plate's own hole (#783).
+ * One castor base upside down (Paper, 2 · Agreed, "Fabrication · Castors in 3D, your kit · Fold
+ * (#783)"): held in the Workmate's jaws, castor end out, when there's one to hand, or on two
+ * offcuts on the floor. One castor upside down on its end, the same gap both sides and a
+ * fingernail from the end; its first bolt in, and the bit through the plate's next hole.
  */
 const castorScene = (setting: SceneSetting): Scene => {
   const castors = setting.parameters.castors;
   const s = setting.shape;
   if (!castors) return whole(setting, []);
-  const closeUp = baseCloseUp(s, castors);
-  const plates = closeUp.pieces.filter((piece) => piece.label === "castor");
+  const plateLength = castors.plate.length.value;
+  const plateWidth = castors.plate.width.value;
   const plate = castors.plate.thickness.value;
   const bolt = castors.bolt.diameter.value;
-  const head = plate + castors.washer.thickness.value + 4;
-  // The bit at the far castor's last hole, its arrow's words clear of the near castor's note.
-  const hole = closeUp.fixings.at(-1);
-  const bolted = closeUp.fixings.slice(0, -1);
-  const near = plates[0];
+  const inWorkmate = setting.toHand.has("folding-workbench");
+  // The base's underside, now on top: proud of the jaws, or an offcut's thickness off the floor.
+  const under = inWorkmate ? JAWS.top + 5 - s.wideThick : s.wideThick;
+  const top = under + s.wideThick;
+  const plateY = (s.wideWidth - plateWidth) / 2;
+  const corner = 10;
+  const first = { x: CASTOR_INSET + corner, y: plateY + corner };
+  const next = { x: CASTOR_INSET + plateLength - corner, y: plateY + plateWidth - corner };
+  const across = CASTOR_INSET + plateLength / 2;
+  const drill = toolIf(setting.toHand, "drill-driver", [
+    // The bit down through the plate's next hole, and the drill's body above it.
+    box(next.x - bolt / 2, next.y - bolt / 2, top + plate, bolt + 1, bolt + 1, 120),
+    box(next.x - 25, next.y - 30, top + plate + 120, 50, 60, 160),
+  ]);
   return {
-    title: "A castor base, upside down",
+    title: inWorkmate ? "In your Workmate" : "On two offcuts",
     view: { turn: -25, tilt: 45 },
     pieces: [
       part("E", nameOf(setting, "E"), "lit", [
-        box(0, 0, 0, s.frameDepth, s.wideWidth, s.wideThick),
+        box(0, 0, under, s.frameDepth, s.wideWidth, s.wideThick),
       ]),
+      inWorkmate
+        ? {
+            kind: "tool",
+            name: TOOL_NAMES["folding-workbench"],
+            label: null,
+            tone: "plain",
+            // The jaws hold the base clear of the castor's end.
+            boxes: workmate(CASTOR_INSET + plateLength + 60, s.wideWidth),
+          }
+        : {
+            kind: "offcut",
+            name: "Offcuts",
+            label: null,
+            tone: "plain",
+            boxes: [80, s.frameDepth - 140].map((x) =>
+              box(x, -20, 0, 60, s.wideWidth + 40, s.wideThick),
+            ),
+          },
       {
         kind: "fitted",
         name: castors.name,
         label: null,
         tone: "plain",
-        // Each castor's plate on the base, and its wheel's housing standing up from the plate.
-        boxes: plates.flatMap((each) => [
-          box(each.x, each.y, s.wideThick, each.w, each.h, plate),
+        // The castor's plate on the base, and its wheel's housing standing up from the plate.
+        boxes: [
+          box(CASTOR_INSET, plateY, top, plateLength, plateWidth, plate),
           box(
-            each.x + each.w / 4,
-            each.y + each.h / 4,
-            s.wideThick + plate,
-            each.w / 2,
-            each.h / 2,
+            CASTOR_INSET + plateLength / 4,
+            plateY + plateWidth / 4,
+            top + plate,
+            plateLength / 2,
+            plateWidth / 2,
             s.castor - plate,
           ),
-        ]),
+        ],
       },
       {
         kind: "fitted",
         name: castorFixingNames(castors, setting.boltLength).bolts,
         label: null,
         tone: "plain",
-        boxes: bolted.map((each) =>
-          box(each.x - bolt / 2, each.y - bolt / 2, 0, bolt, bolt, s.wideThick + head),
-        ),
+        boxes: [
+          box(first.x - bolt / 2, first.y - bolt / 2, under - 10, bolt, bolt, s.wideThick + 20),
+        ],
       },
-      ...(hole === undefined
-        ? []
-        : toolIf(setting.toHand, "drill-driver", [
-            // The bit down through the plate's hole, and the drill's body above it.
-            box(hole.x - bolt / 2, hole.y - bolt / 2, 0, bolt + 1, bolt + 1, s.wideThick + 120),
-            box(hole.x - 25, hole.y - 30, s.wideThick + 120, 50, 60, 160),
-          ])),
+      ...drill,
     ],
     marks: [
+      // The same gap both sides, and a fingernail from the end: no sums.
+      { kind: "line", from: at(across, 0, top), to: at(across, plateY, top), says: "=" },
       {
-        kind: "size",
-        from: at(0, -OUT, s.wideThick),
-        to: at(s.frameDepth, -OUT, s.wideThick),
-        mm: s.frameDepth,
+        kind: "line",
+        from: at(across, plateY + plateWidth, top),
+        to: at(across, s.wideWidth, top),
+        says: "=",
       },
       {
-        kind: "size",
-        from: at(0, s.wideWidth + OUT, s.wideThick),
-        to: at(near?.x ?? 0, s.wideWidth + OUT, s.wideThick),
-        mm: near?.x ?? 0,
+        kind: "line",
+        from: at(0, s.wideWidth / 2, top),
+        to: at(CASTOR_INSET, s.wideWidth / 2, top),
+        says: `${CASTOR_INSET / 10} cm`,
       },
-      ...(hole === undefined
-        ? []
-        : [
+      {
+        kind: "arrow",
+        from: at(next.x, next.y, top + 350),
+        to: at(next.x, next.y, top + plate),
+        says: "through the plate's hole",
+      },
+      {
+        kind: "note",
+        at: at(first.x, first.y, top + 30),
+        says: "first bolt, loose",
+        tone: "plain",
+      },
+      ...(inWorkmate
+        ? [
             {
-              kind: "arrow",
-              from: at(hole.x, hole.y, s.wideThick + 350),
-              to: at(hole.x, hole.y, s.wideThick + plate),
-              says: "drill through the plate's own hole",
+              kind: "note",
+              at: at(CASTOR_INSET + plateLength + 360, -60, JAWS.top),
+              says: "the Workmate's jaws",
+              tone: "plain",
             } satisfies SceneMark,
-          ]),
-      {
-        kind: "note",
-        at: at((near?.x ?? 0) + (near?.w ?? 0) / 2, s.wideWidth / 2, s.wideThick + s.castor + 60),
-        says: "bolt down through the plate and the base",
-        tone: "plain",
-      },
-      {
-        kind: "note",
-        at: at((near?.x ?? 0) + (near?.w ?? 0) / 2, s.wideWidth / 2, s.wideThick + s.castor + 20),
-        says: boltStack(castors),
-        tone: "plain",
-      },
+          ]
+        : []),
     ],
   };
 };

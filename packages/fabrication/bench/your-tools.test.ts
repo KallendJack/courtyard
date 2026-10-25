@@ -91,7 +91,15 @@ describe("a Build's steps with Your tools", () => {
   it("need nothing more once the owner has said the kit the steps use", () => {
     const missing = (tools: readonly string[]) =>
       built({ tools }).findings.find((finding) => finding.kind === "tools-missing");
-    const all = [...theirs, "Countersink", "Spanner", "Ear defenders", "Sawhorses", "Spirit level"];
+    const all = [
+      ...theirs,
+      "Countersink",
+      "Spanner",
+      "Pliers",
+      "Ear defenders",
+      "Sawhorses",
+      "Spirit level",
+    ];
 
     expect(missing(theirs)).toBeDefined();
     expect(missing(all)).toBeUndefined();
@@ -110,5 +118,99 @@ describe("a Build's steps with Your tools", () => {
     const { ways: _after, ...done } = stepOf(after, "cut-timber") ?? {};
     const { ways: _before, ...was } = before ?? {};
     expect(done).toEqual(was);
+  });
+});
+
+describe("the castor step with Your tools (#783)", () => {
+  const castors = (tools: readonly string[]) => stepOf(built({ tools }), "fit-castors");
+  const chips = (tools: readonly string[]) =>
+    castors(tools)?.tools.map((tool) => [tool.name, tool.toHand]);
+  const holders = (tools: readonly string[]) =>
+    castors(tools)
+      ?.walkThrough.flatMap((move) => move.closeUp?.shapes ?? [])
+      .map((shape) => shape.kind)
+      .filter((kind) => kind !== "hex" && kind !== "clockwise");
+
+  it("hold the head with pliers and turn the nut with the adjustable, naming no spanner as theirs", () => {
+    const kit = [...theirs, "Adjustable spanner", "Pliers"];
+
+    expect(chips(kit)).toEqual([
+      ["Drill, 7 mm bit", true],
+      ["Adjustable spanner", true],
+      ["Pliers or 10 mm spanner", true],
+    ]);
+    expect(castors(kit)?.actions.at(-1)?.howTo).toBe(
+      "Tighten each: pliers on the head, their handles against the castor. Turn the nut underneath.",
+    );
+    // Drawn as they are: pliers on the head, the adjustable on the nut.
+    expect(holders(kit)).toEqual(["pliers", "adjustable"]);
+    expect(castors(kit)?.walkThrough.at(-1)?.says).not.toContain("10 mm socket");
+  });
+
+  it("never count one adjustable as two spanners", () => {
+    expect(chips([...theirs, "Adjustable spanner"])).toEqual([
+      ["Drill, 7 mm bit", true],
+      ["Adjustable spanner", true],
+      ["10 mm spanner or pliers", false],
+    ]);
+    const missing = built({ tools: [...theirs, "Adjustable spanner"] }).findings.find(
+      (finding) => finding.kind === "tools-missing",
+    );
+    expect(missing?.kind === "tools-missing" && missing.tools.map((tool) => tool.name)).toContain(
+      "Spanner",
+    );
+  });
+
+  it("use a spanner on each with two spanners, and say the size is stamped on them", () => {
+    const kit = [...theirs, "Spanner set"];
+
+    expect(chips(kit)).toEqual([
+      ["Drill, 7 mm bit", true],
+      ["10 mm spanner × 2", true],
+    ]);
+    expect(castors(kit)?.actions.at(-1)?.howTo).toBe(
+      "Tighten each: spanner on the head, its handle against the castor. Turn the nut underneath.",
+    );
+    expect(holders(kit)).toEqual(["open-spanner", "open-spanner"]);
+    expect(castors(kit)?.walkThrough.at(-1)?.says).toContain("look for 10");
+  });
+
+  it("turn the nut with the socket and hold the head with a spanner, with a socket set", () => {
+    const kit = [...theirs, "Socket set", "Spanner"];
+
+    expect(chips(kit)).toEqual([
+      ["Drill, 7 mm bit", true],
+      ["10 mm socket", true],
+      ["10 mm spanner", true],
+    ]);
+    expect(holders(kit)).toEqual(["open-spanner", "socket"]);
+    expect(chips([...theirs, "Socket set"])).toEqual([
+      ["Drill, 7 mm bit", true],
+      ["10 mm socket", true],
+      ["10 mm spanner or pliers", false],
+    ]);
+  });
+
+  it("keep the lines it was started on before they were drilled through the plate", () => {
+    const old = stepOf(built({ tools: theirs, started: ["fit-castors"] }), "fit-castors");
+
+    expect(old?.actions.map((action) => action.howTo)).toEqual([
+      "Set a castor on the base 10 mm in from each end, centred across it, and mark its holes.",
+      "Drill a 7 mm clearance hole straight through at each mark.",
+      "Push each bolt up through a washer, the castor plate and the base, then add a washer and a lock nut, and tighten with the spanner.",
+    ]);
+    expect(old?.lines).toBeUndefined();
+    // Started on these lines (kept with it), it keeps them.
+    const now = stepOf(
+      built({
+        tools: theirs,
+        started: ["fit-castors"],
+        kept: [{ step: "fit-castors", tool: "through-plate" }],
+      }),
+      "fit-castors",
+    );
+    expect(now?.actions).toHaveLength(4);
+    expect(now?.lines).toBe("through-plate");
+    expect(stepOf(built({ tools: theirs }), "fit-castors")?.actions).toEqual(now?.actions);
   });
 });

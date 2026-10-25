@@ -473,26 +473,30 @@ test.describe("on the unfolded Fold", () => {
     await expect(checklist.getByRole("checkbox", { name: "Line 1 done" })).toBeChecked();
     await expect(checklist.getByRole("checkbox", { name: "Line 2 done" })).not.toBeChecked();
 
-    // The castors, after the frames (#783): the base alone in 3D, lit; the bolts at the length to
-    // use, with why in gold; two spanners, and holding the bolt's head shown close up.
+    // The castors, after the frames (#783): the base in the Workmate's jaws, lit; four short
+    // lines; the bolts at the length to use, with why in gold; the drill and its bit as one, two
+    // spanners, tightening shown close up, and one bolt taken apart.
     for (let step = 4; step < 6; step += 1) await done.click();
     await expect(
       steps.getByRole("heading", { name: "Fit the castors to the bases" }),
     ).toBeVisible();
     await expect(letter(page, "E, Castor bases")).toHaveAttribute("aria-current", "step");
     await expect(letter(page, "A, Legs")).toHaveCount(0);
+    await expect(page.getByRole("figure", { name: "In your Workmate, in 3D" })).toBeVisible();
+    await expect(checklist.getByRole("checkbox")).toHaveCount(4);
     await expect(steps).toContainText(
       "Fixings: M6 × 60 bolts (16), M6 washers (32) and M6 lock nuts (16)",
     );
     const found = steps.getByRole("list", { name: "To check in this step" });
     await expect(found).toContainText("M6 × 50 bolts too short");
     await expect(found).toContainText("The steps and buy list use ones 60 mm long.");
-    await expect(steps.getByRole("list", { name: "Tools for this step" })).toContainText(
-      "10 mm spanner × 2 (or spanner + 10 mm socket)?",
-    );
+    const tools = steps.getByRole("list", { name: "Tools for this step" });
+    await expect(tools).toContainText("Drill, 7 mm bit");
+    await expect(tools).toContainText("10 mm spanner × 2?");
     await expect(steps.getByRole("region", { name: "How it's done" })).toContainText(
-      "Close-up · Holding the bolt's head",
+      "Close-up · Tighten",
     );
+    await expect(closeUps.last()).toContainText("Close-up · One bolt, apart");
   });
 
   test("hold to ask: what's said goes to the Build's chat about the step, and its answer shows over the picture", async ({

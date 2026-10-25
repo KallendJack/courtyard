@@ -8,6 +8,13 @@ import { markingWalk, type Section } from "./walk-throughs.ts";
 // read the cut plan, and the cutting step reads the tools to hand: a hand saw on a folding
 // workbench, or a circular or mitre saw once there is one (#777).
 
+/**
+ * A step's tool as the template writes it: the tool, or the tool with what this step calls it
+ * ("Drill, 7 mm bit"), and whether it's to hand when the step knows better than the tool's own
+ * (pliers holding a bolt's head, #783).
+ */
+export type DraftTool = Tool | { tool: Tool; name: string; toHand?: boolean };
+
 /** A step as the template writes it, before it's numbered and its tools are checked. */
 export type Draft = {
   /** What it does, as a slug: the step's ID, the same whichever steps the Build has. */
@@ -20,8 +27,9 @@ export type Draft = {
   /** The parts it puts on the Build: its parts, unless it only prepares or checks them. */
   adds?: readonly string[];
   ways?: readonly Way[];
-  /** Each tool, or a tool with what this step calls it ("10 mm spanner × 2"). */
-  tools: readonly (Tool | { tool: Tool; name: string })[];
+  /** What its lines are, when a step started keeps them (#783). */
+  lines?: string;
+  tools: readonly DraftTool[];
   safety?: readonly Tool[];
   fixings?: readonly { name: string; count: number }[];
   actions: readonly Action[];

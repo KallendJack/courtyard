@@ -97,16 +97,3 @@ const SPANNERS: Readonly<Record<number, number>> = { 4: 7, 5: 8, 6: 10, 8: 13, 1
 /** The castor bolts' spanner size, mm; none for a thread not listed. */
 export const spannerFor = (castors: Castors): number | undefined =>
   SPANNERS[castors.bolt.diameter.value];
-
-/**
- * What a castor bolt passes through, head to nut, with the Build's washers: one under the nut,
- * against the wood, and a second, when there is one, under the head on the plate (#783).
- */
-export const boltStack = (castors: Castors): string =>
-  [
-    ...(castors.washer.perBolt > 1 ? ["washer"] : []),
-    "plate",
-    "base",
-    ...(castors.washer.perBolt > 0 ? ["washer"] : []),
-    "nut",
-  ].join(", ");

@@ -81,3 +81,49 @@ export const toolsFrom = (names: readonly string[]): Tool[] => {
   );
   return Tool.options.filter((tool) => said.some((name) => TOOL_WORDS[tool].test(name)));
 };
+
+/**
+ * The owner's tools that turn or hold a bolt's head and nut (#783), by what each is: fixed
+ * spanners, adjustables, a socket set and pliers. Your tools has no tile for these, so they're
+ * the owner's own names ("Adjustable spanner", "Pliers", "Socket set"); a name in the plural or a
+ * set ("Spanner set", "spanners") is two or more, and anything else is one, so one adjustable is
+ * never two spanners.
+ */
+export type SpannerKit = {
+  readonly spanners: number;
+  readonly adjustables: number;
+  readonly socket: boolean;
+  readonly pliers: boolean;
+};
+
+export const NO_SPANNERS: SpannerKit = {
+  spanners: 0,
+  adjustables: 0,
+  socket: false,
+  pliers: false,
+};
+
+const KIT_WORDS = {
+  pliers: /\b(pliers|mole grips?|locking grips?)\b/,
+  socket: /\b(sockets?|ratchet)\b/,
+  adjustable: /\b(adjustables?|shifters?)\b/,
+  spanner: /\b(spanners?|wrench(es)?)\b/,
+  several: /\b(spanners|wrenches|adjustables|shifters|set)\b/,
+} as const;
+
+/** The spanner kit among the owner's tools, as Your tools saves them. */
+export const spannerKitFrom = (names: readonly string[]): SpannerKit => {
+  const kit = { ...NO_SPANNERS };
+  for (const said of names) {
+    const name = said
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+    const count = KIT_WORDS.several.test(name) ? 2 : 1;
+    if (KIT_WORDS.socket.test(name)) kit.socket = true;
+    else if (KIT_WORDS.adjustable.test(name)) kit.adjustables += count;
+    else if (KIT_WORDS.spanner.test(name)) kit.spanners += count;
+    else if (KIT_WORDS.pliers.test(name)) kit.pliers = true;
+  }
+  return kit;
+};

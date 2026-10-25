@@ -766,55 +766,69 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     );
   });
 
-  it("fit the castors by drilling through each plate's own hole, one at a time, bolting each loosely (#783)", () => {
+  it("fit the castors in four short lines, as the board says, the sizes one tap away (#783)", () => {
     const fitting = stepOf(built(goldenBench), "fit-castors");
 
     expect(fitting?.actions.map((action) => action.howTo)).toEqual([
-      "Lay a base (E) upside down on two offcuts, so the drill can come out underneath. Set a castor on it 10 mm in from one end, centred across it.",
-      "Drill a 7 mm clearance hole straight through the base, through one of the plate's own holes, so the hole lines up with it. If the drill seems to stop, its clutch is slipping: turn the collar behind the chuck to the drill symbol.",
-      "Push a bolt down through a washer, the plate's hole and the base. Put a washer and a lock nut on underneath, and start the nut by hand, so the castor can't move.",
-      "Drill each next hole the same way, through the plate's hole, and bolt it loosely. Then the other castor, 10 mm in from the other end, and the other base.",
-      "Tighten each nut: hold the bolt's head still with a 10 mm spanner, or pliers, and turn the nut with another 10 mm spanner or a 10 mm socket. An adjustable spanner works too: wind it snug onto the nut. Stop when the washer bites into the wood, then about a quarter turn more. Lock nuts are stiff all the way: that's normal.",
-      "If a hole is off, widen it sideways with the same bit (the washer covers it), or turn the plate 90° and drill fresh holes through it.",
+      "Base in the Workmate's jaws. Castor upside down on its end: same gap both sides, a fingernail from the end.",
+      "Drill one hole through the plate with the 7 mm bit. Bolt it loosely.",
+      "Drill the next hole through the plate. Bolt it. Then the other two.",
+      "Tighten each: spanner on the head, its handle against the castor. Turn the nut underneath.",
     ]);
     expect(fitting?.actions.map((action) => action.numbers)).toEqual([
-      "E upside down; castor 10 from the end, centred.",
-      "7 mm through one plate hole.",
-      "Washer, plate, base, washer, nut, by hand.",
-      "Each next hole through the plate, bolted loosely.",
-      "Head held, 10 mm on the nut: washer bites, then ¼ turn.",
-      "Hole off? Widen it sideways, or turn the plate 90°.",
+      "E in the jaws; castor 10 from the end, centred.",
+      "7 mm through one plate hole; bolt loosely.",
+      "Each next hole through the plate; bolt it.",
+      "Head held against the castor; turn the nut.",
     ]);
+    // The rest is in "show me how", never in the lines.
+    const said = fitting?.walkThrough.map((move) => move.says).join(" ");
+    for (const tip of [
+      "turn the collar behind the chuck to the drill symbol",
+      "widen it sideways with the same bit",
+      "Start each nut by hand",
+      "then about a quarter turn more",
+    ]) {
+      expect(said).toContain(tip);
+      expect(fitting?.actions.some((action) => action.howTo.includes(tip))).toBe(false);
+    }
   });
 
-  it("list two 10 mm spanners, or a spanner and a socket, matched against Your tools (#783)", () => {
-    const tools = (build: Build) =>
-      stepOf(build, "fit-castors")?.tools.map((tool) => [tool.tool, tool.name, tool.toHand]);
+  it("put the base on two offcuts when there's no Workmate (#783)", () => {
+    const derived = deriveBench(goldenBench, { tools: ["Drill / driver", "Drill bits"] });
+    const fitting = derived.ok ? stepOf(derived.value, "fit-castors") : undefined;
 
-    expect(tools(built(goldenBench))).toEqual([
-      ["tape-measure", "Tape measure", true],
-      ["drill-driver", "Drill driver", true],
-      ["drill-bits", "Drill bits", true],
-      ["spanner", "10 mm spanner × 2 (or spanner + 10 mm socket)", false],
-    ]);
-    const withSockets = deriveBench(goldenBench, { tools: ["Socket set", "Drill / driver"] });
-    expect(withSockets.ok && tools(withSockets.value)?.at(-1)?.[2]).toBe(true);
+    expect(fitting?.actions[0]?.howTo).toBe(
+      "Base upside down on two offcuts. Castor upside down on its end: same gap both sides, a fingernail from the end.",
+    );
+    expect(fitting?.scene?.title).toBe("On two offcuts");
   });
 
-  it("say the washers the Build has: one a bolt goes under the nut (#783)", () => {
+  it("show one bolt apart, its washer only under the nut when the Build has one a bolt (#783)", () => {
     const one = built({
       ...goldenBench,
       castors: { ...goldenBench.castors, washer: { ...goldenBench.castors.washer, perBolt: 1 } },
     });
-    const fitting = stepOf(one, "fit-castors");
+    const apart = stepOf(one, "fit-castors")?.closeUp;
 
-    expect(fitting?.actions[2]?.howTo).toBe(
-      "Push a bolt down through the plate's hole and the base. Put a washer and a lock nut on underneath, and start the nut by hand, so the castor can't move.",
+    expect(apart?.title).toBe("One bolt, apart");
+    expect(apart?.labels?.map((label) => label.says)).toEqual([
+      "Top · castor side",
+      "bolt head",
+      "plate",
+      "base",
+      "Underneath",
+      "washer",
+      "nut",
+    ]);
+    expect(apart?.notes).toEqual(["The washer only under the nut, against the wood."]);
+    // Top to bottom: the head, the plate, the base, then the washer and the nut underneath.
+    const y = (label: string) => apart?.pieces.find((piece) => piece.label === label)?.y ?? 0;
+    const head = apart?.pieces.filter((piece) => piece.label === "bolt").at(-1)?.y ?? 0;
+    expect([head, y("E"), y("washer"), y("nut")]).toEqual(
+      [head, y("E"), y("washer"), y("nut")].sort((a, b) => a - b),
     );
-    expect(fitting?.actions[2]?.numbers).toBe("Plate, base, washer, nut, by hand.");
-    expect(fitting?.scene?.marks).toContainEqual(
-      expect.objectContaining({ kind: "note", says: "plate, base, washer, nut" }),
-    );
+    expect(apart?.pieces.filter((piece) => piece.label === "washer")).toHaveLength(1);
   });
 
   it("say every size to the whole mm, though the bench is 899.6 high on its castors", () => {
