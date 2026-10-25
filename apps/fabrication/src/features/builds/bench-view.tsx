@@ -11,6 +11,7 @@ import {
   hatching,
   markWords,
   placing,
+  spread,
   TILT,
   themed,
   viewFrom,
@@ -33,45 +34,6 @@ const TAP_SLOP = 6;
 
 /** How much of the view's shorter half the scene reaches, from its middle, once fitted (#753). */
 const FILL = 0.9;
-
-/** The room a part's letter takes, its 32 px and a gap, so no two overlap (#753). */
-const LETTER_ROOM = 36;
-
-/** Where a letter may move to make room, nearest first: a little way each side, then further. */
-const NUDGES = [1, 2, 3, 4, 5, 6].flatMap((far) =>
-  [
-    [0, 1],
-    [0, -1],
-    [1, 0],
-    [-1, 0],
-    [1, 1],
-    [-1, 1],
-    [1, -1],
-    [-1, -1],
-  ].map(([across = 0, down = 0]) => ({
-    x: (across * far * LETTER_ROOM) / 2,
-    y: (down * far * LETTER_ROOM) / 2,
-  })),
-);
-
-/**
- * Where each letter goes, in order: on its part, or the nearest spot clear of those placed before
- * it, so G never sits on H.
- */
-const spread = (wanted: readonly { x: number; y: number }[]) => {
-  const placed: { x: number; y: number }[] = [];
-  const clear = (x: number, y: number) =>
-    placed.every(
-      (other) => Math.abs(other.x - x) >= LETTER_ROOM || Math.abs(other.y - y) >= LETTER_ROOM,
-    );
-  for (const { x, y } of wanted) {
-    const nudge = clear(x, y)
-      ? { x: 0, y: 0 }
-      : NUDGES.find((each) => clear(x + each.x, y + each.y));
-    placed.push(nudge === undefined ? { x, y } : { x: x + nudge.x, y: y + nudge.y });
-  }
-  return placed;
-};
 
 /**
  * The parts with a letter over them: those lit at the step, or every part when none is, one

@@ -24,7 +24,7 @@ turning in 3D, its cut plan with each offcut's length, and "M6 × 50 bolts too s
 | `chat/hold-to-ask.tsx` | Hold to ask, and the answer it brings over the picture, or that it didn't answer, with Try again |
 | `bench-panel.tsx` | The 3D panel: its label, Reset view, what sits at its foot, and a part's card |
 | `bench-view.tsx` | The scene itself, `three`, loaded lazily so only this page loads it: the whole Build, or a step's picture with its marks, fitted to its panel, its letters apart |
-| `scene.ts` | What `bench-view.tsx` draws a scene with: where the camera goes and how far it may tilt, the marks' lines and words, the waste side's hatching |
+| `scene.ts` | What `bench-view.tsx` draws a scene with: where the camera goes and how far it may tilt, the marks' lines and words, the waste side's hatching, the letters kept apart |
 | `cut-plan.tsx` | Each length of timber as a bar of its cuts and its offcut, and each sheet with its pieces where they sit, each with its size; a length as it's marked, with the saw's cut between pieces |
 | `buy-list.tsx` | What to buy, from where, how many and for how much, with the total; a timber or sheet with options opens them |
 | `stock-options.tsx` | A stock's options (#704; "Fabrication · Choose materials · Tablet (#704)"): the recommended first, each costed, Pick, and Undo of the pick just made; `useStockOptions`, which stock's are open |
