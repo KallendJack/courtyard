@@ -86,51 +86,7 @@ export {
   DocumentSummary,
   SaveAsDocument,
 } from "./lib/documents.ts";
-export {
-  BuildChat,
-  BuildChatEntry,
-  BuildChatSent,
-  BuildOpened,
-  BuildPlace,
-} from "./lib/fabrication/app.ts";
-export {
-  BUILD_NAME_MAX_CHARACTERS,
-  BuildChange,
-  BuildChanged,
-  BuildFile,
-  BuildName,
-  BuildParameters,
-  BuildParametersChange,
-  BuildSave,
-  BuildSlug,
-  BuildSummary,
-  Builds,
-  BuildTemplate,
-  BuildView,
-} from "./lib/fabrication/builds.ts";
-export {
-  BuildBox,
-  BuildBuyLine,
-  BuildCutPlan,
-  BuildFinding,
-  BuildPart,
-  BuildStep,
-  DerivedBuild,
-} from "./lib/fabrication/derived.ts";
-export {
-  COMMON_TOOLS,
-  FoundTool,
-  PRINTER_TOOL,
-  TOOLS_SAID_MAX_CHARACTERS,
-  ToolPick,
-  ToolsChange,
-  ToolsHeard,
-  ToolsSaid,
-  ToolsSaved,
-  ToolsUndo,
-  WorkspaceThing,
-  YourTools,
-} from "./lib/fabrication/tools.ts";
+export * from "./lib/fabrication/index.ts";
 export { FloorPlan, PlanItem, PlanOpening, PlanWall, wallLength } from "./lib/floor-plan.ts";
 export {
   FRESH_START_WORDS,
@@ -319,7 +275,7 @@ export {
   skillTitle,
   UsableSkillSummary,
 } from "./lib/skills.ts";
-export { SourcedSize } from "./lib/sourced/size.ts";
+export { SizeSource, SourcedSize } from "./lib/sourced/size.ts";
 export {
   STATUS_ITEM_MAX_LENGTH,
   StatusItem,

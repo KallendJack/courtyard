@@ -21,6 +21,7 @@ const ensureFolder = (path: string) => {
 };
 
 const NOT_A_PORT = "must be a port number from 1 to 65535";
+const NOT_A_TIME = "must be a whole number of milliseconds, 1 or more";
 const unsetIfEmpty = (value: unknown) => (value === "" ? undefined : value);
 const required = z.string({ error: "is required" }).min(1, "is required");
 /** A setting that's on (1) or off (0), and `whenUnset` when it isn't set. */
@@ -73,6 +74,10 @@ const Env = z.object({
       .string()
       .regex(/^[A-Za-z0-9.]+$/, "must be the GitHub App's client ID, from its settings page")
       .optional(),
+  ),
+  COURTYARD_PRINT_TIME_LIMIT_MS: z.preprocess(
+    unsetIfEmpty,
+    z.coerce.number({ error: NOT_A_TIME }).int(NOT_A_TIME).min(1, NOT_A_TIME).default(60_000),
   ),
   COURTYARD_PAPER_COMMAND: z.preprocess(unsetIfEmpty, z.string().optional()),
   COURTYARD_PREVIEW_PORTS: z.preprocess(
@@ -153,6 +158,11 @@ export type Settings = {
    */
   readonly buildsLock: BuildsLock;
   /**
+   * How a printed part is made (#702): in its turn in the builds lock, and stopped once it takes
+   * longer than its time limit, a minute unless set.
+   */
+  readonly printing: { readonly lock: BuildsLock; readonly timeLimitMs: number };
+  /**
    * Paper's command on the worker machine (ADR 0023), for connecting Paper from a code workspace's
    * page (#308); `null` to use the one a code workspace names already, if any.
    */
@@ -196,6 +206,10 @@ export const readSettings = (env: Environment): Result<Settings, string> => {
     updateTask: parsed.data.COURTYARD_UPDATE_TASK,
     githubClientId: parsed.data.COURTYARD_GITHUB_CLIENT_ID ?? null,
     buildsLock: buildsLockOf(parsed.data),
+    printing: {
+      lock: buildsLockOf(parsed.data),
+      timeLimitMs: parsed.data.COURTYARD_PRINT_TIME_LIMIT_MS,
+    },
     paperCommand: parsed.data.COURTYARD_PAPER_COMMAND ?? null,
     previewPorts: parsed.data.COURTYARD_PREVIEW_PORTS,
   });

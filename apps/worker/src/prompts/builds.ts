@@ -1,5 +1,11 @@
 import { type BuildSave, BuildTemplate } from "@courtyard/contract";
-import { BenchParameters, type Build, type Finding } from "@courtyard/fabrication";
+import {
+  BenchParameters,
+  type Build,
+  type BuildPrint,
+  type Finding,
+  PRINTED_PARAMETERS,
+} from "@courtyard/fabrication";
 import { z } from "zod";
 import { buildPath, type ReadBuilds } from "../features/fabrication/index.ts";
 import {
@@ -21,15 +27,21 @@ import { contained, textReply } from "./text.ts";
 export const BUILD_TOOL_NAME = "save_build" satisfies TurnToolName;
 
 /** When and how a model uses the Build tool (docs/ai-conduct.md, Builds). */
-export const KEEPING_BUILDS = `Anything the owner will make, such as a workbench, is a Build, which you keep with the ${BUILD_TOOL_NAME} tool: you choose its template and set its parameters (its sizes, each with where it came from, the stock it's cut from, the fixings and the tools to hand), and code works out its parts, cut plan, buy list, steps and findings. Start one once the owner wants to make something a template fits, and change it, one parameter at a time, as they decide. Never write a length, a quantity, a price or a total yourself, nor work one out: every one you give comes from the tool's reply, as it says it, and for a Build's numbers without changing it, such as how many screws, call the tool with only its label. To change one, change the parameter it comes from, and the Build works the rest out again. A size the owner measured is measured; one from a maker's page is specified, with the page; any other is assumed, and the reply lists those to check before cutting. Tell the owner what the reply finds: a fixing too short, a tool needed that isn't to hand, a size assumed. Some making rules code can't check, so say them: test-fit one piece before cutting or fixing the rest, measure before buying, and say plainly when a step needs a pro. When a project has a step for making it, give that step with the Build, so the step owns it. A Build's materials live in its buy list, never as wanted Things: offer to remove the wanted Things its buy list now holds, and remove them once the owner agrees. A material becomes a Thing only once the owner has it and it isn't used up in the Build, such as its castors, not its screws. The owner sees each change as a note under your answer, so leave saves unmentioned.`;
+export const KEEPING_BUILDS = `Anything the owner will make, such as a workbench, is a Build, which you keep with the ${BUILD_TOOL_NAME} tool: you choose its template and set its parameters (its sizes, each with where it came from, the stock it's cut from, the fixings and the tools to hand), and code works out its parts, cut plan, buy list, steps and findings. Start one once the owner wants to make something a template fits, and change it, one parameter at a time, as they decide. Never write a length, a quantity, a price or a total yourself, nor work one out: every one you give comes from the tool's reply, as it says it, and for a Build's numbers without changing it, such as how many screws, call the tool with only its label. To change one, change the parameter it comes from, and the Build works the rest out again. A size the owner measured is measured; one from a maker's page is specified, with the page; any other is assumed, and the reply lists those to check before cutting. Tell the owner what the reply finds: a fixing too short, a tool needed that isn't to hand, a size assumed, a part too big for the printer's plate, a wall too thin to print. A part to 3D print is a Build too: battery-holster, castor-shim or bracket when one fits, and for any other shape printed-part, whose part recipe you write as a base and the features cut into it or raised on it. Every size of a real thing a part holds or takes, such as a battery or a screw, comes from the owner or a maker's page: never fill one in from memory, but ask, or set it assumed only once the owner agrees to go ahead without it. Some making rules code can't check, so say them: test-fit one piece before cutting or fixing the rest, measure before buying, and say plainly when a step needs a pro. When a project has a step for making it, give that step with the Build, so the step owns it. A Build's materials live in its buy list, never as wanted Things: offer to remove the wanted Things its buy list now holds, and remove them once the owner agrees. A material becomes a Thing only once the owner has it and it isn't used up in the Build, such as its castors, not its screws. The owner sees each change as a note under your answer, so leave saves unmentioned.`;
 
 /**
  * What a Build's parameters take, in the tool's own description: Codex's tool format keeps no
  * description of an object input, so said there it never reaches the model (#732).
  */
-const PARAMETERS_SHAPE = `Its parameters: a new Build's are all of them; a change gives only what changes, merged into what's there (an object merges, null takes a value out, anything else replaces it). Every size is {"value": 900, "unit": "mm", "source": {"kind": "measured"}}, its source measured, specified (with its reference, the maker's page) or assumed. framed-bench's parameters, as JSON Schema: ${JSON.stringify(
-  z.toJSONSchema(BenchParameters, { io: "input", reused: "ref" }),
-)}`;
+const PARAMETERS_SHAPE = `Its parameters: a new Build's are all of them; a change gives only what changes, merged into what's there (an object merges, null takes a value out, anything else replaces it). Every size of a real thing is {"value": 900, "unit": "mm", "source": {"kind": "measured"}}, its source measured, specified (with its reference, the maker's page) or assumed; a size the owner chooses for a printed part, such as its walls, is a number of mm. A printed part's places are mm from its front left bottom corner, and a feature on a face is placed by u across and v up the face as you look at it. Each template's parameters, as JSON Schema: ${[
+  ["framed-bench", BenchParameters] as const,
+  ...Object.entries(PRINTED_PARAMETERS),
+]
+  .map(
+    ([template, schema]) =>
+      `${template}: ${JSON.stringify(z.toJSONSchema(schema, { io: "input", reused: "ref" }))}`,
+  )
+  .join(" ")}`;
 
 /** The Build tool as a model reads it: what it does, and that the rule is elsewhere. */
 export const BUILD_TOOL: TurnTool = {
@@ -47,7 +59,7 @@ export const BUILD_TOOL: TurnTool = {
       .optional()
       .describe("Its name, as the owner would say it, such as Workbench. A new Build needs one."),
     template: BuildTemplate.optional().describe(
-      "What it's made from: framed-bench, a bench or table on a timber frame. A new Build needs one.",
+      "What it's made from: framed-bench, a bench or table on a timber frame; battery-holster, a printed tray a battery or anything boxy slides into, screwed up through its back; castor-shim, a printed plate under a castor's that lifts it; bracket, a printed L-bracket; printed-part, any other printed shape, from its part recipe. A new Build needs one.",
     ),
     parameters: z
       .record(z.string(), z.unknown())
@@ -135,22 +147,41 @@ const findingLine = (finding: Finding) => {
     case "too-big-for-stock":
       return `Part ${finding.label} is bigger than ${finding.stock}, so it's left out of the cut plan.`;
     case "assumed":
-      return `Assumed, to check before cutting: ${finding.sizes.join(", ")}.`;
+      return `Assumed, to check before cutting or printing: ${finding.sizes.join(", ")}.`;
+    case "cannot-make":
+      return `It can't be made as it is, so no file is made: ${finding.problems.join(" ")}`;
+    case "too-big-for-plate":
+      return `At ${finding.size.length} × ${finding.size.depth} × ${finding.size.height} mm it's bigger than the printer's ${finding.plate.width} × ${finding.plate.depth} × ${finding.plate.height} mm plate.`;
+    case "wall-too-thin":
+      return `${finding.where} is ${finding.mm} mm, thinner than the ${finding.least} mm the nozzle prints well.`;
   }
 };
+
+/** A printed part's own, for the model: the plate, its sizes with their sources, the clearance. */
+const printLines = (print: BuildPrint) => [
+  `${print.fits ? "Fits" : "Doesn't fit"} the printer's ${print.plate.width} × ${print.plate.depth} × ${print.plate.height} mm plate. Its holes and pockets allow ${print.clearance.value} mm (${print.clearance.source.kind}); walls need ${2 * print.nozzle.value} mm or more.`,
+  "Sizes:",
+  ...print.sizes.map(
+    ({ name, says, source }) => `- ${name}: ${says}${source === null ? "" : `, ${source.kind}`}`,
+  ),
+  `${print.recipe === null ? "No file is made until it can be." : "Fabrication makes its file to print, in 3D, from these."}`,
+];
 
 /** Everything code worked out for a Build, for the model to report as it is. */
 const numbersOf = (build: Build) => {
   const { length, depth, height } = build.size;
   const { cutPlan, buyList } = build;
   return [
-    `A framed bench, ${length} × ${depth} × ${height} mm.`,
+    build.print === null
+      ? `A framed bench, ${length} × ${depth} × ${height} mm.`
+      : `A printed part (${build.template}), ${length} × ${depth} × ${height} mm.`,
+    ...(build.print === null ? [] : printLines(build.print)),
     "Parts:",
     ...build.parts.map(
       (part) =>
         `- ${part.label} ${part.name} × ${part.count}: ${part.length} × ${part.width} × ${part.thickness} mm, ${part.material.stock}`,
     ),
-    `Cut plan (${cutPlan.kerf} mm for each saw cut):`,
+    ...(build.print === null ? [`Cut plan (${cutPlan.kerf} mm for each saw cut):`] : []),
     ...cutPlan.timber.flatMap(({ stock, stockLength, lengths }) =>
       lengths.map(
         ({ cuts, offcut }, index) =>

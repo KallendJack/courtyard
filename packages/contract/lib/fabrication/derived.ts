@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SizeSource, SourcedSize } from "../sourced/size.ts";
 
 // What `packages/fabrication` derives for a Build, as Fabrication shows it (#698): the engine's
 // `Build` (its `build.ts`), checked here so the app parses what crosses rather than trusting it,
@@ -75,7 +76,7 @@ export type BuildCutPlan = z.infer<typeof BuildCutPlan>;
 
 export const BuildBuyLine = z.object({
   item: z.string(),
-  kind: z.enum(["timber", "sheet", "fitted", "fixing"]),
+  kind: z.enum(["timber", "sheet", "fitted", "fixing", "filament"]),
   for: z.string(),
   needed: z.number(),
   packOf: z.number(),
@@ -116,8 +117,34 @@ export const BuildFinding = z.discriminatedUnion("kind", [
   }),
   z.object({ kind: z.literal("too-big-for-stock"), label: z.string(), stock: z.string() }),
   z.object({ kind: z.literal("assumed"), sizes: list(z.string()) }),
+  z.object({ kind: z.literal("cannot-make"), problems: list(z.string()) }),
+  z.object({
+    kind: z.literal("too-big-for-plate"),
+    size: z.object({ length: z.number(), depth: z.number(), height: z.number() }),
+    plate: z.object({ width: z.number(), depth: z.number(), height: z.number() }),
+  }),
+  z.object({
+    kind: z.literal("wall-too-thin"),
+    where: z.string(),
+    mm: z.number(),
+    least: z.number(),
+  }),
 ]);
 export type BuildFinding = z.infer<typeof BuildFinding>;
+
+/**
+ * A printed part's own (#702): the plate it's made for and whether it fits, the clearance its
+ * holes and pockets allow and the nozzle, and each size the Print tab lists, with its source when
+ * it's an object's (`null` for a size the owner chose, such as its walls).
+ */
+export const BuildPrint = z.object({
+  plate: z.object({ width: z.number(), depth: z.number(), height: z.number() }),
+  fits: z.boolean(),
+  clearance: SourcedSize,
+  nozzle: SourcedSize,
+  sizes: list(z.object({ name: z.string(), says: z.string(), source: SizeSource.nullable() })),
+});
+export type BuildPrint = z.infer<typeof BuildPrint>;
 
 /** Everything a Build shows, worked out from its template and parameters. */
 export const DerivedBuild = z.object({
@@ -129,5 +156,30 @@ export const DerivedBuild = z.object({
   buyList: z.object({ lines: list(BuildBuyLine), total: z.number(), unpriced: z.number() }),
   steps: list(BuildStep),
   findings: list(BuildFinding),
+  /** A printed part's own; `null` for a Build cut from timber and sheets. */
+  print: BuildPrint.nullable(),
 });
 export type DerivedBuild = z.infer<typeof DerivedBuild>;
+
+/**
+ * A printed part as the worker made it (#702): its size and volume from the solid itself, whether
+ * it's watertight (closed all round, so a slicer reads it), the filament it takes, and its
+ * triangles for the 3D view, in mm with `z` up from the plate.
+ */
+export const MadePart = z.object({
+  size: z.object({ length: z.number(), depth: z.number(), height: z.number() }),
+  /** mm³. */
+  volume: z.number(),
+  watertight: z.boolean(),
+  /** PLA's, at 100% infill: what the slicer says will be less. */
+  grams: z.number(),
+  mesh: z.object({
+    /** x, y, z for each corner, flat. */
+    positions: z.array(z.number()),
+    /** Three corners for each triangle, by their place in `positions`. */
+    triangles: z.array(z.number().int()),
+  }),
+  /** The files to print, by their names, under the Build's own path. */
+  files: z.object({ threeMf: z.string(), stl: z.string() }),
+});
+export type MadePart = z.infer<typeof MadePart>;

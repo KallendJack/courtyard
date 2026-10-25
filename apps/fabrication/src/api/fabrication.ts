@@ -7,6 +7,7 @@ import {
   BuildOpened,
   type BuildSlug,
   type ChangeId,
+  MadePart,
   MESSAGE_FIELD,
   type NewMessage,
   ProviderList,
@@ -60,6 +61,14 @@ const buildPath = (workspaceId: WorkspaceId, slug: BuildSlug) =>
 /** A Build with everything derived, and where it is. */
 export const openBuild = (workspaceId: WorkspaceId, slug: BuildSlug) =>
   ask(buildPath(workspaceId, slug), BuildOpened);
+
+/** A printed part's Build made (#702): its size and triangles from the solid, and its files. */
+export const madePart = (workspaceId: WorkspaceId, slug: BuildSlug) =>
+  ask(`${buildPath(workspaceId, slug)}/print`, MadePart);
+
+/** Where one of a printed part's files downloads from, by its name. */
+export const printFile = (workspaceId: WorkspaceId, slug: BuildSlug, file: string) =>
+  `/api${buildPath(workspaceId, slug)}/print/${encodeURIComponent(file)}`;
 
 /** A Build's chat: what's been said in its session. */
 export const buildChat = (workspaceId: WorkspaceId, slug: BuildSlug) =>

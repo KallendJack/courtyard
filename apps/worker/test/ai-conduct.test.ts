@@ -10,7 +10,7 @@ import {
   type SessionEvent,
   SessionSummary,
 } from "@courtyard/contract";
-import { BenchParameters } from "@courtyard/fabrication";
+import { BenchParameters, PRINTED_PARAMETERS } from "@courtyard/fabrication";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { goldenBench } from "../../../packages/fabrication/bench/fixtures/golden.ts";
@@ -1908,9 +1908,17 @@ describe("Builds (#697, ADR 0036)", () => {
       `${await quotedInGuide("What the owner carries on over days")}\n\n${await quotedInGuide("Anything the owner will make")}`,
     );
     const tool = framing?.tools.find((offered) => offered.name === "save_build");
-    const schema = JSON.stringify(z.toJSONSchema(BenchParameters, { io: "input", reused: "ref" }));
+    const schemas = [
+      ["framed-bench", BenchParameters] as const,
+      ...Object.entries(PRINTED_PARAMETERS),
+    ]
+      .map(
+        ([template, schema]) =>
+          `${template}: ${JSON.stringify(z.toJSONSchema(schema, { io: "input", reused: "ref" }))}`,
+      )
+      .join(" ");
     expect(tool?.description).toBe(
-      await quotedInGuide("Starts or changes one of this workspace's Builds", { schema }),
+      await quotedInGuide("Starts or changes one of this workspace's Builds", { schemas }),
     );
     expect(inputsOf(tool)).toBe(await quotedInGuide("- build: To change a Build"));
   });

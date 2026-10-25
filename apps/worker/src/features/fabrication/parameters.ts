@@ -1,5 +1,5 @@
 import type { BuildParameters, BuildTemplate } from "@courtyard/contract";
-import { type Build, deriveBench } from "@courtyard/fabrication";
+import { type Build, deriveBench, derivePrinted } from "@courtyard/fabrication";
 import type { Result } from "../../lib/result.ts";
 
 // A Build's parameters: worked out by its template's engine, changed by a merge patch, and what a
@@ -8,6 +8,10 @@ import type { Result } from "../../lib/result.ts";
 /** Each template's engine: its parameters in, everything its Build shows out, or what's wrong. */
 const ENGINES: Readonly<Record<BuildTemplate, (parameters: unknown) => Result<Build, string[]>>> = {
   "framed-bench": deriveBench,
+  "battery-holster": derivePrinted("battery-holster"),
+  "castor-shim": derivePrinted("castor-shim"),
+  bracket: derivePrinted("bracket"),
+  "printed-part": derivePrinted("printed-part"),
 };
 
 /** Everything a Build shows, worked out from its template and parameters (ADR 0036). */

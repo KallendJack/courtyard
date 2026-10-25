@@ -16,18 +16,33 @@ export const mm = (value: number) => `${Math.round(value * 10) / 10}`;
 export const sizeLine = (size: DerivedBuild["size"]) =>
   `${mm(size.length)} × ${mm(size.depth)} × ${mm(size.height)} mm`;
 
-/** What the making rules found that needs the owner: all but the sizes assumed. */
-export const toCheck = (findings: readonly BuildFinding[]) =>
-  findings.filter((finding) => finding.kind !== "assumed");
-
 /** "A, B and C". */
 export const listed = (items: readonly string[]) =>
   items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
 
 /** A finding as its card says it: a title, and what to do. */
-export const findingWords = (
-  finding: Exclude<BuildFinding, { kind: "assumed" }>,
-): { title: string; detail: string } => {
+type Card = { readonly title: string; readonly detail: string };
+
+/**
+ * What the making rules found that needs the owner, each as its card says it: for a bench, all
+ * but the sizes assumed, which its cut plan says; for a printed part (#702), each size assumed
+ * too, since nothing else shows it before it's printed.
+ */
+export const checkCards = (derived: Pick<DerivedBuild, "findings" | "print">): Card[] =>
+  derived.findings.flatMap((finding) => {
+    if (finding.kind !== "assumed") return [findingWords(finding)];
+    const { print } = derived;
+    if (print === null) return [];
+    return finding.sizes.map((name) => {
+      const says = print.sizes.find((size) => size.name === name)?.says ?? "It";
+      return {
+        title: `${name} assumed`,
+        detail: `${says} isn't measured. Measure yours before printing: too tight and it won't fit.`,
+      };
+    });
+  });
+
+const findingWords = (finding: Exclude<BuildFinding, { kind: "assumed" }>): Card => {
   switch (finding.kind) {
     case "fixing-too-short": {
       const through = [...new Set(finding.through.map((layer) => layer.what))];
@@ -48,8 +63,24 @@ export const findingWords = (
         title: `${finding.label} is too big for ${finding.stock}`,
         detail: "Choose a bigger sheet or length, or a smaller size.",
       };
+    case "cannot-make":
+      return { title: "Can't be made as it is", detail: finding.problems.join(" ") };
+    case "too-big-for-plate":
+      return {
+        title: "Too big for the plate",
+        detail: `It's ${sizeLine(finding.size)}, and the plate takes ${sizeLine({ length: finding.plate.width, depth: finding.plate.depth, height: finding.plate.height })}. Make it smaller, or print it in parts.`,
+      };
+    case "wall-too-thin":
+      return {
+        title: `${finding.where} is too thin`,
+        detail: `${mm(finding.mm)} mm, less than the ${mm(finding.least)} mm the nozzle prints well. Make it thicker.`,
+      };
   }
 };
+
+/** The printer's clearance, as the plate's foot says it (#702). */
+export const clearanceLine = (print: NonNullable<DerivedBuild["print"]>) =>
+  `holes allow ${mm(print.clearance.value)} mm${print.clearance.source.kind === "assumed" ? " (assumed until the printer's calibrated)" : ""}`;
 
 /** The sizes the engine assumed rather than was given, as people say them. */
 const ASSUMED: Readonly<Record<string, string>> = {

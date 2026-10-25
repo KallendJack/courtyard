@@ -118,5 +118,6 @@ export const deriveBench = (input: unknown): Result<Build, string[]> => {
     steps,
     glossary: glossaryOf(steps.flatMap((step) => step.words)),
     findings,
+    print: null,
   });
 };

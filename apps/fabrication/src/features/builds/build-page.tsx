@@ -11,13 +11,18 @@ import { BuildChat } from "./build-chat.tsx";
 import { BuyList } from "./buy-list.tsx";
 import { CutPlan } from "./cut-plan.tsx";
 import { FINDINGS_ID, Findings } from "./findings.tsx";
+import { PrintPanel, PrintTab, useMaking } from "./print-panel.tsx";
 import { StepsList, ToolsList } from "./tools-steps.tsx";
-import { sizeLine, toCheck } from "./words.ts";
+import { checkCards, sizeLine } from "./words.ts";
 
-/** The side panel's tabs, as the board has them; on the cover screen, the 3D view and chat too. */
-const SIDE_TABS = ["Cut plan", "Buy list", "Tools", "Steps"] as const;
-const COVER_TABS = ["Bench", "Chat", ...SIDE_TABS] as const;
-type Tab = (typeof COVER_TABS)[number];
+/**
+ * The side panel's tabs, as the boards have them, for a bench and for a printed part (#702); on
+ * the cover screen, the 3D view and chat too.
+ */
+const BENCH_TABS = ["Cut plan", "Buy list", "Tools", "Steps"] as const;
+const PRINT_TABS = ["Print", "Buy list", "Steps"] as const;
+type SideTab = (typeof BENCH_TABS)[number] | (typeof PRINT_TABS)[number];
+type Tab = SideTab | "Bench" | "Part" | "Chat";
 
 /** A panel on the PC and the unfolded Fold: one of the board's three. */
 const PANEL = "flex min-h-0 flex-col rounded-card border border-border bg-surface p-4";
@@ -61,32 +66,47 @@ function Tabs(props: { tabs: readonly Tab[]; showing: Tab; show: (tab: Tab) => v
  * A Build's page (#698; Paper, 2 · Agreed, "Fabrication · A Build · Tablet (#698)" and
  * "· Desktop 1440×900 (#698)"): a top bar with the way back to its project in Courtyard, its name
  * and size, and what the making rules found; then three panels, its chat, the Build in 3D, and
- * its cut plan, buy list, tools and steps. On the cover screen the panels are tabs. A part tapped
- * anywhere is lit everywhere.
+ * its cut plan, buy list, tools and steps. A printed part (#702; "· Text to print · Tablet
+ * (#702)") shows itself on the printer's plate, and its Print tab before its buy list and steps.
+ * On the cover screen the panels are tabs. A part tapped anywhere is lit everywhere.
  */
 export function BuildPage(props: { build: BuildOpened }) {
   const { build } = props;
   const { derived, place } = build;
+  const { print } = derived;
   const router = useRouter();
   const cover = useLayout() === "cover";
+  const sideTabs: readonly SideTab[] = print === null ? BENCH_TABS : PRINT_TABS;
+  const coverTabs: readonly Tab[] = [print === null ? "Bench" : "Part", "Chat", ...sideTabs];
   const [lit, setLit] = useState<string>();
-  const [side, setSide] = useState<(typeof SIDE_TABS)[number]>("Cut plan");
-  const [coverTab, setCoverTab] = useState<Tab>("Bench");
+  const [side, setSide] = useState<SideTab>(sideTabs[0] ?? "Buy list");
+  const [coverTab, setCoverTab] = useState<Tab>(coverTabs[0] ?? "Chat");
   const pick = (label: string) => setLit((now) => (now === label ? undefined : label));
   const reread = useCallback(() => void router.invalidate(), [router]);
   // The Build may change from Courtyard too: it's read again the shared way.
   useFresh({ ask: () => router.invalidate() });
+  const making = useMaking({ workspaceId: place.workspace.id, slug: build.slug, derived });
 
-  const checks = toCheck(derived.findings).length;
+  const checks = checkCards(derived).length;
   const back = courtyardPlace(place);
 
   const showFindings = () => {
-    if (cover && !(SIDE_TABS as readonly string[]).includes(coverTab)) setCoverTab("Cut plan");
+    if (cover && !(sideTabs as readonly Tab[]).includes(coverTab))
+      setCoverTab(sideTabs[0] ?? "Buy list");
     requestAnimationFrame(() => document.getElementById(FINDINGS_ID)?.focus());
   };
 
-  const sideContent = (tab: (typeof SIDE_TABS)[number]): ReactNode => {
+  const sideContent = (tab: SideTab): ReactNode => {
     switch (tab) {
+      case "Print":
+        return print === null ? null : (
+          <PrintTab
+            print={print}
+            making={making}
+            workspaceId={place.workspace.id}
+            slug={build.slug}
+          />
+        );
       case "Cut plan":
         return <CutPlan derived={derived} lit={lit} pick={pick} />;
       case "Buy list":
@@ -102,23 +122,26 @@ export function BuildPage(props: { build: BuildOpened }) {
         return <StepsList derived={derived} lit={lit} pick={pick} />;
     }
   };
-  const sidePanel = (tab: (typeof SIDE_TABS)[number]) => (
+  const sidePanel = (tab: SideTab) => (
     <Scroller className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-col gap-4 pb-2">
-        <Findings findings={derived.findings} />
+        <Findings derived={derived} />
         {sideContent(tab)}
       </div>
     </Scroller>
   );
   const chat = <BuildChat workspaceId={place.workspace.id} slug={build.slug} onChanged={reread} />;
-  const bench = (
-    <BenchPanel
-      name={`The ${derived.template.split("-").at(-1)}`}
-      derived={derived}
-      lit={lit}
-      pick={pick}
-    />
-  );
+  const bench =
+    print === null ? (
+      <BenchPanel
+        name={`The ${derived.template.split("-").at(-1)}`}
+        derived={derived}
+        lit={lit}
+        pick={pick}
+      />
+    ) : (
+      <PrintPanel print={print} making={making} />
+    );
 
   const header = (
     <header
@@ -139,7 +162,9 @@ export function BuildPage(props: { build: BuildOpened }) {
         <h1 className="display-title truncate text-title">{build.name}</h1>
         <p className="truncate font-mono text-meta text-muted-foreground">
           {sizeLine(derived.size)}
-          {cover ? "" : ` · ${derived.template.replaceAll("-", " ")}`}
+          {cover
+            ? ""
+            : ` · ${print === null ? derived.template.replaceAll("-", " ") : "printed part"}`}
         </p>
       </div>
       {checks > 0 && (
@@ -163,9 +188,13 @@ export function BuildPage(props: { build: BuildOpened }) {
       <div className="flex h-full flex-col">
         {header}
         <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 pt-3 pb-4">
-          <Tabs tabs={COVER_TABS} showing={coverTab} show={setCoverTab} />
+          <Tabs tabs={coverTabs} showing={coverTab} show={setCoverTab} />
           <div className={classes(PANEL, "flex-1")}>
-            {coverTab === "Bench" ? bench : coverTab === "Chat" ? chat : sidePanel(coverTab)}
+            {coverTab === "Bench" || coverTab === "Part"
+              ? bench
+              : coverTab === "Chat"
+                ? chat
+                : sidePanel(coverTab)}
           </div>
         </div>
       </div>
@@ -178,7 +207,7 @@ export function BuildPage(props: { build: BuildOpened }) {
         <div className={PANEL}>{chat}</div>
         <div className={PANEL}>{bench}</div>
         <div className={classes(PANEL, "gap-4")}>
-          <Tabs tabs={SIDE_TABS} showing={side} show={(tab) => setSide(tab as typeof side)} />
+          <Tabs tabs={sideTabs} showing={side} show={(tab) => setSide(tab as SideTab)} />
           {sidePanel(side)}
         </div>
       </div>

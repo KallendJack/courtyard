@@ -7,6 +7,7 @@ import {
   type BuildPlace,
   BuildSlug,
   type Builds,
+  type MadePart,
   NewMessage,
   type ProviderList,
   ToolsChange,
@@ -34,6 +35,7 @@ import { readMessageWithAttachments, sessionError } from "../sessions/routes.ts"
 import { getWorkspace } from "../workspaces/index.ts";
 import { chatOf, chatSessionOf } from "./chat.ts";
 import { type BuildRefusal, readBuild, readBuilds, saveBuild, viewOf } from "./index.ts";
+import { createPrints, madePartOf, type PrintRefusal } from "./print.ts";
 import { hearTools, saveTools, type ToolsRefusal, undoToolsSave, yourTools } from "./tools.ts";
 
 // Fabrication's API (ADR 0037, #697): what the Fabrication app calls, never Courtyard's own
@@ -92,6 +94,34 @@ export const buildUndoError = (c: Context, refusal: WholeFilesUndoRefusal) =>
       })
     : sharedFileError(c, refusal, BUILDS);
 
+/** A printed part's files' names: its Build's file name, as a 3MF and an STL. */
+const filesOf = (slug: string): MadePart["files"] => ({
+  threeMf: `${slug}.3mf`,
+  stl: `${slug}.stl`,
+});
+
+/** Why a printed part wasn't made, as the API answers it. */
+const printError = (c: Context, refusal: PrintRefusal) => {
+  switch (refusal.kind) {
+    case "not-printed":
+      return apiError(c, { status: 404, error: "That Build isn't a printed part." });
+    case "cannot-make":
+      return apiError(c, {
+        status: 422,
+        error: `That part can't be made as it is: ${refusal.problems.join(" ")}`,
+      });
+    case "too-long":
+      return apiError(c, {
+        status: 503,
+        error: "Making that part took too long, so it was stopped: make it simpler.",
+      });
+    case "stopped":
+      return apiError(c, { status: 503, error: "Making that part was stopped." });
+    case "failed":
+      return apiError(c, { status: 500, error: "That part couldn't be made just now." });
+  }
+};
+
 /** Why the owner's tools weren't read or saved, as the API answers it. */
 const toolsError = (c: Context, refusal: ToolsRefusal) => {
   switch (refusal.kind) {
@@ -147,10 +177,13 @@ export const fabricationRoutes = (
      */
     sessions: Pick<Sessions, "list" | "events" | "create" | "send">;
     providers: readonly Provider[];
+    /** How a printed part's solid and files are made (#702): the builds lock, and a time limit. */
+    printing: Parameters<typeof createPrints>[0];
   },
 ) => {
   const routes = new Hono();
-  const { now, sessions, providers, ...where } = target;
+  const { now, sessions, providers, printing, ...where } = target;
+  const prints = createPrints(printing);
 
   // The owner's tools (#707): every Build's and every workspace's, with what to move.
   routes.get("/tools", async (c) => {
@@ -287,6 +320,44 @@ export const fabricationRoutes = (
     });
     if (!started.ok) return sessionError(c, started.error);
     return c.json({ session: started.value.id } satisfies BuildChatSent, 202);
+  });
+
+  /** A printed part's Build made, by the request's workspace and Build, or the answer why not. */
+  const madePrint = async (c: Context) => {
+    const found = await opened(c);
+    if (!found.ok) return found;
+    const { build, place, slug } = found.value;
+    const made = await prints.make(`${place.workspace.id}/${slug}`, build, c.req.raw.signal);
+    if (made.ok) return ok({ made: made.value, slug });
+    return err(printError(c, made.error));
+  };
+
+  // A printed part made (#702): its size and volume from the solid, its triangles for the 3D view,
+  // and its files' names.
+  routes.get("/workspaces/:id/builds/:slug/print", async (c) => {
+    const made = await madePrint(c);
+    if (!made.ok) return made.error;
+    const { slug } = made.value;
+    return c.json(madePartOf(made.value.made, filesOf(slug)) satisfies MadePart);
+  });
+
+  // Its files to print, by their names: the 3MF Bambu Studio opens, and the STL.
+  routes.get("/workspaces/:id/builds/:slug/print/:file", async (c) => {
+    const made = await madePrint(c);
+    if (!made.ok) return made.error;
+    const files = filesOf(made.value.slug);
+    const file = c.req.param("file");
+    const bytes =
+      file === files.threeMf
+        ? { body: made.value.made.threeMf, type: "model/3mf" }
+        : file === files.stl
+          ? { body: made.value.made.stl, type: "model/stl" }
+          : undefined;
+    if (bytes === undefined) return apiError(c, { status: 404, error: "There's no such file." });
+    return c.body(new Uint8Array(bytes.body), 200, {
+      "Content-Type": bytes.type,
+      "Content-Disposition": `attachment; filename="${file}"`,
+    });
   });
 
   // The owner's own change to a Build's parameters, as a merge patch, worked out again.
