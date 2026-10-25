@@ -65,10 +65,10 @@ test("an approval shows the exact command and why, Allow runs it, and the card g
   page,
   context,
 }) => {
-  await startOnPage(page, ["run command: git --version (for: To check which git runs here)"]);
+  await startOnPage(page, ["run command: git version (for: To check which git runs here)"]);
   const card = approvalOn(page);
   await expect(card).toContainText("Run a command? It isn't on the allowlist.");
-  await expect(card.getByRole("code")).toHaveText("git --version");
+  await expect(card.getByRole("code")).toHaveText("git version");
   await expect(card).toContainText(
     "To check which git runs here. Deny and it will find another way.",
   );
@@ -83,9 +83,9 @@ test("an approval shows the exact command and why, Allow runs it, and the card g
     await expect(approvalOn(each)).toHaveCount(0);
     await expect(
       each.getByRole("list", { name: "What the model did" }).getByRole("listitem"),
-    ).toHaveText(["Ran git --version"]);
+    ).toHaveText(["Ran git version"]);
     await expect(each.getByRole("list", { name: "Session" })).toContainText(
-      "Ran git --version: git version",
+      "Ran git version: git version",
     );
   }
 });
@@ -254,7 +254,7 @@ const noteUnreachable = (page: Page) =>
 test("an answer the worker is slow to take waits for it quietly, never saying it can't be reached (#204)", async ({
   page,
 }) => {
-  await startOnPage(page, ["run command: git --version"]);
+  await startOnPage(page, ["run command: git version"]);
   const card = approvalOn(page);
   await expect(card).toBeVisible();
   await noteUnreachable(page);
@@ -272,7 +272,7 @@ test("an answer the worker is slow to take waits for it quietly, never saying it
   await expect(card.getByRole("status")).toHaveText("Waiting for Courtyard…");
   await expect(approvalOn(page)).toHaveCount(0);
   await expect(page.getByRole("list", { name: "Session" })).toContainText(
-    "Ran git --version: git version",
+    "Ran git version: git version",
   );
   expect(tries).toBe(2);
   await expect(page.locator("body")).not.toHaveAttribute("data-saw-unreachable", "yes");
@@ -281,7 +281,7 @@ test("an answer the worker is slow to take waits for it quietly, never saying it
 test("an answer given while the worker can't be reached is kept, and goes once it's back (#204)", async ({
   page,
 }) => {
-  await startOnPage(page, ["run command: git --version"]);
+  await startOnPage(page, ["run command: git version"]);
   const card = approvalOn(page);
   await expect(card).toBeVisible();
   await page.route(APPROVAL_ANSWERS, (route) =>
@@ -294,14 +294,14 @@ test("an answer given while the worker can't be reached is kept, and goes once i
   await page.unroute(APPROVAL_ANSWERS);
   await expect(approvalOn(page)).toHaveCount(0);
   await expect(page.getByRole("list", { name: "Session" })).toContainText(
-    "Ran git --version: git version",
+    "Ran git version: git version",
   );
 });
 
 test("an answer whose connection is refused says so within moments, and goes once the worker's back (#204)", async ({
   page,
 }) => {
-  await startOnPage(page, ["run command: git --version"]);
+  await startOnPage(page, ["run command: git version"]);
   const card = approvalOn(page);
   await expect(card).toBeVisible();
   let tries = 0;
@@ -318,7 +318,7 @@ test("an answer whose connection is refused says so within moments, and goes onc
   await page.unroute(APPROVAL_ANSWERS);
   await expect(approvalOn(page)).toHaveCount(0);
   await expect(page.getByRole("list", { name: "Session" })).toContainText(
-    "Ran git --version: git version",
+    "Ran git version: git version",
   );
 });
 
@@ -326,7 +326,7 @@ test("an answer given with the device's network down says so at once, and goes o
   page,
   context,
 }) => {
-  await startOnPage(page, ["run command: git --version"]);
+  await startOnPage(page, ["run command: git version"]);
   const card = approvalOn(page);
   await expect(card).toBeVisible();
   let tries = 0;
@@ -343,12 +343,12 @@ test("an answer given with the device's network down says so at once, and goes o
   await context.setOffline(false);
   await expect(approvalOn(page)).toHaveCount(0);
   await expect(page.getByRole("list", { name: "Session" })).toContainText(
-    "Ran git --version: git version",
+    "Ran git version: git version",
   );
 });
 
 test("stopping a turn that waits on an approval ends it, and the card goes", async ({ page }) => {
-  await startOnPage(page, ["run command: git --version"]);
+  await startOnPage(page, ["run command: git version"]);
   await expect(approvalOn(page)).toBeVisible();
 
   await page.getByRole("button", { name: "Stop" }).click();
