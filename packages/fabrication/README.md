@@ -97,6 +97,28 @@ if (recipe) {
 - **A pick changes only what it swaps:** the parts, cut plan and buy list follow the new section; its old price and
   length are kept in `prices`, so picking it again puts it back as it was.
 
+## How a step reads
+
+Written for a beginner holding a Fold at the bench, whoever they are and whatever tools they have. The key details
+are always there, and the essays never are.
+
+- **Steps follow the user's own tools, whatever they are:** the kind and how many (a speed square or an L-square, two
+  clamps or four), with the technique and the picture for that kind, so the steps change as the kit grows. A tool
+  that isn't known yet gets asked about then, with picture tiles, and never assumed.
+- **The picture carries the key details:** what goes where, the order, the tool and the check. Each is drawn in 3D,
+  the way the wood actually lies (a leg end is ▯ not ▭), with the tools as their real shape. Labels are 2-3 words, as
+  pills off the wood; numbered badges match the step's numbered lines. A fixing of several parts is drawn exploded,
+  so it's clear which side each piece goes.
+- **About 4 short lines a step,** one action each. The how and why sit behind "Show me how", and extras are tips.
+- **The order is said, never left to guess:** square, then clamp, then a screw; one piece or one joint at a time,
+  and "together" only for identical setups. A picture that shows a square says when the clamp comes, and the other
+  way round. If it needs more than one moment, it's a strip of small frames.
+- **Every mark says "by eye" or "measure":** measure cut lengths, matching pieces, square and a flush top; screw
+  spots, clamp spots and centring are by eye, with the area drawn ("anywhere in the green").
+- **Simplest way first, still in good nick:** pilot holes or countersinking only where they matter (near an end, in
+  hardwood, on a top), as one line.
+- **A missing key detail is a bug, and so is an extra paragraph.**
+
 ## Tests
 
 `cut-plan.test.ts` (packing, whatever the pieces), `bench/bench.test.ts` (the golden bench, the garage workbench's
