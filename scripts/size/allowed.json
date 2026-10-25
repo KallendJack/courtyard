@@ -11,7 +11,7 @@
     "apps/web/src/features/sign-ins/sign-ins.tsx": 535,
     "apps/web/src/routes/_app/workspaces.$workspaceId.sessions.$sessionId.tsx": 629,
     "apps/worker/eval/context.ts": 1071,
-    "apps/worker/eval/scenarios.ts": 1341,
+    "apps/worker/eval/scenarios.ts": 1329,
     "apps/worker/src/features/code/allowlist.ts": 956,
     "apps/worker/src/features/code/index.ts": 580,
     "apps/worker/src/features/context-file/index.ts": 459,
