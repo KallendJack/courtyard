@@ -45,7 +45,8 @@ const pictureLine = (step: Step, build: Build) => {
   const marked = [
     ...new Set(
       step.scene.marks.flatMap((mark) =>
-        mark.kind === "size" || mark.kind === "check" ? [] : [mark.says],
+        // Words only: a size, a check, a line's badge and a screw spot say nothing of their own.
+        "says" in mark ? [mark.says] : [],
       ),
     ),
   ];
