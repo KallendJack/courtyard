@@ -128,6 +128,7 @@ const stepLines = (step: Step, build: Build, ticked: readonly number[]) => {
     ...step.actions.map(
       ({ howTo }, at) => `${at + 1}. ${ticked.includes(at) ? "[ticked] " : ""}${howTo}`,
     ),
+    ...(step.tips.length === 0 ? [] : [`Its tips, behind Show me how: ${step.tips.join(" ")}`]),
     ...step.closeUps.flatMap(({ title, notes }) =>
       notes.length === 0 ? [] : [`Its close-up, ${title}: ${notes.join(" ")}`],
     ),

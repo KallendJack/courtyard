@@ -1968,6 +1968,8 @@ describe("Builds (#697, ADR 0036)", () => {
         "2. [ticked] Lay them tall and thin on offcuts. Top rail (C) flush with the top ends.",
         "3. Bottom rail's lower edge on your line. Mark the 2 crosses first, then clamp beside them.",
         "4. Screw where the clamp isn't. Move the clamp, second screw. Next joint.",
+        // What moved behind Show me how still reaches the chat (#826).
+        "Its tips, behind Show me how: Check the corner with your square before the first screw. The crosses are near the leg's end: drill a 3 mm pilot hole at each first.",
         // Screw spots are by eye in the overlap (packages/fabrication, How a step reads), never "47 in".
         "Its close-up, Mark your screw spots: Screws only in the green: where the rail sits on the leg. The red line is its edge, drawn. By eye: 2 crosses on a diagonal, a fingertip from the edges.",
         "Its close-up, Leg end on: Each leg on its edge, tall and thin, so the rails lie across its narrow face.",

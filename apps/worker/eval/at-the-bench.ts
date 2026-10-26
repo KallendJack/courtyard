@@ -107,6 +107,7 @@ export const AT_THE_BENCH: readonly Scenario[] = [
             "correct",
             "spot on",
             "looks right",
+            "look right",
             "looks good",
           ],
         ],
