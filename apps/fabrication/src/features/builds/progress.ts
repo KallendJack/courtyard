@@ -135,12 +135,13 @@ export const useProgress = (
       if (step === undefined) return;
       change({ ...progress, parked: progress.parked.filter((each) => each.step !== step.id) });
     },
-    /** "Done, next step": every line of this step ticked, and on to the next. */
+    /** "Done, next step": every line of this step ticked, not parked any more, and on to the next. */
     done: () => {
       if (step === undefined) return;
       const all = step.actions.map((_, line) => line);
       const ticked = withLines(progress, step.id, all);
-      change({ ...ticked, step: at(step.number + 1) });
+      const parked = ticked.parked.filter((each) => each.step !== step.id);
+      change({ ...ticked, parked, step: at(step.number + 1) });
     },
   };
 };

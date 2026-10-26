@@ -59,7 +59,7 @@ the step for the next or the one before. The dots in the top bar show how far, a
 step in 3D with **Hold to ask**: held, it listens through any pause, listening out for the step's parts, tools and
 words, and shows what will be sent ("Step 3, Cut and label the timber: …"); let go, it's asked in the chat. Let go on
 a few words, or on one like "and", it waits 3 seconds for **Hold to add more** before it's asked (#787). The answer is
-a card over the picture (#793; "Fabrication · Asking at the bench: step buttons + answer card · Fold (#793)"): "You
+a card over the picture, just above Hold to ask (#793; "Fabrication · Asking at the bench: step buttons + answer card · Fold (#793)"): "You
 asked: …", the answer and ×, closing by itself 30 seconds after it has all come; one that fails or never comes says
 "It didn't answer." with Try again, until it's closed. The step never changes, and there's no chat at the bench: a
 tap on Hold to ask opens it in Plan. Under the step's lines, four buttons: **Show me how** opens its walk-through,
@@ -67,7 +67,7 @@ close-ups and the check before moving on; **Is this right?** takes a photo and a
 the card; **I don't have…** lists only the step's tools, parts and fixings, and one picked says what stands in for it
 from Your tools, or offers Park this step; **Can't do this now** (in gold) parks the step with why (Missing
 something, Went wrong, Out of time). A parked step is kept with why, the next step not done or parked comes up, and
-back on it a gold line says why with Do it now. **Plan**, one tap away in the top bar, is the Build big in 3D with
+back on it a gold line says why with Do it now (Done takes it off too). **Plan**, one tap away in the top bar, is the Build big in 3D with
 Hold to ask and Chat, and its cut plan, buy list and tools as tabs under what the making rules found. The chat is a
 sheet from the right, open on its latest. Folded, it's At the bench alone, stacked: the step in 3D above, the step
 below, and the chat a sheet over it.

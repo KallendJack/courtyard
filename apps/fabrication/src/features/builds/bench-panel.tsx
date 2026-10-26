@@ -80,7 +80,7 @@ export function BenchPanel(props: {
   big?: boolean;
   /** What sits at the view's foot, left of Reset view: Hold to ask. */
   children?: ReactNode;
-  /** What shows over the top of the view in place of a part's card: an answer. */
+  /** What shows over the view in place of a part's card: an answer, at its foot. */
   over?: ReactNode;
 }) {
   const { derived, lit, pick, atStep, resettable = true } = props;
@@ -114,8 +114,14 @@ export function BenchPanel(props: {
           />
         </Suspense>
         {over !== undefined && over !== null && (
-          // Over the view, clear of its foot, as tall as what's in it.
-          <div className="pointer-events-none absolute inset-x-0 top-0 bottom-18 flex flex-col *:pointer-events-auto">
+          // Over the view, clear of its foot, as tall as what's in it: a part's card at the top,
+          // an answer just above Hold to ask (#793's board).
+          <div
+            className={classes(
+              "pointer-events-none absolute inset-x-0 top-0 bottom-18 flex flex-col *:pointer-events-auto",
+              props.over !== undefined && props.over !== null && "justify-end",
+            )}
+          >
             {over}
           </div>
         )}

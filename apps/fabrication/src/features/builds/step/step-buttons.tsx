@@ -2,7 +2,7 @@ import type { BuildStep, DerivedBuild } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { Camera } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { BenchAsk } from "../chat/hold-to-ask.tsx";
 import { CloseUp, Techniques } from "../close-up.tsx";
 import type { Progress } from "../progress.ts";
@@ -64,8 +64,8 @@ function Missing(props: { needed: Needed[]; park: (why: string) => void }) {
           {picked.standIn !== undefined
             ? `Your ${picked.standIn.toLowerCase()} will do instead.`
             : picked.tool
-              ? `Nothing in Your tools stands in for a ${picked.name}.`
-              : `Nothing stands in for the ${picked.name}.`}
+              ? "Nothing in Your tools will do instead."
+              : "Nothing will do instead."}
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -116,6 +116,11 @@ export function StepButtons(props: {
   const [problem, setProblem] = useState<string>();
   const [openFor, setOpenFor] = useState(step.id);
   const picker = useRef<HTMLInputElement>(null);
+  const opened = useRef<HTMLDivElement>(null);
+  // What a button opens shows at once, not out of sight below the step's buttons.
+  useEffect(() => {
+    if (open !== undefined) opened.current?.scrollIntoView({ block: "nearest" });
+  }, [open]);
   // A new step opens with nothing open under its buttons.
   if (openFor !== step.id) {
     setOpenFor(step.id);
@@ -144,19 +149,19 @@ export function StepButtons(props: {
         <legend className="sr-only">This step</legend>
         <Button
           variant="outline"
-          size="thumb"
+          size="md"
           aria-expanded={open === "how"}
           onClick={() => toggle("how")}
         >
           Show me how
         </Button>
-        <Button variant="outline" size="thumb" onClick={() => picker.current?.click()}>
+        <Button variant="outline" size="md" onClick={() => picker.current?.click()}>
           Is this right?
           <Camera aria-hidden />
         </Button>
         <Button
           variant="outline"
-          size="thumb"
+          size="md"
           aria-expanded={open === "missing"}
           onClick={() => toggle("missing")}
         >
@@ -164,7 +169,7 @@ export function StepButtons(props: {
         </Button>
         <Button
           variant="needsOutline"
-          size="thumb"
+          size="md"
           aria-expanded={open === "why"}
           onClick={() => toggle("why")}
         >
@@ -184,30 +189,34 @@ export function StepButtons(props: {
           {problem}
         </p>
       )}
-      {open === "how" && (
-        <>
-          <WalkThrough step={step} parts={derived.parts} big={props.big} />
-          {step.closeUps.map((closeUp) => (
-            <CloseUp key={closeUp.title} closeUp={closeUp} parts={derived.parts} narrow />
-          ))}
-          <Techniques step={step} parts={derived.parts} />
-          <BeforeMovingOn step={step} />
-        </>
-      )}
-      {open === "missing" && <Missing needed={neededFor(derived, step)} park={park} />}
-      {open === "why" && (
-        <Opened label="Why not now" title="Why not now?">
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="lg" onClick={() => setOpen("missing")}>
-              Missing something
-            </Button>
-            {WHY_NOT.map((why) => (
-              <Button key={why} variant="outline" size="lg" onClick={() => park(why)}>
-                {why}
-              </Button>
-            ))}
-          </div>
-        </Opened>
+      {open !== undefined && (
+        <div ref={opened} className="flex scroll-mt-4 flex-col gap-4">
+          {open === "how" && (
+            <>
+              <WalkThrough step={step} parts={derived.parts} big={props.big} />
+              {step.closeUps.map((closeUp) => (
+                <CloseUp key={closeUp.title} closeUp={closeUp} parts={derived.parts} narrow />
+              ))}
+              <Techniques step={step} parts={derived.parts} />
+              <BeforeMovingOn step={step} />
+            </>
+          )}
+          {open === "missing" && <Missing needed={neededFor(derived, step)} park={park} />}
+          {open === "why" && (
+            <Opened label="Why not now" title="Why not now?">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="lg" onClick={() => setOpen("missing")}>
+                  Missing something
+                </Button>
+                {WHY_NOT.map((why) => (
+                  <Button key={why} variant="outline" size="lg" onClick={() => park(why)}>
+                    {why}
+                  </Button>
+                ))}
+              </div>
+            </Opened>
+          )}
+        </div>
       )}
     </>
   );

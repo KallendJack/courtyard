@@ -335,7 +335,7 @@ export function BenchAnswer(props: {
       className="flex max-h-full min-h-0 flex-col gap-2 rounded-card border border-primary/35 bg-popover p-4 shadow-raised"
     >
       <div className="flex shrink-0 items-start justify-between gap-2">
-        <h3 className="min-w-0 pt-1 text-interface text-primary-text">
+        <h3 className="min-w-0 pt-1.5 text-meta text-primary-text">
           You asked: {props.asked.said}
         </h3>
         <div className="flex shrink-0 items-center gap-1">

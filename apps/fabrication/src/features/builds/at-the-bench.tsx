@@ -33,7 +33,7 @@ function Printed(props: { printed: ReactNode; ask: ReactNode; answer: ReactNode 
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {props.printed}
       {props.answer !== null && props.answer !== undefined && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 bottom-18 flex flex-col *:pointer-events-auto">
+        <div className="pointer-events-none absolute inset-x-0 top-0 bottom-18 flex flex-col justify-end *:pointer-events-auto">
           {props.answer}
         </div>
       )}

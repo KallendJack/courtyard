@@ -75,6 +75,25 @@ function Ways(props: { ways: BuildStep["ways"] }) {
   );
 }
 
+/** One of how much is said, pressed while it's the one chosen. */
+function DetailOption(props: { pressed: boolean; press: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={props.pressed}
+      onClick={props.press}
+      className={classes(
+        "min-h-11 rounded-row border px-4 text-interface",
+        props.pressed
+          ? "border-primary bg-primary/15 font-semibold text-foreground"
+          : "border-transparent bg-muted text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {props.children}
+    </button>
+  );
+}
+
 /**
  * "Show me how" or "Just the numbers". At the bench, where Show me how opens the close-ups (#793),
  * it's Just the numbers alone, pressed or not.
@@ -84,47 +103,25 @@ function DetailSwitch(props: {
   choose: (detail: Detail) => void;
   atBench: boolean;
 }) {
+  const numbers = props.detail === "numbers";
   if (props.atBench) {
-    const numbers = props.detail === "numbers";
     return (
-      <button
-        type="button"
-        aria-pressed={numbers}
-        onClick={() => props.choose(numbers ? "how" : "numbers")}
-        className={classes(
-          "min-h-11 self-start rounded-row border px-4 text-interface",
-          numbers
-            ? "border-primary bg-primary/15 font-semibold text-foreground"
-            : "border-transparent bg-muted text-muted-foreground hover:text-foreground",
-        )}
-      >
-        Just the numbers
-      </button>
+      <div>
+        <DetailOption pressed={numbers} press={() => props.choose(numbers ? "how" : "numbers")}>
+          Just the numbers
+        </DetailOption>
+      </div>
     );
   }
-  const options = [
-    { detail: "how", name: "Show me how" },
-    { detail: "numbers", name: "Just the numbers" },
-  ] as const;
   return (
     <fieldset className="grid grid-cols-2 gap-2">
       <legend className="sr-only">Detail</legend>
-      {options.map((option) => (
-        <button
-          key={option.detail}
-          type="button"
-          aria-pressed={props.detail === option.detail}
-          onClick={() => props.choose(option.detail)}
-          className={classes(
-            "min-h-11 rounded-row border px-3 text-interface",
-            props.detail === option.detail
-              ? "border-primary bg-primary/15 font-semibold text-foreground"
-              : "border-transparent bg-muted text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {option.name}
-        </button>
-      ))}
+      <DetailOption pressed={!numbers} press={() => props.choose("how")}>
+        Show me how
+      </DetailOption>
+      <DetailOption pressed={numbers} press={() => props.choose("numbers")}>
+        Just the numbers
+      </DetailOption>
     </fieldset>
   );
 }

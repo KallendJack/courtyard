@@ -764,7 +764,8 @@ test.describe("on the unfolded Fold", () => {
       "M6 lock nuts",
     ]);
     await missing.getByRole("button", { name: "10 mm spanner × 2" }).click();
-    await expect(missing).toContainText("Nothing in Your tools stands in for a 10 mm spanner × 2.");
+    await expect(missing).toContainText("No 10 mm spanner × 2");
+    await expect(missing).toContainText("Nothing in Your tools will do instead.");
     await missing.getByRole("button", { name: "Park this step" }).click();
 
     // Parked, the next step comes up; back on it, it says why, and Do it now takes it off.
@@ -793,6 +794,17 @@ test.describe("on the unfolded Fold", () => {
           BuildOpened.parse(await (await page.request.get(buildApi)).json()).progress.parked,
       )
       .toEqual([{ step: "fit-castors", why: "Out of time" }]);
+
+    // Done after all, it isn't parked any more.
+    await page.getByRole("button", { name: "Back" }).click();
+    await expect(parked).toHaveText(/Parked: Out of time/);
+    await page.getByRole("button", { name: "Done, next step" }).click();
+    await expect
+      .poll(
+        async () =>
+          BuildOpened.parse(await (await page.request.get(buildApi)).json()).progress.parked,
+      )
+      .toEqual([]);
   });
 
   // #787: half-sentences went as messages of their own, and the step's words were misheard.
