@@ -20,16 +20,9 @@ import { type PlanningFilesTarget, planningFolder } from "../../planning-files/i
 import { readProjects, readProjectText } from "../../projects/index.ts";
 import { historyDate, type ReadThing, readThingsIn } from "../../things/index.ts";
 import { CONTEXT_FILE } from "../../workspaces/index.ts";
-import {
-  confirmedPath,
-  type ReadSize,
-  readSizes,
-  type SizeEdit,
-  type SizeRefusal,
-  saveSizes,
-  standing,
-} from "./index.ts";
+import { type ReadSize, readSizes, type SizeRefusal, standing } from "./index.ts";
 import { type OldSentence, oldSizesIn } from "./old-sizes.ts";
+import { confirmedPath, type SizeEdit, saveSizes } from "./save.ts";
 
 // A space's sizes in Fabrication (#709): the room's Things panel. Its records grouped into lines,
 // one per size, with the sizes any space needs and those its Builds' steps need, each with where
@@ -167,7 +160,11 @@ const readSpaceIn = async (
       for (const need of step.needs) {
         const there = needed.find(({ property }) => sameName(property) === sameName(need.what));
         if (there === undefined) {
-          needed.push({ property: needName(need.what), where: `for ${step.text}`, builds: [step.build] });
+          needed.push({
+            property: needName(need.what),
+            where: `for ${step.text}`,
+            builds: [step.build],
+          });
         } else if (!there.builds.includes(step.build)) {
           there.builds.push(step.build);
         }

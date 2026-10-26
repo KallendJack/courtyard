@@ -32,7 +32,20 @@ const NAMED: readonly [RegExp, string][] = [
 ];
 
 const WORDS_BEFORE = /([A-Za-z][A-Za-z' ]{0,40})[:\s-]*$/;
-const STOP = new Set(["the", "a", "an", "is", "are", "was", "it", "its", "of", "at", "and", "about"]);
+const STOP = new Set([
+  "the",
+  "a",
+  "an",
+  "is",
+  "are",
+  "was",
+  "it",
+  "its",
+  "of",
+  "at",
+  "and",
+  "about",
+]);
 
 /**
  * A size's name from the words around it: the word just after it ("2.45 m high"), then those

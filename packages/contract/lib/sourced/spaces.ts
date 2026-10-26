@@ -102,9 +102,7 @@ export type SizeCorrection = z.infer<typeof SizeCorrection>;
  * kept one's value and source.
  */
 export const SizeKeep = z.object({
-  others: z
-    .array(z.object({ id: SizeRecordId, revision: z.number().int().positive() }))
-    .min(1),
+  others: z.array(z.object({ id: SizeRecordId, revision: z.number().int().positive() })).min(1),
 });
 export type SizeKeep = z.infer<typeof SizeKeep>;
 

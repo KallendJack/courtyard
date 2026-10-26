@@ -36,10 +36,7 @@ beforeEach(async () => {
     join(garage(), "things", "garage.md"),
     "---\nname: Garage\nstatus: have\nkind: space\n---\n- 2026-10-01: Boiler on the back wall\n",
   );
-  await writeFile(
-    join(garage(), "things", "bench.md"),
-    "---\nname: Bench\nstatus: have\n---\n",
-  );
+  await writeFile(join(garage(), "things", "bench.md"), "---\nname: Bench\nstatus: have\n---\n");
   await writeFile(
     join(garage(), "projects", "split-the-garage.md"),
     [
@@ -66,8 +63,7 @@ afterEach(async () => {
 
 const owner = () => asOwner(testWorker({ root }));
 
-const spaceOf = async (request: Requester) =>
-  SpaceSizes.parse(await (await request(SPACE)).json());
+const spaceOf = async (request: Requester) => SpaceSizes.parse(await (await request(SPACE)).json());
 
 const changed = async (response: Response) => {
   expect(response.status).toBe(200);
@@ -240,10 +236,24 @@ describe("a space's sizes", () => {
   it("offers the old sizes once, and records only what's ticked as measured", async () => {
     const request = await owner();
     const { oldSizes } = await spaceOf(request);
-    expect(oldSizes.map(({ from, property, value, rough, day }) => ({ from, property, value, rough, day }))).toEqual([
+    expect(
+      oldSizes.map(({ from, property, value, rough, day }) => ({
+        from,
+        property,
+        value,
+        rough,
+        day,
+      })),
+    ).toEqual([
       { from: "Facts", property: "Inside width", value: quantity(2735), rough: true, day: null },
       { from: "Facts", property: "Inside length", value: quantity(5137), rough: false, day: null },
-      { from: "Facts", property: "Floor to ceiling", value: quantity(2.45, "m"), rough: false, day: null },
+      {
+        from: "Facts",
+        property: "Floor to ceiling",
+        value: quantity(2.45, "m"),
+        rough: false,
+        day: null,
+      },
       {
         from: "Split the garage",
         property: "Door width",

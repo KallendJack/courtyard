@@ -7,6 +7,7 @@ import {
   BuildChatSent,
   BuildOpened,
   BuildProgress,
+  BuildSizes,
   type BuildSlug,
   type BuildStockPick,
   BuildView,
@@ -14,7 +15,15 @@ import {
   MadePart,
   MESSAGE_FIELD,
   type NewMessage,
+  type OldSizesConfirm,
   ProviderList,
+  type SizeAdd,
+  type SizeCorrection,
+  type SizeKeep,
+  type SizeRecordId,
+  SpaceChanged,
+  SpaceSizes,
+  type ThingSlug,
   type ToolPick,
   ToolsHeard,
   ToolsSaved,
@@ -131,6 +140,54 @@ export const keepProgress = (
   progress: BuildProgress,
 ) =>
   sendJson(`${buildPath(where.workspaceId, where.slug)}/progress`, BuildProgress, "PUT", progress);
+
+const spacePath = (workspaceId: WorkspaceId, slug: ThingSlug) =>
+  `/fabrication/workspaces/${encodeURIComponent(workspaceId)}/spaces/${encodeURIComponent(slug)}`;
+
+/** A space's sizes (#709): its own and its Things', what it needs, and old sizes to confirm. */
+export const openSpace = (workspaceId: WorkspaceId, slug: ThingSlug) =>
+  ask(spacePath(workspaceId, slug), SpaceSizes);
+
+type SpaceWhere = { workspaceId: WorkspaceId; slug: ThingSlug };
+
+/** + Size: a new size of the space or a Thing in it. */
+export const addSize = (where: SpaceWhere, size: SizeAdd) =>
+  sendJson(`${spacePath(where.workspaceId, where.slug)}/sizes`, SpaceChanged, "POST", size);
+
+/** A size corrected: a record of its own, the next revision. */
+export const correctSize = (where: SpaceWhere, id: SizeRecordId, correction: SizeCorrection) =>
+  sendJson(
+    `${spacePath(where.workspaceId, where.slug)}/sizes/${encodeURIComponent(id)}`,
+    SpaceChanged,
+    "POST",
+    correction,
+  );
+
+/** Two answers settled: the one kept, and each other one corrected to it. */
+export const keepSize = (where: SpaceWhere, id: SizeRecordId, keep: SizeKeep) =>
+  sendJson(
+    `${spacePath(where.workspaceId, where.slug)}/sizes/${encodeURIComponent(id)}/keep`,
+    SpaceChanged,
+    "POST",
+    keep,
+  );
+
+/** The old sizes confirmed, once. */
+export const confirmOldSizes = (where: SpaceWhere, confirm: OldSizesConfirm) =>
+  sendJson(`${spacePath(where.workspaceId, where.slug)}/old-sizes`, SpaceChanged, "POST", confirm);
+
+/** Undo of one of a space's sizes' changes: the space as it is again. */
+export const undoSizeChange = (where: SpaceWhere, change: ChangeId) =>
+  sendJson(
+    `${spacePath(where.workspaceId, where.slug)}/changes/${encodeURIComponent(change)}/undo`,
+    SpaceSizes,
+    "POST",
+    {},
+  );
+
+/** The sizes a Build's steps need, as its space shows them. */
+export const buildSizes = (workspaceId: WorkspaceId, slug: BuildSlug) =>
+  ask(`${buildPath(workspaceId, slug)}/sizes`, BuildSizes);
 
 /** The owner's next message in a Build's chat, with any photos or PDFs attached. */
 export const sendToChat = (

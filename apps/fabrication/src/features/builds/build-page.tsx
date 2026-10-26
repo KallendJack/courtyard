@@ -1,4 +1,4 @@
-import { type BuildOpened, buildStarted } from "@courtyard/contract";
+import { type BuildOpened, type BuildSizes, buildStarted } from "@courtyard/contract";
 import { SegmentedChoice } from "@courtyard/ui/forms/segmented-choice.tsx";
 import { useLayout, useWide } from "@courtyard/ui/frame/handheld.ts";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
@@ -9,6 +9,7 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useRouter } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
+import { BuildSizesBlock } from "../sizes/build-sizes.tsx";
 import { AtTheBench, PANEL, Plan } from "./at-the-bench.tsx";
 import { BenchPanel } from "./bench-panel.tsx";
 import { BuyList } from "./buy-list.tsx";
@@ -91,7 +92,7 @@ function Tabs(props: { tabs: readonly Tab[]; showing: Tab; show: (tab: Tab) => v
  * · Tablet (#702)") shows itself on the printer's plate, and its Print tab before its buy list. A
  * part tapped anywhere is lit everywhere.
  */
-export function BuildPage(props: { build: BuildOpened }) {
+export function BuildPage(props: { build: BuildOpened; sizes: BuildSizes }) {
   const { build } = props;
   const { derived, place } = build;
   const { print } = derived;
@@ -214,6 +215,10 @@ export function BuildPage(props: { build: BuildOpened }) {
       <Scroller className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-col gap-4 pb-2">
           <Findings findings={derived.findings} print={print} />
+          {/* The sizes its steps need, where it's made from them (#709). */}
+          {!stock.showing && (tab === "Cut plan" || tab === "Print") && (
+            <BuildSizesBlock workspaceId={place.workspace.id} sizes={props.sizes} />
+          )}
           {stock.panel(tab) ?? sideContent(tab)}
         </div>
       </Scroller>

@@ -24,7 +24,8 @@ import {
 } from "../../planning-files/routes.ts";
 import { readThings } from "../../things/index.ts";
 import { getWorkspace } from "../../workspaces/index.ts";
-import { readSizes, type SizeEdit, saveSizes, sizeRows, undoSizeChange, valueText } from "./index.ts";
+import { readSizes, sizeRows, undoSizeChange, valueText } from "./index.ts";
+import { type SizeEdit, saveSizes } from "./save.ts";
 import { buildSizes, confirmOldSizes, ownerEdit, readSpace, type SpaceRefusal } from "./space.ts";
 
 // Fabrication's sizes (ADR 0037, #708): a workspace's size records, which every project in it uses
@@ -107,7 +108,8 @@ export const sizeRoutes = (
   /** The space a request's path names, as its page shows it, and where it is. */
   const space = async (c: Context) => {
     const named = fileIn(c, where, ThingSlug);
-    if (named === undefined) return { answer: apiError(c, { status: 404, error: "No such space." }) };
+    if (named === undefined)
+      return { answer: apiError(c, { status: 404, error: "No such space." }) };
     const workspace = await getWorkspace(where.contextDir, named.workspace.workspaceId);
     if (!workspace.ok) return { answer: contextError(c, workspace.error) };
     const { id, name } = workspace.value.summary;
