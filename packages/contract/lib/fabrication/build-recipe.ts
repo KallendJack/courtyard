@@ -7,8 +7,10 @@ import {
   BuildSheet,
   BuildTimber,
   BuildToolId,
+  Words,
 } from "./materials.ts";
 import { PartRecipe } from "./recipe.ts";
+import { notAKind, overMost } from "./recipe-refusals.ts";
 
 // A Build's recipe (ADR 0039, #769): what it's made of, as a model writes it. Its stock, its
 // pieces (timber members, sheet panels, printed parts), its groups of pieces (legs, frames, a box,
@@ -18,8 +20,6 @@ import { PartRecipe } from "./recipe.ts";
 //
 // The words for where things go: the build's length runs left to right, its depth front to back,
 // its height up from the floor. Its ends are left and right, its sides front and back.
-
-const Words = z.string().trim().min(1).max(80);
 
 /** A stock's, piece's, group's or joint's name in the recipe, so others can point at it. */
 export const RecipeId = z
@@ -56,12 +56,16 @@ const Castor = z.strictObject({
 });
 
 /** What the recipe's pieces are cut from and fixed with, each by its own ID. */
-export const RecipeStock = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("timber"), id: RecipeId, ...BuildTimber.shape }),
-  z.strictObject({ kind: z.literal("sheet"), id: RecipeId, ...BuildSheet.shape }),
-  z.strictObject({ kind: z.literal("fixing"), id: RecipeId, ...BuildFixing.shape }),
-  Castor,
-]);
+export const RecipeStock = z.discriminatedUnion(
+  "kind",
+  [
+    z.strictObject({ kind: z.literal("timber"), id: RecipeId, ...BuildTimber.shape }),
+    z.strictObject({ kind: z.literal("sheet"), id: RecipeId, ...BuildSheet.shape }),
+    z.strictObject({ kind: z.literal("fixing"), id: RecipeId, ...BuildFixing.shape }),
+    Castor,
+  ],
+  { error: notAKind("stock") },
+);
 export type RecipeStock = z.infer<typeof RecipeStock>;
 
 /**
@@ -69,31 +73,35 @@ export type RecipeStock = z.infer<typeof RecipeStock>;
  * every side), a timber member (across the middle of what it's under, or one under each end of
  * it), or a printed part (#702) on another piece.
  */
-export const RecipePiece = z.discriminatedUnion("kind", [
-  z.strictObject({
-    kind: z.literal("panel"),
-    id: RecipeId,
-    stock: RecipeId,
-    place: z.enum(["top"]),
-    overhang: SourcedSize,
-  }),
-  z.strictObject({
-    kind: z.literal("member"),
-    id: RecipeId,
-    stock: RecipeId,
-    place: z.enum(["across-the-middle", "under-each-end"]),
-    /** The piece or group it's under. */
-    under: RecipeId,
-  }),
-  z.strictObject({
-    kind: z.literal("printed"),
-    id: RecipeId,
-    part: PartRecipe,
-    count: z.number().int().positive().max(50).default(1),
-    /** The piece or group it's fitted to. */
-    on: RecipeId,
-  }),
-]);
+export const RecipePiece = z.discriminatedUnion(
+  "kind",
+  [
+    z.strictObject({
+      kind: z.literal("panel"),
+      id: RecipeId,
+      stock: RecipeId,
+      place: z.enum(["top"]),
+      overhang: SourcedSize,
+    }),
+    z.strictObject({
+      kind: z.literal("member"),
+      id: RecipeId,
+      stock: RecipeId,
+      place: z.enum(["across-the-middle", "under-each-end"]),
+      /** The piece or group it's under. */
+      under: RecipeId,
+    }),
+    z.strictObject({
+      kind: z.literal("printed"),
+      id: RecipeId,
+      part: PartRecipe,
+      count: z.number().int().positive().max(50).default(1),
+      /** The piece or group it's fitted to. */
+      on: RecipeId,
+    }),
+  ],
+  { error: notAKind("piece") },
+);
 export type RecipePiece = z.infer<typeof RecipePiece>;
 
 /**
@@ -102,48 +110,52 @@ export type RecipePiece = z.infer<typeof RecipePiece>;
  * side; a shelf resting on a frame's lower rails or on cleats; brace panels on a frame's back or
  * ends, so it can't rack.
  */
-export const RecipeGroup = z.discriminatedUnion("kind", [
-  z.strictObject({
-    kind: z.literal("legs"),
-    id: RecipeId,
-    stock: RecipeId,
-    at: z.enum(["corners"]),
-  }),
-  z.strictObject({
-    kind: z.literal("frame"),
-    id: RecipeId,
-    stock: RecipeId,
-    /** The legs its rails join. */
-    legs: RecipeId,
-    sides: z.enum(["ends", "front-and-back"]),
-    /** The lower rails' height above the legs' feet. */
-    lower: SourcedSize,
-  }),
-  z.strictObject({
-    kind: z.literal("box"),
-    id: RecipeId,
-    stock: RecipeId,
-    open: z.enum(["front", "top"]),
-  }),
-  z.strictObject({
-    kind: z.literal("shelf"),
-    id: RecipeId,
-    stock: RecipeId,
-    /** The frame or box it's in. */
-    on: RecipeId,
-    rests: z.enum(["rails", "cleats"]),
-  }),
-  z.strictObject({
-    kind: z.literal("brace"),
-    id: RecipeId,
-    stock: RecipeId,
-    on: RecipeId,
-    sides: z
-      .array(z.enum(["back", "ends"]))
-      .min(1)
-      .max(2),
-  }),
-]);
+export const RecipeGroup = z.discriminatedUnion(
+  "kind",
+  [
+    z.strictObject({
+      kind: z.literal("legs"),
+      id: RecipeId,
+      stock: RecipeId,
+      at: z.enum(["corners"]),
+    }),
+    z.strictObject({
+      kind: z.literal("frame"),
+      id: RecipeId,
+      stock: RecipeId,
+      /** The legs its rails join. */
+      legs: RecipeId,
+      sides: z.enum(["ends", "front-and-back"]),
+      /** The lower rails' height above the legs' feet. */
+      lower: SourcedSize,
+    }),
+    z.strictObject({
+      kind: z.literal("box"),
+      id: RecipeId,
+      stock: RecipeId,
+      open: z.enum(["front", "top"]),
+    }),
+    z.strictObject({
+      kind: z.literal("shelf"),
+      id: RecipeId,
+      stock: RecipeId,
+      /** The frame or box it's in. */
+      on: RecipeId,
+      rests: z.enum(["rails", "cleats"]),
+    }),
+    z.strictObject({
+      kind: z.literal("brace"),
+      id: RecipeId,
+      stock: RecipeId,
+      on: RecipeId,
+      sides: z
+        .array(z.enum(["back", "ends"]))
+        .min(1)
+        .max(2),
+    }),
+  ],
+  { error: notAKind("group") },
+);
 export type RecipeGroup = z.infer<typeof RecipeGroup>;
 
 /** Two pieces or groups a joint holds, by their IDs. */
@@ -155,63 +167,46 @@ const Joins = z.tuple([RecipeId, RecipeId]);
  * screws' when left out); a castor bolted under a piece, `each` bolts through its plate, each with
  * its washers and nut; or a printed holder or bracket.
  */
-export const RecipeJoint = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("screwed"), joins: Joins, fixing: RecipeId }),
-  z.strictObject({ kind: z.literal("sheet-screwed"), joins: Joins, fixing: RecipeId }),
-  z.strictObject({
-    kind: z.literal("bracket"),
-    joins: Joins,
-    fixing: RecipeId,
-    screws: RecipeId.optional(),
-  }),
-  z.strictObject({
-    kind: z.literal("bolted"),
-    /** The piece the castor is under. */
-    piece: RecipeId,
-    fits: RecipeId,
-    at: z.enum(["each-end"]),
-    each: z.number().int().positive().max(8),
-    bolt: z.strictObject({
-      diameter: SourcedSize,
-      /** The thread's pitch: two threads past the nut is the least that holds. */
-      pitch: SourcedSize,
-      length: SourcedSize,
-      price: BuildPrice.optional(),
+export const RecipeJoint = z.discriminatedUnion(
+  "kind",
+  [
+    z.strictObject({ kind: z.literal("screwed"), joins: Joins, fixing: RecipeId }),
+    z.strictObject({ kind: z.literal("sheet-screwed"), joins: Joins, fixing: RecipeId }),
+    z.strictObject({
+      kind: z.literal("bracket"),
+      joins: Joins,
+      fixing: RecipeId,
+      screws: RecipeId.optional(),
     }),
-    washer: z.strictObject({
-      thickness: SourcedSize,
-      perBolt: z.number().int().nonnegative().max(4),
-      price: BuildPrice.optional(),
+    z.strictObject({
+      kind: z.literal("bolted"),
+      /** The piece the castor is under. */
+      piece: RecipeId,
+      fits: RecipeId,
+      at: z.enum(["each-end"]),
+      each: z.number().int().positive().max(8),
+      bolt: z.strictObject({
+        diameter: SourcedSize,
+        /** The thread's pitch: two threads past the nut is the least that holds. */
+        pitch: SourcedSize,
+        length: SourcedSize,
+        price: BuildPrice.optional(),
+      }),
+      washer: z.strictObject({
+        thickness: SourcedSize,
+        perBolt: z.number().int().nonnegative().max(4),
+        price: BuildPrice.optional(),
+      }),
+      nut: z.strictObject({ height: SourcedSize, price: BuildPrice.optional() }),
     }),
-    nut: z.strictObject({ height: SourcedSize, price: BuildPrice.optional() }),
-  }),
-  z.strictObject({ kind: z.literal("printed"), joins: Joins, fixing: RecipeId.optional() }),
-]);
+    z.strictObject({ kind: z.literal("printed"), joins: Joins, fixing: RecipeId.optional() }),
+  ],
+  { error: notAKind("joint") },
+);
 export type RecipeJoint = z.infer<typeof RecipeJoint>;
 
 /** Each kind of stock, piece and group a reference can point at. */
 type Named = { readonly what: "stock" | "piece" | "group"; readonly kind: string };
-
-/**
- * A size over its most, or nothing where it can't be (a 0 kerf or overhang can), refused with what
- * it is and what it can be.
- */
-const overMost = (
-  context: z.RefinementCtx,
-  path: (string | number)[],
-  size: SourcedSize,
-  most: number,
-  what: string,
-  { zero = false }: { zero?: boolean } = {},
-) => {
-  if ((!zero && size.value <= 0) || size.value > most) {
-    context.addIssue({
-      code: "custom",
-      path,
-      message: `${what} is ${size.value} mm: it must be ${zero ? "" : "more than 0 and "}at most ${most} mm.`,
-    });
-  }
-};
 
 /**
  * A recipe as written: its overall size, the saw's kerf, its stock, pieces, groups and joints, and
@@ -378,6 +373,13 @@ export const BuildRecipe = z
       joint.joins.forEach((id, side) => {
         refer(id, at("joins", side), anyPiece, "a joint holds two pieces or groups");
       });
+      if (joint.joins[0] === joint.joins[1]) {
+        context.addIssue({
+          code: "custom",
+          path: at("joins"),
+          message: `"${joint.joins[0]}" is joined to itself: a joint holds two pieces or groups.`,
+        });
+      }
       if (joint.fixing !== undefined) {
         refer(joint.fixing, at("fixing"), fixing, "a joint is held with a fixing");
       }

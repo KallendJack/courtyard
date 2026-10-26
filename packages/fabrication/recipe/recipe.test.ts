@@ -168,13 +168,44 @@ describe("a recipe that doesn't hold together", () => {
     );
   });
 
-  it("is refused for a joint the language doesn't have", () => {
-    const errors = refused({
-      ...goldenBenchRecipe,
-      joints: [{ kind: "pocket-hole", joins: ["legs", "end-frames"], fixing: "5-80-screws" }],
-    });
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatch(/^joints\.0\.kind: /);
+  it("is refused for pocket holes and drawers in plain words, with what to make instead", () => {
+    expect(
+      refused({
+        ...goldenBenchRecipe,
+        joints: [{ kind: "pocket-hole", joins: ["legs", "end-frames"], fixing: "5-80-screws" }],
+      }),
+    ).toEqual([
+      "joints.0.kind: Pocket holes aren't in a recipe yet: screw timber into timber instead.",
+    ]);
+    expect(
+      refused({
+        ...goldenBenchRecipe,
+        groups: [...goldenBenchRecipe.groups, { kind: "drawers", id: "d", stock: "18-mm-plywood" }],
+      }),
+    ).toEqual([
+      "groups.5.kind: Drawers aren't in a recipe yet: shelves in a box or frame, holding storage boxes, instead.",
+    ]);
+  });
+
+  it("is refused for a joint the language doesn't have, saying the ones it has", () => {
+    expect(
+      refused({
+        ...goldenBenchRecipe,
+        joints: [{ kind: "nailed", joins: ["legs", "end-frames"], fixing: "5-80-screws" }],
+      }),
+    ).toEqual([
+      `joints.0.kind: "nailed" isn't a joint a recipe has: it has screwed, sheet-screwed, bracket, bolted or printed.`,
+    ]);
+  });
+
+  it("is refused for a piece joined to itself", () => {
+    const [, ...rest] = goldenBenchRecipe.joints;
+    expect(
+      refused({
+        ...goldenBenchRecipe,
+        joints: [{ kind: "screwed", joins: ["legs", "legs"], fixing: "5-80-screws" }, ...rest],
+      }),
+    ).toEqual([`joints.0.joins: "legs" is joined to itself: a joint holds two pieces or groups.`]);
   });
 
   it("is refused, until any recipe is worked out (#770), when it isn't the bench's arrangement", () => {

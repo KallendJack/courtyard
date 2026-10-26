@@ -56,7 +56,9 @@ if (recipe) {
 - **A recipe stays within its bounds** (`RECIPE_MOST`, #769): the build's length, depth and height at most 3000 mm, a
   stock's sizes at most 6000, the kerf at most 10 and an overhang at most 300; at most 16 stocks, 24 pieces, 12
   groups and 32 joints. Over them, or naming two things with one ID, or pointing at what isn't there or isn't the
-  right kind (a panel cut from a timber), it's refused with the reason, by where it is in the recipe.
+  right kind (a panel cut from a timber), or joining a piece to itself, it's refused with the reason, by where it is
+  in the recipe. A kind it doesn't have is refused saying the kinds it has, and one out of version 1 (pocket holes,
+  dowels, glue-only joints, hinges, drawers) saying what to make instead (`recipe-refusals.ts` in the contract).
 - **A bench's recipe is the bench, to the last number** (#769): the bench template loads its parameters as its
   recipe, and a recipe is read back as a bench only when the bench's starter would write exactly it, whatever its
   IDs; anything else is refused, saying what it has that a bench doesn't, until any recipe is worked out (#770).

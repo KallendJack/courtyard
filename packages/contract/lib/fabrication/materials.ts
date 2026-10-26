@@ -5,7 +5,8 @@ import { SourcedSize } from "../sourced/size.ts";
 // shared by a template's parameters and a recipe, so `packages/fabrication` re-exports them by
 // their own names (`Timber`, `Sheet`, `Tool`…) and nowhere else defines them.
 
-const Words = z.string().trim().min(1).max(80);
+/** A name, as a stock, a fixing or a shop has. */
+export const Words = z.string().trim().min(1).max(80);
 
 /** A pack's price, in pence, and where it's from. */
 export const BuildPrice = z.object({
