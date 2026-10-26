@@ -17,7 +17,7 @@ import { chipOf, listed, stepFindings, wayChanges } from "./words.ts";
 // the check before moving on, the tools to hand, and Back and Done big enough for dusty hands.
 
 /** A step's sentence with the words it uses as buttons that say what they mean. */
-function WithWords(props: {
+export function WithWords(props: {
   text: string;
   words: readonly string[];
   open: (word: string) => void;
@@ -48,7 +48,7 @@ function WithWords(props: {
 }
 
 /** The ways a step can be done: the one in use, and the others, "not yet" until they're to hand. */
-function Ways(props: { ways: BuildStep["ways"] }) {
+export function Ways(props: { ways: BuildStep["ways"] }) {
   if (props.ways.length === 0) return null;
   return (
     <section aria-label="How you'll do it" className="flex flex-col gap-2">
@@ -94,25 +94,9 @@ function DetailOption(props: { pressed: boolean; press: () => void; children: Re
   );
 }
 
-/**
- * "Show me how" or "Just the numbers". At the bench, where Show me how opens the close-ups (#793),
- * it's Just the numbers alone, pressed or not.
- */
-function DetailSwitch(props: {
-  detail: Detail;
-  choose: (detail: Detail) => void;
-  atBench: boolean;
-}) {
+/** "Show me how" or "Just the numbers", beside the steps on a computer. */
+function DetailSwitch(props: { detail: Detail; choose: (detail: Detail) => void }) {
   const numbers = props.detail === "numbers";
-  if (props.atBench) {
-    return (
-      <div>
-        <DetailOption pressed={numbers} press={() => props.choose(numbers ? "how" : "numbers")}>
-          Just the numbers
-        </DetailOption>
-      </div>
-    );
-  }
   return (
     <fieldset className="grid grid-cols-2 gap-2">
       <legend className="sr-only">Detail</legend>
@@ -126,19 +110,24 @@ function DetailSwitch(props: {
   );
 }
 
-/** One action a line: ticked lines go grey, and the first not ticked is the one to do now. */
-function Checklist(props: {
+/**
+ * One action a line: ticked lines go grey, and the first not ticked is the one to do now. At the
+ * bench (#826, its boards), each line is numbered as its badge on the picture is, its box ringed in
+ * violet while it's the one to do now, and its marked length is on the picture, not under it.
+ */
+export function Checklist(props: {
   step: BuildStep;
   detail: Detail;
   ticked: readonly number[];
   tick: (line: number) => void;
   openWord: (word: string) => void;
-  big: boolean;
+  bench?: boolean;
 }) {
-  const { step, ticked, big } = props;
+  const { step, ticked } = props;
+  const bench = props.bench === true;
   const now = step.actions.findIndex((_, line) => !ticked.includes(line));
   return (
-    <ul aria-label="Checklist" className="flex flex-col gap-1">
+    <ul aria-label="Checklist" className={classes("flex flex-col", bench ? "gap-2.5" : "gap-1")}>
       {step.actions.map((action, line) => {
         const done = ticked.includes(line);
         const text = props.detail === "how" ? action.howTo : action.numbers;
@@ -147,19 +136,20 @@ function Checklist(props: {
           <li key={line}>
             <div
               className={classes(
-                "flex items-start gap-3 rounded-row px-2.5 py-2",
-                line === now && "bg-primary/15",
+                "flex items-start gap-3",
+                !bench && "rounded-row px-2.5 py-2",
+                !bench && line === now && "bg-primary/15",
               )}
             >
-              <span className={classes("relative flex shrink-0", big ? "size-8" : "size-7")}>
+              <span className={classes("relative flex shrink-0", bench ? "size-6.5" : "size-7")}>
                 <input
                   type="checkbox"
                   checked={done}
                   aria-label={`Line ${line + 1} done`}
                   onChange={() => props.tick(line)}
                   className={classes(
-                    "appearance-none rounded-md border-2",
-                    big ? "size-8" : "size-7",
+                    "appearance-none border-2",
+                    bench ? "size-6.5 rounded-picture" : "size-7 rounded-md",
                     done
                       ? "border-success bg-success"
                       : line === now
@@ -170,28 +160,26 @@ function Checklist(props: {
                 {done && (
                   <Check
                     aria-hidden
-                    className={classes(
-                      "pointer-events-none absolute text-background",
-                      big ? "inset-1.5 size-5" : "inset-1.5 size-4",
-                    )}
+                    className="pointer-events-none absolute inset-1.5 size-4 text-background"
                   />
                 )}
               </span>
               <p
                 className={classes(
-                  "min-w-0 flex-1 pt-0.5",
-                  big ? "text-bench" : "text-answer",
+                  "min-w-0 flex-1",
+                  bench ? "text-bench" : "pt-0.5 text-answer",
                   done
                     ? "text-muted-foreground line-through"
-                    : line === now
+                    : line === now && !bench
                       ? "font-semibold text-foreground"
                       : "text-foreground",
                 )}
               >
+                {bench && <span className="pr-2">{line + 1}</span>}
                 <WithWords text={text} words={step.words} open={props.openWord} />
               </p>
             </div>
-            {action.length !== undefined && (
+            {action.length !== undefined && !bench && (
               <div className="pt-1 pr-2.5 pb-2 pl-12">
                 <LengthBar length={action.length} />
               </div>
@@ -204,12 +192,11 @@ function Checklist(props: {
 }
 
 /** Extras for anyone who wants them, closed until tapped, never in the checklist (#789). */
-function Tips(props: { tips: readonly string[]; big: boolean }) {
+export function Tips(props: { tips: readonly string[] }) {
   if (props.tips.length === 0) return null;
   return (
     <Disclosure
       look="row"
-      big={props.big}
       icon={<Lightbulb aria-hidden className="size-4 text-primary-text" />}
       label="Tips"
     >
@@ -222,8 +209,8 @@ function Tips(props: { tips: readonly string[]; big: boolean }) {
   );
 }
 
-/** The step's tools as chips, as the bench board has them: ticked, or gold to check. */
-function ToolChips(props: { step: BuildStep; big: boolean }) {
+/** The step's tools as chips: ticked, or gold to check. */
+function ToolChips(props: { step: BuildStep }) {
   const tools = [...props.step.tools, ...props.step.safety];
   if (tools.length === 0) return null;
   return (
@@ -235,8 +222,7 @@ function ToolChips(props: { step: BuildStep; big: boolean }) {
             // Two chips can be one tool: a spanner on the head, another on the nut (#783).
             key={`${tool.tool} ${tool.name}`}
             className={classes(
-              "flex items-center gap-2 rounded-full border px-4 font-semibold",
-              props.big ? "h-11 text-interface" : "h-9 text-meta",
+              "flex h-9 items-center gap-2 rounded-full border px-4 text-meta font-semibold",
               ready
                 ? "border-transparent bg-muted text-foreground"
                 : "border-warning/50 bg-warning/10 text-warning",
@@ -255,33 +241,68 @@ function ToolChips(props: { step: BuildStep; big: boolean }) {
   );
 }
 
+/** A word tapped in a step's line, and what it means, with × to close it. */
+export function Meaning(props: { meaning: { word: string; means: string }; close: () => void }) {
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-3 rounded-row border border-primary/35 bg-popover p-3.5"
+    >
+      <p className="min-w-0 flex-1 text-interface text-foreground">
+        <span className="font-bold capitalize">{props.meaning.word}:</span> {props.meaning.means}
+      </p>
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={props.close}
+        className="rounded-full p-1 text-muted-foreground hover:text-foreground"
+      >
+        <X aria-hidden className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+/** A step's fixings: "5 × 80 screws (16)", a count after its size so it doesn't read as one more. */
+export function Fixings(props: { step: BuildStep }) {
+  if (props.step.fixings.length === 0) return null;
+  return (
+    <p className="text-interface text-muted-foreground">
+      Fixings:{" "}
+      <span className="text-foreground">
+        {listed(props.step.fixings.map((fixing) => `${fixing.name} (${fixing.count})`))}
+      </span>
+    </p>
+  );
+}
+
+/** How the steps are done now Your tools have changed (#777), said whichever step is showing. */
+export function WayChanges(props: { derived: DerivedBuild }) {
+  return wayChanges(props.derived).map((change) => (
+    <p key={change} className="text-interface text-primary-text">
+      {change}
+    </p>
+  ));
+}
+
 /**
- * The step reached, as the instruction manual shows it (#699; at the bench, #753): which step and
- * how long it takes, its title and how to batch it, its checklist, a word's meaning when tapped,
- * its tips behind a tap (#789), its tools, its fixings, then `children`, its techniques in full
- * the first time or a "how?" tap (#813), the check before moving on, and how it's done and how
- * much is said. `big` at the bench on the unfolded Fold, read at arm's length. `atBench` (#793),
- * `children` are the step's buttons, which open its walk-through, close-ups, techniques and
- * check, so they aren't shown here; beside the steps on a computer, the photo for the check goes
- * by `sendPhoto`.
+ * The step reached, as the instruction manual shows it beside the 3D view on a computer (#699):
+ * which step and how long it takes, its title and how to batch it, its walk-through, its
+ * checklist, a word's meaning when tapped, its tips behind a tap (#789), its tools, its fixings,
+ * its techniques in full the first time or a "how?" tap (#813), the check before moving on with
+ * its photo sent by `sendPhoto`, and how it's done and how much is said. At the bench it's
+ * `BenchStep`, as its boards have it (#826).
  */
 export function StepPanel(props: {
   derived: DerivedBuild;
   step: BuildStep;
   progress: Progress;
   sendPhoto?: (photo: File) => void;
-  atBench?: boolean;
-  big?: boolean;
-  children?: ReactNode;
 }) {
   const { derived, step, progress } = props;
-  const big = props.big === true;
-  const atBench = props.atBench === true;
   const [detail, choose] = useDetail();
   const [word, setWord] = useState<string>();
   const meaning = derived.glossary.find((each) => each.word === word);
-  // How the steps are done now Your tools have changed, said whichever step is showing.
-  const changes = wayChanges(derived);
   return (
     <section aria-label="Steps" className="flex min-w-0 flex-col gap-4 pb-2">
       <div className="flex flex-col gap-1.5">
@@ -289,67 +310,27 @@ export function StepPanel(props: {
           Step {step.number} of {derived.steps.length} · about {step.minutes} min
           {step.helper ? " · needs a helper" : ""}
         </CapsLabel>
-        <h2
-          className={classes(
-            "display-title text-foreground",
-            big ? "text-step" : "text-sheet-title",
-          )}
-        >
-          {step.title}
-        </h2>
-        <p className={classes("text-muted-foreground", big ? "text-answer" : "text-interface")}>
-          {step.batch}
-        </p>
+        <h2 className="display-title text-sheet-title text-foreground">{step.title}</h2>
+        <p className="text-interface text-muted-foreground">{step.batch}</p>
       </div>
-      {changes.map((change) => (
-        <p key={change} className="text-interface text-primary-text">
-          {change}
-        </p>
-      ))}
-      {detail === "how" && !atBench && <WalkThrough step={step} parts={derived.parts} big={big} />}
+      <WayChanges derived={derived} />
+      {detail === "how" && <WalkThrough step={step} parts={derived.parts} />}
       <Checklist
         step={step}
         detail={detail}
         ticked={tickedIn(progress.progress, step.id)}
         tick={progress.tick}
         openWord={setWord}
-        big={big}
       />
-      {meaning !== undefined && (
-        <div
-          role="status"
-          className="flex items-start gap-3 rounded-row border border-primary/35 bg-popover p-3.5"
-        >
-          <p className="min-w-0 flex-1 text-interface text-foreground">
-            <span className="font-bold capitalize">{meaning.word}:</span> {meaning.means}
-          </p>
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={() => setWord(undefined)}
-            className="rounded-full p-1 text-muted-foreground hover:text-foreground"
-          >
-            <X aria-hidden className="size-4" />
-          </button>
-        </div>
-      )}
-      <Tips tips={step.tips} big={big} />
-      <ToolChips step={step} big={big} />
-      {step.fixings.length > 0 && (
-        <p className={classes("text-muted-foreground", big ? "text-answer" : "text-interface")}>
-          Fixings:{" "}
-          <span className="text-foreground">
-            {/* "5 × 80 screws (16)": a count before a size would read as one more size. */}
-            {listed(step.fixings.map((fixing) => `${fixing.name} (${fixing.count})`))}
-          </span>
-        </p>
-      )}
+      {meaning !== undefined && <Meaning meaning={meaning} close={() => setWord(undefined)} />}
+      <Tips tips={step.tips} />
+      <ToolChips step={step} />
+      <Fixings step={step} />
       <Findings findings={stepFindings(derived, step)} label="To check in this step" />
-      {props.children}
-      {!atBench && <Techniques step={step} parts={derived.parts} />}
-      {!atBench && <BeforeMovingOn step={step} sendPhoto={props.sendPhoto} />}
+      <Techniques step={step} parts={derived.parts} />
+      <BeforeMovingOn step={step} sendPhoto={props.sendPhoto} />
       <Ways ways={step.ways} />
-      <DetailSwitch detail={detail} choose={choose} atBench={atBench} />
+      <DetailSwitch detail={detail} choose={choose} />
     </section>
   );
 }

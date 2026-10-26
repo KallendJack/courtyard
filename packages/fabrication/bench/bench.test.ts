@@ -13,6 +13,12 @@ const built = (parameters: unknown, setting?: BuildSetting): Build => {
   return derived.value;
 };
 
+/**
+ * A step's line at most this long, in characters: about the longest the end frames' agreed board
+ * draws (88), so four fit beside the picture with the step's buttons on the unfolded Fold (#826).
+ */
+const LINE = 95;
+
 const partSizes = (build: Build) =>
   Object.fromEntries(
     build.parts.map((part) => [
@@ -710,7 +716,7 @@ describe("the golden bench's steps", () => {
     const said = (step: typeof handSaw) => step?.actions.map((action) => action.howTo).join(" ");
     expect(handSaw?.tools.map((tool) => tool.tool)).toContain("folding-workbench");
     expect(said(handSaw)).toContain("waste side");
-    expect(said(handSaw)).toContain("hold the offcut");
+    expect(said(handSaw)).toContain("holding the offcut");
     expect(circular?.tools.map((tool) => tool.tool)).toContain("circular-saw");
     expect(circular?.safety.map((tool) => tool.tool)).toEqual(["safety-glasses", "ear-defenders"]);
     expect(said(circular)).not.toEqual(said(handSaw));
@@ -728,13 +734,13 @@ describe("the golden bench's steps", () => {
       });
       expect(cut?.actions[1]?.howTo).toBe(
         circular
-          ? "Rest the long end on a support as high as what it's clamped to (a sawhorse, a stool or the stack of timber), so it stays level and can't sag and pinch the saw."
-          : "Rest the long end on a support as high as the jaws (a sawhorse, a stool or the stack of timber), so it stays level and can't sag and pinch the saw.",
+          ? "Rest the long end on something as high as what it's clamped to."
+          : "Rest the long end on something as high as the jaws.",
       );
+      // What it can rest on, and why, behind Show me how (#826).
+      expect(cut?.tips.join(" ")).toMatch(/A sawhorse, a stool or the stack of timber/);
       // Cut and label: each piece's letter goes on it as it comes off, said with the cut (#789).
-      expect(cut?.actions.at(-1)?.howTo).toMatch(
-        / As it comes off, write its letter on it in pencil\.$/,
-      );
+      expect(cut?.actions.at(-1)?.howTo).toMatch(/ Pencil its letter on it\.$/);
     }
   });
 
@@ -840,7 +846,7 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     ]);
     expect(standing?.actions.map((action) => action.numbers)).toContain("2 brackets a leg.");
     expect(standing?.actions.at(-1)?.howTo).toBe(
-      "Hold each bracket tight into its corner and mark through its holes. Drill a small 3 mm pilot hole at each mark, then drive the screw.",
+      "Bracket tight in its corner: mark its holes. Drill a 3 mm pilot hole at each, then screw.",
     );
     expect(stepOf(build, "fit-supports")?.fixings).toEqual([
       { name: "40 mm angle brackets", count: 4, joint: "bracket" },
@@ -865,7 +871,7 @@ describe("the golden bench's steps, at the bench (#699)", () => {
 
     expect(top?.tools.map((tool) => tool.tool)).toContain("countersink-bit");
     expect(top?.actions.map((action) => action.howTo)).toContain(
-      "Countersink each cross a little with the countersink bit, and drive its screw until the head sits flush in the dip, so nothing catches on it.",
+      "Countersink each cross. Screw till the head sits flush.",
     );
     expect(build.glossary.find((entry) => entry.word === "countersink")?.means).toBe(
       "A cone-shaped dip cut into the top of a screw hole, so the screw's head sits flush.",
@@ -876,10 +882,10 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     const fitting = stepOf(built(goldenBench), "fit-castors");
 
     expect(fitting?.actions.map((action) => action.howTo)).toEqual([
-      "Base in the Workmate's jaws. Castor upside down on its end: same gap both sides, a fingernail from the end.",
+      "Base in the Workmate's jaws. Castor on its end, centred, a fingernail in.",
       "Drill one hole through the plate with the 7 mm bit. Bolt it loosely.",
       "Drill the next hole through the plate. Bolt it. Then the other two.",
-      "Tighten each: spanner on the head, its handle against the castor. Turn the nut underneath.",
+      "Tighten each: spanner on the head, against the castor. Turn the nut.",
     ]);
     expect(fitting?.actions.map((action) => action.numbers)).toEqual([
       "E in the jaws; castor 10 from the end, centred.",
@@ -918,7 +924,7 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     const fitting = derived.ok ? stepOf(derived.value, "fit-castors") : undefined;
 
     expect(fitting?.actions[0]?.howTo).toBe(
-      "Base upside down on two offcuts. Castor upside down on its end: same gap both sides, a fingernail from the end.",
+      "Base upside down on two offcuts. Castor on its end, centred, a fingernail in.",
     );
     expect(fitting?.scene?.title).toBe("On two offcuts");
   });
@@ -984,7 +990,7 @@ describe("the golden bench's steps, at the bench (#699)", () => {
 
     expect(build.size.height).toBe(899.6);
     expect(stepOf(build, "check-bench")?.actions[1]?.howTo).toBe(
-      "Measure the height to the top: it should be 900.",
+      "Measure the height to the top: 900.",
     );
     for (const line of said) expect(line).not.toMatch(/\d\.\d/);
   });
@@ -1086,7 +1092,7 @@ describe("the simplest way first (#789)", () => {
     for (const action of marking) expect(action.howTo).not.toContain("2203");
     // How to mark is said once; a piece cut again and again is said once.
     expect(marking[2]?.howTo).toBe(
-      "On one length of 45 × 95 C16: C 460 four times, then D 460. The same: each piece from the fresh end.",
+      "On one length of 45 × 95 C16: C 460 four times, then D 460, the same way.",
     );
     expect(marking[3]?.numbers).toBe("1 × 45 × 145 C16: E 550 twice, then F 460");
   });
@@ -1107,8 +1113,8 @@ describe("the simplest way first (#789)", () => {
     expect(spots?.title).toBe("Mark your screw spots");
     expect(spots?.type).toBe("screwed-overlap");
     expect(spots?.fixings).toHaveLength(2);
-    expect(said(build, "end-frames")).toContain("Mark 2 crosses where the rail sits on the leg");
-    expect(said(build, "long-rails")).toContain("2 crosses where the rail sits on the leg");
+    expect(said(build, "end-frames")).toContain("Mark 2 crosses where the rail sits on each leg");
+    expect(said(build, "long-rails")).toContain("2 crosses where the rail sits on each leg");
     for (const step of build.steps) {
       expect(step.actions.map((action) => action.howTo).join(" ")).not.toMatch(/each dot/);
     }
@@ -1136,8 +1142,23 @@ describe("the simplest way first (#789)", () => {
   it("square the corner before clamping it, on the end frames", () => {
     const frames = stepOf(built(goldenBench), "end-frames");
 
-    expect(frames?.actions[1]?.howTo).toMatch(/Check the corner with your square, then clamp it/);
+    expect(frames?.actions[1]?.howTo).toMatch(/Square the corner, then clamp\.$/);
     expect(frames?.actions[1]?.numbers).toMatch(/square, clamp\.$/);
+  });
+
+  it("say each line as short as the bench's boards do, the rest behind Show me how (#826)", () => {
+    for (const build of [
+      built(goldenBench),
+      built({ ...goldenBench, tools: [...goldenBench.tools, "circular-saw"] }),
+      built({ ...goldenBench, tools: [...goldenBench.tools, "mitre-saw"] }),
+    ]) {
+      for (const step of build.steps) {
+        expect(step.actions.length, step.id).toBeLessThanOrEqual(4);
+        for (const action of step.actions) {
+          expect(action.howTo.length, `${step.id}: ${action.howTo}`).toBeLessThanOrEqual(LINE);
+        }
+      }
+    }
   });
 
   it("sand the edges your hands touch, on the top", () => {

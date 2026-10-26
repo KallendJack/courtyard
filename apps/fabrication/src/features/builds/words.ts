@@ -241,3 +241,33 @@ export const chipOf = (tool: BuildStepTool): { says: string; ready: boolean } =>
   }
   return { says: tool.name, ready: true };
 };
+
+/**
+ * What every step that marks or cuts has to hand, so the bench's chips leave it out (#826, its
+ * boards): the tape, the pencil and the glasses. Show me how and I don't have… still list them.
+ */
+const EVERYDAY = new Set(["tape-measure", "pencil", "safety-glasses", "ear-defenders"]);
+
+/**
+ * A step's tools as the bench's chips say them (#826; "Fabrication · Castors in 3D, your kit ·
+ * Fold (#783)"): the ones particular to it, and the drill with the bit it drills with, as one
+ * ("Drill driver, 7 mm bit"), gold while the owner's set isn't known to have it.
+ */
+export const benchChips = (step: BuildStep): { key: string; says: string; ready: boolean }[] => {
+  const bits = step.tools.find((tool) => tool.tool === "drill-bits");
+  const drill = step.tools.some((tool) => tool.tool === "drill-driver");
+  return step.tools.flatMap((tool) => {
+    // The bits are said with the drill when it's listed, and on their own ("Drill, 7 mm bit") when not.
+    if (EVERYDAY.has(tool.tool) || (tool.tool === "drill-bits" && drill)) return [];
+    const key = `${tool.tool} ${tool.name}`;
+    if (tool.tool !== "drill-driver" || bits === undefined) return [{ key, ...chipOf(tool) }];
+    const sizes = bits.bits ?? [];
+    return [
+      {
+        key,
+        says: `${tool.name}, ${listed(sizes.map((bit) => `${bit.mm} mm`))} bit`,
+        ready: tool.toHand && bits.toHand && sizes.every((bit) => bit.have === true),
+      },
+    ];
+  });
+};

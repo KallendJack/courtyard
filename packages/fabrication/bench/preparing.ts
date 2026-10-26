@@ -58,7 +58,7 @@ export const act = (howTo: string, numbers: string): Action => ({ howTo, numbers
 
 /** A shop's cut end is often out of square, and the first piece is measured from it. */
 const squareEnd = act(
-  "First check the end is square: hold the square's stock tight against the edge and look along its blade. If there's a gap, square a line 10 mm in and saw off the end, then measure from there.",
+  "Check the end is square. If it isn't, saw 10 mm off it first.",
   "End square? If not, trim it.",
 );
 
@@ -79,9 +79,9 @@ const marking = (length: MarkedLength, at: number): Action => {
     else runs.push([`${label} ${mm}`, 1]);
   }
   const pieces = runs.map(([cut, n]) => `${cut}${TIMES[n] ?? ` ${n} times`}`).join(", then ");
-  // How a piece is marked is said on the first length only; Show me how walks through it.
+  // How a piece is marked is Show me how's walk-through; the first line says where it starts.
   return {
-    howTo: `On ${lengths} of ${length.stock}: ${pieces}. ${at === 0 ? "Hook the tape over the end, tick the length, square a line across. Cut it, then measure the next piece from the fresh end." : "The same: each piece from the fresh end."}`,
+    howTo: `On ${lengths} of ${length.stock}: ${pieces}, ${at === 0 ? "each from the fresh end" : "the same way"}.`,
     numbers: `${length.count} × ${length.stock}: ${pieces}`,
     length,
   };
@@ -113,17 +113,14 @@ const sawWays = (toHand: ReadonlySet<Tool>, using: Saw): Way[] =>
   }));
 
 /** Each piece's letter on it as it comes off, whichever saw cut it: said with the cut. */
-const LABEL = "As it comes off, write its letter on it in pencil.";
+const LABEL = "Pencil its letter on it.";
 
 /**
  * A length held at one end sags at the other as the cut goes through, which pinches the saw and
  * snaps the last of the cut, so the long end rests on something level with where it's held.
  */
 const longEnd = (holding: string) =>
-  act(
-    `Rest the long end on a support as high as ${holding} (a sawhorse, a stool or the stack of timber), so it stays level and can't sag and pinch the saw.`,
-    "Long end supported, level.",
-  );
+  act(`Rest the long end on something as high as ${holding}.`, "Long end supported, level.");
 
 /** Each saw's three lines: held, the long end supported, the cut and its letter. */
 const CUTTING: Readonly<
@@ -134,12 +131,12 @@ const CUTTING: Readonly<
     safety: ["safety-glasses", "ear-defenders"],
     actions: [
       act(
-        "Stand the mitre saw on something flat and solid, and lay the length on its bed, tight against the fence, with the line just past the blade's slot.",
+        "Length on the saw's bed, tight to the fence, the line just past the slot.",
         "On the bed, against the fence.",
       ),
       longEnd("the saw's bed"),
       act(
-        `With the saw still, bring the blade down to line its edge up on the waste side of the line. Hold the length to the fence, your hand well clear, cut, and let the blade stop before you lift it. ${LABEL}`,
+        `Blade on the waste side. Cut, and let it stop before you lift it. ${LABEL}`,
         "Mitre saw, waste side, blade stopped before lifting. Letter on it.",
       ),
     ],
@@ -149,12 +146,12 @@ const CUTTING: Readonly<
     safety: ["safety-glasses", "ear-defenders"],
     actions: [
       act(
-        "Clamp the length to the folding workbench, or something as solid, with the line just past its edge.",
+        "Clamp the length down, the line just past the edge.",
         "Clamped down, line just past the edge.",
       ),
       longEnd("what it's clamped to"),
       act(
-        `Set the blade about 5 mm deeper than the timber, line it up on the waste side of the line and cut in one steady push, letting the offcut fall clear. ${LABEL}`,
+        `Blade 5 mm deeper than the timber, on the waste side. One steady push. ${LABEL}`,
         "Circular saw, blade 5 mm past the timber, waste side. Letter on it.",
       ),
     ],
@@ -171,12 +168,12 @@ const CUTTING: Readonly<
     safety: ["safety-glasses"],
     actions: [
       act(
-        "Clamp the length in the folding workbench's jaws with the line just past the edge.",
+        "Clamp the length in the folding workbench's jaws, the line just past the edge.",
         "In the jaws, line just past the edge.",
       ),
       longEnd("the jaws"),
       act(
-        `Saw on the waste side of the line. Near the end of the cut, hold the offcut so it doesn't snap off. ${LABEL}`,
+        `Saw on the waste side, holding the offcut near the end. ${LABEL}`,
         "Hand saw, waste side. Letter on it.",
       ),
     ],
@@ -230,8 +227,8 @@ export const handedOn = (options: {
 
 /**
  * The line saying why a stock goes to another saw (#780): "The 145 castor bases and top support
- * are too wide for your mitre saw: hand saw for these." A saw whose capacity isn't given says
- * what's assumed.
+ * are too wide for your mitre saw: hand saw for these." How that saw cuts, and any capacity
+ * assumed, are tips (#826).
  */
 const handedLine = (
   { stock, saw: other, why }: HandedOn,
@@ -241,7 +238,7 @@ const handedLine = (
     sectionOf: (stock: string) => Section;
     nameOf: (label: string) => string;
   },
-): Action => {
+): { action: Action; tips: string[] } => {
   const labels = [
     ...new Set(
       options.cutPlan.timber
@@ -258,13 +255,16 @@ const handedLine = (
   const yours = TOOL_NAMES[options.saw].toLowerCase();
   const using = TOOL_NAMES[other].toLowerCase();
   const isAssumed = why.limit.source.kind === "assumed";
+  const limit = `${why.limit.value} mm ${why.way}`;
   const line = isAssumed
-    ? `Your ${yours}'s cutting capacity isn't known, so it's assumed to cut ${why.limit.value} mm ${why.way}: ${using} for the ${these}. Say what it cuts at 90°, from its label, to check.`
+    ? `Your ${yours} may not cut ${limit}: ${using} for the ${these}.`
     : `The ${these} are too ${why.way} for your ${yours}: ${using} for these.`;
-  return act(
-    `${line} ${OTHER_SAW[other]}`,
-    `${labels.join(", ")}: ${using}${isAssumed ? " (capacity assumed)" : `, too ${why.way}`}.`,
-  );
+  const assumed = `Your ${yours}'s cutting capacity isn't known, so it's assumed to cut ${limit}. Say what it cuts at 90°, from its label, to check.`;
+  const numbers = `${labels.join(", ")}: ${using}${isAssumed ? " (capacity assumed)" : `, too ${why.way}`}.`;
+  return {
+    action: act(line, numbers),
+    tips: [...(isAssumed ? [assumed] : []), OTHER_SAW[other]],
+  };
 };
 
 /** Several actions said as one line. */
@@ -297,6 +297,7 @@ export const preparingSteps = (options: {
 }): Draft[] => {
   const { cutPlan, toHand, saw, handed } = options;
   const others = handed.map((each) => each.saw);
+  const handedLines = handed.map((each) => handedLine(each, options));
   const cutting = CUTTING[saw];
   const marked = markedLengths(cutPlan);
   const first = marked[0];
@@ -324,7 +325,7 @@ export const preparingSteps = (options: {
       actions: [
         ...cutPlan.timber.map((plan) =>
           act(
-            `Count the ${plan.stock}: you need ${plan.lengths.length} lengths of ${plan.stockLength}. Check none is badly bent or split.`,
+            `${plan.lengths.length === 1 ? "One length" : `${plan.lengths.length} lengths`} of ${plan.stock}, ${plan.stockLength} long, none badly bent or split.`,
             `${plan.stock} × ${plan.lengths.length}`,
           ),
         ),
@@ -332,11 +333,12 @@ export const preparingSteps = (options: {
           ? []
           : [
               act(
-                `Have the shop cut the sheet to the cut plan, then measure each piece: ${sheetPieces.join(", ")}.`,
-                sheetPieces.join(" · "),
+                "The sheet cut by the shop to the cut plan: measure each piece.",
+                "Each sheet piece measured.",
               ),
             ]),
       ],
+      tips: sheetPieces.length === 0 ? [] : [`The sheet's pieces: ${sheetPieces.join(", ")}.`],
       check: {
         says: "Everything on the buy list is here.",
         photo: "Everything laid out on the floor.",
@@ -353,6 +355,10 @@ export const preparingSteps = (options: {
       tools: ["tape-measure", "pencil", "square"],
       batch: "One piece at a time, with the next step: mark it, cut it, then mark the next.",
       actions: [squareEnd, ...marked.map(marking)],
+      // How the end is checked, behind Show me how (#826): the line says only what to do.
+      tips: [
+        "To check an end, hold the square's stock tight against the edge and look along its blade: a gap means it's out. Square a line 10 mm in and saw to it.",
+      ],
       walkThrough: markingWalk(first),
       techniques: markingTechnique(first, options.sectionOf),
       check: {
@@ -375,7 +381,11 @@ export const preparingSteps = (options: {
       // The cuts handed on to another saw, in one line, so the step stays at four.
       actions: [
         ...cutting.actions,
-        ...(handed.length === 0 ? [] : [joined(handed.map((each) => handedLine(each, options)))]),
+        ...(handedLines.length === 0 ? [] : [joined(handedLines.map((each) => each.action))]),
+      ],
+      tips: [
+        "A sawhorse, a stool or the stack of timber will do for the long end. One that sags pinches the saw and snaps the last of the cut.",
+        ...new Set(handedLines.flatMap((each) => each.tips)),
       ],
       check: {
         says: "Each piece within 1 mm of its length, and its letter on it.",

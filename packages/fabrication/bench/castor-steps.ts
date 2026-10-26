@@ -147,7 +147,7 @@ export const castorsDraft = (options: {
     batch: "One castor at a time, placed by eye: each hole drilled and bolted before the next.",
     actions: [
       act(
-        `${workmate ? "Base in the Workmate's jaws." : "Base upside down on two offcuts."} Castor upside down on its end: same gap both sides, a fingernail from the end.`,
+        `${workmate ? "Base in the Workmate's jaws." : "Base upside down on two offcuts."} Castor on its end, centred, a fingernail in.`,
         `E ${workmate ? "in the jaws" : "on offcuts"}; castor ${CASTOR_INSET} from the end, centred.`,
       ),
       act(
@@ -164,8 +164,8 @@ export const castorsDraft = (options: {
         : []),
       act(
         pliers
-          ? "Tighten each: pliers on the head, their handles against the castor. Turn the nut underneath."
-          : "Tighten each: spanner on the head, its handle against the castor. Turn the nut underneath.",
+          ? "Tighten each: pliers on the head, against the castor. Turn the nut."
+          : "Tighten each: spanner on the head, against the castor. Turn the nut.",
         "Head held against the castor; turn the nut.",
       ),
     ],

@@ -1,13 +1,11 @@
 import type { BuildStep, DerivedBuild } from "@courtyard/contract";
-import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import type { ReactNode } from "react";
 import { BenchPanel } from "./bench-panel.tsx";
 import type { BenchAsk } from "./chat/hold-to-ask.tsx";
 import type { Progress } from "./progress.ts";
-import { StepButtons } from "./step/step-buttons.tsx";
-import { StepFoot, useSwipe } from "./step-moves.tsx";
-import { StepPanel } from "./step-panel.tsx";
+import { BenchStep } from "./step/bench-step.tsx";
+import { useSwipe } from "./step-moves.tsx";
 
 /** A panel on the PC and the Fold: one of the boards' cards. */
 export const PANEL =
@@ -47,10 +45,9 @@ function Printed(props: { printed: ReactNode; ask: ReactNode; answer: ReactNode 
 /**
  * At the bench (#753; Paper, 2 · Agreed, "Fabrication · At the bench · Fold 933×645" and
  * "· Cover 476×695"): one step at a time, filling the screen. On the unfolded Fold, the step in 3D
- * on the left, with Hold to ask and Reset view, and the step in big type on the right, Back and
- * Done at thumb height; folded, the same stacked. A swipe on the step moves to the next or the one
- * before. Under the step's lines, its four buttons (#793), and no chat: what's asked is answered
- * over the picture, and the full chat is in Plan.
+ * on the left, with Hold to ask and Reset view, and the step as its boards have it on the right
+ * (`BenchStep`, #826); folded, the same stacked. A swipe on the step moves to the next or the one
+ * before. No chat: what's asked is answered over the picture, and the full chat is in Plan.
  */
 export function AtTheBench(
   props: Bench & {
@@ -81,28 +78,11 @@ export function AtTheBench(
       <Printed printed={props.printed} ask={props.ask} answer={props.answer} />
     );
   const theStep = (
-    <div {...swipe} className={classes(PANEL, "flex-1 touch-pan-y")}>
-      <Scroller className="flex min-h-0 flex-1 flex-col">
-        <StepPanel derived={derived} step={step} progress={progress} atBench big={!cover}>
-          <StepButtons
-            derived={derived}
-            step={step}
-            progress={progress}
-            check={props.check}
-            big={!cover}
-          />
-        </StepPanel>
-      </Scroller>
-      <StepFoot
-        derived={derived}
-        step={step}
-        progress={progress}
-        hint={
-          cover
-            ? "Swipe for the next step · open it on the Fold for Plan"
-            : "Swipe for the next step · Tools, cut plan and buy list in Plan"
-        }
-      />
+    <div
+      {...swipe}
+      className="flex min-h-0 min-w-0 flex-1 touch-pan-y flex-col rounded-card border border-border bg-surface px-4.5 pt-4.5 pb-3"
+    >
+      <BenchStep derived={derived} step={step} progress={progress} check={props.check} />
     </div>
   );
   return cover ? (

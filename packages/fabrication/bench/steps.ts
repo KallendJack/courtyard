@@ -73,11 +73,7 @@ export const benchSteps = (options: {
   const pilots = benchPilots(p, s);
   /** Screws through a sheet into what it rests on, spaced by eye. */
   const sheetScrewing = (pilot: boolean, into: string, count: number) =>
-    screwing(
-      pilot,
-      `Screw it down into ${into}: ${count} screws, spaced evenly by eye, two fingers in from the ends.`,
-      `${count} screws.`,
-    );
+    screwing(pilot, `${count} screws into ${into}, evenly by eye.`, `${count} screws.`);
   const braces = (p.braces.ends ? 2 : 0) + (p.braces.rear ? 1 : 0);
   const shelfCloseUp = sheetCloseUp({
     title: "The shelf, from above",
@@ -147,12 +143,9 @@ export const benchSteps = (options: {
       fixings: bracketed(p, p.shelf.on ? 4 : 2),
       batch: "One support at a time.",
       actions: [
+        act(`Mark the middle of each top long rail, ${middle} from its end.`, `Middle: ${middle}.`),
         act(
-          `Measure the middle of each upper long rail, ${middle} from its end, and mark it.`,
-          `Middle: ${middle}.`,
-        ),
-        act(
-          "Fit the top support (F) between them there, its top flush with the rails, with an angle bracket in the corner at each end.",
+          "Top support (F) between them there, flush with the rails, a bracket each end.",
           "F flush, a bracket each end.",
         ),
         ...(p.shelf.on
@@ -190,12 +183,13 @@ export const benchSteps = (options: {
       batch: "One rail at a time, then the support.",
       actions: [
         act(
-          "Drop the shelf (H) in between the end frames, onto the lower rails. It has 2 mm to spare at each end.",
+          "Drop the shelf (H) in between the end frames, onto the lower rails.",
           "H onto the lower rails.",
         ),
-        sheetScrewing(pilots.shelf, "the rails and the shelf support", shelfCloseUp.fixings.length),
+        sheetScrewing(pilots.shelf, "the rails and support", shelfCloseUp.fixings.length),
       ],
       tips: [
+        "Keep the screws two fingers in from the shelf's ends.",
         "Want it neater? Countersink the shelf's screws too, so nothing catches on their heads.",
         ...(pilots.shelf ? [] : [SPLIT_TIP]),
       ],
@@ -222,7 +216,7 @@ export const benchSteps = (options: {
         ...(p.braces.ends
           ? [
               act(
-                "Clamp an end brace (J) on the outside of each end frame, its top edge flush with the leg tops.",
+                "Clamp an end brace (J) outside each end frame, flush with the leg tops.",
                 "J on each end, flush with the tops.",
               ),
             ]
@@ -230,18 +224,21 @@ export const benchSteps = (options: {
         ...(p.braces.rear
           ? [
               act(
-                `Clamp the rear brace (J) on the back rails, ${rearInset} from each end: measure it at both ends.`,
+                `Clamp the rear brace (J) on the back rails, ${rearInset} from each end.`,
                 `Rear J ${rearInset} from each end.`,
               ),
             ]
           : []),
         screwing(
           pilots.braces,
-          "Mark 2 crosses over the middle of each leg or rail, two fingers from the brace's top and bottom, by eye.",
+          "Mark 2 crosses over each leg or rail it covers.",
           `${SHEET_SCREWS_PER_BRACE} screws a brace.`,
         ),
       ],
-      tips: pilots.braces ? [] : [SPLIT_TIP],
+      tips: [
+        "Keep the crosses over the middle of the leg or rail, two fingers from the brace's top and bottom.",
+        ...(pilots.braces ? [] : [SPLIT_TIP]),
+      ],
       closeUps: [braceCloseUp(s), sheetOn("brace", s.braceSheet, "leg")],
       techniques: [driving(sheetScrews)],
       check: {
@@ -262,23 +259,23 @@ export const benchSteps = (options: {
       batch: "One rail at a time: crosses, countersink, screws, then the next.",
       actions: [
         act(
-          `Lay the top (G) on with ${whole(s.overhang)} over the frame on every side: measure it at each corner. Clamp it so it can't move.`,
+          `Top (G) on, ${whole(s.overhang)} over the frame all round. Clamp it so it can't move.`,
           `G, ${whole(s.overhang)} over all round.`,
         ),
         act(
-          `Mark ${topCloseUp.fixings.length} crosses over the rails and the top support (below), spaced evenly by eye, two fingers in from the ends. The rails' middles are ${railsIn} in from the top's edges.`,
+          `Mark ${topCloseUp.fixings.length} crosses over the rails and support, ${railsIn} in from the edges.`,
           `${topCloseUp.fixings.length} crosses, ${railsIn} in.`,
         ),
         act(
-          `${pilots.top ? "Drill a small 3 mm pilot hole at each cross, then countersink it" : "Countersink each cross"} a little with the countersink bit, and drive its screw until the head sits flush in the dip, so nothing catches on it.`,
+          `${pilots.top ? "3 mm pilot hole, then countersink" : "Countersink"} each cross. Screw till the head sits flush.`,
           pilots.top ? "3 mm pilots, countersink, screws flush." : "Countersink, screws flush.",
         ),
-        act(
-          "Sand the top's edges and corners, the ones your hands touch, until they're smooth.",
-          "Sand the edges.",
-        ),
+        act("Sand the top's edges and corners smooth.", "Sand the edges."),
       ],
-      tips: pilots.top ? [] : [SPLIT_TIP],
+      tips: [
+        `Measure the ${whole(s.overhang)} at each corner. Space the crosses evenly by eye, two fingers in from the ends.`,
+        ...(pilots.top ? [] : [SPLIT_TIP]),
+      ],
       closeUps: [topCloseUp, sheetOn("top", s.top, "rail")],
       techniques: [driving(sheetScrews)],
       check: {
@@ -297,10 +294,7 @@ export const benchSteps = (options: {
       batch: "All at once.",
       actions: [
         act("Put the level on the top, along it and across it.", "Level both ways."),
-        act(
-          `Measure the height to the top: it should be ${whole(s.height)}.`,
-          `${whole(s.height)} high.`,
-        ),
+        act(`Measure the height to the top: ${whole(s.height)}.`, `${whole(s.height)} high.`),
       ],
       check: {
         says: castors

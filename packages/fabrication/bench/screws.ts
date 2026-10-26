@@ -74,7 +74,7 @@ export type Pilots = ReturnType<typeof benchPilots>;
 /** A joint's screws: marked by eye where they must hit, a pilot hole first only where needed. */
 export const screwing = (pilot: boolean, marking: string, numbers: string): Action =>
   act(
-    `${marking} ${pilot ? "Drill a small 3 mm pilot hole at each mark, then drive the screw." : "Drive a screw straight in at each."}`,
+    `${marking} ${pilot ? "Drill a 3 mm pilot hole at each, then screw." : "Screw straight in at each."}`,
     pilot ? `${numbers} 3 mm pilots.` : numbers,
   );
 
@@ -82,7 +82,7 @@ export const screwing = (pilot: boolean, marking: string, numbers: string): Acti
 export const bracketing = (pilot: boolean) =>
   screwing(
     pilot,
-    "Hold each bracket tight into its corner and mark through its holes.",
+    "Bracket tight in its corner: mark its holes.",
     `${SCREWS_PER_BRACKET} screws a bracket.`,
   );
 

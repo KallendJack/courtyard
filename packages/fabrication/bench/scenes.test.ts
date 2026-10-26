@@ -166,7 +166,7 @@ describe("the marking step", () => {
     const step = built(goldenBench).steps.find((each) => each.id === "mark-lengths");
     const [first, ...lengths] = step?.actions ?? [];
 
-    expect(first?.howTo).toContain("check the end is square");
+    expect(first?.howTo).toContain("Check the end is square");
     expect(first?.length).toBeUndefined();
     expect(lengths.map((action) => action.length)).toEqual([
       {
@@ -183,8 +183,10 @@ describe("the marking step", () => {
       expect.objectContaining({ count: 1, offcut: 88 }),
       expect.objectContaining({ stock: "45 × 145 C16", count: 1, offcut: 834 }),
     ]);
-    // Show me how walks through the tape, the tick, the square and the line, in that order.
-    const said = lengths[0]?.howTo ?? "";
+    // Show me how walks through the tape, the tick, the square and the line, in that order; the
+    // line says only where each piece starts (#826).
+    expect(lengths[0]?.howTo).toContain("each from the fresh end");
+    const said = (step?.walkThrough ?? []).map((move) => move.title.toLowerCase()).join(" ");
     const order = ["tape", "tick", "square", "line"].map((word) => said.indexOf(word));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);

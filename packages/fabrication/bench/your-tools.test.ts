@@ -234,7 +234,7 @@ describe("the castor step with Your tools (#783)", () => {
       ["Pliers or 10 mm spanner", true],
     ]);
     expect(castors(kit)?.actions.at(-1)?.howTo).toBe(
-      "Tighten each: pliers on the head, their handles against the castor. Turn the nut underneath.",
+      "Tighten each: pliers on the head, against the castor. Turn the nut.",
     );
     // Drawn as they are: pliers on the head, the adjustable on the nut.
     expect(holders(kit)).toEqual(["pliers", "adjustable"]);
@@ -263,7 +263,7 @@ describe("the castor step with Your tools (#783)", () => {
       ["10 mm spanner × 2", true],
     ]);
     expect(castors(kit)?.actions.at(-1)?.howTo).toBe(
-      "Tighten each: spanner on the head, its handle against the castor. Turn the nut underneath.",
+      "Tighten each: spanner on the head, against the castor. Turn the nut.",
     );
     expect(holders(kit)).toEqual(["open-spanner", "open-spanner"]);
     expect(turning(kit)).toBe("your 10 mm spanner, clockwise");

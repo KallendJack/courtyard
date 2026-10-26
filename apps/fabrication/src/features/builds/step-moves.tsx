@@ -37,38 +37,58 @@ export const useSwipe = (progress: Progress, step: BuildStep) => {
 };
 
 /**
- * Back, and "Done, next step", pinned at the foot, big enough for dusty hands; above them, at the
- * bench, a line saying a swipe moves a step and where the rest is (`hint`).
+ * Back, and "Done, next step", pinned at the foot, big enough for dusty hands. At the bench
+ * (`bench`, #826), as its boards draw them: square-cornered, Back narrow and Done the rest.
  */
 export function StepFoot(props: {
   derived: DerivedBuild;
   step: BuildStep;
   progress: Progress;
-  hint?: string;
+  bench?: boolean;
 }) {
   const { derived, step, progress } = props;
   const last = step.number === derived.steps.length;
+  const done = last ? "Done, all built" : "Done, next step";
   return (
-    <div className="flex shrink-0 flex-col gap-2 pt-3">
+    <div className={classes("flex shrink-0 flex-col gap-2", props.bench !== true && "pt-3")}>
       {progress.problem !== undefined && (
         <p role="status" className="text-meta text-warning">
           {progress.problem}
         </p>
       )}
-      {props.hint !== undefined && <p className="text-meta text-muted-foreground">{props.hint}</p>}
-      <div className="flex gap-3">
-        <Button
-          variant="outline"
-          size="thumb"
-          disabled={step.number === 1}
-          onClick={() => progress.go(step.number - 1)}
-        >
-          Back
-        </Button>
-        <Button variant="primary" size="thumb" grow onClick={progress.done}>
-          {last ? "Done, all built" : "Done, next step"}
-        </Button>
-      </div>
+      {props.bench === true ? (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={step.number === 1}
+            onClick={() => progress.go(step.number - 1)}
+            className="h-14 w-24 shrink-0 rounded-lg bg-secondary text-answer font-semibold text-foreground active:translate-y-px disabled:opacity-50"
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            onClick={progress.done}
+            className="h-14 flex-1 rounded-lg bg-primary text-talk font-bold text-primary-foreground hover:bg-primary/80 active:translate-y-px"
+          >
+            {done}
+          </button>
+        </div>
+      ) : (
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            size="thumb"
+            disabled={step.number === 1}
+            onClick={() => progress.go(step.number - 1)}
+          >
+            Back
+          </Button>
+          <Button variant="primary" size="thumb" grow onClick={progress.done}>
+            {done}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -88,19 +108,19 @@ export function StepDots(props: { derived: DerivedBuild; step: BuildStep }) {
       aria-valuemax={count}
       aria-valuenow={step.number}
       aria-valuetext={`Step ${step.number} of ${count}`}
-      className="flex min-w-0 items-center gap-1.5"
+      className="flex min-w-0 items-center gap-1.25 pl-1.5"
     >
       {props.derived.steps.map((each) => (
         <span
           key={each.number}
           aria-hidden
           className={classes(
-            "block h-2.5 shrink-0 rounded-full",
+            "block h-2 shrink-0 rounded-full",
             each.number === step.number
-              ? "w-6 bg-primary"
+              ? "w-5.5 bg-primary"
               : each.number < step.number
-                ? "w-2.5 bg-success"
-                : "w-2.5 bg-input",
+                ? "w-2 bg-success"
+                : "w-2 bg-input",
           )}
         />
       ))}

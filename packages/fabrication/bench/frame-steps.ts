@@ -73,22 +73,19 @@ export const frameDrafts = (options: {
       batch: "One joint at a time: crosses, screws, then the next. Both frames the same way.",
       actions: [
         act(
-          `Lay both legs (A) side by side, ends level. Measure ${shelfUp} up from the floor end and square one line across both.`,
+          `Both legs (A) side by side, ends level: mark ${shelfUp} from the floor end across both.`,
           `A × 2: line ${shelfUp} up across both.`,
         ),
         act(
-          `Spread them ${whole(s.endRail)} apart outside to outside. Lay an end rail (C) across, flush with the tops. Check the corner with your square, then clamp it.`,
+          "Top rail (C) across them, flush with the top ends. Square the corner, then clamp.",
           `${whole(s.endRail)} outside; C flush with the tops; square, clamp.`,
         ),
         screwing(
           pilots.endFrames,
-          "Mark 2 crosses where the rail sits on the leg (below), by eye.",
+          "Mark 2 crosses where the rail sits on each leg.",
           "2 crosses a joint.",
         ),
-        act(
-          "Fit the bottom rail the same way, its underside on your lines.",
-          "Bottom C on the lines.",
-        ),
+        act("Bottom rail (C) the same, its lower edge on your line.", "Bottom C on the lines."),
       ],
       // The rail lies on the leg's narrow face, flat on the floor.
       closeUps: [railOnLeg(s, s.wide, s.thick), endFrameCloseUp(s)],
@@ -117,20 +114,20 @@ export const frameDrafts = (options: {
       batch: "One joint at a time: the front's top rail, its bottom rail, then the back the same.",
       actions: [
         act(
-          `With a helper, stand both end frames up, rails facing in, ${whole(s.frameLength)} apart outside to outside.`,
+          `With a helper, stand both end frames up, rails in, ${whole(s.frameLength)} apart outside.`,
           `Frames ${whole(s.frameLength)} outside, rails in.`,
         ),
         act(
-          "Clamp an upper long rail (B) across the front, flush with the frames' ends and the leg tops.",
+          "Clamp a top long rail (B) across the front, flush with the ends and tops.",
           "Upper B flush with ends and tops.",
         ),
         screwing(
           pilots.longRails,
-          "Mark 2 crosses where the rail sits on the leg, by eye, as on the end frames.",
+          "Mark 2 crosses where the rail sits on each leg.",
           "2 crosses a joint.",
         ),
         act(
-          `Then the lower rail, its underside level with the bottom end rails' undersides, ${shelfUp} up: measure it at both ends. The same on the back.`,
+          `Lower rail ${shelfUp} up at both ends, level with the end rails. Then the back.`,
           `Lower B ${shelfUp} up; back the same.`,
         ),
       ],
@@ -159,19 +156,17 @@ export const frameDrafts = (options: {
       batch: "One leg at a time: square, clamp, both brackets, then the next.",
       actions: [
         act(
-          "With a helper, lay the frame on its back. Set a base (E) across the foot of each end frame, castors out, flush with the outside of the legs and the long rails.",
+          "With a helper, frame on its back. A base (E) across each end's feet, castors out.",
           "Frame on its back; E flush with the outside.",
         ),
+        act("Square each leg to its base, then clamp the base to both legs.", "Square, clamp."),
         act(
-          "Check each leg is square to its base with your square, then clamp the base to both legs.",
-          "Square, clamp.",
-        ),
-        act(
-          "Fix each leg to its base with two angle brackets in the corner where they meet: one on the leg's face towards the bench's middle, one on its face towards the other leg.",
+          "Two angle brackets a leg: one facing the middle, one facing the other leg.",
           `${BRACKETS_PER_LEG} brackets a leg.`,
         ),
         bracketing(pilots.brackets),
       ],
+      tips: ["Each base flush with the outside of its legs and the long rails."],
       // A leg's face towards the middle, on its base (#813).
       closeUps: [
         bracketCloseUp({

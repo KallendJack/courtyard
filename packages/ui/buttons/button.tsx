@@ -112,6 +112,8 @@ const SIZES = {
   /** Words that act, in a row's first column: Home's Needs you's Allow and Retry (#592). */
   words: "-mx-1.5 h-8 px-1.5 text-meta font-bold whitespace-nowrap",
   md: classes(ONE_LINE, "h-9 px-5 text-sm"),
+  /** A few side by side that must fit their row: a step's four buttons at the bench (#826). */
+  snug: classes(ONE_LINE, "h-9 px-3.5 text-sm"),
   /** A form's only action on its own page (logging in). */
   lg: classes(ONE_LINE, "h-11 px-5 text-sm"),
   /** A sheet's actions in the thumb's reach (Something's off's File it and Cancel, #554). */
