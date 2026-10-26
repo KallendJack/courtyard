@@ -95,8 +95,8 @@ export type Stroke3 = { from: At3; to: At3; look: CloseUpStroke["look"] };
 type Pill3 = { says: string; to: At3; badge?: number; tone?: CloseUpPill["tone"] };
 
 /**
- * A close-up by type from what it draws in 3D: faces far to near, strokes, screw spots, pills and
- * words on it; `extra` is drawn flat on the page, placed from where the 3D lands (a drill from
+ * A close-up by type from what it draws in 3D: faces far to near, strokes, screw spots and pills;
+ * `extra` is drawn flat on the page, placed from where the 3D lands (a drill from
  * the side).
  */
 export const drawn = (options: {
@@ -105,8 +105,8 @@ export const drawn = (options: {
   faces: readonly Face3[];
   strokes?: readonly Stroke3[];
   spots?: readonly At3[];
+  /** Its words, each a pill in the column off the drawing, never on the wood: a piece's name too. */
   pills: readonly Pill3[];
-  labels?: readonly { at: At3; says: string }[];
   notes: readonly string[];
   extra?: (place: { left: number; top: number; right: number }) => {
     faces: CloseUpFace[];
@@ -167,8 +167,5 @@ export const drawn = (options: {
     faces: flatFaces.map((face) => ({ ...face, points: face.points.map(at) })),
     strokes: strokes.map((stroke) => ({ ...stroke, from: at(stroke.from), to: at(stroke.to) })),
     pills,
-    ...(options.labels === undefined
-      ? {}
-      : { labels: options.labels.map((label) => ({ ...at(flat(label.at)), says: label.says })) }),
   };
 };

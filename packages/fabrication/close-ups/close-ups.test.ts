@@ -243,7 +243,12 @@ describe("a screwed overlap", () => {
 
     expect(drawn.type).toBe("screwed-overlap");
     expect(drawn.title).toBe("Mark your screw spots");
-    expect(drawn.pills?.map((pill) => pill.says).sort()).toEqual(["2 crosses", "Only in green"]);
+    expect(drawn.pills?.map((pill) => pill.says).sort()).toEqual([
+      "2 crosses",
+      "Only in green",
+      "leg",
+      "rail",
+    ]);
     expect(drawn.fixings).toHaveLength(2);
     expect(drawn.notes.join(" ")).toMatch(/by eye/i);
   });
@@ -287,13 +292,19 @@ describe("an angle bracket in a corner", () => {
     const drawn = bracketCloseUp(corner);
 
     expect(drawn.type).toBe("bracket");
-    // In badge order; on the drawing each sits level with what it points at.
+    // The moves in badge order, and each piece named in a pill too, off the wood.
     const read = [...(drawn.pills ?? [])].sort((a, b) => (a.badge ?? 0) - (b.badge ?? 0));
     expect(read.map((pill) => [pill.badge, pill.says])).toEqual([
+      [undefined, "post"],
+      [undefined, "beam"],
       [1, "Tight in corner"],
       [2, "Mark the holes"],
       [3, "2 screws each"],
     ]);
+    // Words only in the column to the drawing's right, never over the wood.
+    const right = Math.max(...(drawn.faces ?? []).flatMap((face) => face.points.map((p) => p.x)));
+    for (const pill of drawn.pills ?? []) expect(pill.x).toBeGreaterThan(right);
+    expect(drawn.labels).toBeUndefined();
     expect(drawn.notes.join(" ")).toMatch(/by eye/i);
     // Everything drawn sits inside the drawing.
     for (const face of drawn.faces ?? []) {

@@ -1,8 +1,9 @@
 import type { BuildPart, BuildStep } from "@courtyard/contract";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
-import { ChevronDown, CircleHelp } from "lucide-react";
+import { CircleHelp } from "lucide-react";
 import { type RefObject, useEffect, useRef, useState } from "react";
+import { Disclosure } from "@/components/disclosure";
 import { Shape } from "./picture/close-up-shapes.tsx";
 import { mm } from "./words.ts";
 
@@ -350,18 +351,20 @@ export function CloseUp(props: {
  * it, and after that a small "how?" tap that opens it.
  */
 export function Techniques(props: { step: BuildStep; parts: readonly BuildPart[] }) {
-  return props.step.techniques.map(({ closeUp, first }) =>
-    first ? (
-      <CloseUp key={closeUp.title} closeUp={closeUp} parts={props.parts} narrow />
+  return props.step.techniques.map(({ closeUp, first }) => {
+    // Keyed by its step too, so a tap opened on one step starts closed on the next.
+    const key = `${props.step.id} ${closeUp.title}`;
+    return first ? (
+      <CloseUp key={key} closeUp={closeUp} parts={props.parts} narrow />
     ) : (
-      <details key={closeUp.title} className="group flex flex-col gap-2">
-        <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-full bg-muted px-4 text-interface font-semibold text-foreground">
-          <CircleHelp aria-hidden className="size-4 text-primary-text" />
-          How? {closeUp.title}
-          <ChevronDown aria-hidden className="size-4 group-open:rotate-180" />
-        </summary>
+      <Disclosure
+        key={key}
+        look="tap"
+        icon={<CircleHelp aria-hidden className="size-4 text-primary-text" />}
+        label={`How? ${closeUp.title}`}
+      >
         <CloseUp closeUp={closeUp} parts={props.parts} narrow />
-      </details>
-    ),
-  );
+      </Disclosure>
+    );
+  });
 }
