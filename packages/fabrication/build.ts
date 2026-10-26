@@ -383,8 +383,7 @@ export type StockOptions = {
 };
 
 export type Build = {
-  /** The template it was worked out by, or `recipe` for a recipe no template is (#770). */
-  readonly template: BuildTemplate | "recipe";
+  readonly template: BuildTemplate | "recipe"; // A recipe that's no template's (#770).
   /** The finished size, mm. */
   readonly size: { readonly length: number; readonly depth: number; readonly height: number };
   readonly parts: readonly Part[];
