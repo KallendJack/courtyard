@@ -28,7 +28,9 @@ None.
 - **Documents** (`documents.ts`, ADR 0020): the documents list, each a Build supersedes marked (#786), the rule for
   the document tool, the tool, its replies and its refusals.
 - **Builds** (`builds.ts`, #697): the Builds list, the rule for the Build tool, the tool, and its reply, every
-  number the engine worked out for the model to report.
+  number the engine worked out for the model to report. Once the owner has started building one, the step they're on
+  follows the list in full (`build-step.ts`, #784): its tools, how its parts lie in its picture, its lines with the
+  ticked ones marked, where its screws go by eye and its check, so the chat follows the step rather than making one up.
 - **Sizes** (`sizes.ts`, #708): the recorded sizes list, the rule for the size tool, the tool, its reply and its
   refusals, such as measured for a value the owner never gave.
 - **Your tools** (`tools.ts`, #707): the owner's tools in every planning turn, and the one question that ticks the

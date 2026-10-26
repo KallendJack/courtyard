@@ -1,4 +1,4 @@
-import type { BuyList, Fitted, Part, Step } from "./build.ts";
+import type { BuyList, Fitted, Part, Step } from "../build.ts";
 
 // The parts page and each step's uses (#778; Paper, 2 · Agreed, "Fabrication · Parts page, any
 // build · Fold 933×645 (#778)"), for any Build: like a flat pack's inventory, every piece and the

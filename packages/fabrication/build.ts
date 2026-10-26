@@ -1,13 +1,14 @@
 import type { BuildTemplate } from "@courtyard/contract";
 import type { ToolSize } from "./capacity.ts";
 import type { CloseUp, FixingType } from "./close-up.ts";
-import type { BagItem, Uses } from "./parts-page.ts";
-import type { BuildPrint, PrintSize } from "./print/build-print.ts";
+import type { Finding } from "./finding.ts";
+import type { BagItem, Uses } from "./parts-page/index.ts";
+import type { BuildPrint } from "./print/build-print.ts";
 import type { Scene } from "./scene.ts";
 import type { Tool } from "./tools.ts";
 
 export type { CloseUp, CloseUpShape, CloseUpType, FixingType } from "./close-up.ts";
-export type { BagItem, Uses } from "./parts-page.ts";
+export type { BagItem, Uses } from "./parts-page/index.ts";
 export type { BuildPrint, PrintLine, PrintSize } from "./print/build-print.ts";
 
 // What any template derives from its parameters (ADR 0036): everything a Build shows. Code works
@@ -282,47 +283,7 @@ export type Step = {
 
 export type GlossaryWord = { readonly word: string; readonly means: string };
 
-/**
- * What the making rules found (ADR 0036). A bolt too short isn't one: the steps and buy list use
- * the length to use, and its line says so only when the owner has the short ones (#763).
- */
-export type Finding =
-  | {
-      readonly kind: "tools-missing";
-      readonly tools: readonly {
-        readonly tool: Tool;
-        readonly name: string;
-        readonly steps: readonly number[];
-      }[];
-    }
-  | { readonly kind: "too-big-for-stock"; readonly label: string; readonly stock: string }
-  | {
-      /** A stock wrong for what it's used for: MDF in a damp garage, CLS for castor bases. */
-      readonly kind: "wrong-stock";
-      readonly stock: string;
-      /** The parts it's wrong for, by name. */
-      readonly parts: readonly string[];
-      readonly why: string;
-    }
-  | {
-      readonly kind: "assumed";
-      /** The sizes nobody measured or read from a maker: check these before cutting. */
-      readonly sizes: readonly string[];
-    }
-  /** A printed part's recipe can't be made as it is, so it isn't: each reason. */
-  | { readonly kind: "cannot-make"; readonly problems: readonly string[] }
-  | {
-      readonly kind: "too-big-for-plate";
-      readonly size: Build["size"];
-      readonly plate: PrintSize;
-    }
-  /** A wall thinner than the nozzle prints well: where, how thick, and the least. */
-  | {
-      readonly kind: "wall-too-thin";
-      readonly where: string;
-      readonly mm: number;
-      readonly least: number;
-    };
+export type { Finding };
 
 /** What an option is like, as a chip says it: fine, or something to know. */
 export type Said = { readonly text: string; readonly tone: "fine" | "warn" };

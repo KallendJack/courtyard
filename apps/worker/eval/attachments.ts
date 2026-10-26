@@ -67,6 +67,22 @@ export const BROCHURE_PLAN: TestFile = {
   }),
 };
 
+/**
+ * A made-up photo of an end frame laid out on a grey floor, from above (#784): two pale legs on
+ * their edges, narrow from above, with a wider rail across their tops, half size.
+ */
+export const END_FRAME: TestFile = {
+  name: "IMG_5120.png",
+  type: "image/png",
+  bytes: pngOf(330, 475, (px, py) => {
+    const x = px - 50;
+    const y = py - 50;
+    const leg = y >= 0 && y < 375 && ((x >= 0 && x < 22) || (x >= 208 && x < 230));
+    const rail = x >= 0 && x < 230 && y >= 0 && y < 48;
+    return leg || rail ? [222, 190, 140] : [120, 120, 125];
+  }),
+};
+
 /** A made-up rack manual for the attachment scenarios. */
 export const RACK_MANUAL: TestFile = {
   name: "titan-t3-manual.pdf",

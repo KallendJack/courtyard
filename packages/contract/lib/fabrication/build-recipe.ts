@@ -232,6 +232,11 @@ const RecipeFields = z.strictObject({
     .array(RecipeJoint)
     .max(RECIPE_MOST.joints, `A recipe has at most ${RECIPE_MOST.joints} joints.`)
     .default([]),
+  /**
+   * What it carries, in the owner's words ("paint tins", "a 3D printer"), which code reads as a
+   * load class for its checks (#771). Left out, it's checked as the heaviest.
+   */
+  load: Words.optional(),
   damp: z.boolean().default(false),
   prices: BuildOptionPrices.default({}),
   tools: z.array(BuildToolId).default([]),

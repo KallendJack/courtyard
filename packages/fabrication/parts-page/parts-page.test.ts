@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { goldenBench } from "./bench/fixtures/golden.ts";
-import type { Build } from "./build.ts";
-import { goldenHolster } from "./print/fixtures/golden.ts";
-import { derivePrinted } from "./print/index.ts";
-import { deriveBench } from "./recipe/starters.ts";
+import { goldenBench } from "../bench/fixtures/golden.ts";
+import type { Build } from "../build.ts";
+import { goldenHolster } from "../print/fixtures/golden.ts";
+import { derivePrinted } from "../print/index.ts";
+import { deriveBench } from "../recipe/starters.ts";
 
 // The parts page and each step's uses (#778): like a flat pack's inventory, every piece and the
 // fixings bag before the steps, and each step laying out exactly what it takes.

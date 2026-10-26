@@ -4,7 +4,7 @@ import { type Build, err, type Finding, ok, type Part, type Result } from "../bu
 import { buyLine, buyListOf } from "../buy-list.ts";
 import { toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
-import { bagOf, type StepDraft, withUses } from "../parts-page.ts";
+import { bagOf, type StepDraft, withUses } from "../parts-page/index.ts";
 import { TOOL_NAMES, type Tool } from "../tools.ts";
 import { checkRecipe, envelopeOf } from "./recipe.ts";
 import {

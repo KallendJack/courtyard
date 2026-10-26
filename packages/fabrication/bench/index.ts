@@ -13,7 +13,7 @@ import { cutPlanOf } from "../cut-plan.ts";
 import { assumedSizes, boltLength, toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
 import { oneSheetEach, stockOptions, wrongStock } from "../options.ts";
-import { bagOf } from "../parts-page.ts";
+import { bagOf } from "../parts-page/index.ts";
 import type { Price } from "../stock.ts";
 import {
   bitSetsFrom,

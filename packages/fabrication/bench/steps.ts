@@ -3,7 +3,7 @@ import type { Capacities } from "../capacity.ts";
 import { bracketArm, bracketCloseUp } from "../close-ups/bracket.ts";
 import { overlapCloseUp } from "../close-ups/overlap.ts";
 import { techniquesOf } from "../close-ups/techniques.ts";
-import { type StepDraft, withUses } from "../parts-page.ts";
+import { type StepDraft, withUses } from "../parts-page/index.ts";
 import { type SpannerKit, type SquareKind, TOOL_NAMES, type Tool } from "../tools.ts";
 import { castorsDraft } from "./castor-steps.ts";
 import { braceCloseUp, SHEET_SCREWS_PER_BRACE, sheetCloseUp } from "./close-ups.ts";

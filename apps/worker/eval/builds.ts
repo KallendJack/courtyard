@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { BuildSave, BuildTemplate, SessionEvent } from "@courtyard/contract";
 import { goldenBench } from "../../../packages/fabrication/bench/fixtures/golden.ts";
 import { buildPath, readBuildText } from "../src/features/fabrication/index.ts";
+import { AT_THE_BENCH } from "./at-the-bench.ts";
 import type { Scenario, Words } from "./scenarios.ts";
 
 // Builds (#697, ADR 0036): asked for something to make, the model uses the Build tool, and every
@@ -352,4 +353,5 @@ export const BUILDS: readonly Scenario[] = [
       },
     ],
   },
+  ...AT_THE_BENCH,
 ];
