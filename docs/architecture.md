@@ -424,10 +424,13 @@ are the contract's `SourcedSize`, its stock and tools (`materials.ts`), part rec
 (`recipe/`, ADR 0039, #769) is its stock, pieces, groups and joints, checked against the contract's `BuildRecipe`
 (sizes and counts within `RECIPE_MOST`, every ID once, every reference to the right kind). The framed bench
 (`bench/`) is its first starter: the template's parameters are loaded as the bench's recipe, and a recipe that is a
-framed bench is worked out by the bench's own code, to exactly its numbers; any other recipe is refused until
-#770–#772 work any recipe out. The close-ups by type (`close-ups/`, #813) are any template's: a fixing (a bracket, a
-bolt through a plate, a screwed overlap) or a technique (measure and mark, driving a screw) drawn in 3D from the
-pieces it joins, laid flat for the app to draw, and which step shows a technique in full, the first to use it. Printed parts
+framed bench is worked out by the bench's own code, to exactly its numbers, steps and all. Any other recipe is worked
+out from what it says (#770): its pieces placed from its groups, so its parts, its cut plan on the owner's stock
+first, its buy list less what they have (each joint's fixings counted where its pieces touch), its stock findings and
+options; worked out that way, the bench's recipe gives the template's own numbers. Its steps come with #772. The
+close-ups by type (`close-ups/`, #813) are any template's: a fixing (a bracket, a bolt through a plate, a screwed
+overlap) or a technique (measure and mark, driving a screw) drawn in 3D from the pieces it joins, laid flat for the
+app to draw, and which step shows a technique in full, the first to use it. Printed parts
 (`print/`, #702) are the holster, shim and bracket templates and a part recipe as written: each becomes a recipe
 (a base and its features), checked by the making rules (on the plate, holes on their faces, walls the nozzle prints),
 and made into a solid with manifold-3d (WebAssembly) and its lettering with opentype.js and the bundled Figtree font,

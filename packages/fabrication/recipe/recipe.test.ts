@@ -59,10 +59,9 @@ describe("the golden bench as a recipe", () => {
     const onLegs = {
       ...goldenBenchRecipe,
       stock: stock.filter((item) => item.kind !== "castor"),
-      pieces: pieces.filter((piece) => piece.id !== "castor-bases"),
+      pieces: pieces.filter((piece) => piece.id !== "castor-bases" && piece.id !== "castors"),
       joints: joints.filter(
-        (joint) =>
-          joint.kind !== "bolted" && !("joins" in joint && joint.joins[1] === "castor-bases"),
+        (joint) => !(joint.joins as readonly string[]).includes("castor-bases"),
       ),
     };
     expect(fromRecipe(onLegs)).toEqual(fromTemplate({ ...goldenBench, castors: null }));
@@ -124,6 +123,28 @@ describe("a recipe over its bounds", () => {
     expect(
       refused({ ...goldenBenchRecipe, joints: Array.from({ length: 33 }, () => joint) }),
     ).toEqual(["joints: A recipe has at most 32 joints."]);
+  });
+
+  it("is refused for a castor, bolt, washer or nut over its most (#770)", () => {
+    const stock = goldenBenchRecipe.stock.map((item) =>
+      item.kind === "castor" ? { ...item, height: { ...item.height, value: 400 } } : item,
+    );
+    const joints = goldenBenchRecipe.joints.map((joint) =>
+      joint.kind === "bolted"
+        ? {
+            ...joint,
+            bolt: { ...joint.bolt, diameter: { ...joint.bolt.diameter, value: 30 } },
+            washer: { ...joint.washer, thickness: { ...joint.washer.thickness, value: 12 } },
+            nut: { ...joint.nut, height: { ...joint.nut.height, value: 40 } },
+          }
+        : joint,
+    );
+    expect(refused({ ...goldenBenchRecipe, stock, joints })).toEqual([
+      "stock.7.height: The castor's height is 400 mm: it must be more than 0 and at most 300 mm.",
+      "joints.3.bolt.diameter: The bolt's thread is 30 mm: it must be more than 0 and at most 24 mm.",
+      "joints.3.washer.thickness: The washer's thickness is 12 mm: it must be more than 0 and at most 10 mm.",
+      "joints.3.nut.height: The nut's height is 40 mm: it must be more than 0 and at most 30 mm.",
+    ]);
   });
 
   it("is refused for a timber longer than any sold", () => {
@@ -208,22 +229,21 @@ describe("a recipe that doesn't hold together", () => {
     ).toEqual([`joints.0.joins: "legs" is joined to itself: a joint holds two pieces or groups.`]);
   });
 
-  it("is refused, until any recipe is worked out (#770), when it isn't the bench's arrangement", () => {
+  it("is refused for standing on both legs and a box, as any recipe is worked out (#770)", () => {
     const { groups } = goldenBenchRecipe;
+    const crate = { kind: "box", id: "crate", stock: "18-mm-plywood", open: "top" };
     expect(
-      refused({
-        ...goldenBenchRecipe,
-        groups: [...groups, { kind: "box", id: "crate", stock: "18-mm-plywood", open: "top" }],
-      }),
-    ).toEqual([
-      "recipe: Only a framed bench's recipe can be worked out so far, and this has a box (crate).",
-    ]);
+      refused({ ...goldenBenchRecipe, groups: [...groups, { ...crate, fixing: "4-40-screws" }] }),
+    ).toEqual(["recipe: A recipe stands on one set of legs or one box, and this has 2."]);
   });
+});
 
-  it("is refused, until then, when it's a bench's pieces held another way", () => {
+describe("a bench's pieces held another way", () => {
+  it("is worked out as any recipe is: its top left unscrewed buys the top's 21 screws fewer", () => {
     const loose = { ...goldenBenchRecipe, joints: goldenBenchRecipe.joints.slice(0, -1) };
-    expect(refused(loose)).toEqual([
-      "recipe: Only a framed bench's recipe can be worked out so far, and this joins its pieces another way than a bench's.",
-    ]);
+    const build = fromRecipe(loose);
+    expect(build.template).toBe("recipe");
+    expect(build.parts).toHaveLength(fromTemplate(goldenBench).parts.length);
+    expect(build.buyList.lines.find((line) => line.item === "4 × 40 screws")?.needed).toBe(22);
   });
 });

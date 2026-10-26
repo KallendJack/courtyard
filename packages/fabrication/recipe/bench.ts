@@ -1,11 +1,11 @@
 import { BuildRecipe, type RecipeJoint, type RecipeStock } from "@courtyard/contract";
 import type { z } from "zod";
 import type { BenchParameters } from "../bench/parameters.ts";
-import { err, ok, type Result } from "../build.ts";
 
 // The framed bench as a recipe (#769): its starter writes one from the bench's parameters, and a
 // recipe that is a framed bench is read back into them, so the bench's own code works it out to
-// exactly the template's numbers. Any other recipe waits for #770–#772.
+// exactly the template's numbers, steps and all, until any recipe's steps are (#772). Any other
+// recipe is worked out from its pieces, groups and joints (#770).
 
 /** A recipe as written, before its defaults are filled in. */
 export type RecipeInput = z.input<typeof BuildRecipe>;
@@ -25,6 +25,7 @@ const ROLES = [
   "top-support",
   "shelf-support",
   "castor-bases",
+  "castors",
 ] as const;
 type Role = (typeof ROLES)[number];
 
@@ -128,11 +129,16 @@ export const benchRecipe = (p: BenchParameters): RecipeInput => {
       place: "under-each-end",
       under: "end-frames",
     });
+    pieces.push({
+      kind: "fitted",
+      id: "castors",
+      stock: castor,
+      at: "each-end",
+      under: "castor-bases",
+    });
     joints.push(bracket(["legs", "castor-bases"]), {
       kind: "bolted",
-      piece: "castor-bases",
-      fits: castor,
-      at: "each-end",
+      joins: ["castors", "castor-bases"],
       each: castors.boltsEach,
       bolt: castors.bolt,
       washer: castors.washer,
@@ -183,22 +189,13 @@ export const benchRecipe = (p: BenchParameters): RecipeInput => {
   };
 };
 
-/** What the vocabulary has that a framed bench never does, said as "a box (crate)". */
-const notInABench = (recipe: BuildRecipe): string[] => [
-  ...recipe.groups.flatMap((group) =>
-    group.kind === "box"
-      ? [`a box (${group.id})`]
-      : group.kind === "shelf" && group.rests === "cleats"
-        ? [`a shelf on cleats (${group.id})`]
-        : [],
-  ),
-  ...recipe.pieces.flatMap((piece) =>
-    piece.kind === "printed" ? [`a printed part (${piece.id})`] : [],
-  ),
-  ...recipe.joints.flatMap((joint) =>
-    joint.kind === "printed" ? [`a printed joint (${joint.joins.join(" to ")})`] : [],
-  ),
-];
+/** Whether it has what a framed bench never does: a box, a shelf on cleats, a printed part. */
+const notInABench = (recipe: BuildRecipe) =>
+  recipe.groups.some(
+    (group) => group.kind === "box" || (group.kind === "shelf" && group.rests === "cleats"),
+  ) ||
+  recipe.pieces.some((piece) => piece.kind === "printed") ||
+  recipe.joints.some((joint) => joint.kind === "printed");
 
 /**
  * A recipe as what it is, whatever its IDs: each stock it points at by what that stock is, and
@@ -208,17 +205,14 @@ const shapeOf = (recipe: BuildRecipe, roleOf: ReadonlyMap<string, Role>) => {
   const stockOf = new Map(recipe.stock.map((stock) => [stock.id, contentOf(stock)]));
   const ref = (id: string) => roleOf.get(id) ?? `not a bench's: ${id}`;
   const stuff = (id: string) => stockOf.get(id) ?? id;
-  const joint = (joint: RecipeJoint) =>
-    joint.kind === "bolted"
-      ? { ...joint, piece: ref(joint.piece), fits: stuff(joint.fits) }
-      : {
-          ...joint,
-          joins: joint.joins.map(ref).sort(),
-          ...(joint.fixing === undefined ? {} : { fixing: stuff(joint.fixing) }),
-          ...(joint.kind === "bracket" && joint.screws !== undefined
-            ? { screws: stuff(joint.screws) }
-            : {}),
-        };
+  const joint = (joint: RecipeJoint) => ({
+    ...joint,
+    joins: joint.joins.map(ref).sort(),
+    ...("fixing" in joint && joint.fixing !== undefined ? { fixing: stuff(joint.fixing) } : {}),
+    ...(joint.kind === "bracket" && joint.screws !== undefined
+      ? { screws: stuff(joint.screws) }
+      : {}),
+  });
   const sorted = (items: unknown[]) => items.map(sameAs).sort();
   return sameAs({
     size: recipe.size,
@@ -250,18 +244,14 @@ const shapeOf = (recipe: BuildRecipe, roleOf: ReadonlyMap<string, Role>) => {
   });
 };
 
-/** Why a recipe isn't one worked out yet, as the one finding it's refused with. */
-const notYet = (why: string) =>
-  err([`recipe: Only a framed bench's recipe can be worked out so far, and this ${why}.`]);
-
 /**
  * A checked recipe read back into the bench's parameters, when it's a framed bench's: its legs,
  * end frames and long rails, its top and the support under it, and whichever of the shelf, braces
- * and castor bases it has, joined as the bench's starter joins them. Anything else is refused.
+ * and castor bases it has, joined as the bench's starter joins them; else none. Its steps are the
+ * bench's own until any recipe's are worked out from its joints (#772).
  */
-export const benchFromRecipe = (recipe: BuildRecipe): Result<BenchParameters, string[]> => {
-  const others = notInABench(recipe);
-  if (others.length > 0) return notYet(`has ${others.join(", ")}`);
+export const benchFromRecipe = (recipe: BuildRecipe): BenchParameters | null => {
+  if (notInABench(recipe)) return null;
 
   const stockOf = new Map(recipe.stock.map((stock) => [stock.id, stock]));
   const strip = <T extends RecipeStock>({ kind: _kind, id: _id, ...rest }: T) => rest;
@@ -299,6 +289,9 @@ export const benchFromRecipe = (recipe: BuildRecipe): Result<BenchParameters, st
   const bases = members.find(
     (member) => member.place === "under-each-end" && member.under === ends?.id,
   );
+  const fitted = recipe.pieces.find(
+    (piece) => piece.kind === "fitted" && piece.under === bases?.id,
+  );
   const found: [Role, { id: string } | undefined][] = [
     ["legs", legs],
     ["end-frames", ends],
@@ -309,16 +302,14 @@ export const benchFromRecipe = (recipe: BuildRecipe): Result<BenchParameters, st
     ["top-support", topSupport],
     ["shelf-support", shelfSupport],
     ["castor-bases", bases],
+    ["castors", fitted],
   ];
   for (const [role, item] of found) if (item) roleOf.set(item.id, role);
 
   const timber = legs && timberAt(legs.stock);
   const sheet = top && sheetAt(top.stock);
   const wide = topSupport && timberAt(topSupport.stock);
-  if (!legs || !timber) return notYet("has no timber legs at its corners");
-  if (!ends || !long) return notYet("has no end frames and long rails joining its legs");
-  if (!top || !sheet) return notYet("has no top");
-  if (!wide) return notYet("has no timber support across the middle under its top");
+  if (!legs || !timber || !ends || !long || !top || !sheet || !wide) return null;
 
   const fixingOf = (kind: RecipeJoint["kind"]) => {
     const joint = recipe.joints.find((joint) => joint.kind === kind);
@@ -330,13 +321,11 @@ export const benchFromRecipe = (recipe: BuildRecipe): Result<BenchParameters, st
   const sheetScrews = fixingOf("sheet-screwed");
   const bracketJoint = recipe.joints.find((joint) => joint.kind === "bracket");
   const brackets = fixingOf("bracket");
-  if (!frameScrews || !sheetScrews || !brackets || bracketJoint?.kind !== "bracket") {
-    return notYet("isn't screwed, bracketed and sheet-screwed as a bench is");
-  }
+  if (!frameScrews || !sheetScrews || !brackets || bracketJoint?.kind !== "bracket") return null;
   const bracketScrews =
     bracketJoint.screws === undefined ? undefined : fixingAt(bracketJoint.screws);
   const bolted = recipe.joints.find((joint) => joint.kind === "bolted");
-  const castor = bolted?.kind === "bolted" ? castorAt(bolted.fits) : undefined;
+  const castor = fitted?.kind === "fitted" ? castorAt(fitted.stock) : undefined;
 
   const parameters: BenchParameters = {
     length: recipe.size.length,
@@ -373,8 +362,5 @@ export const benchFromRecipe = (recipe: BuildRecipe): Result<BenchParameters, st
   // It's a bench's only when the bench's own starter would write it so: nothing more, nothing less.
   const starter = BuildRecipe.parse(benchRecipe(parameters));
   const asStarter = new Map(ROLES.map((role) => [role, role]));
-  if (shapeOf(recipe, roleOf) !== shapeOf(starter, asStarter)) {
-    return notYet("joins its pieces another way than a bench's");
-  }
-  return ok(parameters);
+  return shapeOf(recipe, roleOf) === shapeOf(starter, asStarter) ? parameters : null;
 };

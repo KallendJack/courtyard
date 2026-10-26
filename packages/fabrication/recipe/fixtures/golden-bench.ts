@@ -1,9 +1,9 @@
 import { goldenBench } from "../../bench/fixtures/golden.ts";
 
 // The golden bench (#696) as a recipe (#769), written by hand as a model would write it: its stock,
-// its legs, end frames and long rails, the top and its support, the shelf, the braces and the
-// castor bases, and the joints that hold them. Its stock is the golden bench's own, so its Build
-// must be the golden bench's to the last number.
+// its legs, end frames and long rails, the top and its support, the shelf, the braces, the castor
+// bases with a castor fitted under each end (#770), and the joints that hold them. Its stock is the
+// golden bench's own, so its Build must be the golden bench's to the last number.
 
 const { frame, top, shelf, castors, fixings } = goldenBench;
 const { boltsEach, bolt, washer, nut, ...castor } = castors;
@@ -65,6 +65,13 @@ export const goldenBenchRecipe = {
       under: "end-frames",
     },
     {
+      kind: "fitted",
+      id: "castors",
+      stock: "wheelwright-td60-castors",
+      at: "each-end",
+      under: "castor-bases",
+    },
+    {
       kind: "member",
       id: "shelf-support",
       stock: "45-95-c16",
@@ -83,9 +90,7 @@ export const goldenBenchRecipe = {
     },
     {
       kind: "bolted",
-      piece: "castor-bases",
-      fits: "wheelwright-td60-castors",
-      at: "each-end",
+      joins: ["castors", "castor-bases"],
       each: boltsEach,
       bolt,
       washer,
