@@ -307,7 +307,8 @@ _Avoid_: fact (that's a context file line), dimension, measurement (as a record'
 
 **Space**:
 A Thing of kind space, such as the garage or a van's interior (ADR 0037): its sizes, its openings and what's kept in
-it, which the room in Fabrication is drawn from.
+it, which the room in Fabrication is drawn from. Spaces are Fabrication's, kept outside any workspace once its own
+store lands (ADR 0040, #818).
 _Avoid_: room (one kind of space), area, zone (that's a part of a space to keep clear)
 
 **Tool**:
@@ -322,9 +323,20 @@ first Build and from any Build's Tools. A workspace's Thing that looks like a to
 where from ("F-clamps · from Garage"), and moves to the owner's tools with Save, keeping its name; Save has Undo.
 _Avoid_: toolbox, tool list, inventory
 
+**Your stock**:
+The materials and fixings the owner has, kept in Fabrication at the owner's level beside Your tools (ADR 0040, #760),
+so a Build's buy list shows only what's left to buy.
+_Avoid_: inventory, materials list, leftovers
+
+**At the shop**:
+Fabrication's shop trip for a Build (ADR 0040, #757): what's left to buy, the swaps when something isn't on the shelf,
+and the cutting card for the shop's saw.
+_Avoid_: shopping mode, shopping list (that's the buy list)
+
 **Fabrication**:
-The app the owner opens a Build in (`apps/fabrication`, ADR 0036): the chat about it, its 3D view and its build list.
-The engine behind it is `packages/fabrication`.
+The app for making (`apps/fabrication`, ADRs 0036, 0040): its spaces, projects and Builds, each Build's chat, 3D view
+and build list, Your tools, Your stock and At the shop. It stands on its own, with its own Home, data and sign-in;
+Courtyard links in with **Open in Fabrication** and keeps no copy. The engine behind it is `packages/fabrication`.
 _Avoid_: Fabricator, maker mode, workshop
 
 **At the bench**:

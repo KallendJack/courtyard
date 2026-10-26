@@ -471,6 +471,11 @@ goes to Courtyard's login. It holds no state and does no model work, and calls o
   box's mic and Hold to ask listen through `packages/ui/frame/speech.ts`.
 - **Both ways between the apps:** a project step with a Build has Open in Fabrication (`projects/project-view.tsx`),
   and the Build's page goes back to its project on its workspace's page.
+- **Where it's going** ([ADR 0040](adr/0040-fabrication-owns-making-and-stands-on-its-own-courtyard-links-in.md)):
+  Fabrication owns making and stands on its own, and Courtyard links in. A Build's chat becomes the Build's own, not a
+  project's session (#817); its spaces, projects and Builds move to its own store at the owner's level, behind its
+  own sign-in, with Courtyard's steps keeping a link (#818); it gets its own Home (#765), Your stock (#760) and At the
+  shop (#757). Until each lands, the bullets above hold.
 
 ### The house configs: `packages/house`
 
