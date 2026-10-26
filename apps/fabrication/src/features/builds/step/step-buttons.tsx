@@ -1,19 +1,22 @@
 import type { BuildStep, DerivedBuild } from "@courtyard/contract";
-import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { Button, IconButton } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
-import { Camera } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
+import { Camera, X } from "lucide-react";
+import { type ReactNode, useRef, useState } from "react";
 import type { BenchAsk } from "../chat/hold-to-ask.tsx";
 import { CloseUp, Techniques } from "../close-up.tsx";
+import { Findings } from "../findings.tsx";
 import type { Progress } from "../progress.ts";
-import { checkQuestion } from "../words.ts";
+import { Fixings, Tips, WayChanges, Ways } from "../step-panel.tsx";
+import { checkQuestion, stepFindings } from "../words.ts";
 import { BeforeMovingOn, PhotoPicker, WalkThrough } from "./how.tsx";
 
 /** What a photo sent by Is this right? is, on its answer's card. */
 const IS_IT_RIGHT = "Is this right? (a photo)";
 
-/** What's open under the step's buttons: Show me how, I don't have…, or Can't do this now's reasons. */
-type Open = "how" | "missing" | "why";
+/** What's open over the step: Show me how, I don't have…, or Can't do this now's reasons. */
+export type Open = "how" | "missing" | "why";
 
 /** Why a step can't be done now (#792's three): missing something opens I don't have…. */
 const WHY_NOT = ["Went wrong", "Out of time"] as const;
@@ -39,27 +42,13 @@ const neededFor = (derived: DerivedBuild, step: BuildStep): Needed[] => [
   ...step.fixings.map((fixing) => ({ name: fixing.name, standIn: undefined, tool: false })),
 ];
 
-/** A panel opened under the buttons, named for screen readers. */
-function Opened(props: { label: string; title: string; children: ReactNode }) {
-  return (
-    <section
-      aria-label={props.label}
-      className="flex flex-col gap-3 rounded-card border border-border bg-popover p-4"
-    >
-      <CapsLabel tone="muted" heading={{ level: 3 }}>
-        {props.title}
-      </CapsLabel>
-      {props.children}
-    </section>
-  );
-}
-
 /** I don't have…: the step's tools and parts to pick, then the stand-in from Your tools, or Park. */
 function Missing(props: { needed: Needed[]; park: (why: string) => void }) {
   const [picked, pick] = useState<Needed>();
   if (picked !== undefined) {
     return (
-      <Opened label="What you don't have" title={`No ${picked.name}`}>
+      <>
+        <CapsLabel tone="muted" heading={{ level: 3 }}>{`No ${picked.name}`}</CapsLabel>
         <p className="text-answer text-foreground">
           {picked.standIn !== undefined
             ? `Your ${picked.standIn.toLowerCase()} will do instead.`
@@ -79,11 +68,14 @@ function Missing(props: { needed: Needed[]; park: (why: string) => void }) {
             Something else
           </Button>
         </div>
-      </Opened>
+      </>
     );
   }
   return (
-    <Opened label="What you don't have" title="Which don't you have?">
+    <>
+      <CapsLabel tone="muted" heading={{ level: 3 }}>
+        Which don't you have?
+      </CapsLabel>
       <div className="flex flex-wrap gap-2">
         {props.needed.map((each) => (
           <Button key={each.name} variant="outline" size="lg" onClick={() => pick(each)}>
@@ -91,53 +83,115 @@ function Missing(props: { needed: Needed[]; park: (why: string) => void }) {
           </Button>
         ))}
       </div>
-    </Opened>
+    </>
+  );
+}
+
+/** Each panel a button opens, by name for screen readers. */
+const OPENED: Readonly<Record<Open, string>> = {
+  how: "How it's done, close up",
+  missing: "What you don't have",
+  why: "Why not now",
+};
+
+/**
+ * What a step's button opens (#793), over the step rather than down it (#826): Show me how's
+ * walk-through, close-ups, techniques, tips, fixings and check, everything the board leaves off
+ * the step; I don't have…'s list; or why it can't be done now. Its own title and ×, and it scrolls
+ * itself when it's long.
+ */
+export function StepOpened(props: {
+  open: Open;
+  setOpen: (open: Open | undefined) => void;
+  derived: DerivedBuild;
+  step: BuildStep;
+  progress: Progress;
+}) {
+  const { open, derived, step, progress } = props;
+  const park = (why: string) => {
+    props.setOpen(undefined);
+    progress.park(why);
+  };
+  let body: ReactNode;
+  if (open === "how") {
+    body = (
+      <>
+        <WayChanges derived={derived} />
+        <WalkThrough step={step} parts={derived.parts} />
+        {step.closeUps.map((closeUp) => (
+          <CloseUp key={closeUp.title} closeUp={closeUp} parts={derived.parts} narrow />
+        ))}
+        <Techniques step={step} parts={derived.parts} />
+        <Findings findings={stepFindings(derived, step)} label="To check in this step" />
+        <Tips tips={step.tips} />
+        <Fixings step={step} />
+        <BeforeMovingOn step={step} />
+        <Ways ways={step.ways} />
+      </>
+    );
+  } else if (open === "missing") {
+    body = <Missing needed={neededFor(derived, step)} park={park} />;
+  } else {
+    body = (
+      <>
+        <CapsLabel tone="muted" heading={{ level: 3 }}>
+          Why not now?
+        </CapsLabel>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="lg" onClick={() => props.setOpen("missing")}>
+            Missing something
+          </Button>
+          {WHY_NOT.map((why) => (
+            <Button key={why} variant="outline" size="lg" onClick={() => park(why)}>
+              {why}
+            </Button>
+          ))}
+        </div>
+      </>
+    );
+  }
+  return (
+    <section
+      aria-label={OPENED[open]}
+      className="absolute inset-0 z-10 flex flex-col gap-3 rounded-card border border-border bg-popover p-4"
+    >
+      <div className="flex shrink-0 items-center justify-between gap-3">
+        <h3 className="display-section text-interface text-foreground">{step.title}</h3>
+        <IconButton
+          label="Close"
+          icon={<X aria-hidden />}
+          onClick={() => props.setOpen(undefined)}
+        />
+      </div>
+      <Scroller className="flex min-h-0 flex-1 flex-col gap-4">{body}</Scroller>
+    </section>
   );
 }
 
 /**
  * The step's four buttons under its lines (#793; Paper, 2 · Agreed, "Fabrication · Asking at the
- * bench: step buttons + answer card · Fold (#793)"), so asking never leaves the step: Show me how
- * opens its walk-through, close-ups, techniques (#813) and check; Is this right? takes a photo, checked against the
- * step, its answer over the picture; I don't have… picks one of the step's tools or parts and says
- * what stands in, or parks the step; Can't do this now parks it with why. A parked step says why,
- * with Do it now.
+ * bench: step buttons + answer card · Fold (#793)"), so asking never leaves the step: Show me how,
+ * I don't have… and Can't do this now open over the step (`StepOpened`); Is this right? takes a
+ * photo, checked against the step, its answer over the picture. A parked step says why, with Do
+ * it now.
  */
 export function StepButtons(props: {
-  derived: DerivedBuild;
   step: BuildStep;
   progress: Progress;
+  open: Open | undefined;
+  toggle: (which: Open) => void;
   /** Is this right?: the photo, asked about against this step; why it couldn't go, if it didn't. */
   check: (ask: BenchAsk) => Promise<string | undefined>;
-  big: boolean;
 }) {
-  const { derived, step, progress } = props;
-  const [open, setOpen] = useState<Open>();
+  const { step, progress, open, toggle } = props;
   const [problem, setProblem] = useState<string>();
-  const [openFor, setOpenFor] = useState(step.id);
   const picker = useRef<HTMLInputElement>(null);
-  const opened = useRef<HTMLDivElement>(null);
-  // What a button opens shows at once, not out of sight below the step's buttons.
-  useEffect(() => {
-    if (open !== undefined) opened.current?.scrollIntoView({ block: "nearest" });
-  }, [open]);
-  // A new step opens with nothing open under its buttons.
-  if (openFor !== step.id) {
-    setOpenFor(step.id);
-    setOpen(undefined);
-  }
-  const toggle = (which: Open) => setOpen((now) => (now === which ? undefined : which));
-  const park = (why: string) => {
-    setOpen(undefined);
-    progress.park(why);
-  };
-
   return (
     <>
       {progress.parked !== undefined && (
         <div
           role="status"
-          className="flex flex-wrap items-center gap-3 rounded-row border border-warning/50 bg-warning/10 p-3.5"
+          className="flex flex-wrap items-center gap-3 rounded-row border border-warning/50 bg-warning/10 px-3.5 py-2"
         >
           <p className="min-w-0 flex-1 text-interface text-warning">Parked: {progress.parked}</p>
           <Button variant="needsOutline" size="sm" onClick={progress.unpark}>
@@ -149,19 +203,19 @@ export function StepButtons(props: {
         <legend className="sr-only">This step</legend>
         <Button
           variant="outline"
-          size="md"
+          size="snug"
           aria-expanded={open === "how"}
           onClick={() => toggle("how")}
         >
           Show me how
         </Button>
-        <Button variant="outline" size="md" onClick={() => picker.current?.click()}>
+        <Button variant="outline" size="snug" onClick={() => picker.current?.click()}>
           Is this right?
           <Camera aria-hidden />
         </Button>
         <Button
           variant="outline"
-          size="md"
+          size="snug"
           aria-expanded={open === "missing"}
           onClick={() => toggle("missing")}
         >
@@ -169,7 +223,7 @@ export function StepButtons(props: {
         </Button>
         <Button
           variant="needsOutline"
-          size="md"
+          size="snug"
           aria-expanded={open === "why"}
           onClick={() => toggle("why")}
         >
@@ -188,35 +242,6 @@ export function StepButtons(props: {
         <p role="alert" className="text-meta text-warning">
           {problem}
         </p>
-      )}
-      {open !== undefined && (
-        <div ref={opened} className="flex scroll-mt-4 flex-col gap-4">
-          {open === "how" && (
-            <>
-              <WalkThrough step={step} parts={derived.parts} big={props.big} />
-              {step.closeUps.map((closeUp) => (
-                <CloseUp key={closeUp.title} closeUp={closeUp} parts={derived.parts} narrow />
-              ))}
-              <Techniques step={step} parts={derived.parts} />
-              <BeforeMovingOn step={step} />
-            </>
-          )}
-          {open === "missing" && <Missing needed={neededFor(derived, step)} park={park} />}
-          {open === "why" && (
-            <Opened label="Why not now" title="Why not now?">
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="lg" onClick={() => setOpen("missing")}>
-                  Missing something
-                </Button>
-                {WHY_NOT.map((why) => (
-                  <Button key={why} variant="outline" size="lg" onClick={() => park(why)}>
-                    {why}
-                  </Button>
-                ))}
-              </div>
-            </Opened>
-          )}
-        </div>
       )}
     </>
   );

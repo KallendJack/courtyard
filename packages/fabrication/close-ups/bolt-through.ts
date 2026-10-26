@@ -29,12 +29,12 @@ export type BoltThrough = {
 
 /** How far a spanner's handle reaches from the head to the plate's body, as drawn. */
 const REACH = 110;
-/** Where the second half of the tightening close-up starts, from the left. */
-const UNDER = 200;
+/** Where the second half of the tightening close-up starts, from the top: under the first. */
+const UNDER = 100;
 
 /**
- * Tightening a bolt: on top, the head held, its tool's handle resting against the body on the
- * plate so it can't spin; underneath, the nut turned clockwise with the owner's tool, named as
+ * Tightening a bolt, drawn top to bottom as its board has it: on top, the head held, its tool's
+ * handle resting against the body on the plate so it can't spin; under it, the nut turned clockwise with the owner's tool, named as
  * theirs, until the washer bites.
  */
 export const tightenCloseUp = (
@@ -56,17 +56,18 @@ export const tightenCloseUp = (
   return {
     title: "Tighten",
     type: "bolt-through",
-    width: UNDER + body.x + body.w - x,
-    height: 92,
+    width: body.x + body.w,
+    height: UNDER + 112,
     pieces: [{ label: thing, ...body }],
     dimensions: [],
     fixings: [],
     shapes: [
       { kind: hold.head, x, y, jaw: across, length: REACH, turn: 0 },
       { kind: "hex", x, y, across },
-      { kind: hold.nut, x: UNDER + x, y, jaw: across, length: REACH, turn: 0 },
-      { kind: "hex", x: UNDER + x, y, across },
-      { kind: "clockwise", x: UNDER + x, y, r: 2 * across },
+      // What's turned underneath in red, as the board has it.
+      { kind: hold.nut, x, y: UNDER + y, jaw: across, length: REACH, turn: 0, under: true },
+      { kind: "hex", x, y: UNDER + y, across },
+      { kind: "clockwise", x, y: UNDER + y, r: 2 * across },
     ],
     labels: [
       { x: 0, y: 6, says: "On top: hold the head", heading: true },
@@ -77,13 +78,16 @@ export const tightenCloseUp = (
         says:
           hold.head === "pliers" ? `handles rest on the ${thing}` : `handle rests on the ${thing}`,
       },
-      { x: UNDER, y: 6, says: "Under: turn the nut", heading: true },
+      { x: 0, y: UNDER + 6, says: "Under: turn the nut", heading: true },
       {
-        x: UNDER,
-        y: 84,
+        x: 0,
+        y: UNDER + 84,
         says: `${hold.yours ? "your" : "a"} ${named[hold.nut]}, clockwise`,
         key: true,
+        // Turned underneath, in red as the board has it.
+        tone: "under",
       },
+      { x: 0, y: UNDER + 104, says: `stop when ${bites} bites`, tone: "note" },
     ],
     notes: [`Stop when ${bites} bites.`],
   };
@@ -122,11 +126,17 @@ export const boltApartCloseUp = (through: BoltThrough, size: number | undefined)
     (_, at) => under + APART + at * (washer + 4),
   );
   const nutY = (washers.at(-1) ?? under) + washer + APART;
+  // Where the washer goes, under it all on two lines, as the board has it.
+  const note =
+    washers.length === 0
+      ? ["no washer: the nut goes", "on against the wood"]
+      : ["washer only under the", "nut, against the wood"];
+  const noteY = nutY + nut + 18;
   return {
     title: "One bolt, apart",
     type: "bolt-through",
     width: named + 70,
-    height: nutY + nut + 6,
+    height: noteY + 26,
     pieces: [
       { label: through.piece.label, x: 0, y: baseY, w: plate.length, h: base },
       // The bolt's shank, through the plate and the piece, to past the nut.
@@ -150,13 +160,15 @@ export const boltApartCloseUp = (through: BoltThrough, size: number | undefined)
       label(headY + 2, "bolt head"),
       label(plateY + 2, "plate"),
       label(baseY + base / 2, "base"),
-      { x: named, y: under, says: "Underneath", heading: true },
+      // Underneath in red, as the board has it.
+      { x: named, y: under, says: "Underneath", heading: true, tone: "under" },
       ...washers
         .slice(0, 1)
         .map((y) =>
           label(y + washer / 2, washers.length > 1 ? `${washers.length} washers` : "washer", true),
         ),
       label(nutY + nut / 2, "nut"),
+      ...note.map((says, line) => ({ x: 0, y: noteY + 18 * line, says, tone: "note" as const })),
     ],
     notes: [
       washers.length === 0

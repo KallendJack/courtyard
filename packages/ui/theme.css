@@ -85,11 +85,12 @@
   --text-card-title--line-height: 24px;
   --text-sheet-title: 22px;
   --text-sheet-title--line-height: 28px;
-  /* Fabrication at the bench (#753), read at arm's length: a step's title, and its lines. */
+  /* Fabrication at the bench (#753), read at arm's length: a step's title, and its lines, as its
+     agreed boards have them (#826). */
   --text-step: 30px;
-  --text-step--line-height: 36px;
-  --text-bench: 20px;
-  --text-bench--line-height: 28px;
+  --text-step--line-height: 34px;
+  --text-bench: 18px;
+  --text-bench--line-height: 24px;
   --text-sign-in-code: 28px; /* the code a sign-in shows, to type elsewhere */
   --text-sign-in-code--line-height: 34px;
   --text-code: 0.9em; /* code inside a line of text */
@@ -211,6 +212,9 @@
   --sheet: #dcc99c;
   --fitted: #6b6b6b;
   --printed: #9fb2c6;
+  /* In a step's picture (#826, its boards): what holds the work grey, a hand tool orange. */
+  --support: #3d3d3d;
+  --tool: #e0803c;
   /* In a step's picture, the words for the owner's own tools and where things go (#783). */
   --yours: #e8c766;
 

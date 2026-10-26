@@ -71,7 +71,11 @@ describe("a saw's cutting capacity", () => {
 
     expect(cut.ways.find((way) => way.using)?.tool).toBe("mitre-saw");
     expect(said(cut)).toContain(
-      "Your mitre saw's cutting capacity isn't known, so it's assumed to cut 100 mm wide: hand saw for the 145 castor bases and top support.",
+      "Your mitre saw may not cut 100 mm wide: hand saw for the 145 castor bases and top support.",
+    );
+    // Why, and how to set it right, behind Show me how (#826).
+    expect(cut.tips).toContain(
+      "Your mitre saw's cutting capacity isn't known, so it's assumed to cut 100 mm wide. Say what it cuts at 90°, from its label, to check.",
     );
   });
 
@@ -128,7 +132,7 @@ describe("a saw's capacity as the owner gave it", () => {
       }),
     );
 
-    expect(said(cut)).toContain("Your mitre saw's cutting capacity isn't known");
+    expect(cut.tips.join(" ")).toContain("Your mitre saw's cutting capacity isn't known");
   });
 
   it("reads a circular saw's depth only when it's said as one", () => {

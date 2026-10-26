@@ -69,6 +69,8 @@ export type CloseUpShape =
       readonly jaw: number;
       readonly length: number;
       readonly turn: number;
+      /** Turned from underneath, in red as the castors' board draws it (#826). */
+      readonly under?: boolean;
     }
   | { readonly kind: "clockwise"; readonly x: number; readonly y: number; readonly r: number }
   | {
@@ -79,6 +81,17 @@ export type CloseUpShape =
       readonly plate: number;
       readonly wheel: number;
     };
+
+/**
+ * What a close-up's screw spots or mark ask, said by code so it's never left to guess (#826):
+ * placed by eye or measured (a measured mark with its number), and for screw spots whether to
+ * drill a pilot hole first (with its bit) or just screw, by the pilot rule (#789).
+ */
+export type CloseUpAnswers = {
+  readonly placed: "eye" | "measure";
+  readonly mm?: number;
+  readonly drill?: { readonly first: boolean; readonly bit?: number };
+};
 
 /**
  * A step's close-up: a flat view of what it makes, in mm from the view's top left corner (`y`
@@ -117,9 +130,15 @@ export type CloseUp = {
     readonly says: string;
     readonly heading?: boolean;
     readonly key?: boolean;
+    /**
+     * What's done or goes underneath, in red (#826, the castors' board); a quiet note under the
+     * drawing; or a piece's name, in its wood's colour (the end frames' board).
+     */
+    readonly tone?: "under" | "note" | "wood";
   }[];
   /** What's drawn in 3D, projected, far to near (#813). */
   readonly faces?: readonly CloseUpFace[];
   readonly strokes?: readonly CloseUpStroke[];
   readonly pills?: readonly CloseUpPill[];
+  readonly answers?: CloseUpAnswers;
 };

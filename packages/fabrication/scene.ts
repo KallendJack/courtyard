@@ -6,12 +6,12 @@ import type { Box } from "./build.ts";
 export type At = { readonly x: number; readonly y: number; readonly z: number };
 
 /**
- * Something drawn in a step's scene: a part (with its letter), something fitted, a tool, or the
- * offcut on the waste side. This step's own are lit, those put on before are faint (built), and
- * the rest plain.
+ * Something drawn in a step's scene: a part (with its letter), something fitted, a tool, what
+ * holds the work (a support: offcuts under it, the Workmate, #826), or the offcut on the waste
+ * side. This step's own are lit, those put on before are faint (built), and the rest plain.
  */
 export type ScenePiece = {
-  readonly kind: "part" | "fitted" | "tool" | "offcut";
+  readonly kind: "part" | "fitted" | "tool" | "support" | "offcut";
   readonly name: string;
   readonly label: string | null;
   readonly tone: "lit" | "built" | "plain";
@@ -23,9 +23,12 @@ export type ScenePiece = {
  * line on a piece, an arrow (where the saw runs, where a screw goes in), a corner-to-corner check,
  * a note at a place (where the support goes, the waste side), and a callout: words off the model
  * with a short leader to what they're about, in the owner's colour for their own tools and where
- * things go, or the next action's (#783).
+ * things go, or the next action's (#783). Then a numbered badge at what each of the step's lines
+ * acts on, and a dot on each screw spot, red where it's drilled first (#826).
  */
 export type SceneMark =
+  | { readonly kind: "badge"; readonly at: At; readonly line: number }
+  | { readonly kind: "spot"; readonly at: At; readonly first: boolean }
   | { readonly kind: "size"; readonly from: At; readonly to: At; readonly mm: number }
   | { readonly kind: "line"; readonly from: At; readonly to: At; readonly says: string }
   | { readonly kind: "arrow"; readonly from: At; readonly to: At; readonly says: string }
@@ -59,4 +62,8 @@ export type Scene = {
   readonly view: { readonly turn: number; readonly tilt: number };
   readonly pieces: readonly ScenePiece[];
   readonly marks: readonly SceneMark[];
+  /** What the picture frames, nearly to its edges: what the step works on (#826). All of it when none. */
+  readonly framed?: readonly Box[];
+  /** What the step's pieces make, as Where this goes says it: "The two ends" (#826). */
+  readonly goes?: string;
 };
