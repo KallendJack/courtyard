@@ -93,9 +93,10 @@ export const legEndOnCloseUp = (s: Shape): CloseUp => {
     title: "Leg end on",
     width: flatX + s.wide,
     height: s.wide + 40,
+    // Both drawn as the leg (A), in its wood.
     pieces: [
-      { label: "", x: 0, y: 0, w: s.thick, h: s.wide },
-      { label: "", x: flatX, y: flatY, w: s.wide, h: s.thick },
+      { label: "A", x: 0, y: 0, w: s.thick, h: s.wide },
+      { label: "A", x: flatX, y: flatY, w: s.wide, h: s.thick },
     ],
     dimensions: [],
     fixings: [],

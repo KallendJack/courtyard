@@ -100,7 +100,8 @@ export function WhereThisGoes(props: { derived: DerivedBuild; step: BuildStep })
     .filter((part) => props.step.parts.includes(part.label))
     .map((part) => part.name.toLowerCase());
   if (names.length === 0) return null;
-  const what = listed(names);
+  // What the step's picture says its pieces make ("The two ends"), else the pieces by name.
+  const what = props.step.scene?.goes ?? listed(names);
   const says = `${what.charAt(0).toUpperCase()}${what.slice(1)}`;
   return big ? (
     <section

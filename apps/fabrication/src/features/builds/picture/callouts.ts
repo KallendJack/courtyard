@@ -152,6 +152,49 @@ const leaderEnd = (to: Point, word: Placing): Point => ({
   y: Math.min(Math.max(to.y, word.y - word.h / 2), word.y + word.h / 2),
 });
 
+/** How far a dimension line's ends are carried towards what it measures, in px. */
+const CARRIED = 8;
+
+/**
+ * A size's dimension line over the picture (#826, its boards): drawn end to end in `lines`, each
+ * end carried towards what it measures by a short dashed line; and where its gold tag goes,
+ * beside its middle on the side away from the model.
+ */
+export const dimensionLine = (
+  size: { key: string; from: THREE.Vector3; to: THREE.Vector3 },
+  onScreen: (at: THREE.Vector3) => Point,
+  outlines: readonly (readonly Point[])[],
+  tag: { w: number; h: number },
+  lines: ReadonlyMap<string, SVGLineElement>,
+): Point => {
+  const from = onScreen(size.from);
+  const to = onScreen(size.to);
+  const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  const all = outlines.flat();
+  const middle = {
+    x: all.reduce((sum, p) => sum + p.x, 0) / Math.max(all.length, 1),
+    y: all.reduce((sum, p) => sum + p.y, 0) / Math.max(all.length, 1),
+  };
+  // Square to the line, pointing away from the model.
+  const square = { x: -(to.y - from.y) / length, y: (to.x - from.x) / length };
+  const side = (mid.x - middle.x) * square.x + (mid.y - middle.y) * square.y < 0 ? -1 : 1;
+  const away = { x: square.x * side, y: square.y * side };
+  const draw = (key: string, a: Point, b: Point) => {
+    const line = lines.get(key);
+    line?.setAttribute("x1", String(a.x));
+    line?.setAttribute("y1", String(a.y));
+    line?.setAttribute("x2", String(b.x));
+    line?.setAttribute("y2", String(b.y));
+  };
+  const carried = (end: Point) => ({ x: end.x - away.x * CARRIED, y: end.y - away.y * CARRIED });
+  draw(size.key, from, to);
+  draw(`${size.key} from`, from, carried(from));
+  draw(`${size.key} to`, to, carried(to));
+  const out = (Math.abs(away.x) * tag.w + Math.abs(away.y) * tag.h) / 2 + GAP;
+  return { x: mid.x + away.x * out, y: mid.y + away.y * out };
+};
+
 /** How much of the view's foot its buttons take, in px: Hold to ask and Reset view. */
 const FOOT = 72;
 /** How much of its top its title takes, in px: "In your Workmate". */

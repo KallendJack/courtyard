@@ -127,7 +127,10 @@ export function Checklist(props: {
   const bench = props.bench === true;
   const now = step.actions.findIndex((_, line) => !ticked.includes(line));
   return (
-    <ul aria-label="Checklist" className={classes("flex flex-col", bench ? "gap-2.5" : "gap-1")}>
+    <ul
+      aria-label="Checklist"
+      className={classes("flex flex-col", bench ? "gap-2.5 max-md:gap-1.5" : "gap-1")}
+    >
       {step.actions.map((action, line) => {
         const done = ticked.includes(line);
         const text = props.detail === "how" ? action.howTo : action.numbers;

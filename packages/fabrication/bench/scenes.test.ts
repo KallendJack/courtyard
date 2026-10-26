@@ -240,8 +240,12 @@ describe("the castors' close-ups (#783)", () => {
       "Under: turn the nut",
       // The golden bench has no spanner to hand: not "your".
       "a 10 mm spanner, clockwise",
+      "stop when the washer bites",
     ]);
     expect(close?.notes).toEqual(["Stop when the washer bites."]);
+    // What's turned underneath in red, the tool and its words, as the board has them (#826).
+    expect(close?.labels?.find((label) => label.key)?.tone).toBe("under");
+    expect(close?.shapes?.filter((shape) => "under" in shape && shape.under)).toHaveLength(1);
     // A spanner's shape on the head, its handle reaching the castor's body; the nut turned
     // clockwise underneath. No tool is a bar.
     const [onHead, head, onNut, nut, turn] = close?.shapes ?? [];
@@ -320,14 +324,20 @@ describe("the end frames' scene, as its board has it (#826)", () => {
       "tool Clamps plain ×3",
       "tool Square plain ×2",
     ]);
-    // Two crosses at each of the four joints, drilled first: they're near the leg's end.
-    expect(marks(scene, "spot")).toHaveLength(8);
+    // Two crosses where the bottom rail sits on each leg, as the board has them on one rail,
+    // drilled first: they're near the leg's end.
+    expect(marks(scene, "spot")).toHaveLength(4);
     expect(marks(scene, "spot").every((spot) => spot.first)).toBe(true);
     // Only the board's marks: the gold length from the floor end, and the lines' badges.
     expect(marks(scene, "size").map((size) => size.mm)).toEqual([250]);
     expect(scene.marks.filter((mark) => !["size", "spot", "badge"].includes(mark.kind))).toEqual(
       [],
     );
+    // Framed on the frame itself, legs and rails, so it fills the picture as the board's does;
+    // Where this goes says what it makes.
+    const frame = scene.pieces.filter((piece) => piece.kind === "part").flatMap((p) => p.boxes);
+    expect(scene.framed).toEqual(frame);
+    expect(scene.goes).toBe("The two ends");
   });
 });
 

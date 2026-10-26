@@ -16,7 +16,7 @@ function BenchChips(props: { step: BuildStep }) {
   const chips = benchChips(props.step);
   if (chips.length === 0) return null;
   return (
-    <ul aria-label="Tools for this step" className="flex flex-wrap gap-2 pt-2">
+    <ul aria-label="Tools for this step" className="flex flex-wrap gap-2 pt-2 max-md:pt-0.5">
       {chips.map((chip) => (
         <li
           key={chip.key}
@@ -64,16 +64,18 @@ export function BenchStep(props: {
   }
   const meaning = derived.glossary.find((each) => each.word === word);
   return (
-    <section aria-label="Steps" className="flex min-h-0 flex-1 flex-col gap-3.5">
+    <section aria-label="Steps" className="flex min-h-0 flex-1 flex-col gap-3.5 max-md:gap-2.5">
       <div className="relative flex min-h-0 flex-1 flex-col">
         <Scroller data-step-panel className="flex min-h-0 flex-1 flex-col">
-          <div className="flex min-w-0 flex-col gap-3.5">
-            <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-0 flex-col gap-3.5 max-md:gap-2">
+            <div className="flex flex-col gap-1.5 max-md:gap-0.5">
               <CapsLabel tone="primary">
                 Step {step.number} of {derived.steps.length} · about {step.minutes} min
                 {step.helper ? " · needs a helper" : ""}
               </CapsLabel>
-              <h2 className="display-title text-step text-foreground">{step.title}</h2>
+              <h2 className="display-title text-step text-foreground max-md:text-sheet-title">
+                {step.title}
+              </h2>
             </div>
             <div className="flex flex-col gap-2.5">
               <Checklist
@@ -101,7 +103,7 @@ export function BenchStep(props: {
           />
         )}
       </div>
-      <div className="flex shrink-0 flex-col gap-2.5">
+      <div className="flex shrink-0 flex-col gap-2.5 max-md:gap-2">
         <StepButtons
           step={step}
           progress={progress}

@@ -116,6 +116,8 @@ const SIZES = {
   snug: classes(ONE_LINE, "h-9 px-3.5 text-sm"),
   /** A form's only action on its own page (logging in). */
   lg: classes(ONE_LINE, "h-11 px-5 text-sm"),
+  /** Held to talk, its mic in a circle at its start: Fabrication's Hold to ask (#826's boards). */
+  talk: classes(ONE_LINE, "h-11 gap-2.5 pr-4 pl-1.5 text-sm"),
   /** A sheet's actions in the thumb's reach (Something's off's File it and Cancel, #554). */
   thumb: classes(ONE_LINE, "h-13 px-6 text-base"),
   /** Words that wrap when they're long, as tall as they need (a suggested reply). */

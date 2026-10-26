@@ -24,8 +24,9 @@ their set, and the countersink bit, with Have it and Add to list.
 | `chat/build-chat.tsx` | The chat, once for the page (`useBuildChat`), and its view: what's been said in its session, answers formatted as Courtyard's are, each change saved, and the Reply box |
 | `chat/chat-dock.ts` | Where the Reply box sits in the chat, with no Handheld frame, and its mic listening |
 | `chat/hold-to-ask.tsx` | Hold to ask, and the answer it brings over the picture, or that it didn't answer, with Try again |
-| `bench-panel.tsx` | The 3D panel: its label, Reset view (not at the bench), what sits at its foot, and a part's card; at the bench unfolded, the step's close-ups beside the model and where it goes (#826) |
+| `bench-panel.tsx` | The 3D panel: its label, Reset view (not at the bench), what sits at its foot (in its label's row, folded at the bench), and a part's card; at the bench unfolded, the step's close-ups beside the model and where it goes (#826) |
 | `picture/scene-words.tsx` | The words over the model: its marks, the callouts' leaders, and each part lit at the step, a letter on a computer or a pill with its leader at the bench |
+| `picture/fitted.ts` | Where a close-up's drawing sits in its box, in the middle or at its left, so its words go over it at their own size |
 | `picture/close-up-card.tsx` | A close-up at the bench (#826): its drawing, titled, with its answers ("By eye" or "Measure", "Drill first" or "Just screw") |
 | `picture/where-this-goes.tsx` | "Where this goes" (#826): the whole Build small, this step's pieces vivid and the rest outlined, tapped to show it big |
 | `bench-view.tsx` | The scene itself, `three`, loaded lazily so only this page loads it: the whole Build, or a step's picture with its marks, fitted to its panel, its letters apart, and its callouts' leaders (#783) |
@@ -63,9 +64,12 @@ time, its title, at most four short numbered lines with their boxes, its tools a
 gold where one's to check), then pinned its four buttons, Back and "Done, next step", and a swipe on the step for the
 next or the one before. Open, the step never scrolls; what a button opens shows over its lines. The dots in the top
 bar show how far, and are nothing to tap. Beside it, the step in 3D, titled with what it shows: this step's pieces in
-their wood's colour, supports grey and tools orange, each part a pill off the wood with its leader, a numbered badge
-where each line is done, a dot on each screw spot and the length as a gold tag; unfolded, the step's close-ups beside
-it with their answers, and "Where this goes" in its corner. With it, **Hold to ask**: held, it listens through any pause, listening out for the step's parts, tools and
+their wood's colour, supports grey and tools orange, framed close on what the step works on so it fills the picture
+(the end frame itself), each part a pill off the wood with its leader (none where the picture's callouts say what's
+what, as on the castors), a numbered badge where each line is done, a dot on each screw spot the board marks and the
+length as a gold tag beside its dimension line; unfolded, the step's close-ups beside it with their answers (a
+piece's name in its wood, what's underneath in red), and "Where this goes" in its corner, saying what the step's
+pieces make ("The two ends · tap"). With it, **Hold to ask**, dark with its mic in a violet circle: held, it listens through any pause, listening out for the step's parts, tools and
 words, and shows what will be sent ("Step 3, Cut and label the timber: …"); let go, it's asked in the chat. Let go on
 a few words, or on one like "and", it waits 3 seconds for **Hold to add more** before it's asked (#787). The answer is
 a card over the picture, just above Hold to ask (#793; "Fabrication · Asking at the bench: step buttons + answer card · Fold (#793)"): "You
@@ -78,8 +82,9 @@ from Your tools, or offers Park this step; **Can't do this now** (in gold) parks
 something, Went wrong, Out of time). A parked step is kept with why, the next step not done or parked comes up, and
 back on it a gold line says why with Do it now (Done takes it off too). **Plan**, one tap away in the top bar, is the Build big in 3D with
 Hold to ask and Chat, and its cut plan, buy list and tools as tabs under what the making rules found. The chat is a
-sheet from the right, open on its latest. Folded, it's At the bench alone, stacked: the step in 3D above, the step
-below, and the chat a sheet over it.
+sheet from the right, open on its latest. Folded, it's At the bench alone, stacked: the step in 3D above, with Hold
+to ask in its heading clear of the model, the step below as tall as its lines need, so all of them show, and the chat
+a sheet over it.
 
 **Steps** (#699; Paper, 2 · Agreed, "Fabrication · Build steps v2, teaching · Tablet (#699)", "· Build steps, cutting
 by your tools · Tablet (#699)" and "· Build steps · Cover (#699)"): the step reached, and in 3D its picture (#754;

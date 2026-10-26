@@ -61,6 +61,62 @@ export const placing = (scene: BuildScene) => {
   };
 };
 
+/**
+ * What the picture frames, as points in three: what the step works on, where the scene says
+ * (#826), else all of it; every corner of every box, so the model, not its bounding box, fills
+ * the view.
+ */
+export const framedCorners = (scene: BuildScene, point: (at: At) => THREE.Vector3) =>
+  (scene.framed ?? scene.pieces.flatMap((piece) => piece.boxes)).flatMap((box) =>
+    [0, 1, 2, 3, 4, 5, 6, 7].map((corner) =>
+      point({
+        x: corner & 1 ? box.x + box.w : box.x,
+        y: corner & 2 ? box.y + box.d : box.y,
+        z: corner & 4 ? box.z + box.h : box.z,
+      }),
+    ),
+  );
+
+/**
+ * Where the camera looks from `direction` so `points` fill the view: what it turns about, in the
+ * middle of the points as they show (not of their box), and how far away, moved in or out until
+ * their widest reach is at `fill` of the view. Starts `from` that far away; nearly in proportion,
+ * so a few rounds settle it.
+ */
+export const fitCamera = (
+  camera: THREE.PerspectiveCamera,
+  points: readonly THREE.Vector3[],
+  direction: THREE.Vector3,
+  options: { fill: number; from: number },
+) => {
+  if (points.length === 0) return undefined;
+  const target = new THREE.Box3().setFromPoints([...points]).getCenter(new THREE.Vector3());
+  let distance = options.from;
+  const half = Math.tan((camera.fov * RADIANS) / 2);
+  for (let round = 0; round < 6; round += 1) {
+    camera.position.copy(direction).multiplyScalar(distance).add(target);
+    camera.lookAt(target);
+    camera.updateMatrixWorld();
+    const shown = points.map((each) => each.clone().project(camera));
+    const xs = shown.map((each) => each.x);
+    const ys = shown.map((each) => each.y);
+    const across = { least: Math.min(...xs), most: Math.max(...xs) };
+    const up = { least: Math.min(...ys), most: Math.max(...ys) };
+    target
+      .addScaledVector(
+        new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0),
+        ((across.least + across.most) / 2) * distance * half * camera.aspect,
+      )
+      .addScaledVector(
+        new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1),
+        ((up.least + up.most) / 2) * distance * half,
+      );
+    const reaches = Math.max(across.most - across.least, up.most - up.least) / 2;
+    if (reaches > 0) distance *= reaches / options.fill;
+  }
+  return { target, distance };
+};
+
 /** The camera at a scene's view, the given distance from what it turns about. */
 export const viewFrom = (view: BuildScene["view"], distance: number) => {
   const turn = view.turn * RADIANS;
@@ -108,9 +164,8 @@ export const hatching = () => {
 type LineMark = Extract<BuildSceneMark, { from: At }>;
 const isLine = (mark: BuildSceneMark): mark is LineMark => "from" in mark;
 
-/** Each line's colour by the theme: sizes gold as the board has them, the saw violet, checks moss. */
-const MARK_COLOUR: Readonly<Record<LineMark["kind"], string>> = {
-  size: "warning",
+/** Each line's colour by the theme: the saw violet, checks moss. */
+const MARK_COLOUR: Readonly<Record<Exclude<LineMark["kind"], "size">, string>> = {
   line: "foreground",
   arrow: "primary",
   check: "success",
@@ -167,9 +222,10 @@ export const markWords = (mark: BuildSceneMark) => {
 };
 
 /**
- * A mark's lines in the scene: a size as a gold line (#826, its boards), a dashed check, a pencil
- * line, an arrow with its head. Notes, callouts, badges and spots are over the scene only.
- * Returns what to dispose of.
+ * A mark's lines in the scene: a dashed check, a pencil line, an arrow with its head. A size's
+ * gold dimension line (#826, its boards), notes, callouts, badges and spots are over the scene
+ * only (`picture/scene-words.tsx`), so the line is as bold as the board's. Returns what to
+ * dispose of.
  */
 export const drawMark = (
   world: THREE.Scene,
@@ -177,7 +233,7 @@ export const drawMark = (
   point: (at: At) => THREE.Vector3,
   reach: number,
 ) => {
-  if (!isLine(mark)) return [];
+  if (!isLine(mark) || mark.kind === "size") return [];
   const colour = themed(MARK_COLOUR[mark.kind]);
   const from = point(mark.from);
   const to = point(mark.to);

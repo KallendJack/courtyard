@@ -511,7 +511,8 @@ test.describe("on the unfolded Fold", () => {
     await expect(
       steps.getByRole("heading", { name: "Fit the castors to the bases" }),
     ).toBeVisible();
-    await expect(letter(page, "E, Castor bases")).toHaveAttribute("aria-current", "step");
+    // Its callouts say what's what, so no part has a pill, as its board has it (#826).
+    await expect(letter(page, "E, Castor bases")).toHaveCount(0);
     await expect(letter(page, "A, Legs")).toHaveCount(0);
     const picture = page.getByRole("figure", { name: "In your Workmate, in 3D" });
     await expect(picture).toBeVisible();
@@ -1143,12 +1144,13 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await drag(page, { x: 0, y: 400 });
     await expect.poll(async () => (await camera(page)).tilt).toBe(60);
 
-    // Another step opens at its own angle: the end frame from its floor end, as its board has it.
+    // Another step opens at its own angle: the end frame, its floor ends bottom left and its top
+    // rail top right, as its board has it.
     await page.getByRole("button", { name: "Done, next step" }).click();
     await expect(
       page.getByRole("figure", { name: "On the floor, on offcuts, in 3D" }),
     ).toBeVisible();
-    await expect.poll(() => camera(page)).toEqual({ turn: -145, tilt: 35 });
+    await expect.poll(() => camera(page)).toEqual({ turn: -135, tilt: 35 });
 
     // The bench has no Reset view (#826); Plan's puts the camera back after a drag.
     await expect(page.getByRole("button", { name: "Reset view" })).toHaveCount(0);

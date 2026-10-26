@@ -3,12 +3,14 @@ import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { CALLOUT_FILL, isSmall, outlineOf, placeWords } from "./picture/callouts.ts";
-import { SceneWords } from "./picture/scene-words.tsx";
+import { CALLOUT_FILL, dimensionLine, isSmall, outlineOf, placeWords } from "./picture/callouts.ts";
+import { type PartWords, SceneWords } from "./picture/scene-words.tsx";
 import {
   anchorOf,
   type BuildScene,
   drawMark,
+  fitCamera,
+  framedCorners,
   hatching,
   letteredOf,
   placing,
@@ -92,6 +94,10 @@ export default function BenchView(props: {
   const [drawn, setDrawn] = useState({ scene: wanted, id: props.sceneId, shape });
   if (drawn.shape !== shape) setDrawn({ scene: wanted, id: props.sceneId, shape });
   const { scene: built, id: builtId } = drawn;
+  // The parts named as the boards have them: pills off the wood, but none where the picture's
+  // callouts already say what's what (the castors' board); folded and on a computer, letters.
+  const withCallouts = built.marks.some((mark) => mark.kind === "callout");
+  const naming: PartWords = !pills ? "letters" : withCallouts ? "none" : "pills";
   // Which way the camera looked, and at which picture: kept only while it's the same.
   const kept = useRef<{ id: string; from: THREE.Vector3 }>(undefined);
 
@@ -179,12 +185,20 @@ export default function BenchView(props: {
       at: point(anchorOf(mark)),
       kind: mark.kind,
     }));
+    // A size's ends, for its dimension line over the scene.
+    const sizes = built.marks.flatMap((mark, at) =>
+      mark.kind === "size"
+        ? [{ key: `mark ${at}`, from: point(mark.from), to: point(mark.to) }]
+        : [],
+    );
     // A screw spot stays on its spot; the parts' pills go off the wood at the bench, like callouts.
     const spots = anchored.filter((mark) => mark.kind === "spot");
-    const marks = anchored.filter((mark) => mark.kind !== "callout" && mark.kind !== "spot");
+    const marks = anchored.filter(
+      (mark) => mark.kind !== "callout" && mark.kind !== "spot" && mark.kind !== "size",
+    );
     const callouts = [
       ...anchored.filter((mark) => mark.kind === "callout"),
-      ...(pills ? letters : []),
+      ...(naming === "pills" ? letters : []),
     ];
     const draw = () => {
       renderer.render(world, camera);
@@ -203,60 +217,44 @@ export default function BenchView(props: {
         const leader = leaders.current.get(key);
         return [{ label, leader, ...onScreen(at), w: label.offsetWidth, h: label.offsetHeight }];
       };
+      const outlines = meshes.map(({ mesh }) => outlineOf(mesh, onScreen));
+      const sizeTags = sizes.flatMap((size) => {
+        const tag = measured(size.key, size.from)[0];
+        if (tag === undefined) return [];
+        return [{ ...tag, ...dimensionLine(size, onScreen, outlines, tag, leaders.current) }];
+      });
       placeWords({
         pinned: spots.flatMap(({ key, at }) => measured(key, at)),
-        shown: [...marks, ...(pills ? [] : letters)].flatMap(({ key, at }) => measured(key, at)),
+        shown: [
+          ...sizeTags,
+          ...[...marks, ...(naming === "letters" ? letters : [])].flatMap(({ key, at }) =>
+            measured(key, at),
+          ),
+        ],
         // A part's pill steps aside when there's no room for it; a mark never does.
         callouts: callouts.flatMap(({ key, at }) =>
           measured(key, at).map((each) => ({ ...each, optional: key.startsWith("part ") })),
         ),
         keepClear: pills ? [{ ...WHERE_THIS_GOES, x: width - WHERE_THIS_GOES.w / 2 }] : [],
-        outlines: meshes.map(({ mesh }) => outlineOf(mesh, onScreen)),
+        outlines,
         bounds: { width, height },
       });
     };
+    const framed = framedCorners(built, point);
     /**
-     * Turns the camera to look from `from` (else as it looks now) at the scene, near enough that
-     * it fills the view: moved in or out until its farthest corner is at `FILL`.
+     * Turns the camera to look from `from` (else as it looks now) at what the picture frames,
+     * filling the view (`fitCamera`).
      */
     const fit = (from?: THREE.Vector3) => {
       // At the bench the parts' pills sit on and beside the wood, as the boards have them (#826).
-      const fill = pills
-        ? BENCH_FILL
-        : built.marks.some((mark) => mark.kind === "callout")
-          ? CALLOUT_FILL
-          : FILL;
-      const shown = new THREE.Box3();
-      for (const { mesh } of meshes) shown.expandByObject(mesh);
-      if (shown.isEmpty()) return;
+      const fill = pills ? BENCH_FILL : withCallouts ? CALLOUT_FILL : FILL;
       const direction = (from ?? camera.position.clone().sub(controls.target)).normalize();
-      const centre = shown.getCenter(new THREE.Vector3());
-      const corners = [0, 1, 2, 3, 4, 5, 6, 7].map(
-        (corner) =>
-          new THREE.Vector3(
-            corner & 1 ? shown.max.x : shown.min.x,
-            corner & 2 ? shown.max.y : shown.min.y,
-            corner & 4 ? shown.max.z : shown.min.z,
-          ),
-      );
-      let distance = shown.getSize(new THREE.Vector3()).length() * 1.5;
-      // Nearly in proportion, so a few rounds settle it.
-      for (let round = 0; round < 5; round += 1) {
-        camera.position.copy(direction).multiplyScalar(distance).add(centre);
-        camera.lookAt(centre);
-        camera.updateMatrixWorld();
-        const reaches = Math.max(
-          ...corners.map((corner) => {
-            const onScreen = corner.clone().project(camera);
-            return Math.max(Math.abs(onScreen.x), Math.abs(onScreen.y));
-          }),
-        );
-        if (reaches > 0) distance *= reaches / fill;
-      }
-      controls.target.copy(centre);
-      camera.position.copy(direction).multiplyScalar(distance).add(centre);
-      controls.minDistance = distance * 0.4;
-      controls.maxDistance = distance * 3;
+      const fitted = fitCamera(camera, framed, direction, { fill, from: reach * 2 });
+      if (fitted === undefined) return;
+      controls.target.copy(fitted.target);
+      camera.position.copy(direction).multiplyScalar(fitted.distance).add(fitted.target);
+      controls.minDistance = fitted.distance * 0.4;
+      controls.maxDistance = fitted.distance * 3;
       controls.update();
     };
 
@@ -342,7 +340,7 @@ export default function BenchView(props: {
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [built, builtId, pills]);
+  }, [built, builtId, pills, naming, withCallouts]);
 
   useEffect(() => scene.current?.light(lit), [lit]);
   useEffect(() => {
@@ -380,7 +378,7 @@ export default function BenchView(props: {
         scene={built}
         lit={lit}
         pick={props.pick}
-        pills={pills}
+        parts={naming}
         place={place}
         lead={lead}
       />

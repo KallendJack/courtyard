@@ -62,14 +62,14 @@ export function StepFoot(props: {
             type="button"
             disabled={step.number === 1}
             onClick={() => progress.go(step.number - 1)}
-            className="h-14 w-24 shrink-0 rounded-lg bg-secondary text-answer font-semibold text-foreground active:translate-y-px disabled:opacity-50"
+            className="h-14 w-24 shrink-0 rounded-lg max-md:h-12 bg-secondary text-answer font-semibold text-foreground active:translate-y-px disabled:opacity-50"
           >
             Back
           </button>
           <button
             type="button"
             onClick={progress.done}
-            className="h-14 flex-1 rounded-lg bg-primary text-talk font-bold text-primary-foreground hover:bg-primary/80 active:translate-y-px"
+            className="h-14 flex-1 rounded-lg max-md:h-12 bg-primary text-talk font-bold text-primary-foreground hover:bg-primary/80 active:translate-y-px"
           >
             {done}
           </button>

@@ -102,6 +102,8 @@ export function BenchPanel(props: {
   const [reset, setReset] = useState(0);
   const closeUps = props.closeUp === true ? (atStep?.step.closeUps ?? []) : [];
   const cards = bench && props.withCards === true;
+  // Folded at the bench, Hold to ask sits in the picture's heading, clear of the model.
+  const askAbove = bench && !cards;
   const benchCloseUps = cards ? atStep.step.closeUps.slice(0, AT_THE_BENCH) : [];
   // Diagrams with headed words (a bolt, tightened and apart) read top to bottom, so they stack in
   // a column beside the model, as the castors' board has them; pictures sit in a row under it.
@@ -135,7 +137,8 @@ export function BenchPanel(props: {
         // above Hold to ask (#793's board).
         <div
           className={classes(
-            "pointer-events-none absolute inset-x-0 top-0 bottom-18 z-20 flex flex-col *:pointer-events-auto",
+            "pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col *:pointer-events-auto",
+            askAbove ? "bottom-0" : "bottom-18",
             props.over !== undefined && props.over !== null && "justify-end",
           )}
         >
@@ -148,7 +151,7 @@ export function BenchPanel(props: {
           resettable ? "justify-between" : "justify-start",
         )}
       >
-        {props.children}
+        {!askAbove && props.children}
         {resettable && (
           <Button variant="outline" size="lg" onClick={() => setReset((count) => count + 1)}>
             <RotateCcw aria-hidden />
@@ -160,7 +163,12 @@ export function BenchPanel(props: {
   );
   return (
     <section aria-label="In 3D" className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-      <div className="flex items-baseline justify-between gap-3">
+      <div
+        className={classes(
+          "flex justify-between gap-3",
+          askAbove ? "-mt-1.5 items-center" : "items-baseline",
+        )}
+      >
         <CapsLabel tone="muted" heading={{ level: 2 }} className="min-w-0 truncate">
           {atStep === undefined
             ? props.name
@@ -168,9 +176,13 @@ export function BenchPanel(props: {
               ? (atStep.step.scene?.title ?? atStep.step.title)
               : `Step ${atStep.step.number} · ${atStep.step.title}`}
         </CapsLabel>
-        <span className="shrink-0 text-meta text-muted-foreground">
-          {atStep === undefined ? "Drag to turn · tap a part" : "Drag to turn"}
-        </span>
+        {askAbove ? (
+          props.children
+        ) : (
+          <span className="shrink-0 text-meta text-muted-foreground">
+            {atStep === undefined ? "Drag to turn · tap a part" : "Drag to turn"}
+          </span>
+        )}
       </div>
       {bench ? (
         // At the bench, Hold to ask and an answer sit over the close-ups too, as the board has them.
@@ -182,7 +194,7 @@ export function BenchPanel(props: {
               {cards && !column && <WhereThisGoes derived={derived} step={atStep.step} />}
             </div>
             {column && (
-              <div className="flex w-50 shrink-0 flex-col gap-3 *:flex-1">
+              <div className="flex w-46 shrink-0 flex-col gap-3 *:flex-1">
                 {benchCloseUps.map((closeUp) => (
                   <CloseUpCard key={closeUp.title} closeUp={closeUp} parts={derived.parts} />
                 ))}

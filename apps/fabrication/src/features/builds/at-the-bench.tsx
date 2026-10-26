@@ -80,14 +80,18 @@ export function AtTheBench(
   const theStep = (
     <div
       {...swipe}
-      className="flex min-h-0 min-w-0 flex-1 touch-pan-y flex-col rounded-card border border-border bg-surface px-4.5 pt-4.5 pb-3"
+      className={classes(
+        "flex min-h-0 min-w-0 touch-pan-y flex-col rounded-card border border-border bg-surface px-4.5 pb-3",
+        // Folded, as tall as its lines need, so all of them show; the picture has the rest.
+        cover ? "pt-3.5" : "flex-1 pt-4.5",
+      )}
     >
       <BenchStep derived={derived} step={step} progress={progress} check={props.check} />
     </div>
   );
   return cover ? (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-      <div className={classes(PANEL, "h-2/5 shrink-0")}>{picture}</div>
+      <div className={classes(PANEL, "min-h-36 flex-1")}>{picture}</div>
       {theStep}
     </div>
   ) : (

@@ -114,6 +114,11 @@ export const drawn = (options: {
   spots?: readonly At3[];
   /** Its words, each a pill in the column off the drawing, never on the wood: a piece's name too. */
   pills: readonly Pill3[];
+  /**
+   * Pieces named on the drawing rather than in a pill (#826, the end frames' board), each from its
+   * point in its wood's colour: "rail" past the rail's end.
+   */
+  names?: readonly { says: string; at: At3 }[];
   notes: readonly string[];
   /** By eye or measured, and whether to drill first (#826), when it has spots or a mark. */
   answers?: CloseUpAnswers;
@@ -176,6 +181,15 @@ export const drawn = (options: {
     faces: flatFaces.map((face) => ({ ...face, points: face.points.map(at) })),
     strokes: strokes.map((stroke) => ({ ...stroke, from: at(stroke.from), to: at(stroke.to) })),
     pills,
+    ...(options.names === undefined
+      ? {}
+      : {
+          labels: options.names.map((name) => ({
+            ...at(flat(name.at)),
+            says: name.says,
+            tone: "wood" as const,
+          })),
+        }),
     ...(options.answers === undefined ? {} : { answers: options.answers }),
   };
 };

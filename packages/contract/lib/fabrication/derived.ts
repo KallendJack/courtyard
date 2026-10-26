@@ -163,6 +163,10 @@ const BuildScene = z.object({
     }),
   ),
   marks: list(BuildSceneMark),
+  /** What the picture frames, nearly to its edges: what the step works on (#826). All of it when none. */
+  framed: list(BuildBox).optional(),
+  /** What the step's pieces make, as Where this goes says it: "The two ends" (#826). */
+  goes: z.string().optional(),
 });
 
 /** A step's ID, the slug of what it does ("fit-castors"), the same whatever else a Build has. */

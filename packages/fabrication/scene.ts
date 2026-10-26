@@ -62,4 +62,8 @@ export type Scene = {
   readonly view: { readonly turn: number; readonly tilt: number };
   readonly pieces: readonly ScenePiece[];
   readonly marks: readonly SceneMark[];
+  /** What the picture frames, nearly to its edges: what the step works on (#826). All of it when none. */
+  readonly framed?: readonly Box[];
+  /** What the step's pieces make, as Where this goes says it: "The two ends" (#826). */
+  readonly goes?: string;
 };

@@ -25,9 +25,10 @@ import {
 
 /**
  * One end frame on the floor (Paper, 2 · Agreed, "Fabrication · End frames in 3D, your kit · Fold
- * (#785, #788)"): the legs tall and thin on offcuts, the rails across them, the clamps at a joint
- * and the square in the corner; the length marked from the floor end in gold, and each joint's
- * two screw spots, red where they're drilled first.
+ * (#785, #788)"): the legs tall and thin on offcuts, the rails across them, the clamps and the
+ * square at the far leg's top joint; the length marked from the floor end in gold beside that
+ * leg, and the bottom rail's screw spots, red where they're drilled first. Framed on the frame,
+ * so it fills the picture as the board's does.
  */
 const endFrameScene = (setting: SceneSetting, first: boolean): Scene => {
   const s = setting.shape;
@@ -38,10 +39,12 @@ const endFrameScene = (setting: SceneSetting, first: boolean): Scene => {
   const lower = s.leg - s.shelfHeight - s.wide;
   const legsAt = [0, s.endRail - s.thick];
   const far = s.endRail - s.thick;
+  const legs = legsAt.map((x) => box(x, 0, lift, s.thick, s.leg, s.wide));
+  const rails = [0, lower].map((y) => box(0, y, legTop, s.endRail, s.wide, s.thick));
   return {
     title: "On the floor, on offcuts",
-    // From the floor end, as the board looks: the legs run away to the right, the clamps far off.
-    view: { turn: -145, tilt: 35 },
+    // As the board looks: the floor ends bottom left, the top rail and its clamp top right.
+    view: { turn: -135, tilt: 35 },
     pieces: [
       {
         kind: "support",
@@ -52,46 +55,38 @@ const endFrameScene = (setting: SceneSetting, first: boolean): Scene => {
           [0.2, 0.75].map((along) => box(x - 25, s.leg * along, 0, s.thick + 50, s.wide, lift)),
         ),
       },
-      part(
-        "A",
-        nameOf(setting, "A"),
-        "lit",
-        legsAt.map((x) => box(x, 0, lift, s.thick, s.leg, s.wide)),
-      ),
-      part(
-        "C",
-        nameOf(setting, "C"),
-        "lit",
-        [0, lower].map((y) => box(0, y, legTop, s.endRail, s.wide, s.thick)),
-      ),
+      part("A", nameOf(setting, "A"), "lit", legs),
+      part("C", nameOf(setting, "C"), "lit", rails),
       // A clamp beside the top joint's crosses, on the far leg: its bar, and a jaw each side.
       ...toolIf(setting.toHand, "clamps", [
         box(far + s.thick + 10, s.wide - 25, 5, 20, 20, top + 60),
         box(far - 30, s.wide - 30, top, s.thick + 60, 30, 20),
         box(far - 30, s.wide - 30, 5, s.thick + 60, 30, lift - 10),
       ]),
+      // The square in that corner: its stock along the leg's outside, its blade on the rail.
       ...toolIf(setting.toHand, "square", [
-        box(-20, 0, top - 30, 20, 250, 35),
-        box(0, 0, top, 200, 25, 2),
+        box(s.endRail, 0, top - 30, 20, 250, 35),
+        box(s.endRail - 200, 0, top, 200, 25, 2),
       ]),
     ],
     marks: [
       {
         kind: "size",
-        from: at(-OUT / 2, s.leg - s.shelfHeight, legTop),
-        to: at(-OUT / 2, s.leg, legTop),
+        from: at(s.endRail + OUT / 2, s.leg - s.shelfHeight, legTop),
+        to: at(s.endRail + OUT / 2, s.leg, legTop),
         mm: s.shelfHeight,
       },
-      // Two crosses a joint, on a diagonal in the green, as the screw spots' close-up draws them.
+      // Two crosses where the bottom rail sits on each leg, on a diagonal in the green, as the
+      // screw spots' close-up draws them: one rail, as the board has it.
       ...legsAt.flatMap((x) =>
-        [0, lower].flatMap((y) =>
-          [
-            at(x + s.thick / 3, y + s.wide / 4, top),
-            at(x + (2 * s.thick) / 3, y + (3 * s.wide) / 4, top),
-          ].map((spot): SceneMark => ({ kind: "spot", at: spot, first })),
-        ),
+        [
+          at(x + s.thick / 3, lower + s.wide / 4, top),
+          at(x + (2 * s.thick) / 3, lower + (3 * s.wide) / 4, top),
+        ].map((spot): SceneMark => ({ kind: "spot", at: spot, first })),
       ),
     ],
+    framed: [...legs, ...rails],
+    goes: "The two ends",
   };
 };
 
@@ -108,11 +103,13 @@ const lineSpots = (setting: SceneSetting, id: string, scene: Scene): At[] => {
       const legTop = s.thick + s.wide;
       const top = legTop + s.thick;
       const lower = s.leg - s.shelfHeight - s.wide;
+      // As the board places them: beside the length's floor end, outside the top rail's end, on
+      // the bottom rail, and at the clamp.
       return [
-        at(0, s.leg - s.shelfHeight / 2, legTop),
-        at(s.endRail - s.thick / 2, s.wide / 2, top + 120),
+        at(s.endRail + 2 * OUT, s.leg - s.shelfHeight / 5, legTop),
+        at(s.endRail + 2 * OUT, s.wide * 2, legTop),
         at(s.endRail / 2, lower + s.wide / 2, top),
-        at(s.endRail, s.wide / 2, top + 220),
+        at(s.endRail - s.thick / 2, s.wide / 2, top + 160),
       ];
     }
     default: {

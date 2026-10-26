@@ -69,6 +69,8 @@ export type CloseUpShape =
       readonly jaw: number;
       readonly length: number;
       readonly turn: number;
+      /** Turned from underneath, in red as the castors' board draws it (#826). */
+      readonly under?: boolean;
     }
   | { readonly kind: "clockwise"; readonly x: number; readonly y: number; readonly r: number }
   | {
@@ -128,6 +130,11 @@ export type CloseUp = {
     readonly says: string;
     readonly heading?: boolean;
     readonly key?: boolean;
+    /**
+     * What's done or goes underneath, in red (#826, the castors' board); a quiet note under the
+     * drawing; or a piece's name, in its wood's colour (the end frames' board).
+     */
+    readonly tone?: "under" | "note" | "wood";
   }[];
   /** What's drawn in 3D, projected, far to near (#813). */
   readonly faces?: readonly CloseUpFace[];

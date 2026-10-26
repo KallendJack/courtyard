@@ -57,14 +57,15 @@ export const tightenCloseUp = (
     title: "Tighten",
     type: "bolt-through",
     width: body.x + body.w,
-    height: UNDER + 92,
+    height: UNDER + 112,
     pieces: [{ label: thing, ...body }],
     dimensions: [],
     fixings: [],
     shapes: [
       { kind: hold.head, x, y, jaw: across, length: REACH, turn: 0 },
       { kind: "hex", x, y, across },
-      { kind: hold.nut, x, y: UNDER + y, jaw: across, length: REACH, turn: 0 },
+      // What's turned underneath in red, as the board has it.
+      { kind: hold.nut, x, y: UNDER + y, jaw: across, length: REACH, turn: 0, under: true },
       { kind: "hex", x, y: UNDER + y, across },
       { kind: "clockwise", x, y: UNDER + y, r: 2 * across },
     ],
@@ -83,7 +84,10 @@ export const tightenCloseUp = (
         y: UNDER + 84,
         says: `${hold.yours ? "your" : "a"} ${named[hold.nut]}, clockwise`,
         key: true,
+        // Turned underneath, in red as the board has it.
+        tone: "under",
       },
+      { x: 0, y: UNDER + 104, says: `stop when ${bites} bites`, tone: "note" },
     ],
     notes: [`Stop when ${bites} bites.`],
   };
@@ -122,11 +126,17 @@ export const boltApartCloseUp = (through: BoltThrough, size: number | undefined)
     (_, at) => under + APART + at * (washer + 4),
   );
   const nutY = (washers.at(-1) ?? under) + washer + APART;
+  // Where the washer goes, under it all on two lines, as the board has it.
+  const note =
+    washers.length === 0
+      ? ["no washer: the nut goes", "on against the wood"]
+      : ["washer only under the", "nut, against the wood"];
+  const noteY = nutY + nut + 18;
   return {
     title: "One bolt, apart",
     type: "bolt-through",
     width: named + 70,
-    height: nutY + nut + 6,
+    height: noteY + 26,
     pieces: [
       { label: through.piece.label, x: 0, y: baseY, w: plate.length, h: base },
       // The bolt's shank, through the plate and the piece, to past the nut.
@@ -150,13 +160,15 @@ export const boltApartCloseUp = (through: BoltThrough, size: number | undefined)
       label(headY + 2, "bolt head"),
       label(plateY + 2, "plate"),
       label(baseY + base / 2, "base"),
-      { x: named, y: under, says: "Underneath", heading: true },
+      // Underneath in red, as the board has it.
+      { x: named, y: under, says: "Underneath", heading: true, tone: "under" },
       ...washers
         .slice(0, 1)
         .map((y) =>
           label(y + washer / 2, washers.length > 1 ? `${washers.length} washers` : "washer", true),
         ),
       label(nutY + nut / 2, "nut"),
+      ...note.map((says, line) => ({ x: 0, y: noteY + 18 * line, says, tone: "note" as const })),
     ],
     notes: [
       washers.length === 0

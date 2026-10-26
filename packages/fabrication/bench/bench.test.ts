@@ -956,8 +956,13 @@ describe("the golden bench's steps, at the bench (#699)", () => {
       "Underneath",
       "washer",
       "nut",
+      // Its note under it, as the castors' board has it (#826).
+      "washer only under the",
+      "nut, against the wood",
     ]);
     expect(apart?.labels?.find((label) => label.key)?.says).toBe("washer");
+    // Underneath in red, as the board has it.
+    expect(apart?.labels?.find((label) => label.says === "Underneath")?.tone).toBe("under");
     expect(apart?.notes).toEqual(["Washer only under the nut, against the wood."]);
     // Top to bottom: the head, the base, then the washer and the nut underneath.
     const y = (label: string) => apart?.pieces.find((piece) => piece.label === label)?.y ?? 0;
