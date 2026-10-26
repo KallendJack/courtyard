@@ -39,15 +39,29 @@ A Courtyard session's `gh issue create` without a milestone, a category label an
 
 ## Paper
 
-Every project's Paper file has four pages (#340): `1 · Live` (one board per screen per device, as built, plus the
-style guide and components), `2 · Agreed` (OK'd, not built), `3 · Drafts`, `4 · Archive`. Board names, layout and how
-boards move: `docs/ai-conduct.md`, Paper.
+Every project's Paper file has four pages (#340): `1 · Live` (screenshots of the built app, one per screen per device,
+plus the style guide and components), `2 · Agreed` (OK'd, not yet built as drawn), `3 · Drafts`, `4 · Archive`. Board
+names, layout and how boards move: `docs/ai-conduct.md`, Paper.
+
+What the owner signs off on a board is what they see. These rules cover every screen in both apps, Courtyard and
+Fabrication (2026-10-26: the bench's step buttons were built from their board, its picture style wasn't, and the
+board went to Live as if built).
 
 - An issue that changes what the owner sees links its agreed board before it's `ready-for-agent`; one without a board
   stops for a design first.
+- **An issue built from a board covers the whole board,** or lists exactly which parts it leaves out and the issue
+  that covers each. Otherwise it isn't `ready-for-agent`.
 - A change with nothing new to see (a title updating in place) needs no board. Its issue names the agreed board that
   already covers it.
-- Whoever merges a PR moves the boards its description lists.
+- **A PR that changes what the owner sees** puts Playwright screenshots of the built screen beside each board it
+  builds, at 933 × 645 and 476 × 695 (and 1440 × 900 where a desktop board exists), and lists every difference. It
+  doesn't merge with an unlisted difference; a listed difference needs the owner's OK; "close enough, with a
+  follow-up" is not a merge. A review checks the screenshots against the board, not only the code against the issue.
+- **`1 · Live` holds screenshots of the built app only,** named "Built · <Device> · <Screen>", never a copy of a
+  design. On merge, whoever merges moves each board the PR built from Agreed to Archive (as built) and puts the new
+  built screenshot on Live, but only if the built screen matches the board (apart from differences the owner OK'd on
+  the PR). Otherwise the board stays in Agreed and the gap is written on its issue.
+- **Every label says what's happening, never what isn't:** "in the green", not "no tape".
 
 ## Reviewing use
 

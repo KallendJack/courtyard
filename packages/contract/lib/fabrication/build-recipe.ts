@@ -9,7 +9,7 @@ import {
   BuildToolId,
   Words,
 } from "./materials.ts";
-import { PartRecipe } from "./recipe.ts";
+import { PrinterSpec } from "./recipe.ts";
 import { RECIPE_MOST, referencesHold, withinBounds } from "./recipe-checks.ts";
 import { notAKind } from "./recipe-refusals.ts";
 
@@ -97,10 +97,18 @@ export const RecipePiece = z.discriminatedUnion(
     z.strictObject({
       kind: z.literal("printed"),
       id: RecipeId,
-      part: PartRecipe,
+      /**
+       * Which part (#773): a holder a timber's end drops into, or a bracket a timber's or sheet's
+       * edge runs along. Code sizes it from the stock it fits, with the printer's clearance.
+       */
+      part: z.enum(["holder", "bracket"]),
+      /** The timber or sheet it fits, by its stock's ID. */
+      fits: RecipeId,
       count: z.number().int().positive().max(50).default(1),
       /** The piece or group it's fitted to. */
       on: RecipeId,
+      /** The screws through it into what it's on, when it's screwed: "4 × 30 screws". */
+      screws: RecipeId.optional(),
     }),
   ],
   { error: notAKind("piece") },
@@ -232,6 +240,13 @@ const RecipeFields = z.strictObject({
     .array(RecipeJoint)
     .max(RECIPE_MOST.joints, `A recipe has at most ${RECIPE_MOST.joints} joints.`)
     .default([]),
+  /**
+   * What it carries, in the owner's words ("paint tins", "a 3D printer"), which code reads as a
+   * load class for its checks (#771). Left out, it's checked as the heaviest.
+   */
+  load: Words.optional(),
+  /** The printer its printed parts are made on: its clearance, assumed 0.2 mm until calibrated. */
+  printer: PrinterSpec.optional(),
   damp: z.boolean().default(false),
   prices: BuildOptionPrices.default({}),
   tools: z.array(BuildToolId).default([]),

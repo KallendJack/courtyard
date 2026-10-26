@@ -21,20 +21,6 @@ export const BuildBox = z.object({
 });
 export type BuildBox = z.infer<typeof BuildBox>;
 
-/** A part, once for all its pieces: its label, what it does, its cut size and its boxes. */
-export const BuildPart = z.object({
-  label: z.string(),
-  name: z.string(),
-  does: z.string(),
-  count: z.number().int(),
-  material: z.object({ kind: z.enum(["timber", "sheet", "printed"]), stock: z.string() }),
-  length: z.number(),
-  width: z.number(),
-  thickness: z.number(),
-  boxes: list(BuildBox),
-});
-export type BuildPart = z.infer<typeof BuildPart>;
-
 /** The cut plan: each timber's lengths with their cuts, each sheet's pieces where they sit. */
 export const BuildCutPlan = z.object({
   kerf: z.number(),
@@ -259,6 +245,45 @@ export const BuildFinding = z.discriminatedUnion("kind", [
     mm: z.number(),
     least: z.number(),
   }),
+  // The checks any recipe gets (#771), each with its plain fixes.
+  z.object({
+    kind: z.literal("sags"),
+    label: z.string(),
+    name: z.string(),
+    span: z.number(),
+    thickness: z.number(),
+    sag: z.number(),
+    allowed: z.number(),
+    most: z.number(),
+    load: z.object({
+      class: z.enum(["medium", "heavy", "very heavy"]),
+      kgPerM2: z.number(),
+      reference: z.string(),
+      said: z.string().nullable(),
+      matched: z.string().nullable(),
+    }),
+    fixes: list(z.string()),
+  }),
+  z.object({
+    kind: z.literal("tips"),
+    height: z.number(),
+    feet: z.number(),
+    way: z.enum(["front to back", "end to end"]),
+    fixes: list(z.string()),
+    advice: z.string(),
+  }),
+  z.object({ kind: z.literal("racks"), frame: z.string(), fixes: list(z.string()) }),
+  z.object({
+    kind: z.literal("screw-length"),
+    screws: z.string(),
+    joint: z.string(),
+    problem: z.enum(["too short", "too long"]),
+    through: z.number(),
+    into: z.number(),
+    least: z.number(),
+    room: z.number(),
+    fixes: list(z.string()),
+  }),
 ]);
 export type BuildFinding = z.infer<typeof BuildFinding>;
 
@@ -275,6 +300,24 @@ export const BuildPrint = z.object({
   sizes: list(z.object({ name: z.string(), says: z.string(), source: SizeSource.nullable() })),
 });
 export type BuildPrint = z.infer<typeof BuildPrint>;
+
+/**
+ * A part, once for all its pieces: its label, what it does, its cut size and its boxes; and a
+ * printed part's in a wooden build, its print, sized from the wood it fits (#773).
+ */
+export const BuildPart = z.object({
+  label: z.string(),
+  name: z.string(),
+  does: z.string(),
+  count: z.number().int(),
+  material: z.object({ kind: z.enum(["timber", "sheet", "printed"]), stock: z.string() }),
+  length: z.number(),
+  width: z.number(),
+  thickness: z.number(),
+  boxes: list(BuildBox),
+  print: BuildPrint.optional(),
+});
+export type BuildPart = z.infer<typeof BuildPart>;
 
 /** Everything a Build shows, worked out from its template and parameters. */
 export const DerivedBuild = z.object({

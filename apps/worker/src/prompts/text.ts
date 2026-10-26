@@ -25,6 +25,7 @@ const MARKERS = [
   "projects",
   "project",
   "builds",
+  "step",
   "sizes",
   "document",
   "tools",

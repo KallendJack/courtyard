@@ -23,6 +23,8 @@ Seen is `sessions/`' `POST /api/sessions/:id/seen` and `POST /api/workspaces/:id
 ## How it works
 
 - **A session** waits for its approval while one is asked for.
+- Else for **Continue**, while its last turn was cut off by a restart under a day ago, unless its pull request has
+  merged or closed: then there's nothing to continue, and it ends quietly (#755).
 - Else, a Lead's builder that's **stuck** (#590, its status from `builders/`), saying why, until it carries on.
 - Else as a **new reply** while its latest answer (the last turn that completed or failed) is under a day old, no
   turn runs or waits for a slot, it has no pull request, and the owner hasn't **seen** it.

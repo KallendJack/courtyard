@@ -80,10 +80,20 @@ describe("the golden bench through the general engine", () => {
     expect(recipe.buyList.unpriced).toBe(bench.buyList.unpriced);
   });
 
-  it("gives the template's findings, but the tools its steps need (#772)", () => {
-    expect(recipe.findings).toEqual(
+  it("gives the template's findings, but the tools its steps need (#772), then the checks' (#771)", () => {
+    const checks = ["sags", "tips", "racks", "screw-length"];
+    expect(recipe.findings.filter((finding) => !checks.includes(finding.kind))).toEqual(
       bench.findings.filter((finding) => finding.kind !== "tools-missing"),
     );
+    // Its load isn't said, so its shelf is checked under the heaviest, and sags 1 mm over the
+    // 460 mm between its rails; its 4 × 40 sheet screws go 22 mm into the rails, short of 6
+    // diameters.
+    expect(recipe.findings.filter((finding) => checks.includes(finding.kind))).toEqual([
+      expect.objectContaining({ kind: "sags", name: "Shelf", span: 460, sag: 1, allowed: 0.8 }),
+      ...["shelf to long rails", "braces to end frames", "top to long rails"].map((joint) =>
+        expect.objectContaining({ kind: "screw-length", joint, fixes: ["Use 4 × 45 screws"] }),
+      ),
+    ]);
   });
 
   it("offers the template's options for each stock, each costed the same", () => {

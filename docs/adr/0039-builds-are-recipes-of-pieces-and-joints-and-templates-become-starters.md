@@ -18,7 +18,9 @@ So:
   plan, the buy list, the build steps, their close-ups, and the checks (sag, tipping, racking, fixings long enough,
   #771). The model still never writes a length, a quantity or a total itself.
 - **Version 1's vocabulary is small,** and a recipe uses only it:
-  - **Pieces:** a timber member, a sheet panel, a printed part (its part recipe, #702).
+  - **Pieces:** a timber member, a sheet panel, a printed part. A printed piece names only which part (a holder or
+    bracket), the wood it fits, where it goes and its screws; code writes its part recipe (#702) from that wood's
+    size and the printer's clearance (#773), so the model picks a part, never its sizes.
   - **Groups:** a rectangle frame, a box or carcass, legs, a shelf on rails or cleats, a brace.
   - **Joints:** screws timber into timber (staggered); screws through a sheet into an edge; an angle bracket; a bolt,
     nut and washer; a printed holder or bracket.
