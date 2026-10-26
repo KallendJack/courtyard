@@ -9,7 +9,7 @@ import {
   Sizes,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { givenIn } from "../src/features/fabrication/size-tool.ts";
+import { givenIn } from "../src/features/fabrication/sizes/tool.ts";
 import {
   asOwner,
   changesIn,

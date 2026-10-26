@@ -5,8 +5,8 @@ import {
   labelledSizes,
   type SizeToolDone,
   type SizeToolRefusal,
-} from "../features/fabrication/size-tool.ts";
-import { conflictsOf, type ReadSizes, sizePath, valueText } from "../features/fabrication/sizes.ts";
+} from "../features/fabrication/sizes/tool.ts";
+import { conflictsOf, type ReadSizes, sizePath, valueText } from "../features/fabrication/sizes/index.ts";
 import { labelledThings, type ReadThings } from "../features/things/index.ts";
 import type { Result } from "../lib/result.ts";
 import type { ToolReply, TurnTool, TurnToolName } from "../providers/index.ts";

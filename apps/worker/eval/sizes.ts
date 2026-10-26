@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RecordSourceKind, RecordUnit, SessionEvent, SizeRecord } from "@courtyard/contract";
-import { readSizeText, SIZES_FOLDER, valueText } from "../src/features/fabrication/sizes.ts";
+import { readSizeText, SIZES_FOLDER, valueText } from "../src/features/fabrication/sizes/index.ts";
 import { ALCOVE, ESTATE_SPEC } from "./attachments.ts";
 import type { Scenario, Words } from "./scenarios.ts";
 import { type Check, hasWords } from "./words.ts";

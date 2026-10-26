@@ -30,7 +30,7 @@ import {
 } from "../context-folder/index.ts";
 import { documentChangeOf } from "../documents/index.ts";
 import { buildChangeOf, isBuildChange } from "../fabrication/changes.ts";
-import { isSizeChange, sizeChangeOf } from "../fabrication/sizes.ts";
+import { isSizeChange, sizeChangeOf } from "../fabrication/sizes/index.ts";
 import { isProjectChange, projectChangeOf } from "../projects/index.ts";
 import { titleOf } from "../saves/index.ts";
 import type { SessionError, Sessions } from "../sessions/index.ts";

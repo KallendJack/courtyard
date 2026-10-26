@@ -35,7 +35,7 @@ import { type PreparedAttachment, prepareAttachments } from "../attachments/inde
 import type { BranchRefusal } from "../code/index.ts";
 import { documentError } from "../documents/routes.ts";
 import { buildUndoError } from "../fabrication/routes.ts";
-import { sizeUndoError } from "../fabrication/size-routes.ts";
+import { sizeUndoError } from "../fabrication/sizes/routes.ts";
 import { projectError } from "../projects/routes.ts";
 import type { NoteRefusal } from "../saves/index.ts";
 import { thingError } from "../things/routes.ts";
