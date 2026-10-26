@@ -21,6 +21,7 @@ import {
 import { buyLine } from "../buy-list.ts";
 import { fitsPlate, toolsOf } from "../print/index.ts";
 import { checkRecipe, envelopeOf } from "../print/recipe.ts";
+import type { FixingLine } from "./fixings.ts";
 import { box } from "./geometry.ts";
 import { type Placed, said, stockIn, words } from "./layout.ts";
 
@@ -121,7 +122,9 @@ const shapeOf = (
         ? {
             name: "Pocket",
             says: `${round(thick + 2 * c)} × ${mm(fits.width.value + 2 * c)}`,
-            source: fits.width.source,
+            // From both of the timber's sizes, so it's only as sure as the less sure of them.
+            source:
+              fits.thickness.source.kind === "assumed" ? fits.thickness.source : fits.width.source,
           }
         : { name: "Slot", says: mm(thick + 2 * c), source: fits.thickness.source },
       chosen(holder ? "Pocket depth" : "Slot depth", deep),
@@ -139,9 +142,12 @@ const shapeOf = (
   };
 };
 
-/** Where each one sits: on top of what it's on, at its ends in turn. */
+/**
+ * Where each one sits: on top of what it's on, one on each of them first and then their other
+ * ends, so two brackets on four legs go on two legs, not both on one.
+ */
 const boxesOn = (on: readonly Box[], count: number, size: Part) => {
-  const ends = on.flatMap((each) =>
+  const ends = on.map((each) =>
     each.w >= each.d
       ? [each.x, each.x + each.w - size.length].map((x) =>
           box(
@@ -164,7 +170,7 @@ const boxesOn = (on: readonly Box[], count: number, size: Part) => {
           ),
         ),
   );
-  return ends.slice(0, count);
+  return [0, 1].flatMap((end) => ends.flatMap((each) => each.slice(end, end + 1))).slice(0, count);
 };
 
 /**
@@ -240,38 +246,48 @@ export const printedParts = (
   return problems.length > 0 ? err(problems) : ok(made);
 };
 
-/** The filament for them all, and the screws through them. */
-export const printedBuys = (printed: readonly PrintedPart[], recipe: BuildRecipe): BuyLine[] => {
-  if (printed.length === 0) return [];
-  const priceOf = (name: string) =>
-    recipe.stock.find((item) => item.kind === "fixing" && item.name === name)?.price;
-  const screws = new Map<string, { count: number; for: string[] }>();
-  for (const { part, screws: each } of printed) {
-    if (each === undefined) continue;
-    const there = screws.get(each.name) ?? { count: 0, for: [] };
-    screws.set(each.name, {
-      count: there.count + each.count,
-      for: [...there.for, said(part.name)],
-    });
+/** The filament for them all. */
+export const printedBuys = (printed: readonly PrintedPart[]): BuyLine[] =>
+  printed.length === 0
+    ? []
+    : [
+        buyLine({
+          item: FILAMENT,
+          kind: "filament",
+          for: `printing the ${printed.map(({ part }) => said(part.name)).join(" and ")}`,
+          needed: 1,
+          price: undefined,
+        }),
+      ];
+
+/**
+ * The joints' fixings with the screws through the printed parts added, so screws a joint uses too
+ * are one line on the buy list.
+ */
+export const withPrintedScrews = (
+  fixings: readonly FixingLine[],
+  printed: readonly PrintedPart[],
+  recipe: BuildRecipe,
+): FixingLine[] => {
+  const lines = [...fixings];
+  for (const { part, piece, screws } of printed) {
+    if (screws === undefined) continue;
+    const purpose = `${said(part.name)} to ${said(words(piece.on))}`;
+    const at = lines.findIndex((line) => line.name === screws.name);
+    const there = lines[at];
+    if (there === undefined) {
+      const price = recipe.stock.find((item) => item.id === piece.screws);
+      lines.push({
+        name: screws.name,
+        count: screws.count,
+        price: price?.kind === "fixing" ? price.price : undefined,
+        for: [purpose],
+      });
+    } else {
+      lines[at] = { ...there, count: there.count + screws.count, for: [...there.for, purpose] };
+    }
   }
-  return [
-    buyLine({
-      item: FILAMENT,
-      kind: "filament",
-      for: `printing the ${printed.map(({ part }) => said(part.name)).join(" and ")}`,
-      needed: 1,
-      price: undefined,
-    }),
-    ...[...screws].map(([item, each]) =>
-      buyLine({
-        item,
-        kind: "fixing",
-        for: `fixing the ${each.for.join(" and ")}`,
-        needed: each.count,
-        price: priceOf(item),
-      }),
-    ),
-  ];
+  return lines;
 };
 
 const quiet = {

@@ -59,7 +59,8 @@ if (recipe) {
   size the owner chooses for a printed part (its walls) is a plain number.
 - **A recipe stays within its bounds** (`RECIPE_MOST`, #769): the build's length, depth and height at most 3000 mm, a
   stock's sizes at most 6000, the kerf at most 10 and an overhang at most 300; a castor's height and plate and a
-  bolt's length at most 300, a bolt's thread 24 and pitch 4, a washer 10 and a nut 30 (#770); at most 50 of a stock
+  bolt's length at most 300, a bolt's thread 24 and pitch 4, a washer 10 and a nut 30 (#770); the printer's
+  clearance at most 1 and its nozzle 1.2 (#773); at most 50 of a stock
   had, 16 stocks, 24 pieces, 12 groups and 32 joints. Over them, or naming two things with one ID, or pointing at what isn't there or isn't the
   right kind (a panel cut from a timber), or joining a piece to itself, it's refused with the reason, by where it is
   in the recipe. A kind it doesn't have is refused saying the kinds it has, and one out of version 1 (pocket holes,
@@ -89,8 +90,10 @@ if (recipe) {
   its screws. Code gives a holder a pocket the timber's section plus the printer's clearance each side (45.4 × 95.4 for
   45 × 95 at 0.2, assumed until the printer's calibrated), and a bracket a slot the stock's thickness plus it, so
   changing the timber resizes them. Each is a part recipe for the printed-part pipeline (#702), carried on its part
-  (`print`), lettered after the parts that are cut and left out of the cut plan; the buy list adds the filament and
-  their screws, and the steps print them first and fit them once what they go on is built.
+  (`print`), lettered after the parts that are cut, left out of the cut plan and out of the Build's overall size,
+  and spread one to each of what it's on before doubling up; the buy list adds the filament, and their screws on
+  the same line as a joint's that uses them, and the steps print them first and fit them once what they go on is
+  built, with any tool they need that isn't to hand found.
 - **The owner's stock first** (#770): a timber or sheet the recipe says the owner has (`have`) is bought less by
   that many, and one no piece is cut from (offcuts, at their own size) takes the pieces it will do for (the same
   option or name, section or sheet material) before any is bought, the biggest first.
