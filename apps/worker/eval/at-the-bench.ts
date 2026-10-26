@@ -75,6 +75,8 @@ export const AT_THE_BENCH: readonly Scenario[] = [
             "2 at each",
             "two at each",
             "one above the other",
+            "2 crosses",
+            "two crosses",
           ],
           ["overlap", "where the rail", "over the leg", "crosses"],
           ["by eye", "anywhere", "fingertip"],
