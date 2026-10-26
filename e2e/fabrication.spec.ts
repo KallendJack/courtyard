@@ -895,9 +895,23 @@ const toStep = async (page: Page, number: number) => {
 
 /** A drag across the picture, from its left edge, clear of the letters, by so many pixels. */
 const drag = async (page: Page, by: { x: number; y: number }) => {
-  const box = await page.getByRole("region", { name: "In 3D" }).locator("canvas").boundingBox();
+  const canvas = page.getByRole("region", { name: "In 3D" }).locator("canvas");
+  const box = await canvas.boundingBox();
   if (box === null) throw new Error("The picture isn't drawn.");
-  const from = { x: box.x + 12, y: box.y + box.height / 2 };
+  // From the picture's left edge, at the height nearest its middle where nothing over it (a
+  // part's pill, off the wood at the bench) takes the press.
+  const y = await canvas.evaluate(
+    (element, { x, top, height }) => {
+      for (let tried = 0; tried < 20; tried += 1) {
+        const away = (Math.ceil(tried / 2) * (tried % 2 === 0 ? 1 : -1) * height) / 20;
+        const at = top + height / 2 + away;
+        if (document.elementFromPoint(x, at) === element) return at;
+      }
+      return top + height / 2;
+    },
+    { x: box.x + 12, top: box.y, height: box.height },
+  );
+  const from = { x: box.x + 12, y };
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
   await page.mouse.move(from.x + by.x, from.y + by.y, { steps: 10 });
