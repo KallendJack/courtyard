@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Build, BuildSetting } from "../build.ts";
+import { deriveBench } from "../recipe/starters.ts";
 import { goldenBench } from "./fixtures/golden.ts";
-import { deriveBench } from "./index.ts";
 
 // Your stock (#760): what the owner has for making comes off the buy list, so it lists only what's
 // left to buy. The golden bench's list, worked out by hand in `bench.test.ts`, totals £177.02.

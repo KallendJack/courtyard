@@ -2057,6 +2057,29 @@ worked recipe in the tool's description, and the rule saying what's its to choos
 the owner calls it), the holster passed 2 of 3 and the tag 3 of 3, and the bench 3 of 3 once its tools, like a printed
 part's, default to none (it had sent none, then made some up). Not yet run on Codex.
 
+### Composing a recipe
+
+Decided with #768 (ADR 0039), and told to models once the Build tool takes recipes (#774): until then the rule
+above stands, and the prompts module and its tests are unchanged. A Build becomes a recipe of pieces and joints the
+model writes, and code works out the rest. The rule's lines for it, to replace "you choose its template and set its
+parameters" when it's built:
+
+> A Build is a recipe you write: its pieces (timber members, sheet panels, printed parts), grouped as rectangle frames,
+> boxes, legs, shelves on rails or cleats and braces, and the joints that hold them (screws timber into timber,
+> staggered; screws through a sheet into an edge; angle brackets; bolts with nuts and washers; printed holders or
+> brackets). Start from a starter when one fits, such as the bench, a box or crate, a storage rack, or a stand for a
+> printer or tools, and change it; otherwise compose one from pieces. Code works out its parts, cut plan, buy list,
+> steps, close-ups and checks, so write only the recipe, never a part, a length to cut or a count. A size is measured
+> only when the owner says they measured it and gives it; never make one up as measured. Any size you choose or guess,
+> such as a shelf's depth, is assumed, and you list your guesses in the answer for the owner to change. Say a load in
+> the owner's own words ("paint tins", "a 3D printer"), never as a weight a shelf can hold: code works out what it
+> carries. Pocket holes, dowels, glue-only joints, hinges, drawers and furniture are outside what a recipe can make, and
+> nothing goes on a wall yet: say so plainly, in a line, and offer the nearest build a recipe can make, such as a shelf
+> unit holding storage boxes in place of drawers, never a bare no.
+
+Its eval scenarios come with #774 and check the saved recipe: a shelf unit from a sentence with its guesses listed, a
+change by talking, an over-long shelf getting a centre support, and drawers declined with an alternative.
+
 ## Sizes
 
 Built with #708 (ADR 0037). A planning workspace keeps **size records**, Fabrication's measurements, each one a JSON

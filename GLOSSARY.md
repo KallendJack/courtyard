@@ -215,12 +215,42 @@ _Avoid_: plan, verdict, answer
 Something the owner makes, worked out by code (ADR 0036): a template (a framed bench, wall shelving, a printed part)
 and its parameters, from which code derives the parts, the **cut plan**, the **buy list** and the build steps. A
 project step can own one. The model sets and explains its parameters; it never writes a length or a quantity itself.
+A Build becomes a **recipe** (ADR 0039), its templates **starters**.
 _Avoid_: design (that's what it looks like), plan (that's a floor plan or a project), cut list (that's one part of it)
+
+**Recipe**:
+What a Build is made of, as the model writes it (ADR 0039): its **pieces**, grouped, and the **joints** that hold
+them, every size with its source. Code derives the rest: the parts, cut plan, buy list, steps, close-ups and checks.
+A new kind of build is a new recipe, never new code. Pocket holes, dowels, glue-only joints, hinges, drawers and
+furniture are outside it; asked for one, the model offers the nearest build a recipe can make.
+_Avoid_: design, template (that's a starter), parts list (code derives that)
+
+**Piece**:
+One thing a recipe is made of (ADR 0039): a **timber member**, a **sheet panel** or a **printed part**. Pieces come in
+**groups**: a rectangle frame, a box or carcass, legs, a shelf on rails or cleats, a brace. Each piece the owner
+handles is a part, with its letter (A × 4).
+_Avoid_: component, member (on its own), board
+
+**Joint**:
+How a recipe holds two pieces together (ADR 0039): screws timber into timber (staggered), screws through a sheet into
+an edge, an angle bracket, a bolt with its nut and washer, or a printed holder or bracket. Each is checked, drawn
+and given its close-up by code.
+_Avoid_: connection, fixing (that's the screw or bolt a joint uses)
+
+**Starter**:
+A tested recipe a Build starts from and changes (ADR 0039), such as the bench, a box or crate, a freestanding storage
+rack, or a stand for a printer or tools. Once its recipe gives exactly its numbers, a template is one.
+_Avoid_: template, preset, example (and not Get to know, or a workspace's first files)
+
+**Load class**:
+How much a Build carries, as code works it out from the load said in plain words (#771), such as "paint tins" or "a 3D
+printer", set conservatively from a sourced table. Its checks for sag and tipping use it.
+_Avoid_: weight rating, capacity (that's a saw's), load (that's the owner's words)
 
 **Part recipe**:
 A printed part as data (#702): a base (box, plate, cylinder or L-bracket) and the features cut into it or raised on it
 (holes, slots, pockets sized from an object, fillets, chamfers, lettering). A model fills one; code checks it and makes
-the solid. A new shape is a new recipe, never new code.
+the solid. A new shape is a new recipe, never new code. In a Build's recipe, it's a printed part's piece.
 _Avoid_: model (that's who fills it in, or the 3D file), script, CAD
 
 **Cut plan**:
@@ -314,7 +344,8 @@ _Avoid_: step mode, workshop mode, focus mode
 
 **Hold to ask**:
 The chat behind one button, at the bench (#753): held, it listens, and let go, what was said is asked in the Build's
-chat about the step, its answer showing over the picture until it gets out of the way. A tap opens the chat.
+chat about the step, its answer showing over the picture until it gets out of the way. A pause doesn't end it; let
+go on a few words, it waits a moment for more (#787). A tap opens the chat.
 _Avoid_: push to talk (that's the Talk key's), voice chat
 
 **Carry on (a project)**:

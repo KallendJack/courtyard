@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Build, BuildSetting, Step } from "../build.ts";
 import { capacitiesFrom } from "../capacity.ts";
+import { deriveBench } from "../recipe/starters.ts";
 import { goldenBench } from "./fixtures/golden.ts";
-import { deriveBench } from "./index.ts";
 
 // A saw cuts only what fits it (#780): a 210 mm mitre saw cuts about 120 mm wide, so the golden
 // bench's 95 mm rails go on it and its 145 mm castor bases and top support go back to the hand

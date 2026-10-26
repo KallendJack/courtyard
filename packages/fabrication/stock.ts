@@ -1,10 +1,18 @@
-import { SourcedSize } from "@courtyard/contract";
+import {
+  BuildFixing,
+  BuildOptionPrice,
+  BuildOptionPrices,
+  BuildPrice,
+  BuildSheet,
+  BuildStockOptionId,
+  BuildTimber,
+} from "@courtyard/contract";
 import { z } from "zod";
 
-// What parts are cut from and fixed with, for any template. A template takes each of its slots'
-// stock as a parameter (the frame's timber, the top's sheet), never a stock of its own, so a slot
-// can be offered sawn C16, CLS or treated timber, or plywood, OSB or MDF, and the Build derived
-// again (#704).
+// What parts are cut from and fixed with, for any template or recipe, as the contract defines them
+// (#769). A template takes each of its slots' stock as a parameter (the frame's timber, the top's
+// sheet), never a stock of its own, so a slot can be offered sawn C16, CLS or treated timber, or
+// plywood, OSB or MDF, and the Build derived again (#704).
 
 export const Words = z.string().trim().min(1).max(80);
 
@@ -18,68 +26,29 @@ export type Held = { readonly name: string; readonly count: number; readonly whe
 export type StepFixing = { readonly name: string; readonly count: number; readonly from?: string };
 
 /** A pack's price, in pence, and where it's from. */
-export const Price = z.object({
-  pence: z.number().int().nonnegative(),
-  /** How many come in one pack: a set of 4 castors, a box of 100 screws. */
-  packOf: z.number().int().positive().default(1),
-  shop: Words.optional(),
-  link: z.url().max(2000).optional(),
-});
-export type Price = z.infer<typeof Price>;
+export const Price = BuildPrice;
+export type Price = BuildPrice;
 
 /** The stock options a slot can be offered (`options.ts`), by name. */
-export const StockOptionId = z.enum([
-  "c16-45x95",
-  "cls-38x89",
-  "treated-47x100",
-  "c16-45x145",
-  "plywood-18",
-  "osb-18",
-  "mdf-18",
-]);
-export type StockOptionId = z.infer<typeof StockOptionId>;
+export const StockOptionId = BuildStockOptionId;
+export type StockOptionId = BuildStockOptionId;
 
-/**
- * An option's price from its shop's page, and the size it's sold in at that price where that isn't
- * the option's own (a 3 m length, a half sheet). A stock swapped out keeps its price and size here,
- * so picking it again puts it back as it was.
- */
-export const OptionPrice = Price.extend({
-  /** A timber's length, or a sheet's. */
-  length: SourcedSize.optional(),
-  /** A sheet's width; a timber's section is its option's. */
-  width: SourcedSize.optional(),
-});
-export type OptionPrice = z.infer<typeof OptionPrice>;
+/** An option's price from its shop's page, and the size it's sold in at that price. */
+export const OptionPrice = BuildOptionPrice;
+export type OptionPrice = BuildOptionPrice;
 
 /** The options' prices, each from its shop's page, so each option's cost can be shown. */
-export const OptionPrices = z.partialRecord(StockOptionId, OptionPrice);
-export type OptionPrices = z.infer<typeof OptionPrices>;
+export const OptionPrices = BuildOptionPrices;
+export type OptionPrices = BuildOptionPrices;
 
 /** A timber sold in lengths: its section and its length. */
-export const Timber = z.object({
-  name: Words,
-  /** The stock option it is, when it's one; else it's matched by its section and name. */
-  option: StockOptionId.optional(),
-  thickness: SourcedSize,
-  width: SourcedSize,
-  length: SourcedSize,
-  price: Price.optional(),
-});
-export type Timber = z.infer<typeof Timber>;
+export const Timber = BuildTimber;
+export type Timber = BuildTimber;
 
 /** A sheet material: its thickness and the sheet's size. */
-export const Sheet = z.object({
-  name: Words,
-  /** The stock option it is, when it's one; else it's matched by its thickness and name. */
-  option: StockOptionId.optional(),
-  thickness: SourcedSize,
-  width: SourcedSize,
-  length: SourcedSize,
-  price: Price.optional(),
-});
-export type Sheet = z.infer<typeof Sheet>;
+export const Sheet = BuildSheet;
+export type Sheet = BuildSheet;
 
 /** Screws or brackets, bought by the pack. */
-export const Fixing = z.object({ name: Words, price: Price.optional() });
-export type Fixing = z.infer<typeof Fixing>;
+export const Fixing = BuildFixing;
+export type Fixing = BuildFixing;

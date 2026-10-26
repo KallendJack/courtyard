@@ -13,7 +13,7 @@ import { AtTheBench, PANEL, Plan } from "./at-the-bench.tsx";
 import { BenchPanel } from "./bench-panel.tsx";
 import { BuyList } from "./buy-list.tsx";
 import { BuildChat, useBuildChat } from "./chat/build-chat.tsx";
-import { type Asked, BenchAnswer, HoldToAsk } from "./chat/hold-to-ask.tsx";
+import { type Asked, BenchAnswer, benchPhrases, HoldToAsk } from "./chat/hold-to-ask.tsx";
 import { CutPlan } from "./cut-plan.tsx";
 import { FINDINGS_ID, Findings } from "./findings.tsx";
 import { PrintPanel, PrintTab, useMaking } from "./print/print-panel.tsx";
@@ -223,6 +223,7 @@ export function BuildPage(props: { build: BuildOpened }) {
     <HoldToAsk
       talk={talk}
       about={atBench && step !== undefined ? `Step ${step.number}, ${step.title}` : undefined}
+      phrases={benchPhrases(derived, step)}
       openChat={openChat}
       asked={setAsked}
       withChat={withChat}

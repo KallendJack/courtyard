@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Build, BuildSetting, Step } from "../build.ts";
+import { deriveBench } from "../recipe/starters.ts";
 import { toolsFrom } from "../tools.ts";
 import { goldenBench } from "./fixtures/golden.ts";
-import { deriveBench } from "./index.ts";
 
 // The steps follow Your tools (#707, #777), never fixed at the Build's start: a new saw changes
 // the steps it does better and their pictures, and a step already done stays as it was done.
