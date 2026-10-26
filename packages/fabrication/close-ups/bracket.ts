@@ -35,10 +35,10 @@ export const bracketModel = (corner: Corner) => {
   const width = widthOn(arm, up.across);
   // Only as much of each piece round the corner as the bracket needs, so it reads at its size:
   // the face it's on and each piece's thickness are their own.
-  const height = 2 * arm;
+  const height = 1.5 * arm;
   const deep = Math.min(up.deep, 2 * arm);
   const across = Math.min(under.across, up.across + 1.5 * arm);
-  const flat = box(-arm / 2, (up.across - across) / 2, 0, deep + 2.5 * arm, across, under.thick);
+  const flat = box(-arm / 2, (up.across - across) / 2, 0, deep + 2 * arm, across, under.thick);
   const upright = box(0, 0, under.thick, deep, up.across, height);
   const face = deep;
   const floor = under.thick;
@@ -126,7 +126,7 @@ const crossAt = (at: At3, onFace: boolean, size: number): Stroke3[] =>
 export const bracketCloseUp = (corner: Corner): CloseUp => {
   const model = bracketModel(corner);
   const apart = corner.arm;
-  const reach = corner.arm;
+  const reach = 0.6 * corner.arm;
   const size = corner.arm * 0.12;
   const face = model.upright.x + model.upright.w;
   const heads = model.holes.map((hole) =>
@@ -161,12 +161,22 @@ export const bracketCloseUp = (corner: Corner): CloseUp => {
       },
       { says: "Mark the holes", to: model.holes[2] as At3, badge: 2 },
       { says: "2 screws each", to: heads[1] as At3, badge: 3 },
-    ],
-    labels: [
-      { at: { x: 0, y: 0, z: model.upright.z + model.upright.h }, says: corner.upright.name },
+      // Each piece named off the wood: the upright on its top, the flat piece on its near side.
       {
-        at: { x: model.flat.x + model.flat.w, y: model.flat.y + model.flat.d, z: 0 },
+        says: corner.upright.name,
+        to: {
+          x: model.upright.w / 2,
+          y: model.upright.y + model.upright.d / 2,
+          z: model.upright.z + model.upright.h,
+        },
+      },
+      {
         says: corner.flat.name,
+        to: {
+          x: model.flat.x + 0.8 * model.flat.w,
+          y: model.flat.y + model.flat.d,
+          z: model.flat.h / 2,
+        },
       },
     ],
     notes: [

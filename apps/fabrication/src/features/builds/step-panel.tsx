@@ -2,8 +2,9 @@ import { type BuildStep, type DerivedBuild, tickedIn } from "@courtyard/contract
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
-import { Camera, Check, ChevronDown, Lightbulb, X } from "lucide-react";
+import { Camera, Check, Lightbulb, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
+import { Disclosure } from "@/components/disclosure";
 import { CloseUp, Techniques } from "./close-up.tsx";
 import { LengthBar } from "./cut-plan.tsx";
 import { Findings } from "./findings.tsx";
@@ -212,23 +213,18 @@ function Checklist(props: {
 function Tips(props: { tips: readonly string[]; big: boolean }) {
   if (props.tips.length === 0) return null;
   return (
-    <details
-      className={classes(
-        "group rounded-row bg-muted text-foreground",
-        props.big ? "text-answer" : "text-interface",
-      )}
+    <Disclosure
+      look="row"
+      big={props.big}
+      icon={<Lightbulb aria-hidden className="size-4 text-primary-text" />}
+      label="Tips"
     >
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3.5 font-semibold">
-        <Lightbulb aria-hidden className="size-4 text-primary-text" />
-        Tips
-        <ChevronDown aria-hidden className="ml-auto size-4 group-open:rotate-180" />
-      </summary>
       <ul className="flex flex-col gap-2 px-3.5 pb-3.5">
         {props.tips.map((tip) => (
           <li key={tip}>{tip}</li>
         ))}
       </ul>
-    </details>
+    </Disclosure>
   );
 }
 
