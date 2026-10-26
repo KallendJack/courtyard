@@ -12,6 +12,10 @@ let drawn: string | undefined;
 const router = createRouter({
   routeTree,
   defaultErrorComponent: AppError,
+  // A page opened before shows its last data at once, and its loader asks again behind it (#808),
+  // for as long as the tab is open, as every block's kept answers are (#269).
+  defaultGcTime: Number.POSITIVE_INFINITY,
+  defaultPreloadGcTime: Number.POSITIVE_INFINITY,
   // The router scrolls to the top each time it draws, a page reloading its data included (a
   // session's new title, the worker coming back): only a move to another page should, or back to
   // where that page was (#168).
