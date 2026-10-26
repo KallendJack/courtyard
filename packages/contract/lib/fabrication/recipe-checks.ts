@@ -166,6 +166,19 @@ export const referencesHold = (recipe: RecipeFields, context: z.RefinementCtx) =
     }
     if (piece.kind === "printed") {
       refer(piece.on, at("on"), anyPiece, "a printed part goes on a piece or group");
+      if (piece.part === "holder") {
+        refer(piece.fits, at("fits"), timber, "a holder takes a timber's end");
+      } else {
+        refer(
+          piece.fits,
+          at("fits"),
+          { stock: ["timber", "sheet"] },
+          "a bracket fits a timber or sheet",
+        );
+      }
+      if (piece.screws !== undefined) {
+        refer(piece.screws, at("screws"), fixing, "a printed part's screws are a fixing");
+      }
     }
   });
   recipe.groups.forEach((group, index) => {

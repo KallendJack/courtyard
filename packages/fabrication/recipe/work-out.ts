@@ -12,11 +12,13 @@ import { buyLine, buyListOf, stockLines } from "../buy-list.ts";
 import type { Role } from "../catalog.ts";
 import { cutPlanOf, type Spares } from "../cut-plan.ts";
 import { assumedSizes } from "../findings.ts";
+import { glossaryOf } from "../glossary.ts";
 import { pickStock, type Slot, standsInFor, stockOptions, wrongStock } from "../options.ts";
 import type { Sheet, StockOptionId, Timber } from "../stock.ts";
 import { checksOf } from "./checks.ts";
 import { fixingsOf } from "./fixings.ts";
 import { layoutOf, type Placed, said, stockIn, words } from "./layout.ts";
+import { printedBuys, printedParts, printedSteps } from "./printed.ts";
 
 // Any recipe worked out (#770): its pieces placed, so its parts, each lettered with its cut size;
 // its cut plan, on the stock the owner has first; its buy list, less what they have; the stock
@@ -132,7 +134,10 @@ const recipeBuild = (
   const layout = layoutOf(recipe);
   if (!layout.ok) return layout;
   const labelled = lettered(recipe, layout.value.placed);
-  const parts = labelled.map(({ part }) => part);
+  const cutParts = labelled.map(({ part }) => part);
+  const printed = printedParts(recipe, layout.value.placed, (at) => letter(cutParts.length + at));
+  if (!printed.ok) return printed;
+  const parts = [...cutParts, ...printed.value.map(({ part }) => part)];
   const slots = slotsOf(recipe, labelled);
   const partOf = (from: string) => labelled.find(({ piece }) => piece.from === from)?.part;
   const of = stockIn(recipe);
@@ -208,7 +213,12 @@ const recipeBuild = (
       });
       return each.length ? { ...line, length: each.length } : line;
     }),
+    ...printedBuys(printed.value, recipe),
   ]);
+  const steps = printedSteps(printed.value, recipe).map((step, index) => ({
+    ...step,
+    number: index + 1,
+  }));
 
   const assumed = assumedIn(recipe);
   const boxes = [...parts, ...fitted].flatMap((each) => each.boxes);
@@ -228,13 +238,14 @@ const recipeBuild = (
       fitted,
       cutPlan: planned.cutPlan,
       buyList,
-      steps: [],
-      glossary: [],
+      steps,
+      glossary: glossaryOf(steps.flatMap((step) => step.words)),
       findings: [
         ...planned.findings,
-        ...wrongStock({ parameters: recipe, slots, damp: recipe.damp, build: { parts } }),
+        ...wrongStock({ parameters: recipe, slots, damp: recipe.damp, build: { parts: cutParts } }),
         ...(assumed ? [assumed] : []),
-        ...checksOf({ recipe, layout: layout.value, parts, height }),
+        ...checksOf({ recipe, layout: layout.value, parts: cutParts, height }),
+        ...printed.value.flatMap((each) => each.findings),
       ],
       print: null,
     },

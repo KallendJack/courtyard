@@ -118,22 +118,14 @@ export const layoutOf = (recipe: BuildRecipe): Result<Layout, string[]> => {
       ? `pieces.${recipe.pieces.indexOf(item)}`
       : `groups.${recipe.groups.indexOf(item)}`;
 
-  const printed = [
-    ...recipe.pieces.flatMap((piece) =>
-      piece.kind === "printed"
-        ? [
-            `${at(piece)}: A printed part isn't worked out in a recipe yet: make it a Build of its own.`,
-          ]
-        : [],
-    ),
-    ...recipe.joints.flatMap((joint, index) =>
-      joint.kind === "printed"
-        ? [
-            `joints.${index}: A printed joint isn't worked out in a recipe yet: screw or bracket it.`,
-          ]
-        : [],
-    ),
-  ];
+  // A printed holder or bracket is a piece with its own screws (#773), placed with the parts.
+  const printed = recipe.joints.flatMap((joint, index) =>
+    joint.kind === "printed"
+      ? [
+          `joints.${index}: A printed joint isn't worked out in a recipe: make the holder or bracket a printed piece, with its screws.`,
+        ]
+      : [],
+  );
   if (printed.length > 0) return err(printed);
 
   const stands = recipe.groups.filter((group) => group.kind === "legs" || group.kind === "box");
