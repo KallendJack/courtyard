@@ -85,14 +85,14 @@ const CALLOUT_REACH = { first: 14, step: 10, most: 360 } as const;
  * there's no room off it.
  */
 export const offModel = (
-  wanted: readonly Placing[],
+  wanted: readonly (Placing & { optional?: boolean })[],
   options: {
     outlines: readonly (readonly Point[])[];
     placed: readonly Placing[];
     /** The room it may use, in px: from `top` down to `height`, and across to `width`. */
     bounds: { width: number; height: number; top: number };
   },
-): Point[] => {
+): (Point | undefined)[] => {
   const placed = [...options.placed];
   const all = options.outlines.flat();
   const middle = {
@@ -137,8 +137,10 @@ export const offModel = (
       }
       return undefined;
     };
-    // With no room off the model (a small picture), over it beats over other words.
-    const chosen = nearest(true) ?? nearest(false) ?? want;
+    // With no room off the model (a small picture), over it beats over other words. With no room
+    // at all, one that may step aside (a part's pill) does; the rest go where they point.
+    const chosen = nearest(true) ?? nearest(false) ?? (want.optional ? undefined : want);
+    if (chosen === undefined) return undefined;
     placed.push(chosen);
     return { x: chosen.x, y: chosen.y };
   });
@@ -167,7 +169,8 @@ type Shown = Placing & { label: HTMLElement };
 export const placeWords = (options: {
   pinned: readonly Shown[];
   shown: readonly Shown[];
-  callouts: readonly (Shown & { leader: SVGLineElement | undefined })[];
+  /** Each callout's words and leader; an `optional` one steps aside when nothing fits. */
+  callouts: readonly (Shown & { leader: SVGLineElement | undefined; optional?: boolean })[];
   outlines: readonly (readonly Point[])[];
   bounds: { width: number; height: number };
   /** Room over the picture the callouts keep clear of: Where this goes, at the bench (#826). */
@@ -186,7 +189,12 @@ export const placeWords = (options: {
     placed: [...placed, ...(options.keepClear ?? [])],
   });
   options.callouts.forEach((each, at) => {
-    const spot = { ...each, ...off[at] };
+    const room = off[at];
+    // Hidden by visibility, so it keeps its size for the next frame's placing.
+    each.label.style.visibility = room === undefined ? "hidden" : "";
+    each.leader?.setAttribute("visibility", room === undefined ? "hidden" : "visible");
+    if (room === undefined) return;
+    const spot = { ...each, ...room };
     const end = leaderEnd(each, spot);
     each.leader?.setAttribute("x1", String(each.x));
     each.leader?.setAttribute("y1", String(each.y));

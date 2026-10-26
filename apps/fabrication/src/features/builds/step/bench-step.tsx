@@ -42,8 +42,8 @@ function BenchChips(props: { step: BuildStep }) {
  * frames in 3D, your kit · Fold (#785, #788)" and "· Asking at the bench: step buttons + answer
  * card · Fold (#793)"), and nothing else: which step and how long, its title, its numbered lines
  * with their boxes, its tools as chips, then pinned at the foot its four buttons, and Back and
- * Done. What a button opens shows over the step, never down it, so on the unfolded Fold the step
- * never scrolls.
+ * Done. What a button opens shows over the step's lines, never down them, with the buttons, Back
+ * and Done still in reach, so on the unfolded Fold the step never scrolls.
  */
 export function BenchStep(props: {
   derived: DerivedBuild;
@@ -64,32 +64,43 @@ export function BenchStep(props: {
   }
   const meaning = derived.glossary.find((each) => each.word === word);
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col gap-3.5">
-      <Scroller data-step-panel className="flex min-h-0 flex-1 flex-col">
-        <section aria-label="Steps" className="flex min-w-0 flex-col gap-3.5">
-          <div className="flex flex-col gap-1.5">
-            <CapsLabel tone="primary">
-              Step {step.number} of {derived.steps.length} · about {step.minutes} min
-              {step.helper ? " · needs a helper" : ""}
-            </CapsLabel>
-            <h2 className="display-title text-step text-foreground">{step.title}</h2>
+    <section aria-label="Steps" className="flex min-h-0 flex-1 flex-col gap-3.5">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <Scroller data-step-panel className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-col gap-3.5">
+            <div className="flex flex-col gap-1.5">
+              <CapsLabel tone="primary">
+                Step {step.number} of {derived.steps.length} · about {step.minutes} min
+                {step.helper ? " · needs a helper" : ""}
+              </CapsLabel>
+              <h2 className="display-title text-step text-foreground">{step.title}</h2>
+            </div>
+            <div className="flex flex-col gap-2.5">
+              <Checklist
+                step={step}
+                detail="how"
+                ticked={tickedIn(progress.progress, step.id)}
+                tick={progress.tick}
+                openWord={setWord}
+                bench
+              />
+              {meaning !== undefined && (
+                <Meaning meaning={meaning} close={() => setWord(undefined)} />
+              )}
+              <BenchChips step={step} />
+            </div>
           </div>
-          <div className="flex flex-col gap-2.5">
-            <Checklist
-              step={step}
-              detail="how"
-              ticked={tickedIn(progress.progress, step.id)}
-              tick={progress.tick}
-              openWord={setWord}
-              bench
-            />
-            {meaning !== undefined && (
-              <Meaning meaning={meaning} close={() => setWord(undefined)} />
-            )}
-            <BenchChips step={step} />
-          </div>
-        </section>
-      </Scroller>
+        </Scroller>
+        {open !== undefined && (
+          <StepOpened
+            open={open}
+            setOpen={setOpen}
+            derived={derived}
+            step={step}
+            progress={progress}
+          />
+        )}
+      </div>
       <div className="flex shrink-0 flex-col gap-2.5">
         <StepButtons
           step={step}
@@ -100,15 +111,6 @@ export function BenchStep(props: {
         />
         <StepFoot derived={derived} step={step} progress={progress} bench />
       </div>
-      {open !== undefined && (
-        <StepOpened
-          open={open}
-          setOpen={setOpen}
-          derived={derived}
-          step={step}
-          progress={progress}
-        />
-      )}
-    </div>
+    </section>
   );
 }

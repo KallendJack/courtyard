@@ -123,6 +123,7 @@ export function BenchPanel(props: {
         pick={pick}
         reset={reset}
         bench={bench}
+        pills={cards}
       />
     </Suspense>
   );

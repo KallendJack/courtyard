@@ -41,7 +41,7 @@ const endFrameScene = (setting: SceneSetting, first: boolean): Scene => {
   return {
     title: "On the floor, on offcuts",
     // From the floor end, as the board looks: the legs run away to the right, the clamps far off.
-    view: { turn: 215, tilt: 35 },
+    view: { turn: -145, tilt: 35 },
     pieces: [
       {
         kind: "support",

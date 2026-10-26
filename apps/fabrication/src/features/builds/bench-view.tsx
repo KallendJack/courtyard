@@ -68,8 +68,14 @@ export default function BenchView(props: {
    * title left to the panel above it.
    */
   bench: boolean;
+  /**
+   * With the Fold open at the bench, the parts in pills off the wood and Where this goes in its
+   * corner; folded, the picture has room for the parts' letters only.
+   */
+  pills: boolean;
 }) {
   const { derived, lit, reset, bench } = props;
+  const pills = bench && props.pills;
   const host = useRef<HTMLElement>(null);
   const labels = useRef(new Map<string, HTMLElement>());
   const leaders = useRef(new Map<string, SVGLineElement>());
@@ -178,7 +184,7 @@ export default function BenchView(props: {
     const marks = anchored.filter((mark) => mark.kind !== "callout" && mark.kind !== "spot");
     const callouts = [
       ...anchored.filter((mark) => mark.kind === "callout"),
-      ...(bench ? letters : []),
+      ...(pills ? letters : []),
     ];
     const draw = () => {
       renderer.render(world, camera);
@@ -199,9 +205,12 @@ export default function BenchView(props: {
       };
       placeWords({
         pinned: spots.flatMap(({ key, at }) => measured(key, at)),
-        shown: [...marks, ...(bench ? [] : letters)].flatMap(({ key, at }) => measured(key, at)),
-        callouts: callouts.flatMap(({ key, at }) => measured(key, at)),
-        keepClear: bench ? [{ ...WHERE_THIS_GOES, x: width - WHERE_THIS_GOES.w / 2 }] : [],
+        shown: [...marks, ...(pills ? [] : letters)].flatMap(({ key, at }) => measured(key, at)),
+        // A part's pill steps aside when there's no room for it; a mark never does.
+        callouts: callouts.flatMap(({ key, at }) =>
+          measured(key, at).map((each) => ({ ...each, optional: key.startsWith("part ") })),
+        ),
+        keepClear: pills ? [{ ...WHERE_THIS_GOES, x: width - WHERE_THIS_GOES.w / 2 }] : [],
         outlines: meshes.map(({ mesh }) => outlineOf(mesh, onScreen)),
         bounds: { width, height },
       });
@@ -212,7 +221,7 @@ export default function BenchView(props: {
      */
     const fit = (from?: THREE.Vector3) => {
       // At the bench the parts' pills sit on and beside the wood, as the boards have them (#826).
-      const fill = bench
+      const fill = pills
         ? BENCH_FILL
         : built.marks.some((mark) => mark.kind === "callout")
           ? CALLOUT_FILL
@@ -333,7 +342,7 @@ export default function BenchView(props: {
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [built, builtId, bench]);
+  }, [built, builtId, pills]);
 
   useEffect(() => scene.current?.light(lit), [lit]);
   useEffect(() => {
@@ -371,7 +380,7 @@ export default function BenchView(props: {
         scene={built}
         lit={lit}
         pick={props.pick}
-        bench={bench}
+        pills={pills}
         place={place}
         lead={lead}
       />

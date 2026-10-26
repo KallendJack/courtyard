@@ -106,9 +106,9 @@ const boxOf = async (locator: Locator) => {
   return box;
 };
 
-/** The letters on the parts, over the 3D view. */
+/** The letters on the parts, over the 3D view: those shown (a pill with no room steps aside). */
 const lettersOn = (page: Page) =>
-  page.getByRole("region", { name: "In 3D" }).locator("canvas ~ button");
+  page.getByRole("region", { name: "In 3D" }).locator("canvas ~ button:visible");
 
 /** Each pair of the 3D view's letters that overlap, by their names. */
 const overlappingLetters = async (page: Page) => {
@@ -198,16 +198,13 @@ test.describe("on the unfolded Fold", () => {
     const steps = page.getByRole("region", { name: "Steps" });
     await expect(steps).toContainText("Step 1 of 12 · about 10 min");
     await expect(steps.getByRole("heading", { name: "Check what's arrived" })).toBeVisible();
-    await expect(
-      page.getByText("Swipe for the next step · Tools, cut plan and buy list in Plan"),
-    ).toBeVisible();
     await expect(page.getByRole("button", { name: "Back" })).toBeDisabled();
-    for (const each of ["Done, next step", "Hold to ask", "Reset view"]) {
+    for (const each of ["Done, next step", "Hold to ask"]) {
       await expect(page.getByRole("button", { name: each })).toBeInViewport();
     }
-    // The step's lines are read at arm's length: bigger than an answer's.
+    // The step's lines at the board's size (#826).
     const line = steps.getByRole("list", { name: "Checklist" }).locator("p").first();
-    expect(Number.parseFloat(await line.evaluate((p) => getComputedStyle(p).fontSize))).toBe(20);
+    expect(Number.parseFloat(await line.evaluate((p) => getComputedStyle(p).fontSize))).toBe(18);
     // Nothing's put on yet: the whole bench shows, fitted to the view, its letters apart.
     await expect(letter(page, "G, Top")).toBeVisible();
     expect(await overlappingLetters(page)).toEqual([]);
@@ -228,7 +225,9 @@ test.describe("on the unfolded Fold", () => {
     await expect(steps.getByRole("list", { name: "Tools for this step" })).toContainText(
       "Support for the long end?",
     );
-    const ways = steps.getByRole("region", { name: "How you'll do it" });
+    // Which saw it'll be is behind Show me how, off the step (#826).
+    await page.getByRole("button", { name: "Show me how" }).click();
+    const ways = page.getByRole("region", { name: "How you'll do it" });
     await expect(ways.getByRole("listitem")).toHaveText([
       "Hand saw",
       "Circular saw · not yet",
@@ -459,38 +458,37 @@ test.describe("on the unfolded Fold", () => {
     const done = page.getByRole("button", { name: "Done, next step" });
     for (let step = 1; step < 4; step += 1) await done.click();
 
-    // The end frames: one laid flat on the floor, lit; a checklist with words to tap.
+    // The end frames: one on the floor on offcuts, lit; a checklist with words to tap.
     await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
-    await expect(page.getByRole("region", { name: "In 3D" })).toContainText(
-      "Step 4 · Make the two end frames",
-    );
     await expect(
-      page.getByRole("figure", { name: "One end frame, flat on the floor, in 3D" }),
+      page.getByRole("figure", { name: "On the floor, on offcuts, in 3D" }),
     ).toBeVisible();
     await expect(letter(page, "A, Legs")).toHaveAttribute("aria-current", "step");
     await expect(letter(page, "C, End rails")).toHaveAttribute("aria-current", "step");
     await expect(letter(page, "E, Castor bases")).toHaveCount(0);
     await expect(letter(page, "B, Long rails")).toHaveCount(0);
     expect(await overlappingLetters(page)).toEqual([]);
-    // How to batch it, then the screw spots marked by eye in the green, the first step that
-    // screws a rail to a leg (#789, #813); the end frame's own close-up follows, then driving a
-    // screw, in full the first time, all behind Show me how (#793).
-    await expect(steps).toContainText("One joint at a time");
-    await steps.getByRole("button", { name: "Show me how" }).click();
-    const closeUps = page.getByRole("region", { name: "Close-up" });
+    // The screw spots marked by eye in the green, the first step that screws a rail to a leg
+    // (#789, #813); the end frame's own close-up follows, then driving a screw, in full the first
+    // time, all behind Show me how (#793).
+    const showMe = steps.getByRole("button", { name: "Show me how" });
+    await showMe.click();
+    const closeUps = steps.getByRole("region", { name: "Close-up" });
     await expect(closeUps.first()).toContainText("Close-up · Mark your screw spots");
-    await expect(closeUps.nth(1)).toContainText("Close-up · One end frame");
+    await expect(closeUps.nth(1)).toContainText("Close-up · Leg end on");
     await expect(closeUps.last()).toContainText("Close-up · Driving a screw");
     await expect(steps).toContainText("Fixings: 5 × 80 screws (16)");
+    await expect(steps.getByRole("region", { name: "Before you move on" })).toContainText(
+      "Measure corner to corner both ways.",
+    );
+    const opened = steps.getByRole("region", { name: "How it's done, close up" });
+    await opened.getByRole("button", { name: "Close" }).click();
     const checklist = steps.getByRole("list", { name: "Checklist" });
     await checklist.getByRole("checkbox", { name: "Line 1 done" }).click();
     await expect(checklist.getByRole("checkbox", { name: "Line 1 done" })).toBeChecked();
     await checklist.getByRole("button", { name: "flush" }).click();
     await expect(steps.getByRole("status")).toContainText(
       "flush: Level with the next piece's face or edge",
-    );
-    await expect(steps.getByRole("region", { name: "Before you move on" })).toContainText(
-      "Measure corner to corner both ways.",
     );
 
     // Kept on the Build: opened again, it's where the owner left off.
@@ -521,14 +519,15 @@ test.describe("on the unfolded Fold", () => {
     await expect(picture).toContainText("1 bolt in");
     await expect(checklist.getByRole("checkbox")).toHaveCount(4);
     await expect(steps.getByRole("region", { name: "How it's done" })).toHaveCount(0);
+    // The drill and its bit one chip, gold while the bit's to check; the fixings behind Show me how.
+    const tools = steps.getByRole("list", { name: "Tools for this step" });
+    await expect(tools).toContainText("7 mm bit: check your set");
+    await expect(tools).toContainText("10 mm spanner × 2?");
+    await steps.getByRole("button", { name: "Show me how" }).click();
     await expect(steps).toContainText(
       "Fixings: M6 × 60 bolts (16), M6 washers (16) and M6 lock nuts (16)",
     );
     await expect(steps).not.toContainText("M6 × 50");
-    const tools = steps.getByRole("list", { name: "Tools for this step" });
-    await expect(tools).toContainText("a 7 mm bit: check your set");
-    await expect(tools).toContainText("10 mm spanner × 2?");
-    await steps.getByRole("button", { name: "Show me how" }).click();
     await expect(closeUps.nth(-2)).toContainText("Close-up · Tighten");
     await expect(closeUps.last()).toContainText("Close-up · One bolt, apart");
     await expect(closeUps.last()).toContainText("Washer only under the nut, against the wood.");
@@ -664,7 +663,7 @@ test.describe("on the unfolded Fold", () => {
     const showMe = steps.getByRole("button", { name: "Show me how" });
     await showMe.click();
     await expect(showMe).toHaveAttribute("aria-expanded", "true");
-    await expect(closeUps.filter({ hasText: "Close-up · One end frame" })).toBeVisible();
+    await expect(closeUps.filter({ hasText: "Close-up · Leg end on" })).toBeVisible();
     await expect(closeUps.last()).toContainText("Close-up · Driving a screw");
     await expect(steps.getByRole("region", { name: "Before you move on" })).toContainText(
       "Measure corner to corner both ways.",
@@ -685,7 +684,9 @@ test.describe("on the unfolded Fold", () => {
       "You said: Step 4, Make the two end frames: Both end frames, flat, from above.",
       { timeout: 60_000 },
     );
-    await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
+    await expect(
+      steps.getByRole("heading", { name: "Make the two end frames", level: 2 }),
+    ).toBeVisible();
   });
 
   test("at the bench: I don't have… lists only the step's tools and parts, and Can't do this now parks the step until Do it now", async ({
@@ -701,7 +702,9 @@ test.describe("on the unfolded Fold", () => {
     ).toBeVisible();
     await steps.getByRole("button", { name: "I don't have…" }).click();
     const missing = steps.getByRole("region", { name: "What you don't have" });
-    await expect(missing.getByRole("button")).toHaveText([
+    // Over the step, with its Close first (#826).
+    await expect(missing.getByRole("button", { name: "Close" })).toBeVisible();
+    await expect(missing.getByRole("button").filter({ hasText: /\S/ })).toHaveText([
       "Drill, 7 mm bit",
       "10 mm spanner × 2",
       "Safety glasses",
@@ -909,7 +912,9 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await toStep(page, 3);
 
     const picture = page.getByRole("figure", { name: "In the Workmate, in 3D" });
-    await expect(picture).toContainText("In the Workmate");
+    await expect(
+      page.getByRole("region", { name: "In 3D" }).getByRole("heading", { name: "In the Workmate" }),
+    ).toBeVisible();
     // The 1450 to cut, its line, where the saw runs, the waste side and the long end's support.
     await expect(picture.getByText("1450", { exact: true })).toBeVisible();
     await expect(picture).toContainText("cut at 1450");
@@ -917,9 +922,6 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await expect(picture).toContainText("offcut · waste side");
     await expect(picture).toContainText("support the long end here");
     await expect(picture).toContainText("clamped in the jaws");
-    await expect(
-      page.getByRole("region", { name: "In 3D" }).getByRole("button", { name: "Reset view" }),
-    ).toBeVisible();
     await expect(letter(page, "B, Long rails")).toHaveAttribute("aria-current", "step");
 
     // The part's card covers the picture, so the next step closes it.
@@ -928,7 +930,7 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await expect(card).toContainText("Long rails × 4");
     await page.getByRole("button", { name: "Done, next step" }).click();
     await expect(
-      page.getByRole("figure", { name: "One end frame, flat on the floor, in 3D" }),
+      page.getByRole("figure", { name: "On the floor, on offcuts, in 3D" }),
     ).toBeVisible();
     await expect(card).toBeHidden();
   });
@@ -940,23 +942,18 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await openInFabrication(page);
     await toStep(page, 2);
 
-    // One piece at a time: A is measured from the fresh end B's cut leaves (#789).
-    await expect(page.getByRole("region", { name: "Steps" })).toContainText("One piece at a time");
+    // A is measured from the fresh end B's cut leaves (#789).
     const picture = page.getByRole("figure", { name: "On the Workmate, in 3D" });
     await expect(picture).toContainText("B 1450");
     await expect(picture).not.toContainText("A 750");
     await expect(picture).toContainText("check this end is square");
 
-    // First the end checked square, then a line per length, each with its bar.
-    const checklist = page.getByRole("region", { name: "Steps" }).getByRole("list", {
-      name: "Checklist",
-    });
-    await expect(checklist.getByRole("listitem").first()).toContainText(
-      "First check the end is square",
-    );
-    const bars = checklist.getByRole("img");
-    await expect(bars).toHaveCount(3);
-    await expect(bars.first()).toHaveAccessibleName("B 1450 · 3 mm saw cut · A 750 · offcut 197");
+    // First the end checked square, then a line per length.
+    const checklist = page.getByRole("list", { name: "Checklist" });
+    await expect(checklist.getByRole("listitem").first()).toContainText("Check the end is square");
+    await expect(checklist.getByRole("listitem").nth(1)).toContainText("each from the fresh end");
+    // The bench keeps to its board's lines (#826); the computer's Steps tab draws each length's bar.
+    await expect(checklist.getByRole("img")).toHaveCount(0);
   });
 
   test("a step's extras wait behind Tips, never in its checklist (#789)", async ({ page }) => {
@@ -968,6 +965,8 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await expect(steps.getByRole("heading", { name: "Fit the shelf" })).toBeVisible();
     const tip = steps.getByText("Want it neater? Countersink the shelf's screws too");
     await expect(tip).toBeHidden();
+    // At the bench, the tips are behind Show me how (#826).
+    await steps.getByRole("button", { name: "Show me how" }).click();
     await steps.getByText("Tips", { exact: true }).click();
     await expect(tip).toBeVisible();
     await expect(steps.getByRole("list", { name: "Checklist" })).not.toContainText("Countersink");
@@ -981,7 +980,7 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await toStep(page, 2);
 
     const steps = page.getByRole("region", { name: "Steps" });
-    const walk = steps.getByRole("region", { name: "How it's done" });
+    const walk = steps.getByRole("region", { name: "How it's done", exact: true });
     await expect(walk).toBeHidden();
     const showMe = steps.getByRole("button", { name: "Show me how" });
     await showMe.click();
@@ -995,15 +994,9 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     // The moves are drawn once, by the step's measure and mark close-up (#813), not in the walk.
     await expect(walk.getByRole("region", { name: "Close-up" })).toHaveCount(0);
 
-    // Tapped again, it closes; Just the numbers shortens the lines.
+    // Tapped again, it closes.
     await showMe.click();
     await expect(walk).toBeHidden();
-    const firstLine = steps.getByRole("list", { name: "Checklist" }).locator("p").first();
-    const said = await firstLine.innerText();
-    await steps.getByRole("button", { name: "Just the numbers" }).click();
-    await expect(firstLine).not.toHaveText(said);
-    await steps.getByRole("button", { name: "Just the numbers" }).click();
-    await expect(firstLine).toHaveText(said);
   });
 
   // The close-ups by type (#813; Paper, 2 · Agreed, "Fabrication · Bracket close-up, any build",
@@ -1081,7 +1074,7 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     });
   }
 
-  test("the pictures' words are as big as the step's, and none sits on another (#777)", async ({
+  test("the pictures' words are at the boards' size, and none sits on another (#777, #826)", async ({
     page,
   }) => {
     await workspaceWithBuild(page);
@@ -1125,11 +1118,12 @@ test.describe("each step's picture, on the unfolded Fold", () => {
       await expect.poll(async () => overlaps(await placed(picture))).toEqual([]);
       const marks = (await placed(picture)).filter((each) => each.mark);
       expect(marks.length).toBeGreaterThan(2);
-      for (const mark of marks) expect(mark.size, mark.text).toBe(20);
+      // The boards' words on the model are 13 px, never smaller.
+      for (const mark of marks) expect(mark.size, mark.text).toBeGreaterThanOrEqual(13);
     }
   });
 
-  test("Reset view puts the camera back after a drag, and a drag can't take it under the floor or flat on top", async ({
+  test("a drag can't take the camera under the floor or flat on top, the next step opens at its own angle, and Plan's Reset view puts it back", async ({
     page,
   }) => {
     await workspaceWithBuild(page);
@@ -1140,11 +1134,6 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     // It opens where the step's scene says: from the side and above.
     await expect.poll(() => camera(page)).toEqual({ turn: -50, tilt: 30 });
 
-    await drag(page, { x: 160, y: 0 });
-    await expect.poll(async () => (await camera(page)).turn).not.toBe(-50);
-    await page.getByRole("button", { name: "Reset view" }).click();
-    await expect.poll(() => camera(page)).toEqual({ turn: -50, tilt: 30 });
-
     // Dragged up as far as it goes, it stops above the floor; down, it stops short of the top.
     await drag(page, { x: 0, y: -400 });
     await expect.poll(async () => (await camera(page)).tilt).toBe(15);
@@ -1152,12 +1141,21 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await drag(page, { x: 0, y: 400 });
     await expect.poll(async () => (await camera(page)).tilt).toBe(60);
 
-    // Another step opens at its own angle: the end frame from above.
+    // Another step opens at its own angle: the end frame from its floor end, as its board has it.
     await page.getByRole("button", { name: "Done, next step" }).click();
     await expect(
-      page.getByRole("figure", { name: "One end frame, flat on the floor, in 3D" }),
+      page.getByRole("figure", { name: "On the floor, on offcuts, in 3D" }),
     ).toBeVisible();
-    await expect.poll(() => camera(page)).toEqual({ turn: -20, tilt: 60 });
+    await expect.poll(() => camera(page)).toEqual({ turn: -145, tilt: 35 });
+
+    // The bench has no Reset view (#826); Plan's puts the camera back after a drag.
+    await expect(page.getByRole("button", { name: "Reset view" })).toHaveCount(0);
+    await toPlan(page);
+    const at = await camera(page);
+    await drag(page, { x: 160, y: 0 });
+    await expect.poll(async () => (await camera(page)).turn).not.toBe(at.turn);
+    await page.getByRole("button", { name: "Reset view" }).click();
+    await expect.poll(() => camera(page)).toEqual(at);
   });
 });
 
@@ -1231,11 +1229,9 @@ test.describe("folded", () => {
 
     await expect(page.getByRole("group", { name: "Way of working" })).toHaveCount(0);
     await expect(page.getByRole("tablist")).toHaveCount(0);
-    await expect(
-      page.getByText("Swipe for the next step · open it on the Fold for Plan"),
-    ).toBeVisible();
     await expect(page.getByRole("button", { name: "Hold to ask" })).toBeInViewport();
-    expect(await overlappingLetters(page)).toEqual([]);
+    // Placed once the picture's drawn at its folded size.
+    await expect.poll(() => overlappingLetters(page)).toEqual([]);
     const fills = await buildFills(page);
     expect(Math.max(fills.width, fills.height)).toBeGreaterThan(0.75);
 
@@ -1245,7 +1241,10 @@ test.describe("folded", () => {
     await expect(steps.getByRole("heading", { name: "Fit the shelf" })).toBeVisible();
     await expect(letter(page, "H, Shelf")).toHaveAttribute("aria-current", "step");
     await expect(letter(page, "G, Top")).toHaveCount(0);
+    const showMe = steps.getByRole("button", { name: "Show me how" });
+    await showMe.click();
     await expect(steps).toContainText("Fixings: 4 × 40 screws");
+    await showMe.click();
 
     await page.getByRole("button", { name: "Back" }).click();
     await expect(steps.getByRole("heading", { name: "Fit the supports" })).toBeVisible();
@@ -1299,6 +1298,19 @@ test.describe("on a desktop", () => {
     );
   });
 
+  test("the marking step's lines each have their length's bar", async ({ page }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await page.getByRole("tab", { name: "Steps" }).click();
+    await page.getByRole("button", { name: "Done, next step" }).click();
+    const bars = page
+      .getByRole("region", { name: "Steps" })
+      .getByRole("list", { name: "Checklist" })
+      .getByRole("img");
+    await expect(bars).toHaveCount(3);
+    await expect(bars.first()).toHaveAccessibleName("B 1450 · 3 mm saw cut · A 750 · offcut 197");
+  });
+
   test("just the numbers, and a photo to check goes in the chat to send", async ({ page }) => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
@@ -1307,10 +1319,12 @@ test.describe("on a desktop", () => {
     for (let step = 1; step < 4; step += 1) await done.click();
     const steps = page.getByRole("region", { name: "Steps" });
     const checklist = steps.getByRole("list", { name: "Checklist" });
-    await expect(checklist).toContainText("Top rail (C) across them, flush with the top ends.");
+    await expect(checklist).toContainText("Top rail (C) flush with the top ends.");
 
     await steps.getByRole("button", { name: "Just the numbers" }).click();
-    await expect(checklist).toContainText("460 outside; C flush with the tops; square, clamp.");
+    await expect(checklist).toContainText(
+      "On edge, on offcuts; C flush with the tops, 460 outside.",
+    );
     await expect(letter(page, "C, End rails")).toHaveAttribute("aria-current", "step");
 
     await steps.getByLabel("Photo to check").setInputFiles({

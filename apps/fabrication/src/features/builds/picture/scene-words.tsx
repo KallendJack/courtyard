@@ -2,7 +2,7 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import { type BuildScene, letteredOf, markClass, markWords } from "../scene.ts";
 
 // The words over the Build in 3D (#754): the scene's marks, the callouts' leaders and each part
-// lit at the step, a letter on a computer or a pill off the wood with its leader at the bench
+// lit at the step, a letter, or a pill off the wood with its leader at the bench with the Fold open
 // (#826). Each is placed by the 3D view (`bench-view.tsx`) through `place` and `lead`, as the
 // model turns.
 
@@ -10,13 +10,14 @@ export function SceneWords(props: {
   scene: BuildScene;
   lit: string | undefined;
   pick: (label: string) => void;
-  bench: boolean;
+  /** The parts as named pills, as the bench's boards have them, rather than letters. */
+  pills: boolean;
   /** Where each word is, for the view to move it. */
   place: (key: string) => (element: HTMLElement | null) => void;
   /** Each pill's leader, for the view to draw it. */
   lead: (key: string) => (line: SVGLineElement | null) => void;
 }) {
-  const { scene, lit, bench, place, lead } = props;
+  const { scene, lit, pills, place, lead } = props;
   const lettered = letteredOf(scene);
   return (
     <>
@@ -32,7 +33,7 @@ export function SceneWords(props: {
             />
           ) : null,
         )}
-        {bench &&
+        {pills &&
           lettered.map((part) => (
             <line
               key={part.label}
@@ -76,7 +77,7 @@ export function SceneWords(props: {
           onClick={() => props.pick(part.label)}
           className={classes(
             "absolute top-0 left-0 flex items-center justify-center font-bold",
-            bench
+            pills
               ? classes(
                   "h-8 rounded-full border px-3.5 text-meta whitespace-nowrap",
                   lit === part.label
@@ -91,7 +92,7 @@ export function SceneWords(props: {
                 ),
           )}
         >
-          {bench ? `${part.name} (${part.label})` : part.label}
+          {pills ? `${part.name} (${part.label})` : part.label}
         </button>
       ))}
     </>

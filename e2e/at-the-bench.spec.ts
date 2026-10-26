@@ -21,7 +21,7 @@ const stepsOf = async (page: Page) => {
 /** The step panel's own scroller, and whether it has more than it shows. */
 const overflows = (page: Page) =>
   page.getByRole("region", { name: "Steps" }).evaluate((steps) => {
-    const box = steps.closest("[data-step-panel]");
+    const box = steps.querySelector("[data-step-panel]");
     if (box === null) throw new Error("No step panel.");
     return box.scrollHeight > box.clientHeight;
   });

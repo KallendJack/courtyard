@@ -45,8 +45,8 @@ function Printed(props: { printed: ReactNode; ask: ReactNode; answer: ReactNode 
 /**
  * At the bench (#753; Paper, 2 · Agreed, "Fabrication · At the bench · Fold 933×645" and
  * "· Cover 476×695"): one step at a time, filling the screen. On the unfolded Fold, the step in 3D
- * on the left, with Hold to ask and Reset view, and the step as its boards have it on the right
- * (`BenchStep`, #826); folded, the same stacked. A swipe on the step moves to the next or the one
+ * on the left, with Hold to ask and its close-ups, and the step as its boards have it on the right
+ * (`BenchStep`, #826); folded, the same stacked, the close-ups behind Show me how. A swipe on the step moves to the next or the one
  * before. No chat: what's asked is answered over the picture, and the full chat is in Plan.
  */
 export function AtTheBench(
