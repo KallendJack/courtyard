@@ -26,7 +26,7 @@ const TILE =
 /**
  * A workspace's tile: its icon, its name, and its line, which loads after the page and keeps its
  * place until then. A tap opens the workspace, or the one session waiting on the owner there, as
- * its line names it (#345).
+ * its line names it (#345); what it opens starts loading as the finger lands (#808).
  */
 function Tile(props: { workspace: WorkspaceSummary }) {
   const { workspace } = props;
@@ -51,6 +51,7 @@ function Tile(props: { workspace: WorkspaceSummary }) {
         <Link
           to="/workspaces/$workspaceId"
           params={{ workspaceId: workspace.id }}
+          preload="intent"
           className={className}
         >
           {inside}
@@ -59,6 +60,7 @@ function Tile(props: { workspace: WorkspaceSummary }) {
         <Link
           to="/workspaces/$workspaceId/sessions/$sessionId"
           params={{ workspaceId: workspace.id, sessionId: opens }}
+          preload="intent"
           className={className}
         >
           {inside}

@@ -261,7 +261,10 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`fresh-start/`](../apps/web/src/features/fresh-start/README.md): what a fresh start would clear.
   - [`login/`](../apps/web/src/features/login/README.md): the setup and login form.
 - **`api/workspace-page.ts`** asks for everything a workspace's page shows; its route's loader imports it, so that
-  code and its schemas aren't on the first load. What to show when the worker gives no data is
+  code and its schemas aren't on the first load. A page opened before shows its loader's last data at once while it
+  asks again behind (the router keeps it for the tab's lifetime, #808); a workspace's tile, on the rail and on Home,
+  starts loading its page as a finger, pointer or focus lands on it; and a move between pages once logged in goes on
+  the root route's last answer, asking `/auth` behind it rather than first. What to show when the worker gives no data is
   `components/layout/problems.tsx`, and how dates read is `lib/when.ts`.
 - **`components/`:** Courtyard's shared pieces (buttons, copy buttons, text fields, file pickers, sheets, notices, Connections' cards and so on), used
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)), in groups by kind
