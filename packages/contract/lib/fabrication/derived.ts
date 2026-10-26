@@ -255,6 +255,45 @@ export const BuildFinding = z.discriminatedUnion("kind", [
     mm: z.number(),
     least: z.number(),
   }),
+  // The checks any recipe gets (#771), each with its plain fixes.
+  z.object({
+    kind: z.literal("sags"),
+    label: z.string(),
+    name: z.string(),
+    span: z.number(),
+    thickness: z.number(),
+    sag: z.number(),
+    allowed: z.number(),
+    most: z.number(),
+    load: z.object({
+      class: z.enum(["light", "medium", "heavy", "very heavy"]),
+      kgPerM2: z.number(),
+      reference: z.string(),
+      said: z.string().nullable(),
+      matched: z.string().nullable(),
+    }),
+    fixes: list(z.string()),
+  }),
+  z.object({
+    kind: z.literal("tips"),
+    height: z.number(),
+    feet: z.number(),
+    way: z.enum(["front to back", "end to end"]),
+    fixes: list(z.string()),
+    advice: z.string(),
+  }),
+  z.object({ kind: z.literal("racks"), frame: z.string(), fixes: list(z.string()) }),
+  z.object({
+    kind: z.literal("screw-length"),
+    screws: z.string(),
+    joint: z.string(),
+    problem: z.enum(["too short", "too long"]),
+    through: z.number(),
+    into: z.number(),
+    least: z.number(),
+    room: z.number(),
+    fixes: list(z.string()),
+  }),
 ]);
 export type BuildFinding = z.infer<typeof BuildFinding>;
 

@@ -14,6 +14,7 @@ import { cutPlanOf, type Spares } from "../cut-plan.ts";
 import { assumedSizes } from "../findings.ts";
 import { pickStock, type Slot, standsInFor, stockOptions, wrongStock } from "../options.ts";
 import type { Sheet, StockOptionId, Timber } from "../stock.ts";
+import { checksOf } from "./checks.ts";
 import { fixingsOf } from "./fixings.ts";
 import { layoutOf, type Placed, said, stockIn, words } from "./layout.ts";
 
@@ -213,6 +214,7 @@ const recipeBuild = (
   const boxes = [...parts, ...fitted].flatMap((each) => each.boxes);
   const most = (end: (box: (typeof boxes)[number]) => number) =>
     Math.round(Math.max(...boxes.map(end)) * 10) / 10;
+  const height = most((box) => box.z + box.h);
   return ok({
     slots,
     build: {
@@ -220,7 +222,7 @@ const recipeBuild = (
       size: {
         length: most((box) => box.x + box.w),
         depth: most((box) => box.y + box.d),
-        height: most((box) => box.z + box.h),
+        height,
       },
       parts,
       fitted,
@@ -232,6 +234,7 @@ const recipeBuild = (
         ...planned.findings,
         ...wrongStock({ parameters: recipe, slots, damp: recipe.damp, build: { parts } }),
         ...(assumed ? [assumed] : []),
+        ...checksOf({ recipe, layout: layout.value, parts, height }),
       ],
       print: null,
     },

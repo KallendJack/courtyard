@@ -204,6 +204,14 @@ const findingLine = (finding: Finding) => {
       return `At ${finding.size.length} × ${finding.size.depth} × ${finding.size.height} mm it's bigger than the printer's ${finding.plate.width} × ${finding.plate.depth} × ${finding.plate.height} mm plate.`;
     case "wall-too-thin":
       return `${finding.where} is ${finding.mm} mm, thinner than the ${finding.least} mm the nozzle prints well.`;
+    case "sags":
+      return `${finding.name} (${finding.label}) sags: ${finding.thickness} mm over ${finding.span} mm under ${finding.load.said ?? "a load not said, checked as the heaviest"} (${finding.load.class}) sags ${finding.sag} mm, more than the ${finding.allowed} mm allowed; it takes ${finding.most} mm at most. Fix: ${finding.fixes.join(", or ")}.`;
+    case "tips":
+      return `It can tip: ${finding.height} mm tall on feet ${finding.feet} mm apart ${finding.way}. Fix: ${finding.fixes.join(", or ")}. ${finding.advice}`;
+    case "racks":
+      return `The frame on the ${finding.frame} can lean over: nothing braces it. Fix: ${finding.fixes.join(", or ")}.`;
+    case "screw-length":
+      return `The ${finding.screws} for ${finding.joint} are ${finding.problem}: through ${finding.through} mm, ${finding.problem === "too long" ? `${finding.into} mm into ${finding.room} mm, out the far side` : `${finding.into} mm into what they grip, less than ${finding.least} mm`}. Fix: ${finding.fixes.join(", or ")}.`;
   }
 };
 
