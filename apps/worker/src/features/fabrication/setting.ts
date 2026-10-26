@@ -4,6 +4,7 @@ import { type Build, type BuildSetting, Tool } from "@courtyard/fabrication";
 import { err, ok, type Result } from "../../lib/result.ts";
 import { readThingsIn } from "../things/index.ts";
 import { listWorkspaces } from "../workspaces/index.ts";
+import { heldIn } from "./stock/index.ts";
 import type { ToolsRefusal } from "./tools.ts";
 
 // What a Build is worked out with besides its parameters (#777, #763): the owner's tools and
@@ -26,30 +27,35 @@ export const readTools = async (contextDir: string) => {
 };
 
 /** What every Build is worked out with from the owner's things, before its own progress. */
-export type OwnerSetting = Pick<BuildSetting, "tools" | "sizes" | "have">;
+export type OwnerSetting = Pick<BuildSetting, "tools" | "sizes" | "have" | "stock">;
 
 /**
  * What a Build's steps and buy list follow from the owner's things (#777, #780, #763): Your tools,
  * each by its name and its tile's, with the sizes they gave (a mitre saw's cutting capacity, a bit
  * set's sizes), or none when they've saved none (or they can't be read just now), so a Build
- * follows its own; and what they have in their planning workspaces, by name, which can stand in
- * for a tool (a step stool) or be bolts too short.
+ * follows its own; Your stock (#760), which comes off its buy list; and what they have in their
+ * planning workspaces and stock, by name, which can stand in for a tool (a step stool) or be bolts
+ * too short.
  */
 export const ownerSetting = async (contextDir: string): Promise<OwnerSetting> => {
-  const have = await thingsHad(contextDir);
-  const read = await readTools(contextDir);
-  if (!read.ok || read.value.tools.length === 0) return { have };
+  const read = await readThingsIn(contextDir);
+  const owned = read.ok ? read.value.things : [];
+  const stock = heldIn(owned);
+  const have = [...(await thingsHad(contextDir)), ...stock.map(({ name }) => name)];
+  const tools = owned.filter(({ summary }) => summary.kind === "tool");
+  if (tools.length === 0) return { have, stock };
   const namesOf = ({ summary }: { summary: ThingSummary }) => [
     summary.name,
     ...(summary.tile === undefined ? [] : [summary.tile]),
   ];
   return {
-    tools: read.value.tools.flatMap(namesOf),
-    sizes: read.value.tools.flatMap((tool) => {
+    tools: tools.flatMap(namesOf),
+    sizes: tools.flatMap((tool) => {
       const { size } = tool.summary;
       return size === undefined ? [] : namesOf(tool).map((name) => ({ name, size }));
     }),
     have,
+    stock,
   };
 };
 

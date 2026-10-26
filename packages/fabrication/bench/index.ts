@@ -6,14 +6,15 @@ import {
   type KeptWay,
   ok,
   type Result,
+  type Step,
 } from "../build.ts";
-import { buyLine, buyListOf, stockLines, toolsToBuy } from "../buy-list.ts";
+import { buyLine, buyListOf, heldOf, stockLines, toolsToBuy } from "../buy-list.ts";
 import { type Capacities, capacitiesFrom } from "../capacity.ts";
 import { cutPlanOf } from "../cut-plan.ts";
 import { assumedSizes, boltLength, toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
 import { oneSheetEach, stockOptions, wrongStock } from "../options.ts";
-import type { Price } from "../stock.ts";
+import type { Held, Price } from "../stock.ts";
 import {
   bitSetsFrom,
   NO_SPANNERS,
@@ -73,6 +74,7 @@ export const deriveBench = (
     kept: setting.kept ?? [],
     started: setting.started ?? [],
     capacities: capacitiesFrom(setting.sizes ?? []),
+    stock: setting.stock ?? [],
   });
   const build = benchOf(parameters);
   if (!build.ok) return build;
@@ -89,6 +91,18 @@ export const deriveBench = (
   });
 };
 
+/** The steps, each fixing Your stock has saying where it's kept: "from your Diall case" (#760). */
+const fixingsFrom =
+  (stock: readonly Held[]) =>
+  (steps: readonly Step[]): Step[] =>
+    steps.map((step) => ({
+      ...step,
+      fixings: step.fixings.map((fixing) => {
+        const { where } = heldOf(fixing.name, stock);
+        return where === undefined ? fixing : { ...fixing, from: where };
+      }),
+    }));
+
 /** What the bench is worked out with besides its parameters, as `deriveBench` reads its setting. */
 type Setting = {
   readonly toHand: ReadonlySet<Tool>;
@@ -102,6 +116,8 @@ type Setting = {
   /** The steps with a line ticked, by ID: a step started keeps its lines (#783). */
   readonly started: readonly string[];
   readonly capacities: Capacities;
+  /** Your stock (#760), which comes off the buy list and which the steps say they use. */
+  readonly stock: readonly Held[];
 };
 
 /**
@@ -109,7 +125,7 @@ type Setting = {
  * tools to hand and the ways kept.
  */
 const benchWith =
-  ({ toHand, standIns, have, bitSets, buying, kit, kept, started, capacities }: Setting) =>
+  ({ toHand, standIns, have, bitSets, buying, kit, kept, started, capacities, stock }: Setting) =>
   (parameters: BenchParameters): Result<Omit<Build, "options">, string[]> => {
     const shape = shapeOf(parameters);
     const problems = shapeProblems(shape);
@@ -142,21 +158,23 @@ const benchWith =
     const use = bolts?.use ?? 0;
     const corrected = castors ? use !== castors.bolt.length.value : false;
     const fitted = benchFitted(parameters, shape);
-    const steps = benchSteps({
-      parameters,
-      shape,
-      cutPlan: planned.cutPlan,
-      boltLength: use,
-      parts,
-      fitted,
-      toHand,
-      kit,
-      standIns,
-      bitSets,
-      kept,
-      started,
-      capacities,
-    });
+    const steps = fixingsFrom(stock)(
+      benchSteps({
+        parameters,
+        shape,
+        cutPlan: planned.cutPlan,
+        boltLength: use,
+        parts,
+        fitted,
+        toHand,
+        kit,
+        standIns,
+        bitSets,
+        kept,
+        started,
+        capacities,
+      }),
+    );
 
     const { frameScrews, sheetScrews, brackets, bracketScrews } = parameters.fixings;
     const fixingPrices = new Map<string, Price | undefined>([
@@ -184,36 +202,39 @@ const benchWith =
       }
     }
 
-    const buyList = buyListOf([
-      ...stockLines({
-        cutPlan: planned.cutPlan,
-        timbers,
-        sheets,
-        names: new Map(parts.map((part) => [part.label, part.name])),
-      }),
-      ...(castors
-        ? [
-            buyLine({
-              item: castors.name,
-              kind: "fitted",
-              for: "under the castor bases",
-              needed: 4,
-              price: castors.price,
-            }),
-          ]
-        : []),
-      ...[...fixingCounts].map(([name, counted]) => {
-        const line = buyLine({
-          item: name,
-          kind: "fixing",
-          for: counted.steps.join(", "),
-          needed: counted.count,
-          price: fixingPrices.get(name),
-        });
-        return name === boltNames && bolts ? { ...line, length: bolts.length } : line;
-      }),
-      ...toolsToBuy(steps, buying),
-    ]);
+    const buyList = buyListOf(
+      [
+        ...stockLines({
+          cutPlan: planned.cutPlan,
+          timbers,
+          sheets,
+          names: new Map(parts.map((part) => [part.label, part.name])),
+        }),
+        ...(castors
+          ? [
+              buyLine({
+                item: castors.name,
+                kind: "fitted",
+                for: "under the castor bases",
+                needed: 4,
+                price: castors.price,
+              }),
+            ]
+          : []),
+        ...[...fixingCounts].map(([name, counted]) => {
+          const line = buyLine({
+            item: name,
+            kind: "fixing",
+            for: counted.steps.join(", "),
+            needed: counted.count,
+            price: fixingPrices.get(name),
+          });
+          return name === boltNames && bolts ? { ...line, length: bolts.length } : line;
+        }),
+        ...toolsToBuy(steps, buying),
+      ],
+      stock,
+    );
 
     const findings: Finding[] = [
       ...planned.findings,

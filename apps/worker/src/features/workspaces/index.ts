@@ -28,7 +28,7 @@ export const CONTEXT_FILE = "CONTEXT.md";
 const CONFIG_FILE = "workspace.json";
 /** Context folder folders that aren't workspaces, by what they hold: never listed, nor a name. */
 export const ARCHIVED_FOLDER = "archived";
-export const OWNER_THINGS_FOLDER = "things"; // The owner's tools (ADR 0037), as Things are kept.
+export const OWNER_THINGS_FOLDER = "things"; // The owner's tools (ADR 0037) and stock (#760), as Things.
 const KEPT_FOLDERS: ReadonlyMap<string, string> = new Map([
   [ARCHIVED_FOLDER, "archived workspaces go"],
   [OWNER_THINGS_FOLDER, "the owner's tools are kept"],

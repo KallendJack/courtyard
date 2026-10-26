@@ -11,10 +11,12 @@ import {
   type BuildStockPick,
   BuildView,
   type ChangeId,
+  type HaveIt,
   MadePart,
   MESSAGE_FIELD,
   type NewMessage,
   ProviderList,
+  StockSaved,
   type ToolPick,
   ToolsHeard,
   ToolsSaved,
@@ -120,6 +122,13 @@ export const saveTools = (tools: readonly ToolPick[]) =>
 /** Undo of a Save of the owner's tools. */
 export const undoTools = (change: ChangeId) =>
   sendJson("/fabrication/tools/undo", z.null(), "POST", { change });
+
+/** Have it on a buy-list line (#760): its item saved to Your stock, for every Build. */
+export const haveIt = (have: HaveIt) => sendJson("/fabrication/stock", StockSaved, "POST", have);
+
+/** Undo of Have it. */
+export const undoHaveIt = (change: ChangeId) =>
+  sendJson("/fabrication/stock/undo", z.null(), "POST", { change });
 
 /** "Or just say it": the tools a model heard in what was said, to tick; nothing is saved. */
 export const hearTools = (said: string) =>

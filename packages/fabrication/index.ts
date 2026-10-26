@@ -32,6 +32,7 @@ export type {
   WalkStep,
   Way,
 } from "./build.ts";
+export { sameStock } from "./buy-list.ts";
 export { planLengths, planSheets } from "./cut-plan.ts";
 export {
   derivePrinted,
@@ -52,5 +53,13 @@ export {
   ShimParameters,
 } from "./print/templates.ts";
 export type { Scene, SceneMark, ScenePiece } from "./scene.ts";
-export { Fixing, OptionPrices, Price, Sheet, StockOptionId, Timber } from "./stock.ts";
+export {
+  Fixing,
+  type Held,
+  OptionPrices,
+  Price,
+  Sheet,
+  StockOptionId,
+  Timber,
+} from "./stock.ts";
 export { TOOL_NAMES, Tool, toolsFrom } from "./tools.ts";

@@ -8,6 +8,12 @@ import { z } from "zod";
 
 export const Words = z.string().trim().min(1).max(80);
 
+/**
+ * Something Your stock has (#760): its name, as a buy list line names it ("5 × 80 screws"), how
+ * many, and where it's kept ("Diall case"), which the steps say it comes from.
+ */
+export type Held = { readonly name: string; readonly count: number; readonly where?: string };
+
 /** A pack's price, in pence, and where it's from. */
 export const Price = z.object({
   pence: z.number().int().nonnegative(),

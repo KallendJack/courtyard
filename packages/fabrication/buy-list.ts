@@ -1,5 +1,5 @@
 import type { BuyLine, BuyList, CutPlan, Step, StepTool } from "./build.ts";
-import type { Price, Sheet, Timber } from "./stock.ts";
+import type { Held, Price, Sheet, Timber } from "./stock.ts";
 import { TOOL_NAMES, type Tool } from "./tools.ts";
 
 // A Build's buy list: how many of each thing to buy, in whole packs, at the prices the parameters
@@ -109,12 +109,62 @@ const bitsMissing = (tools: readonly StepTool[]) =>
     ),
   ].sort((a, b) => b - a);
 
-/** The list, with the priced lines' total; lines needing none are left off. */
-export const buyListOf = (lines: readonly BuyLine[]): BuyList => {
-  const needed = lines.filter((line) => line.needed > 0);
+/**
+ * A name as Your stock and a buy list are matched by (#760): the owner's "5x80  Screws" is the
+ * line's "5 × 80 screws".
+ */
+const stockKey = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/(\d)\s*[x×]\s*(?=\d)/g, "$1 × ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** Whether two names are the same stock, as Your stock and a buy list match them. */
+export const sameStock = (a: string, b: string) => stockKey(a) === stockKey(b);
+
+/** How many of a line's item Your stock has, all told; and the first place it's kept. */
+export const heldOf = (item: string, stock: readonly Held[]) => {
+  const key = stockKey(item);
+  const held = stock.filter((each) => stockKey(each.name) === key);
   return {
-    lines: needed,
-    total: needed.reduce((sum, line) => sum + (line.total ?? 0), 0),
-    unpriced: needed.filter((line) => line.total === undefined).length,
+    count: held.reduce((sum, each) => sum + each.count, 0),
+    where: held.find((each) => each.where !== undefined)?.where,
+  };
+};
+
+/** A line less what the owner has of it: the shortfall, in whole packs. */
+const shortfall = (line: BuyLine, have: number): BuyLine => {
+  const needed = line.needed - have;
+  const packs = Math.ceil(needed / line.packOf);
+  const { total: _total, ...rest } = line;
+  return {
+    ...rest,
+    needed,
+    have,
+    packs,
+    ...(line.price === undefined ? {} : { total: packs * line.price.pence }),
+  };
+};
+
+/**
+ * The list, with the priced lines' total; lines needing none are left off. What Your stock has
+ * comes off (#760): a line it covers whole goes to `had`, one it covers in part is the shortfall.
+ * A tool to buy never comes off: Your tools says when the owner has one.
+ */
+export const buyListOf = (lines: readonly BuyLine[], stock: readonly Held[] = []): BuyList => {
+  const left: BuyLine[] = [];
+  const had: BuyLine[] = [];
+  for (const line of lines) {
+    if (line.needed <= 0) continue;
+    const have = line.kind === "tool" ? 0 : heldOf(line.item, stock).count;
+    if (have >= line.needed) had.push(line);
+    else left.push(have > 0 ? shortfall(line, have) : line);
+  }
+  return {
+    lines: left,
+    had,
+    total: left.reduce((sum, line) => sum + (line.total ?? 0), 0),
+    unpriced: left.filter((line) => line.total === undefined).length,
   };
 };

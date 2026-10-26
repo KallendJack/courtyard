@@ -36,7 +36,7 @@ if (recipe) {
 | `catalog.ts` | The stock options (#704): each timber's and sheet's sizes, what it's like, and the jobs it suits, and what each is like for the slots it would fill, judged by the strictest |
 | `options.ts` | A template's slots offered those options, each costed by working the Build out again with it, the stock in use as it is; a pick swapped in, keeping the old one's price and size; and the making rule that flags stock wrong for its slot |
 | `cut-plan.ts` | Packing: timber pieces into lengths and sheet pieces into sheets, the kerf between every two, each sheet's first cut along it or across it, whichever needs fewer sheets |
-| `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed; and the tools the owner chose to buy, while they're missing, a set's missing bits by size (#763) |
+| `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed; the tools the owner chose to buy, while they're missing, a set's missing bits by size (#763); and Your stock taken off (#760), matched by name (`sameStock`: "5x80 screws" is "5 × 80 screws") |
 | `findings.ts` | The making rules code checks: a bolt's length to use, long enough for what it passes through plus two threads, and the owner's own that are short (`boltLength`), tools needed and not to hand, sizes assumed |
 | `capacity.ts` | What a mitre or circular saw cuts (#780): its width at 90° and depth, read from its size in Your tools, assumed until given, and whether a timber fits it |
 | `tools.ts`, `glossary.ts` | The tools and kit a step can need, which of them each of Your tools, or something else the owner has, is by the words in its name, one tool or several ("Drill and drill bits", `toolsFrom`; a step stool for the long end, and only that, `standInFor`), a bit set's sizes and whether it has a bit (`bitSetsFrom`, `bitInSets`), the spanners, adjustables, socket set and pliers among them (`spannerKitFrom`, #783), and the words a beginner may not know |
@@ -98,6 +98,10 @@ if (recipe) {
   unpriced until it's given a price. Its buy-list line carries what it passes through and their sum, and, when the
   owner has bolts of its thread that are too short, by how much (#763). It's no finding: the old length means nothing
   to the owner.
+- **The buy list is what's left to buy** (#760): Your stock (`stock` in the setting, each by name with how many and
+  where it's kept) comes off each line but a tool to buy. A line it covers whole moves to `had`; one it covers in part
+  buys the shortfall in whole packs, saying how many the owner `have`; and a step's fixing it has says where it's kept
+  (`from`: "Diall case").
 - **Parts are cut to the whole mm below,** and the steps say every size to the whole mm; the Build keeps it exact.
 - **A part recipe is checked before it's made:** a feature of a kind no recipe knows, a hole or slot off its face, or
   a pocket running out of the part where it isn't open is refused with a finding, and nothing is made. Holes, slots
@@ -145,7 +149,8 @@ are always there, and the essays never are.
 hand-checked numbers with invented names, in `bench/fixtures/golden.ts`), `bench/scenes.test.ts` (each step's picture
 for the golden bench, by the tools to hand, and the walk-throughs), `bench/your-tools.test.ts` (the steps following
 the owner's tools, a step started kept as it was started, tools found by the words in their names, a stand-in, bits by
-size, tools chosen to buy), `bench/saw-capacity.test.ts` (cuts too big for a saw going to one that takes them, given
+size, tools chosen to buy), `bench/your-stock.test.ts` (the buy list less Your stock, whole and in part),
+`bench/saw-capacity.test.ts` (cuts too big for a saw going to one that takes them, given
 or assumed), `print/print.test.ts` (the golden holster and shim, `print/fixtures/golden.ts`:
 their size and volume worked out by hand, closed all round, the pocket allowing the clearance), `print/recipe.test.ts`
 (what a recipe is refused for) and `print/make.test.ts` (what a checked recipe still can't be made into).

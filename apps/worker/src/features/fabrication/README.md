@@ -51,6 +51,10 @@ rest is worked out again.
 - `POST /api/fabrication/tools/undo`: `ToolsUndo`, Undo of that Save.
 - `POST /api/fabrication/tools/heard`: "Or just say it", `ToolsSaid`. Answers `ToolsHeard`, the tools a model ticked,
   saving nothing; 503 when no model can answer.
+- `POST /api/fabrication/stock`: Have it on a buy-list line (#760), `HaveIt` (its item, material or fixing, and how
+  many the Build uses), saved to Your stock, topping up what's there. Answers `StockSaved`; a name that's one of the
+  owner's tools is 409, and as many already 400.
+- `POST /api/fabrication/stock/undo`: `StockUndo`, Undo of that Have it.
 - `POST /api/fabrication/workspaces/:id/builds/:slug/stock`: the owner's pick of one of a stock's options (#704),
   `BuildStockPick` (the stock by name, as the buy list gives it, and the option), swapped in every part cut from it.
   Answers `BuildChanged`; an option the stock doesn't have is 400.
@@ -94,7 +98,12 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   (a saw's cutting capacity, #780; a bit set's sizes, #763), and the ways its steps started were done. And (#763) the
   names of the Things the owner has in their planning workspaces (a step stool stands in for the long end's support;
   bolts too short are said on their line when every one of its thread they have is), and the tools its progress keeps to buy. Every read of a Build, the
-  model's and Fabrication's, works it out the same way.
+  model's and Fabrication's, works it out the same way. And (#760) Your stock, which comes off its buy list.
+- **Your stock** (`stock/`, #760): Things of kind material or fixing in the context folder's own `things/`, beside the
+  tools, each with its `count` and `where` it's kept. Have it writes one, or tops up the count of the one that's the
+  same stock ("4x40 screws" is "4 × 40 screws"), as one change Undo takes back whole. The engine takes what they have
+  off each line by name: a line covered whole moves to the buy list's `had`, one covered in part buys the shortfall
+  in whole packs, and a step's fixing says where it's kept ("from your Diall case").
 - **The owner's tools** (`tools.ts`, ADR 0037): Things of kind tool in the context folder's own `things/`, so every
   workspace and Build sees the same ones; `sessions/` lists them in every planning turn. A Save writes them all as one
   change: a tool given is written (its count, make and size; a size gives it a subject ID), one not given is removed,

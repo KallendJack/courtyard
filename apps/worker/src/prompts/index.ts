@@ -26,13 +26,13 @@ import {
   type TaskEnding,
   THING_DETAILS,
   type ThingDetailName,
-  ThingKind,
   type ThingSave,
   ThingStatus,
   type ThingSummary,
   type ThingUpcoming,
   type WorkspaceConnections,
   type WorkspaceMode,
+  WorkspaceThingKind,
 } from "@courtyard/contract";
 import { z } from "zod";
 import {
@@ -487,7 +487,7 @@ const THING_TOOL: TurnTool = {
     status: ThingStatus.optional().describe(
       "have, want (to get one, or ordered and not in hand yet) or replace (has it, means to replace it). A new Thing needs one.",
     ),
-    kind: ThingKind.optional().describe(
+    kind: WorkspaceThingKind.optional().describe(
       "What kind of Thing it is: item (kit, the default), space (a place the owner works in or fits out, such as a garage or a van) or tool (one they make things with, such as a saw).",
     ),
     ...Object.fromEntries(

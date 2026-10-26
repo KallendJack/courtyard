@@ -1,5 +1,6 @@
 // Fabrication's part of the contract (ADR 0037): its Builds, what they derive, part recipes
-// (#702), its app's pages, progress through a Build's steps (#699) and the owner's tools, all
+// (#702), its app's pages, progress through a Build's steps (#699), the owner's tools and Your
+// stock (#760), all
 // exported from the contract's index.
 
 export {
@@ -61,3 +62,10 @@ export {
   WorkspaceThing,
   YourTools,
 } from "./tools.ts";
+export {
+  HaveIt,
+  StockKind,
+  StockSaved,
+  StockUndo,
+  stockKindOf,
+} from "./your-stock.ts";

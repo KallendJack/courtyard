@@ -565,11 +565,15 @@ Where the rest fits:
   ([ADR 0020](adr/0020-documents-and-things-are-files-in-the-context-folder-saved-with-undo.md)). A Thing's
   **upcoming** one (#602, ADR 0032) is kept in its file the same way: set by the model's tool, or by Pick on an
   answer's `options` block (Find a replacement's answer), and swapped in by "… fitted" or the tool's `fitted`.
-  A Thing has a **kind** (item, space or tool, ADR 0037) and, once a size is recorded for it, a subject ID.
+  A Thing has a **kind** (item, space or tool, ADR 0037; material or fixing only in Your stock, #760) and, once a
+  size is recorded for it, a subject ID.
 - **The owner's tools** (#707, ADR 0037): Things of kind tool at the owner's level, so every planning turn lists them
   and every Build reads them. Fabrication owns them: its API (`fabrication/tools.ts`) reads them, saves them all at
   once as one change with Undo (moving a workspace's tools there, such as the garage's hand saw, with that Save), and
   asks a cheap model to tick the tools the owner said, saving nothing.
+- **Your stock** (#760): Things of kind material or fixing at the owner's level, beside the tools. Have it on a
+  buy-list line saves one through Fabrication's API (`fabrication/stock/`), one change with Undo, and every Build is
+  worked out with them, so its buy list leaves off what they cover and buys only the shortfall of the rest.
 - **Projects** (#603, ADR 0032). The model calls the project tool by the labels its turn listed; `projects/` checks
   the call and writes the project's file as a change through `context-folder/`; the session records a
   `project-saved` event and the browser shows a note with Open (the project's place on the workspace's page,
@@ -806,7 +810,8 @@ things live only in the worker's memory and go when it restarts.
   photo, resized to fit 1600 px and 300 KB, in plain git. A Thing's `kind` (item when left out), `count` and
   `subject` ID (ADR 0037) are front matter too, and a tool's `tile` when its name isn't the tile's (#707).
 - `things/<slug>.md` at the top: the owner's tools (#707, ADR 0037), Things of kind tool kept as a workspace's are
-  (photos in `things/photos/`), so no workspace can be named `things`.
+  (photos in `things/photos/`), so no workspace can be named `things`; and Your stock (#760), Things of kind material
+  or fixing with their `count` and `where` they're kept.
 - `<workspace>/projects/<slug>.md`: a planning workspace's projects (#603, ADR 0032): name, goal and status in front
   matter, then its steps, decisions and a dated history, each file named by the project's name when it was started.
   A step that makes a Build ends `[build: <slug>]`.

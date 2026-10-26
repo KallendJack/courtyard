@@ -158,6 +158,28 @@ describe("the Build tool", () => {
     );
   });
 
+  it("tells the model only what's left to buy, less Your stock (#760)", async () => {
+    await mkdir(join(contextDir, "things"), { recursive: true });
+    await writeFile(
+      join(contextDir, "things", "5-80-screws.md"),
+      "---\nname: 5 × 80 screws\nstatus: have\nkind: fixing\ncount: 100\n---\n",
+    );
+    await writeFile(
+      join(contextDir, "things", "4-40-screws.md"),
+      "---\nname: 4 × 40 screws\nstatus: have\nkind: fixing\ncount: 20\n---\n",
+    );
+    const { saver } = await sessionWith([[START_BENCH]]);
+
+    const [reply] = saver.replies[0] ?? [];
+    expect(reply?.reply).toContain(
+      "- 4 × 40 screws: 1 × pack of 200 (43 used, 20 in Your stock, fit the shelf, fit the braces, fit the top), £4.20",
+    );
+    expect(reply?.reply).not.toContain("- 5 × 80 screws");
+    expect(reply?.reply).toContain(
+      "Total: £171.82, leaving out 1 line with no price\nAlready in Your stock, so not bought: 5 × 80 screws.",
+    );
+  });
+
   it("marks the documents a Build supersedes, so later turns never take sizes from them (#786)", async () => {
     await mkdir(join(contextDir, "garage", "docs"), { recursive: true });
     await writeFile(

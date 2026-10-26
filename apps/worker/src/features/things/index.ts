@@ -9,12 +9,12 @@ import {
   type ThingDetailName,
   ThingFields,
   type ThingHistoryEntry,
-  ThingKind,
   type ThingProblem,
   type ThingSave,
   ThingSlug,
   ThingStatus,
   type ThingSummary,
+  WorkspaceThingKind,
 } from "@courtyard/contract";
 import sharp from "sharp";
 import { z } from "zod";
@@ -261,7 +261,7 @@ export const keptPhoto = async (bytes: Uint8Array): Promise<Uint8Array | undefin
 type FieldChange = {
   readonly name?: string;
   readonly status?: ThingStatus;
-  readonly kind?: ThingKind;
+  readonly kind?: ThingSummary["kind"];
   readonly partOf?: ThingSlug | null;
 } & { readonly [K in ThingDetailName | UpcomingField]?: string | null };
 
@@ -647,7 +647,7 @@ const ThingRequest = z.looseObject({
   remove: z.boolean().optional(),
   name: z.string().optional(),
   status: ThingStatus.optional(),
-  kind: ThingKind.optional(),
+  kind: WorkspaceThingKind.optional(),
   part_of: z.string().optional(),
   history: z.string().optional(),
   photo: z.number().int().optional(),

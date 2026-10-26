@@ -353,7 +353,7 @@ test.describe("on the unfolded Fold", () => {
 
     await page.getByRole("tab", { name: "Buy list" }).click();
     const buyList = page.getByRole("region", { name: "Buy list" });
-    await expect(buyList).toContainText("To buy · 11");
+    await expect(buyList.getByRole("heading", { name: "11 things left" })).toBeVisible();
     await expect(buyList.getByRole("link", { name: /Wheelwright TD60 castors/ })).toHaveAttribute(
       "href",
       "https://shop.example/td60",
@@ -403,8 +403,8 @@ test.describe("on the unfolded Fold", () => {
 
     await page.getByRole("tab", { name: "Buy list" }).click();
     const buyList = page.getByRole("region", { name: "Buy list" });
-    await expect(buyList).toContainText("To buy · 12");
-    await expect(buyList).toContainText("Spannerstep 6");
+    await expect(buyList.getByRole("heading", { name: "12 things left" })).toBeVisible();
+    await expect(buyList).toContainText("Spannerno price · step 6");
 
     // Its Undo takes it off the list again.
     await page.getByRole("tab", { name: "Tools" }).click();

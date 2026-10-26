@@ -378,8 +378,14 @@ export function StepPanel(props: {
         <p className={classes("text-muted-foreground", big ? "text-answer" : "text-interface")}>
           Fixings:{" "}
           <span className="text-foreground">
-            {/* "5 × 80 screws (16)": a count before a size would read as one more size. */}
-            {listed(step.fixings.map((fixing) => `${fixing.name} (${fixing.count})`))}
+            {/* "5 × 80 screws (16)": a count before a size would read as one more size. Where
+                Your stock keeps them follows (#760): "from your Diall case". */}
+            {listed(
+              step.fixings.map(
+                (fixing) =>
+                  `${fixing.name} (${fixing.count})${fixing.from === undefined ? "" : `, from your ${fixing.from}`}`,
+              ),
+            )}
           </span>
         </p>
       )}
