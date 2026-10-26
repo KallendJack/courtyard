@@ -93,7 +93,35 @@ const findingWords = (finding: Exclude<BuildFinding, { kind: "assumed" }>): Card
         title: `${finding.stock} is wrong for the ${listed(finding.parts.map((part) => part.toLowerCase()))}`,
         detail: `${finding.why} Pick another from its options.`,
       };
+    case "sags":
+      return {
+        title: `${finding.name} sags under ${finding.load.said ?? "a heavy load"}`,
+        detail: `${mm(finding.thickness)} mm over ${mm(finding.span)} mm sags ${tenths(finding.sag)} mm; ${tenths(finding.allowed)} mm is the most it should. ${fixesSaid(finding.fixes)}`,
+      };
+    case "tips":
+      return {
+        title: "It can tip over",
+        detail: `${mm(finding.height)} mm tall on feet ${mm(finding.feet)} mm apart ${finding.way}. ${fixesSaid(finding.fixes)} ${finding.advice}`,
+      };
+    case "racks":
+      return {
+        title: "The frame can lean over",
+        detail: `Nothing braces the ${finding.frame}. ${fixesSaid(finding.fixes)}`,
+      };
+    case "screw-length":
+      return {
+        title: `The ${finding.screws} are ${finding.problem} for the ${finding.joint}`,
+        detail: `${finding.problem === "too long" ? `They'd come out the far side of the ${mm(finding.room)} mm they go into.` : `They go ${mm(finding.into)} mm in, and grip from ${mm(finding.least)} mm.`} ${fixesSaid(finding.fixes)}`,
+      };
   }
+};
+
+/** A check's fixes as its card says them: "Use 18 mm, or add a centre support." */
+const fixesSaid = (fixes: readonly string[]) => {
+  const said = fixes.map((fix, index) =>
+    index === 0 ? fix : fix.charAt(0).toLowerCase() + fix.slice(1),
+  );
+  return `${said.join(", or ")}.`;
 };
 
 /** The printer's clearance, as the plate's foot says it (#702). */
