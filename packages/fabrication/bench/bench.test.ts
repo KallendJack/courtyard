@@ -168,30 +168,47 @@ describe("the golden bench's buy list", () => {
     expect(list.unpriced).toBe(2);
   });
 
+  /** The golden bench's plywood as the strips a shop cut from it, priced as the sheet. */
+  const strips = {
+    ...goldenBench.braces.sheet,
+    name: "18 mm plywood, ripped to width",
+    width: { ...goldenBench.braces.sheet.width, value: 300 },
+  };
+  const sheetLines = (build: Build) =>
+    build.buyList.lines
+      .filter((line) => line.kind === "sheet")
+      .map((line) => [line.item, line.packs, line.total]);
+
   it("buys a sheet once when the braces are the shop's strips of the same plywood (#786)", () => {
-    // The owner's first build: the shop cut the sheet, and the braces were given as its 500-wide
-    // strips, priced as the sheet, while 249 mm up the shelf makes them 501 wide.
-    const strips = {
-      ...goldenBench.braces.sheet,
-      name: "18 mm plywood strips, cut by the shop",
-      width: { ...goldenBench.braces.sheet.width, value: 500 },
-    };
-    const build = built({
-      ...goldenBench,
-      shelf: { ...goldenBench.shelf, height: { ...goldenBench.shelf.height, value: 249 } },
-      braces: { ...goldenBench.braces, sheet: strips },
-    });
+    const build = built({ ...goldenBench, braces: { ...goldenBench.braces, sheet: strips } });
 
     expect(build.parts.find((part) => part.label === "J")).toMatchObject({
-      width: 501,
+      width: 500,
       material: { stock: "18 mm plywood" },
     });
-    expect(
-      build.buyList.lines
-        .filter((line) => line.kind === "sheet")
-        .map((line) => [line.item, line.packs, line.total]),
-    ).toEqual([["18 mm plywood, 2440 × 1220", 1, 5000]]);
+    expect(sheetLines(build)).toEqual([["18 mm plywood, 2440 × 1220", 1, 5000]]);
     expect(build.buyList.total).toBe(17702);
+  });
+
+  it("cuts them from the whole sheet whichever slot is given the strips (#786)", () => {
+    const build = built({ ...goldenBench, top: { ...goldenBench.top, sheet: strips } });
+
+    expect(build.parts.find((part) => part.label === "G")?.material.stock).toBe("18 mm plywood");
+    expect(sheetLines(build)).toEqual([["18 mm plywood, 2440 × 1220", 1, 5000]]);
+  });
+
+  it.each([
+    ["another thickness", { name: "12 mm plywood", thickness: { ...strips.thickness, value: 12 } }],
+    ["another option, by its name", { name: "18 mm OSB" }],
+    ["another option, given", { name: "18 mm board", option: "mdf-18" }],
+    ["another price", { name: "18 mm birch plywood", price: { ...strips.price, pence: 8000 } }],
+    ["no price, such as offcuts to hand", { name: "18 mm plywood offcuts", price: undefined }],
+  ])("keeps a sheet of %s its own (#786)", (_, change) => {
+    const sheet = { ...goldenBench.braces.sheet, ...change };
+    const build = built({ ...goldenBench, braces: { ...goldenBench.braces, sheet } });
+
+    expect(build.parts.find((part) => part.label === "J")?.material.stock).toBe(sheet.name);
+    expect(build.parts.find((part) => part.label === "G")?.material.stock).toBe("18 mm plywood");
   });
 });
 
@@ -392,6 +409,21 @@ describe("choosing the stock (#704)", () => {
     return done.value;
   };
   const cls = () => picked(goldenBench, { stock: "45 × 95 C16", option: "cls-38x89" });
+
+  it("never rewrites a sheet the pick didn't swap, such as the shop's strips (#786)", () => {
+    const braces = {
+      ...goldenBench.braces,
+      sheet: {
+        ...goldenBench.braces.sheet,
+        name: "18 mm plywood, ripped to width",
+        width: { ...goldenBench.braces.sheet.width, value: 300 },
+      },
+    };
+
+    expect(
+      picked({ ...goldenBench, braces }, { stock: "45 × 95 C16", option: "cls-38x89" }).braces,
+    ).toEqual(braces);
+  });
 
   it("offers the frame timber's options, the recommended first, each costed for this bench", () => {
     const frame = built(goldenBench).options.find((options) => options.stock === "45 × 95 C16");

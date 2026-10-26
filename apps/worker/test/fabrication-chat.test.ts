@@ -247,16 +247,51 @@ describe("a Build's chat", () => {
     await reach(fourth.id);
     await sent("What's next?");
 
+    // The step titles are the Build's own, so a change to its steps never breaks this.
+    const taken = {
+      number: "2",
+      steps: String(derived.steps.length),
+      title: second.title,
+      now: "4",
+      "now-title": fourth.title,
+    };
     const [first, later] = saver.framings.map((framing) => framing.message);
     expect(first).toContain(
-      `<attachment kind="photo" name="cut-legs.png">${await quotedInGuide("Image 1 with this message. It was taken at step 2 of 12 (Mark the lengths), the step")}</attachment>`,
+      `<attachment kind="photo" name="cut-legs.png">${await quotedInGuide("Image 1 with this message. It was taken at step <number> of <steps> (<title>), the step", taken)}</attachment>`,
     );
     expect(later).toContain(
-      `<attachment kind="photo" name="cut-legs.png">${await quotedInGuide("Image 1 with this message. It was taken at step 2 of 12 (Mark the lengths), an earlier")}</attachment>`,
+      `<attachment kind="photo" name="cut-legs.png">${await quotedInGuide("Image 1 with this message. It was taken at step <number> of <steps> (<title>), an earlier", taken)}</attachment>`,
     );
     expect(saver.framings[1]?.attachments).toEqual([
       { kind: "photo", name: "cut-legs.png", path: expect.any(String), mediaType: "image/png" },
     ]);
+  });
+
+  it("says no step for a photo sent before building has started (#786)", async () => {
+    await withProject();
+    const saver = savingProvider([[]]);
+    const request = await asOwner(testWorker({ root, providers: [saver.provider] }));
+    const photo = { name: "wall.png", type: "image/png", bytes: pngOf(4, 4, () => [9, 9, 9]) };
+
+    const posted = await postWithFiles(
+      request,
+      CHAT,
+      { text: "Here's the wall.", model: SAVING_MODEL },
+      [photo],
+    );
+    expect(posted.status).toBe(202);
+    const { session } = BuildChatSent.parse(await posted.json());
+    const events = await followSession(request, {
+      sessionId: session,
+      until: (event) => event.type === "turn-completed",
+    });
+
+    expect(saver.framings[0]?.message).toContain(
+      `<attachment kind="photo" name="wall.png">Image 1 with this message.</attachment>`,
+    );
+    const asked = events.find((event) => event.type === "owner-message");
+    expect(asked).toMatchObject({ attachments: [{ kind: "photo", name: "wall.png" }] });
+    expect(JSON.stringify(asked)).not.toContain("takenAt");
   });
 
   it("refuses a message to a Build that isn't there", async () => {

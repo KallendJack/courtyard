@@ -381,6 +381,10 @@ describe("archiving a document (#786)", () => {
     const [saved] = savedEvents(events);
     expect((await undoDocument(request, session.id, saved?.seq ?? 0)).status).toBe(204);
     expect((await listed(request)).map(({ slug }) => slug)).toEqual(["packing-list-for-bilbao"]);
+    expect(await readFile(join(docsDir(), "packing-list-for-bilbao.md"), "utf8")).toBe(PACKING);
+    await expect(
+      readFile(join(docsDir(), "archive", "packing-list-for-bilbao.md"), "utf8"),
+    ).rejects.toThrow();
   });
 
   it("refuses one archived already", async () => {

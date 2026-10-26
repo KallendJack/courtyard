@@ -53,38 +53,54 @@ const optionOf = (stock: Timber | Sheet, kind: StockOption["kind"]) =>
 const kindOf = (role: Role) => (role === "sheet" ? "sheet" : "timber");
 
 /**
- * What a sheet is made of, whatever size it's given in: its option, or the sheet option of its
- * thickness its name says; else its name and thickness.
+ * Which sheet a sheet is, whatever size it's given in: what it's made of (its option, or the sheet
+ * option of its thickness its name says, else its name), its thickness, and its price at its shop.
+ * One with no price, such as offcuts the owner has, is only ever the sheet of its own name.
  */
-const sheetMaterialOf = (sheet: Sheet) =>
-  sheet.option ??
-  IDS.find((id) => {
-    const option = STOCK_OPTIONS[id];
-    return (
-      option.kind === "sheet" &&
-      option.thickness === sheet.thickness.value &&
-      option.known.test(sheet.name)
-    );
-  }) ??
-  `${sheet.name}\n${sheet.thickness.value}`;
+const sheetBoughtAs = (sheet: Sheet) => {
+  const material =
+    sheet.option ??
+    IDS.find((id) => {
+      const option = STOCK_OPTIONS[id];
+      return (
+        option.kind === "sheet" &&
+        option.thickness === sheet.thickness.value &&
+        option.known.test(sheet.name)
+      );
+    }) ??
+    sheet.name;
+  const { price } = sheet;
+  return JSON.stringify([
+    material,
+    sheet.thickness.value,
+    price === undefined
+      ? { unpriced: sheet.name }
+      : { pence: price.pence, packOf: price.packOf, shop: price.shop ?? null },
+  ]);
+};
+
+/** A sheet's area, so the whole sheet is told from the pieces a shop cut from it. */
+const areaOf = (sheet: Sheet) => sheet.width.value * sheet.length.value;
 
 /**
- * The slots cut from sheet of one material cut from one stock (#786): the first slot's, so its
- * parts are packed together and the sheet bought, and costed, once. A slot given the pieces a shop
- * cut from that sheet (its strips) is cut from the sheet itself.
+ * The slots cut from one sheet, bought once (#786): those of one material and thickness at one
+ * price are cut from the biggest of them, so their parts are packed together and the sheet bought,
+ * and costed, once. A slot given the pieces a shop cut from that sheet (its strips, priced as the
+ * sheet) is cut from the sheet itself. Sheets of another thickness, option or price stay their own.
  */
 export const oneSheetEach = <P>(parameters: P, slots: readonly Slot<P>[]): P => {
-  const first = new Map<string, Sheet>();
-  return slots.reduce((now, slot) => {
-    if (slot.role !== "sheet" || !slot.inUse(now)) return now;
+  const sheetSlots = slots.filter((slot) => slot.role === "sheet" && slot.inUse(parameters));
+  const biggest = new Map<string, Sheet>();
+  for (const slot of sheetSlots) {
+    const sheet = slot.stock(parameters) as Sheet;
+    const key = sheetBoughtAs(sheet);
+    const known = biggest.get(key);
+    if (known === undefined || areaOf(sheet) > areaOf(known)) biggest.set(key, sheet);
+  }
+  return sheetSlots.reduce((now, slot) => {
     const sheet = slot.stock(now) as Sheet;
-    const material = sheetMaterialOf(sheet);
-    const earlier = first.get(material);
-    if (earlier === undefined) {
-      first.set(material, sheet);
-      return now;
-    }
-    return earlier === sheet ? now : slot.set(now, earlier);
+    const whole = biggest.get(sheetBoughtAs(sheet));
+    return whole === undefined || whole === sheet ? now : slot.set(now, whole);
   }, parameters);
 };
 

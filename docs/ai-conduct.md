@@ -218,10 +218,10 @@ A photo sent from a Build's chat in Fabrication, once the owner has started buil
 (#786), after the owner's first build sent the cutting stage's photos with every later turn as if they were the bench
 now. Its line goes on to say so, against the step the owner is on now:
 
-> Image 1 with this message. It was taken at step 2 of 12 (Mark the lengths), the step the owner is on now.
+> Image 1 with this message. It was taken at step <number> of <steps> (<title>), the step the owner is on now.
 
-> Image 1 with this message. It was taken at step 2 of 12 (Mark the lengths), an earlier step than the owner is on now
-> (step 4, Fit the castors to the bases), so it shows the Build as it was then, not now.
+> Image 1 with this message. It was taken at step <number> of <steps> (<title>), an earlier step than the owner is on
+> now (step <now>, <now-title>), so it shows the Build as it was then, not now.
 
 (or "a later step", when they've gone back). The image still goes with the message: only the words say when it's from.
 
@@ -1948,9 +1948,8 @@ it gives a fixing as the size to buy, and a shortfall only as the reply says it.
 trestle the owner has counts as the long end's support; any other tool counts only from Your tools. A tool the owner
 chose to buy from the Tools tab, or the bits their set is missing, is a buy-list line of its own.
 
-Changed with #786, after the owner's first build: the Garage chat read an old shopping list and build reference (1500
-long, 950 high) after the Build had changed, and sent the cutting stage's photos with every turn as if they were the
-bench now. A Build keeps the documents it supersedes in its file (`"supersedes": ["workbench-shopping-list"]`, by
+Changed with #786, after the owner's first build: the Garage chat read an old shopping list and build reference
+after the Build had changed, and sent the cutting stage's photos with every turn as if they were the bench now. A Build keeps the documents it supersedes in its file (`"supersedes": ["workbench-shopping-list"]`, by
 file name), the documents list marks each (Documents, above), and the owner archives them with one tap on the
 model's suggested reply. Each photo from a Build's chat says the step it was taken at (Attachments, above).
 

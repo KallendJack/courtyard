@@ -162,7 +162,7 @@ describe("the Build tool", () => {
     await mkdir(join(contextDir, "garage", "docs"), { recursive: true });
     await writeFile(
       join(contextDir, "garage", "docs", "workbench-shopping-list.md"),
-      "# Workbench shopping list\n\n- 45 × 95, for legs 950 high\n",
+      "# Workbench shopping list\n\n- 45 × 95, for legs 870 high\n",
     );
     await writeFile(
       join(contextDir, "garage", "docs", "garage-layout.md"),
