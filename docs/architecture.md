@@ -442,7 +442,8 @@ goes to Courtyard's login. It holds no state and does no model work, and calls o
   in big type beside it in 3D, or **Plan**, the Build in 3D beside its cut plan, buy list and tools as tabs, switched
   in the top bar; folded, At the bench alone, stacked. There the chat is the shared sheet (`packages/ui`'s `layout/sheet.tsx`), opened
   from Chat or a tap on **Hold to ask** (`chat/hold-to-ask.tsx`), which listens while held (told from a tap as
-  Courtyard's Talk is, `frame/press.ts`) and asks about the step when let go, its answer showing over the 3D view, or
+  Courtyard's Talk is, `frame/press.ts`), listening out for the step's words (`listen`'s phrases, where the browser
+  takes them), and asks about the step when let go, after a moment for more on a few words (#787), its answer showing over the 3D view, or
   that it didn't answer, with Try again. The cut plan's every piece shows its size, laid out to fit it. The 3D view is fitted to its panel and its letters kept apart. A part tapped
   anywhere lights everywhere and opens its card. The steps are an instruction manual (#699): one step at a time, the
   3D view built up to it, and the step reached and lines ticked kept through `/api/fabrication`, so every device opens
