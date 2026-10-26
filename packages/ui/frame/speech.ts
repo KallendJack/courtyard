@@ -13,6 +13,8 @@ type Recogniser = {
   onresult: ((event: SpeechRecognitionEvent) => void) | null;
   onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
+  /** What to listen out for, where the browser can be told (contextual biasing). */
+  phrases?: unknown[];
   start: () => void;
   stop: () => void;
   abort: () => void;
@@ -22,8 +24,15 @@ declare global {
   interface Window {
     SpeechRecognition?: new () => Recogniser;
     webkitSpeechRecognition?: new () => Recogniser;
+    SpeechRecognitionPhrase?: new (phrase: string, boost?: number) => unknown;
   }
 }
+
+/**
+ * How much likelier a phrase listened out for is than the recogniser would guess: about the
+ * natural log of how many times likelier, so 3 is some twenty times.
+ */
+const PHRASE_BOOST = 3;
 
 const recogniser = () => window.SpeechRecognition ?? window.webkitSpeechRecognition;
 
@@ -60,14 +69,20 @@ export type Listening = {
  * they come. Chrome on Android stops on its own in a pause; this starts it again, keeping what was
  * said, so the owner can think mid-sentence, but not for ever: with nothing new heard for a while,
  * it stops, and when Courtyard goes out of sight. When it can't listen (the microphone refused,
- * say) or stops like that, `failed` hears why, with the words heard until then.
+ * say) or stops like that, `failed` hears why, with the words heard until then. `phrases` are
+ * words likely to be said (a step's tools, say, #787), heard more surely where the browser can be
+ * told them; where it can't, it listens without.
  */
-export const listen = (on: {
-  heard: (words: string) => void;
-  finished: (words: string) => void;
-  failed: (problem: string, words: string) => void;
-}): Listening => {
+export const listen = (
+  on: {
+    heard: (words: string) => void;
+    finished: (words: string) => void;
+    failed: (problem: string, words: string) => void;
+  },
+  phrases: readonly string[] = [],
+): Listening => {
   const Recogniser = recogniser();
+  let biasing = phrases.length > 0;
   /** What the recognisers that have ended heard, and the one listening now, result by result. */
   let before: string[] = [];
   let now: string[] = [];
@@ -103,6 +118,14 @@ export const listen = (on: {
     recognition.lang = "en-GB";
     recognition.continuous = true;
     recognition.interimResults = true;
+    const Phrase = window.SpeechRecognitionPhrase;
+    if (biasing && Phrase !== undefined) {
+      try {
+        recognition.phrases = phrases.map((phrase) => new Phrase(phrase, PHRASE_BOOST));
+      } catch {
+        biasing = false;
+      }
+    }
     recognition.onresult = (event) => {
       const was = words();
       now = Array.from(event.results, (result) => result[0]?.transcript ?? "");
@@ -111,6 +134,11 @@ export const listen = (on: {
       on.heard(words());
     };
     recognition.onerror = (event) => {
+      // A recogniser that can't be told phrases ends at once: the next listens without them.
+      if (String(event.error) === "phrases-not-supported") {
+        biasing = false;
+        return;
+      }
       // Vivaldi, Brave and Opera have Chrome's recogniser but not Google's speech service, so
       // every listen ends at once in "network" (#422): with nothing heard, it's the browser.
       const problem =

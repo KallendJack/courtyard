@@ -7,8 +7,8 @@ import type { Page } from "@playwright/test";
  * refuse the microphone (`refuse`), or fail to reach its speech service (`loseConnection`), or
  * send the page out of sight (`goOutOfSight`) and back
  * (`comeBack`). It stands in for the screen's wake lock too, released out of sight as browsers do.
- * What the page asked for (the language, the microphone on or off, each vibration, the screen
- * kept awake) is kept in the page's storage for the test to read. Everything from the words on (the talk strip, the
+ * What the page asked for (the language, the phrases to listen out for, the microphone on or off,
+ * each vibration, the screen kept awake) is kept in the page's storage for the test to read. Everything from the words on (the talk strip, the
  * message sent) is real.
  */
 export const standInSpeechRecognition = (page: Page) =>
@@ -27,11 +27,16 @@ export const standInSpeechRecognition = (page: Page) =>
       onresult: Handler = null;
       onerror: Handler = null;
       onend: Handler = null;
+      phrases: { phrase: string; boost: number }[] = [];
       results: Heard[] = [];
 
       start() {
         listening = this;
         localStorage.setItem("stand-in-speech-lang", this.lang);
+        localStorage.setItem(
+          "stand-in-phrases",
+          JSON.stringify(this.phrases.map((each) => each.phrase)),
+        );
         localStorage.setItem("stand-in-mic", "on");
         const words = unheard;
         unheard = undefined;
@@ -88,6 +93,16 @@ export const standInSpeechRecognition = (page: Page) =>
     for (const name of ["SpeechRecognition", "webkitSpeechRecognition"]) {
       Object.defineProperty(window, name, { configurable: true, value: StandIn });
     }
+    /** A phrase the page says is likely, to bias what's heard towards it. */
+    class Phrase {
+      phrase: string;
+      boost: number;
+      constructor(phrase: string, boost = 1) {
+        this.phrase = phrase;
+        this.boost = boost;
+      }
+    }
+    Object.defineProperty(window, "SpeechRecognitionPhrase", { configurable: true, value: Phrase });
     addEventListener("stand-in-hear", (event) => {
       if (!(event instanceof CustomEvent && typeof event.detail === "string")) return;
       if (listening === undefined) unheard = event.detail;
@@ -212,6 +227,10 @@ export const screenKeptAwake = (page: Page) =>
 /** Whether the microphone is on: something is listening. */
 export const micOn = (page: Page) =>
   page.evaluate(() => localStorage.getItem("stand-in-mic") === "on");
+
+/** The phrases the page last told the recogniser to listen out for. */
+export const listenedFor = (page: Page) =>
+  page.evaluate((): unknown => JSON.parse(localStorage.getItem("stand-in-phrases") ?? "[]"));
 
 /** The language the page last listened in. */
 export const listenedIn = (page: Page) =>

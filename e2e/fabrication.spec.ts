@@ -3,7 +3,7 @@ import { BuildChat, BuildOpened } from "../packages/contract/index.ts";
 import { goldenBench } from "../packages/fabrication/bench/fixtures/golden.ts";
 import { goldenHolster } from "../packages/fabrication/print/fixtures/golden.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
-import { hear, standInSpeechRecognition } from "./speech-recognition.ts";
+import { hear, listenedFor, pause, standInSpeechRecognition } from "./speech-recognition.ts";
 
 // Fabrication (#698, ADR 0036): a project step's Build opens in Fabrication, served under
 // /fabrication behind Courtyard's login, with a chat in its session. On the Fold (#753; Paper,
@@ -630,6 +630,73 @@ test.describe("on the unfolded Fold", () => {
     await expect(answer.getByRole("button", { name: "Try again" })).toBeVisible();
     await answer.getByRole("button", { name: "Close" }).click();
     await expect(answer).toBeHidden();
+  });
+
+  // #787: half-sentences went as messages of their own, and the step's words were misheard.
+  test("hold to ask: a pause mid-sentence, or letting go after a few words, still asks once", async ({
+    page,
+  }) => {
+    test.slow();
+    await standInSpeechRecognition(page);
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await chatSettled(page);
+
+    const ask = page.getByRole("button", { name: "Hold to ask" });
+    const { x, y, width, height } = await boxOf(ask);
+    await page.mouse.move(x + width / 2, y + height / 2);
+    await page.mouse.down();
+    // The step's own words are listened out for.
+    expect(await listenedFor(page)).toEqual(expect.arrayContaining(["Tape measure", "clamp"]));
+    await hear(page, "Is the floor");
+    // The browser stops on its own in the pause, as Chrome on Android does; the owner carries on.
+    await pause(page);
+    await hear(page, "level");
+    const heard = page.getByRole("status").filter({ hasText: "Is the floor" });
+    await expect(heard).toHaveText("Step 1, Check what's arrived: Is the floor level");
+    await page.mouse.up();
+
+    // A few words: a moment to carry on before it's asked.
+    await expect(page.getByRole("button", { name: "Hold to add more" })).toBeVisible();
+    await page.mouse.down();
+    await hear(page, "enough for the clamps?");
+    await expect(heard).toHaveText(
+      "Step 1, Check what's arrived: Is the floor level enough for the clamps?",
+    );
+    await page.mouse.up();
+
+    const answer = page.getByRole("region", { name: "Answer" });
+    await expect(answer).toContainText(
+      "You said: Step 1, Check what's arrived: Is the floor level enough for the clamps?",
+      { timeout: 60_000 },
+    );
+    await answer.getByRole("button", { name: "Open chat" }).click();
+    const messages = page
+      .getByRole("dialog", { name: "Chat" })
+      .getByRole("list", { name: "Messages" });
+    await expect(messages.getByText(/^Step 1, Check what's arrived:/)).toHaveCount(1);
+  });
+
+  test("hold to ask: a few words with nothing more are asked after a moment", async ({ page }) => {
+    test.slow();
+    await standInSpeechRecognition(page);
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await chatSettled(page);
+
+    const ask = page.getByRole("button", { name: "Hold to ask" });
+    const { x, y, width, height } = await boxOf(ask);
+    await page.mouse.move(x + width / 2, y + height / 2);
+    await page.mouse.down();
+    await hear(page, "Which screws?");
+    await page.mouse.up();
+    await expect(page.getByRole("button", { name: "Hold to add more" })).toBeVisible();
+
+    const answer = page.getByRole("region", { name: "Answer" });
+    await expect(answer).toContainText("You said: Step 1, Check what's arrived: Which screws?", {
+      timeout: 60_000,
+    });
+    await expect(page.getByRole("button", { name: "Hold to ask" })).toBeVisible();
   });
 });
 

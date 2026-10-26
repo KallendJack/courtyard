@@ -303,7 +303,8 @@ _Avoid_: step mode, workshop mode, focus mode
 
 **Hold to ask**:
 The chat behind one button, at the bench (#753): held, it listens, and let go, what was said is asked in the Build's
-chat about the step, its answer showing over the picture until it gets out of the way. A tap opens the chat.
+chat about the step, its answer showing over the picture until it gets out of the way. A pause doesn't end it; let
+go on a few words, it waits a moment for more (#787). A tap opens the chat.
 _Avoid_: push to talk (that's the Talk key's), voice chat
 
 **Carry on (a project)**:

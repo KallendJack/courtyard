@@ -1,4 +1,10 @@
-import type { ModelRef, NewMessage, ProviderList } from "@courtyard/contract";
+import type {
+  BuildStep,
+  DerivedBuild,
+  ModelRef,
+  NewMessage,
+  ProviderList,
+} from "@courtyard/contract";
 import { MarkdownAnswer } from "@courtyard/ui/answer/markdown.tsx";
 import { Button, IconButton } from "@courtyard/ui/buttons/button.tsx";
 import { usePress } from "@courtyard/ui/frame/press.ts";
@@ -43,17 +49,61 @@ const sendAsked = async (talk: BuildTalk, message: NewMessage, asked: (asked: As
   return failed;
 };
 
+/** Words said at any bench, which the browser mishears without a nudge ("plant" for plan, #787). */
+const BENCH_WORDS = ["clamp", "clamps", "plan", "cut plan", "buy list", "next step"];
+
+/** What Hold to ask listens out for (#787): the bench's words, and the step's parts, tools and words. */
+export const benchPhrases = (derived: DerivedBuild, step: BuildStep | undefined) => [
+  ...new Set(
+    [
+      ...BENCH_WORDS,
+      ...(step === undefined
+        ? []
+        : [
+            ...step.parts.map(
+              (label) => derived.parts.find((part) => part.label === label)?.name ?? label,
+            ),
+            ...[...step.tools, ...step.safety, ...step.fixings].map((each) => each.name),
+            ...step.words,
+          ]),
+    ].filter((phrase) => phrase.length > 1),
+  ),
+];
+
+/**
+ * Said and let go with fewer words than this, or ending on a word that leads on ("and"), it waits
+ * `CARRY_ON_MS` before it's asked, for a hold that carries on (#787).
+ */
+const FEW_WORDS = 5;
+const CARRY_ON_MS = 3000;
+const LEADS_ON = new Set(["and", "but", "or", "so", "if", "because", "then", "the", "a", "to"]);
+
+const joined = (...parts: readonly string[]) =>
+  parts
+    .map((part) => part.trim())
+    .filter((part) => part !== "")
+    .join(" ");
+
+/** Whether what was said sounds unfinished: a few words, or a last word that leads on. */
+const unfinished = (said: string) => {
+  const words = said.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
+  return words.length < FEW_WORDS || LEADS_ON.has(words.at(-1) ?? "");
+};
+
 /**
  * Hold to ask (#753's boards): the chat behind one button, for dusty hands. Held, it listens,
- * showing what will be sent ("Step 3, Cut and label the timber: …"); let go, it's asked in the
- * Build's chat, and `asked` hears what was asked. A tap opens the chat to type in, as it does
- * where the browser can't listen; a tap and a hold are told apart as Courtyard's Talk does
- * (`usePress`). In Plan, Chat sits beside it.
+ * showing what will be sent ("Step 3, Cut and label the timber: …"), through any pause, until
+ * it's let go; then it's asked in the Build's chat, and `asked` hears what was asked. Let go on
+ * a few words, it waits a moment for Hold to add more (#787). A tap opens the chat to type in, as
+ * it does where the browser can't listen, or asks at once what's waiting; a tap and a hold are
+ * told apart as Courtyard's Talk does (`usePress`). It listens out for `phrases`. In Plan, Chat
+ * sits beside it.
  */
 export function HoldToAsk(props: {
   talk: BuildTalk;
   /** What the question is about, said before it: the step. */
   about: string | undefined;
+  phrases: readonly string[];
   openChat: () => void;
   asked: (asked: Asked) => void;
   withChat?: boolean;
@@ -63,40 +113,58 @@ export function HoldToAsk(props: {
   const [problem, setProblem] = useState<string>();
   const listening = useRef<Listening>(undefined);
   const words = useRef("");
+  /** What was said and let go, waiting a moment for more; and that moment. */
+  const said = useRef("");
+  const carryOn = useRef<number>(undefined);
+  const [waiting, setWaiting] = useState(false);
+  useEffect(() => () => window.clearTimeout(carryOn.current), []);
   const press = usePress({ held: () => feel("thump") });
 
-  const ask = async (said: string) => {
-    const text = said.trim();
-    if (text === "") return;
+  const ask = async (text: string) => {
     const model = modelFor(talk.chat?.model, talk.providers);
     if (model === undefined) return setProblem(UNREACHABLE);
     const message = { text: about === undefined ? text : `${about}: ${text}`, model };
     setProblem(await sendAsked(talk, message, props.asked));
   };
 
+  /** What was said is done with: asked now, or, sounding unfinished, after a moment for more. */
+  const settle = (text: string, now: boolean) => {
+    window.clearTimeout(carryOn.current);
+    const waits = text !== "" && !now && unfinished(text);
+    said.current = waits ? text : "";
+    setWaiting(waits);
+    setHeard(waits ? text : undefined);
+    if (waits) carryOn.current = window.setTimeout(() => settle(text, true), CARRY_ON_MS);
+    else if (text !== "") void ask(text);
+  };
+
   const hold = (event: PointerEvent<HTMLButtonElement>) => {
     if (!canListen() || listening.current !== undefined || event.button !== 0) return;
     press.begin(event);
+    // Held again in the moment after a few words: what's said now carries on from them.
+    window.clearTimeout(carryOn.current);
+    setWaiting(false);
     words.current = "";
     setProblem(undefined);
-    setHeard("");
+    setHeard(said.current);
     feel("tick");
-    listening.current = listen({
-      heard: (now) => {
-        words.current = now;
-        setHeard(now);
+    listening.current = listen(
+      {
+        heard: (now) => {
+          words.current = now;
+          setHeard(joined(said.current, now));
+        },
+        finished: (now) => settle(joined(said.current, now === "" ? words.current : now), false),
+        failed: (why) => {
+          press.cancel();
+          listening.current = undefined;
+          said.current = "";
+          setHeard(undefined);
+          setProblem(why);
+        },
       },
-      finished: (now) => {
-        setHeard(undefined);
-        void ask(now === "" ? words.current : now);
-      },
-      failed: (why) => {
-        press.cancel();
-        listening.current = undefined;
-        setHeard(undefined);
-        setProblem(why);
-      },
-    });
+      props.phrases,
+    );
   };
   const letGo = (event: PointerEvent<HTMLButtonElement>) => {
     const how = press.end(event);
@@ -105,6 +173,8 @@ export function HoldToAsk(props: {
     listening.current = undefined;
     if (how === "tap" && words.current === "") {
       now.cancel();
+      // A tap in the moment after a few words asks them now; otherwise it opens the chat.
+      if (said.current !== "") return settle(said.current, true);
       setHeard(undefined);
       props.openChat();
       return;
@@ -144,13 +214,14 @@ export function HoldToAsk(props: {
             press.cancel();
             listening.current?.cancel();
             listening.current = undefined;
-            setHeard(undefined);
+            // What was let go before waits its moment again; what this hold heard is dropped.
+            settle(said.current, false);
           }}
           onContextMenu={(event) => event.preventDefault()}
           onClick={tapped}
         >
           <Mic aria-hidden className="size-5" />
-          {heard === undefined ? "Hold to ask" : "Let go to ask"}
+          {waiting ? "Hold to add more" : heard === undefined ? "Hold to ask" : "Let go to ask"}
         </Button>
         {props.withChat === true && (
           <Button variant="outline" size="thumb" onClick={props.openChat}>

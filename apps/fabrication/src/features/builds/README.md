@@ -53,8 +53,9 @@ plate in place of the bench, its Print tab before its buy list.
 **On the Fold** (#753): **At the bench** is where a Build with steps opens: the step's label, title and checklist in
 big type, its tools as chips (gold where one's to check), Back and "Done, next step" at thumb height, and a swipe on
 the step for the next or the one before. The dots in the top bar show how far, and are nothing to tap. Beside it, the
-step in 3D with **Hold to ask**: held, it listens and shows what will be sent ("Step 3, Cut and label the timber: …");
-let go, it's asked in the chat, and the answer shows over the picture, closing by itself 30 seconds after it has
+step in 3D with **Hold to ask**: held, it listens through any pause, listening out for the step's parts, tools and
+words, and shows what will be sent ("Step 3, Cut and label the timber: …"); let go, it's asked in the chat. Let go on
+a few words, or on one like "and", it waits 3 seconds for **Hold to add more** before it's asked (#787). The answer shows over the picture, closing by itself 30 seconds after it has
 all come; one that fails or never comes says "It didn't answer." with Try again, until it's closed. A tap
 opens the chat. **Plan**, one tap away in the top bar, is the Build big in 3D with Hold to ask and
 Chat, and its cut plan, buy list and tools as tabs under what the making rules found. The chat is a sheet from the
