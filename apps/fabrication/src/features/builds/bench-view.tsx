@@ -4,14 +4,16 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { CALLOUT_FILL, isSmall, outlineOf, placeWords } from "./picture/callouts.ts";
 import {
   anchorOf,
   type BuildScene,
   drawMark,
   hatching,
+  letteredOf,
+  markClass,
   markWords,
   placing,
-  spread,
   TILT,
   themed,
   viewFrom,
@@ -36,19 +38,6 @@ const TAP_SLOP = 6;
 const FILL = 0.9;
 
 /**
- * The parts with a letter over them: those lit at the step, or every part when none is, one
- * letter a part so they don't pile up (#753).
- */
-const letteredOf = (scene: BuildScene) => {
-  const anyLit = scene.pieces.some((piece) => piece.tone === "lit");
-  return scene.pieces.flatMap((piece) =>
-    piece.kind === "part" && piece.label !== null && (!anyLit || piece.tone === "lit")
-      ? [{ label: piece.label, name: piece.name, lit: piece.tone === "lit" }]
-      : [],
-  );
-};
-
-/**
  * The scene, drawn when something changes it (a turn, a part lit, a new step), never in a loop.
  * The part letters and the marks' words are over the canvas, moved to where each belongs. Built
  * again only when the scene's numbers change: at the same step it stays as the owner turned it,
@@ -70,6 +59,7 @@ export default function BenchView(props: {
   const { derived, lit, reset } = props;
   const host = useRef<HTMLElement>(null);
   const labels = useRef(new Map<string, HTMLElement>());
+  const leaders = useRef(new Map<string, SVGLineElement>());
   const scene = useRef<{ light: (label: string | undefined) => void; reset: () => void }>(
     undefined,
   );
@@ -164,31 +154,35 @@ export default function BenchView(props: {
       const box = built.pieces.find((piece) => piece.label === label)?.boxes[0];
       return { key: `part ${label}`, at: box === undefined ? undefined : centreOf(box) };
     });
-    const marks = built.marks.map((mark, at) => ({
+    const anchored = built.marks.map((mark, at) => ({
       key: `mark ${at}`,
       at: point(anchorOf(mark)),
+      callout: mark.kind === "callout",
     }));
+    const marks = anchored.filter((mark) => !mark.callout);
+    const callouts = anchored.filter((mark) => mark.callout);
     const draw = () => {
       renderer.render(world, camera);
       const { clientWidth: width, clientHeight: height } = element;
       const view = viewOf(camera.position.clone().sub(controls.target));
       element.dataset.turn = String(view.turn);
       element.dataset.tilt = String(view.tilt);
+      element.toggleAttribute("data-small", isSmall({ width, height }));
       const onScreen = (at: THREE.Vector3) => {
         const projected = at.clone().project(camera);
         return { x: ((projected.x + 1) / 2) * width, y: ((1 - projected.y) / 2) * height };
       };
-      // The marks' words, then the parts' letters, each clear of the others and inside the
-      // picture (#777).
-      const shown = [...marks, ...letters].flatMap(({ key, at }) => {
+      const measured = (key: string, at: THREE.Vector3 | undefined) => {
         const label = labels.current.get(key);
         if (label === undefined || at === undefined) return [];
-        return [{ label, ...onScreen(at), w: label.offsetWidth, h: label.offsetHeight }];
-      });
-      spread(shown, { width, height }).forEach(({ x, y }, at) => {
-        const label = shown[at]?.label;
-        if (label !== undefined)
-          label.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+        const leader = leaders.current.get(key);
+        return [{ label, leader, ...onScreen(at), w: label.offsetWidth, h: label.offsetHeight }];
+      };
+      placeWords({
+        shown: [...marks, ...letters].flatMap(({ key, at }) => measured(key, at)),
+        callouts: callouts.flatMap(({ key, at }) => measured(key, at)),
+        outlines: meshes.map(({ mesh }) => outlineOf(mesh, onScreen)),
+        bounds: { width, height },
       });
     };
     /**
@@ -196,6 +190,7 @@ export default function BenchView(props: {
      * it fills the view: moved in or out until its farthest corner is at `FILL`.
      */
     const fit = (from?: THREE.Vector3) => {
+      const fill = built.marks.some((mark) => mark.kind === "callout") ? CALLOUT_FILL : FILL;
       const shown = new THREE.Box3();
       for (const { mesh } of meshes) shown.expandByObject(mesh);
       if (shown.isEmpty()) return;
@@ -221,7 +216,7 @@ export default function BenchView(props: {
             return Math.max(Math.abs(onScreen.x), Math.abs(onScreen.y));
           }),
         );
-        if (reaches > 0) distance *= reaches / FILL;
+        if (reaches > 0) distance *= reaches / fill;
       }
       controls.target.copy(centre);
       camera.position.copy(direction).multiplyScalar(distance).add(centre);
@@ -335,36 +330,49 @@ export default function BenchView(props: {
     <figure
       ref={host}
       aria-label={`${built.title}, in 3D`}
-      className="relative h-full w-full touch-none overflow-hidden select-none"
+      className="group relative h-full w-full touch-none overflow-hidden select-none"
     >
       {props.scene !== undefined && (
         <CapsLabel tone="muted" className="pointer-events-none absolute top-0 left-0">
           {built.title}
         </CapsLabel>
       )}
+      <svg aria-hidden className="pointer-events-none absolute inset-0 size-full">
+        {built.marks.map((mark, at) =>
+          mark.kind === "callout" ? (
+            <line
+              // biome-ignore lint/suspicious/noArrayIndexKey: a scene's marks are in a fixed order.
+              key={at}
+              ref={(line) => {
+                if (line === null) leaders.current.delete(`mark ${at}`);
+                else leaders.current.set(`mark ${at}`, line);
+              }}
+              strokeWidth={1.5}
+              className={mark.tone === "yours" ? "stroke-yours" : "stroke-success"}
+            />
+          ) : null,
+        )}
+      </svg>
       {built.marks.map((mark, at) => (
         <span
           // biome-ignore lint/suspicious/noArrayIndexKey: a scene's marks are in a fixed order.
           key={at}
           ref={place(`mark ${at}`)}
           className={classes(
-            // As big as the step's own lines, read at arm's length (#777).
             "pointer-events-none absolute top-0 left-0 rounded-sm px-1 whitespace-nowrap",
-            props.big ? "text-bench" : "text-answer",
-            mark.kind === "size" &&
-              "border border-warning/60 bg-background/80 font-mono text-warning",
-            mark.kind === "check" && "bg-background/80 font-mono text-success",
-            mark.kind === "line" && "font-mono text-foreground",
-            mark.kind === "arrow" && "text-primary-text",
-            mark.kind === "note" &&
-              (mark.tone === "waste"
-                ? "text-destructive-text"
-                : mark.tone === "check"
-                  ? "text-success"
-                  : "text-muted-foreground"),
+            markClass(mark, props.big),
           )}
         >
-          {markWords(mark)}
+          {mark.kind === "callout" ? (
+            <>
+              <span className="block font-semibold">{mark.says}</span>
+              {mark.more !== undefined && (
+                <span className="block group-data-small:hidden">{mark.more}</span>
+              )}
+            </>
+          ) : (
+            markWords(mark)
+          )}
         </span>
       ))}
       {lettered.map((part) => (

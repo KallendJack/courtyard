@@ -1,7 +1,7 @@
 import type { StepTool } from "../build.ts";
 import { bitInSets, TOOL_NAMES, type Tool } from "../tools.ts";
 import { PILOT } from "./close-ups.ts";
-import type { Draft } from "./preparing.ts";
+import type { Draft, DraftTool } from "./preparing.ts";
 
 // A step's tools as the steps say them (#763): each against what's to hand, what will do for one
 // the owner hasn't (a step stool), and drill bits by the size the step drills with.
@@ -16,7 +16,11 @@ export const stepToolsOf =
     bitSets: readonly string[];
   }) =>
   (draft: Draft) =>
-  (tool: Tool): StepTool => {
+  (drafted: DraftTool): StepTool => {
+    // A tool the step names itself ("Drill, 7 mm bit") keeps its name, and its own say on whether
+    // it's to hand when it knows better (pliers holding a bolt's head, #783).
+    const { tool, name, toHand } =
+      typeof drafted === "string" ? { tool: drafted, name: TOOL_NAMES[drafted] } : drafted;
     const standIn = owner.standIns.get(tool);
     // Every step that drills makes 3 mm pilot holes, unless it says it drills another size.
     const bits =
@@ -28,8 +32,8 @@ export const stepToolsOf =
         : undefined;
     return {
       tool,
-      name: TOOL_NAMES[tool],
-      toHand: owner.toHand.has(tool),
+      name,
+      toHand: toHand ?? owner.toHand.has(tool),
       ...(standIn === undefined ? {} : { standIn }),
       ...(bits === undefined ? {} : { bits }),
     };

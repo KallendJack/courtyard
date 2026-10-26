@@ -148,7 +148,7 @@ const readBuildsIn = async (
     if (build === undefined) continue;
     const kept = await readTextFile(join(folder, progressPath(slug.data)));
     if (!kept.ok) return err({ kind: "storage" });
-    const progress = progressIn(kept.value, () => readBuildText(build));
+    const progress = progressIn(kept.value, (started) => readBuildText(build, { started }));
     const read = readBuildText(build, settingOf(owner, progress));
     if (!read.ok) {
       problems.push({ path, problem: read.error });

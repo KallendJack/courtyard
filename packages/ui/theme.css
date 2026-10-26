@@ -45,6 +45,7 @@
   --color-sheet: var(--sheet);
   --color-fitted: var(--fitted);
   --color-printed: var(--printed);
+  --color-yours: var(--yours);
   --color-code-keyword: var(--code-keyword);
   --color-code-name: var(--code-name);
   --color-code-number: var(--code-number);
@@ -210,6 +211,8 @@
   --sheet: #dcc99c;
   --fitted: #6b6b6b;
   --printed: #9fb2c6;
+  /* In a step's picture, the words for the owner's own tools and where things go (#783). */
+  --yours: #e8c766;
 
   /* Code in answers. */
   --code-keyword: #b784bb;

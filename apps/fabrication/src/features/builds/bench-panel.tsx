@@ -70,7 +70,7 @@ export function BenchPanel(props: {
   lit: string | undefined;
   pick: (label: string) => void;
   atStep?: AtStep | undefined;
-  /** Whether the step's close-up goes under the 3D view: only on a computer. */
+  /** Whether the step's close-ups go under the 3D view: only on a computer. */
   closeUp?: boolean;
   /** Whether the parts' key goes under it: only on a computer, with room for it. */
   withKey?: boolean;
@@ -85,7 +85,7 @@ export function BenchPanel(props: {
 }) {
   const { derived, lit, pick, atStep, resettable = true } = props;
   const [reset, setReset] = useState(0);
-  const closeUp = props.closeUp === true ? atStep?.step.closeUp : null;
+  const closeUps = props.closeUp === true ? (atStep?.step.closeUps ?? []) : [];
   const over =
     props.over ??
     (lit === undefined ? undefined : (
@@ -134,9 +134,11 @@ export function BenchPanel(props: {
           )}
         </div>
       </div>
-      {closeUp !== undefined && closeUp !== null && (
-        <div className="flex max-h-[45%] shrink-0">
-          <CloseUp closeUp={closeUp} parts={derived.parts} />
+      {closeUps.length > 0 && (
+        <div className="flex max-h-[45%] shrink-0 gap-3">
+          {closeUps.map((closeUp) => (
+            <CloseUp key={closeUp.title} closeUp={closeUp} parts={derived.parts} />
+          ))}
         </div>
       )}
       {/* At a step, the letters on the parts are the key, and the 3D view keeps the room. */}

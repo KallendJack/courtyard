@@ -1,6 +1,6 @@
 import type { CutPlan, Fitted, KeptWay, Part, Step } from "../build.ts";
 import type { Capacities } from "../capacity.ts";
-import { TOOL_NAMES, type Tool } from "../tools.ts";
+import { type SpannerKit, TOOL_NAMES, type Tool } from "../tools.ts";
 import { castorsDraft } from "./castor-steps.ts";
 import { braceCloseUp, SHEET_SCREWS_PER_BRACE, sheetCloseUp } from "./close-ups.ts";
 import { type Shape, whole } from "./frame.ts";
@@ -37,6 +37,10 @@ export const benchSteps = (options: {
   bitSets: readonly string[];
   /** The ways the steps already started were done, which they keep. */
   kept: readonly KeptWay[];
+  /** The steps with a line ticked, by ID: a step started keeps its lines (#783). */
+  started: readonly string[];
+  /** What the owner has that holds a bolt's head and turns its nut (#783). */
+  kit: SpannerKit;
   /** What the owner's powered saws can cut (#780). */
   capacities: Capacities;
 }): Step[] => {
@@ -95,8 +99,13 @@ export const benchSteps = (options: {
       sectionOf: (stock) => sectionOf(setting, stock),
       nameOf: (label) => nameOf(setting, label),
     }),
-    ...(castors ? [castorsDraft({ castors, shape: s, boltLength: options.boltLength })] : []),
-    ...frameDrafts({ parameters: p, shape: s, pilots }),
+    // The castors after the frames, so a spanner still to get doesn't hold up the day (#783).
+    ...frameDrafts({
+      parameters: p,
+      shape: s,
+      pilots,
+      castors: castors ? castorsDraft({ ...options, castors, shape: s }) : null,
+    }),
     {
       id: "fit-supports",
       on: true,
@@ -268,6 +277,7 @@ export const benchSteps = (options: {
     parts: draft.parts,
     adds: draft.adds ?? draft.parts,
     ways: draft.ways ?? [],
+    ...(draft.lines === undefined ? {} : { lines: draft.lines }),
     wayChanged: draft.id === CUT_STEP ? sawChanged : null,
     tools: draft.tools.map(stepTool(draft)),
     safety: (draft.safety ?? []).map(stepTool(draft)),
@@ -275,7 +285,7 @@ export const benchSteps = (options: {
     batch: draft.batch,
     actions: draft.actions,
     tips: draft.tips ?? [],
-    closeUp: draft.closeUp ?? null,
+    closeUps: draft.closeUps ?? (draft.closeUp === undefined ? [] : [draft.closeUp]),
     walkThrough: draft.walkThrough ?? [],
     scene: stepScene(setting, {
       id: draft.id,

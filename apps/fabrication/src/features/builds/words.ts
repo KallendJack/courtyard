@@ -183,6 +183,10 @@ export const toolsNeeded = (derived: DerivedBuild): ToolNeeded[] => {
           bits: [],
         };
         tools.set(tool.tool, known);
+      } else if (known.toHand && !tool.toHand) {
+        // One tool twice, as the castors' spanners (#783): it's to sort while either isn't to hand.
+        known = { ...known, name: tool.name, toHand: false };
+        tools.set(tool.tool, known);
       }
       if (!known.steps.includes(step.number)) known.steps.push(step.number);
       for (const bit of tool.bits ?? []) {

@@ -141,11 +141,11 @@ describe("the golden bench's buy list", () => {
       ["45 × 145 C16, 2.4 m", 1, 1, 1200],
       ["18 mm plywood, 2440 × 1220", 1, 1, 5000],
       ["Wheelwright TD60 castors", 4, 1, 4999],
+      ["5 × 80 screws", 32, 1, 520],
       // The M6 × 50s given are too short: the 60s to use have no price yet.
       ["M6 × 60 bolts", 16, 16, undefined],
-      ["M6 washers", 32, 1, 365],
+      ["M6 washers", 16, 1, 365],
       ["M6 lock nuts", 16, 1, 350],
-      ["5 × 80 screws", 32, 1, 520],
       ["40 mm angle brackets", 12, 12, 1068],
       ["4 × 30 screws", 48, 1, 380],
       ["4 × 40 screws", 43, 1, 420],
@@ -169,7 +169,10 @@ describe("the golden bench's buy list", () => {
   });
 });
 
-/** The golden bench with its castor bolts this long, and its washers this thick. */
+/**
+ * The golden bench with its castor bolts this long, and its washers this thick: two a bolt, so
+ * the lengths below have a washer of each kind to add up.
+ */
 const withBolts = (length: number, washer = goldenBench.castors.washer.thickness.value) => ({
   ...goldenBench,
   castors: {
@@ -180,6 +183,7 @@ const withBolts = (length: number, washer = goldenBench.castors.washer.thickness
     },
     washer: {
       ...goldenBench.castors.washer,
+      perBolt: 2,
       thickness: { ...goldenBench.castors.washer.thickness, value: washer },
     },
   },
@@ -257,7 +261,7 @@ describe("the making rules", () => {
       kind: "tools-missing",
       tools: [
         { tool: "long-end-support", name: "Support for the long end", steps: [3] },
-        { tool: "spanner", name: "Spanner", steps: [4] },
+        { tool: "spanner", name: "Spanner", steps: [6] },
         { tool: "countersink-bit", name: "Countersink bit", steps: [11] },
         { tool: "sandpaper", name: "Sandpaper", steps: [11] },
         { tool: "spirit-level", name: "Spirit level", steps: [12] },
@@ -583,9 +587,9 @@ describe("the golden bench's steps", () => {
       [1, "Check what's arrived", []],
       [2, "Mark the lengths", ["A", "B", "C", "D", "E", "F"]],
       [3, "Cut and label the timber", ["A", "B", "C", "D", "E", "F"]],
-      [4, "Fit the castors to the bases", ["E"]],
-      [5, "Make the two end frames", ["A", "C"]],
-      [6, "Join the end frames with the long rails", ["B"]],
+      [4, "Make the two end frames", ["A", "C"]],
+      [5, "Join the end frames with the long rails", ["B"]],
+      [6, "Fit the castors to the bases", ["E"]],
       [7, "Stand the frame on its bases", ["E"]],
       [8, "Fit the supports", ["F", "D"]],
       [9, "Fit the shelf", ["H"]],
@@ -600,9 +604,9 @@ describe("the golden bench's steps", () => {
       [1, []],
       [2, []],
       [3, []],
-      [4, ["E"]],
-      [5, ["A", "C"]],
-      [6, ["B"]],
+      [4, ["A", "C"]],
+      [5, ["B"]],
+      [6, ["E"]],
       [7, []],
       [8, ["F", "D"]],
       [9, ["H"]],
@@ -683,12 +687,12 @@ describe("the golden bench's steps", () => {
   });
 
   it("make the end frames with their sizes, two screws a joint and a check for square", () => {
-    const step = built(goldenBench).steps.find((step) => step.number === 5);
+    const step = built(goldenBench).steps.find((step) => step.number === 4);
 
     expect(step?.fixings).toEqual([{ name: "5 × 80 screws", count: 16 }]);
     expect(step?.safety.map((tool) => tool.tool)).toEqual(["safety-glasses"]);
-    expect(step?.closeUp?.dimensions.map((line) => line.mm)).toEqual([460, 750, 250]);
-    expect(step?.closeUp?.fixings).toHaveLength(8);
+    expect(step?.closeUps[0]?.dimensions.map((line) => line.mm)).toEqual([460, 750, 250]);
+    expect(step?.closeUps[0]?.fixings).toHaveLength(8);
     expect(step?.check.says).toBe(
       "Measure corner to corner both ways. The same within 2 mm means it's square.",
     );
@@ -700,7 +704,7 @@ describe("the golden bench's steps", () => {
       .steps.filter((step) => step.helper)
       .map((step) => step.number);
 
-    expect(helped).toEqual([6, 7]);
+    expect(helped).toEqual([5, 7]);
   });
 
   it("point every word they use into the glossary", () => {
@@ -724,9 +728,9 @@ describe("the golden bench's steps, at the bench (#699)", () => {
       "check-delivery",
       "mark-lengths",
       "cut-timber",
-      "fit-castors",
       "end-frames",
       "long-rails",
+      "fit-castors",
       "stand-on-bases",
       "fit-supports",
       "fit-shelf",
@@ -805,11 +809,103 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     );
   });
 
+  it("fit the castors in four short lines, as the board says, the sizes one tap away (#783)", () => {
+    const fitting = stepOf(built(goldenBench), "fit-castors");
+
+    expect(fitting?.actions.map((action) => action.howTo)).toEqual([
+      "Base in the Workmate's jaws. Castor upside down on its end: same gap both sides, a fingernail from the end.",
+      "Drill one hole through the plate with the 7 mm bit. Bolt it loosely.",
+      "Drill the next hole through the plate. Bolt it. Then the other two.",
+      "Tighten each: spanner on the head, its handle against the castor. Turn the nut underneath.",
+    ]);
+    expect(fitting?.actions.map((action) => action.numbers)).toEqual([
+      "E in the jaws; castor 10 from the end, centred.",
+      "7 mm through one plate hole; bolt loosely.",
+      "Each next hole through the plate; bolt it.",
+      "Head held against the castor; turn the nut.",
+    ]);
+    // Nothing else shows by default: no walk-through, and no tips in the lines or close-ups.
+    expect(fitting?.walkThrough).toEqual([]);
+    const said = JSON.stringify([fitting?.actions, fitting?.closeUps]);
+    for (const tip of ["clutch", "is off", "by hand", "quarter turn"]) {
+      expect(said).not.toContain(tip);
+    }
+  });
+
+  it("keep the castors' extras behind Tips: the clutch, the nut by hand, how tight (#783, #789)", () => {
+    const fitting = stepOf(built(goldenBench), "fit-castors");
+
+    expect(fitting?.batch).toBe("One castor at a time: place, drill, bolt, then the next.");
+    expect(fitting?.tips).toEqual([
+      "If the drill seems to stop, turn its collar to the drill symbol: the numbers are for driving screws.",
+      "Start each nut by hand, a few turns, before the spanner.",
+      "Tight is when the washer bites into the wood, then about a quarter turn more. A lock nut is stiff all the way.",
+    ]);
+  });
+
+  it("put the base on two offcuts when there's no Workmate (#783)", () => {
+    const derived = deriveBench(goldenBench, { tools: ["Drill / driver", "Drill bits"] });
+    const fitting = derived.ok ? stepOf(derived.value, "fit-castors") : undefined;
+
+    expect(fitting?.actions[0]?.howTo).toBe(
+      "Base upside down on two offcuts. Castor upside down on its end: same gap both sides, a fingernail from the end.",
+    );
+    expect(fitting?.scene?.title).toBe("On two offcuts");
+  });
+
+  it("show one bolt apart, its one washer under the nut, against the wood (#783)", () => {
+    const build = built(goldenBench);
+    const fitting = stepOf(build, "fit-castors");
+    const apart = fitting?.closeUps[1];
+
+    // The bench is costed with one washer a bolt: the drawing, its note and the fixings agree.
+    expect(fitting?.fixings).toContainEqual({ name: "M6 washers", count: 16 });
+    expect(apart?.title).toBe("One bolt, apart");
+    expect(apart?.labels?.map((label) => label.says)).toEqual([
+      "Top · castor side",
+      "castor",
+      "bolt head",
+      "plate",
+      "base",
+      "Underneath",
+      "washer",
+      "nut",
+    ]);
+    expect(apart?.labels?.find((label) => label.key)?.says).toBe("washer");
+    expect(apart?.notes).toEqual(["Washer only under the nut, against the wood."]);
+    // Top to bottom: the head, the base, then the washer and the nut underneath.
+    const y = (label: string) => apart?.pieces.find((piece) => piece.label === label)?.y ?? 0;
+    const head = apart?.pieces.filter((piece) => piece.label === "bolt").at(-1)?.y ?? 0;
+    expect([head, y("E"), y("washer"), y("nut")]).toEqual(
+      [head, y("E"), y("washer"), y("nut")].sort((a, b) => a - b),
+    );
+    expect(apart?.pieces.filter((piece) => piece.label === "washer")).toHaveLength(1);
+    // Each word a line of its own: none closer than 16 mm to the next, drawn spaced for them.
+    const ys = (apart?.labels ?? []).map((label) => label.y);
+    for (const [at, each] of ys.slice(1).entries()) {
+      expect(each - (ys[at] ?? 0)).toBeGreaterThanOrEqual(16);
+    }
+  });
+
+  it("put every washer under the nut, never under the head, when the Build has two a bolt", () => {
+    const two = built({
+      ...goldenBench,
+      castors: { ...goldenBench.castors, washer: { ...goldenBench.castors.washer, perBolt: 2 } },
+    });
+    const apart = stepOf(two, "fit-castors")?.closeUps[1];
+    const base = apart?.pieces.find((piece) => piece.label === "E");
+    const washers = apart?.pieces.filter((piece) => piece.label === "washer") ?? [];
+
+    expect(washers).toHaveLength(2);
+    expect(washers.every((washer) => washer.y > (base?.y ?? 0))).toBe(true);
+    expect(apart?.labels?.find((label) => label.key)?.says).toBe("2 washers");
+  });
+
   it("say every size to the whole mm, though the bench is 899.6 high on its castors", () => {
     const build = built(goldenBench);
     const said = build.steps.flatMap((step) => [
       ...step.actions.flatMap((action) => [action.howTo, action.numbers]),
-      ...(step.closeUp?.notes ?? []),
+      ...step.closeUps.flatMap((closeUp) => closeUp.notes),
     ]);
 
     expect(build.size.height).toBe(899.6);

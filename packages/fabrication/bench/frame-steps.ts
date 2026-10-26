@@ -1,4 +1,4 @@
-import { endFrameCloseUp, longSideCloseUp } from "./close-ups.ts";
+import { endFrameCloseUp, longSideCloseUp, screwSpotsWalk } from "./close-ups.ts";
 import { type Shape, whole } from "./frame.ts";
 import type { BenchParameters } from "./parameters.ts";
 import { act, type Draft } from "./preparing.ts";
@@ -10,10 +10,9 @@ import {
   screwing,
   wordsWith,
 } from "./screws.ts";
-import { screwSpotsWalk } from "./walk-throughs.ts";
 
 // Joining the frame: the two end frames, the long rails between them, and the frame stood on its
-// castor bases. Each joint's screws go where the rail sits on the leg, marked by eye (#789).
+// castor bases, with the castors fitted to the bases between (#783). Each joint's screws go where the rail sits on the leg, marked by eye (#789).
 
 /**
  * The brackets holding each leg to its castor base: one on the face towards the bench's middle and
@@ -35,6 +34,8 @@ export const frameDrafts = (options: {
   parameters: BenchParameters;
   shape: Shape;
   pilots: Pilots;
+  /** The castor step, when the bench has castors: after the rails, before standing on the bases. */
+  castors: Draft | null;
 }): Draft[] => {
   const { parameters: p, shape: s, pilots } = options;
   const frameScrews = { name: p.fixings.frameScrews.name, count: 16 };
@@ -115,9 +116,10 @@ export const frameDrafts = (options: {
       },
       words: wordsWith(pilots.longRails, "flush"),
     },
+    ...(options.castors ? [options.castors] : []),
     {
       id: "stand-on-bases",
-      on: p.castors !== null,
+      on: options.castors !== null,
       title: "Stand the frame on its bases",
       minutes: 30,
       helper: true,

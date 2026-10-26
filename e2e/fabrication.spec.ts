@@ -364,7 +364,7 @@ test.describe("on the unfolded Fold", () => {
     await expect(buyList).not.toContainText("M6 × 50");
     await buyList.getByRole("button", { name: "Why 60 mm?" }).click();
     await expect(buyList).toContainText(
-      "castor plate 4 + castor base 45 + M6 washer 1.6 + M6 washer 1.6 + M6 lock nut 5 + two threads 2 = 59.2 mm",
+      "castor plate 4 + castor base 45 + M6 washer 1.6 + M6 lock nut 5 + two threads 2 = 57.6 mm",
     );
   });
 
@@ -384,7 +384,7 @@ test.describe("on the unfolded Fold", () => {
     await expect(toSort.locator("li > div > p:first-child")).toHaveText([
       "Support for the long end",
       "Drill bits: 7 mm and 3 mm",
-      "Spanner",
+      "10 mm spanner × 2",
       "Countersink bit",
       "Sandpaper",
       "Spirit level",
@@ -396,7 +396,7 @@ test.describe("on the unfolded Fold", () => {
     await bits.getByRole("button", { name: "How do I tell a bit's size?" }).click();
     await expect(bits).toContainText("stamped on the bit's smooth shank");
     const spanner = sorting.nth(2);
-    await expect(spanner).toContainText("Fit the castors to the bases · step 4");
+    await expect(spanner).toContainText("Fit the castors to the bases · step 6");
     await expect(spanner.getByRole("button", { name: "Have it" })).toBeVisible();
     await spanner.getByRole("button", { name: "Add to list" }).click();
     await expect(spanner).toContainText("On the buy list");
@@ -405,7 +405,7 @@ test.describe("on the unfolded Fold", () => {
     await page.getByRole("tab", { name: "Buy list" }).click();
     const buyList = page.getByRole("region", { name: "Buy list" });
     await expect(buyList).toContainText("To buy · 12");
-    await expect(buyList).toContainText("Spannerstep 4");
+    await expect(buyList).toContainText("Spannerstep 6");
 
     // Its Undo takes it off the list again.
     await page.getByRole("tab", { name: "Tools" }).click();
@@ -505,26 +505,10 @@ test.describe("on the unfolded Fold", () => {
     const done = page.getByRole("button", { name: "Done, next step" });
     for (let step = 1; step < 4; step += 1) await done.click();
 
-    // The castors: the bases alone in 3D, lit; the bolts at the length to use, the 50s given
-    // never said (#763); the bit by its size, to check in the owner's set.
-    await expect(
-      steps.getByRole("heading", { name: "Fit the castors to the bases" }),
-    ).toBeVisible();
-    await expect(letter(page, "E, Castor bases")).toHaveAttribute("aria-current", "step");
-    await expect(letter(page, "A, Legs")).toHaveCount(0);
-    await expect(steps).toContainText(
-      "Fixings: M6 × 60 bolts (16), M6 washers (32) and M6 lock nuts (16)",
-    );
-    await expect(steps).not.toContainText("M6 × 50");
-    const chips = steps.getByRole("list", { name: "Tools for this step" });
-    await expect(chips).toContainText("Spanner?");
-    await expect(chips).toContainText("a 7 mm bit: check your set");
-
     // The end frames: one laid flat on the floor, lit; a checklist with words to tap.
-    await done.click();
     await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
     await expect(page.getByRole("region", { name: "In 3D" })).toContainText(
-      "Step 5 · Make the two end frames",
+      "Step 4 · Make the two end frames",
     );
     await expect(
       page.getByRole("figure", { name: "One end frame, flat on the floor, in 3D" }),
@@ -564,6 +548,32 @@ test.describe("on the unfolded Fold", () => {
     await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
     await expect(checklist.getByRole("checkbox", { name: "Line 1 done" })).toBeChecked();
     await expect(checklist.getByRole("checkbox", { name: "Line 2 done" })).not.toBeChecked();
+
+    // The castors, after the frames (#783): the base in the Workmate's jaws, lit, its words off
+    // the model; four short lines and nothing above them; the bolts at the length to use, one
+    // washer each; the bit to check, two spanners to get; tightening and one bolt apart, close up.
+    for (let step = 4; step < 6; step += 1) await done.click();
+    await expect(
+      steps.getByRole("heading", { name: "Fit the castors to the bases" }),
+    ).toBeVisible();
+    await expect(letter(page, "E, Castor bases")).toHaveAttribute("aria-current", "step");
+    await expect(letter(page, "A, Legs")).toHaveCount(0);
+    const picture = page.getByRole("figure", { name: "In your Workmate, in 3D" });
+    await expect(picture).toBeVisible();
+    await expect(picture).toContainText("your Workmate's jaws");
+    await expect(picture).toContainText("1 bolt in");
+    await expect(checklist.getByRole("checkbox")).toHaveCount(4);
+    await expect(steps.getByRole("region", { name: "How it's done" })).toHaveCount(0);
+    await expect(steps).toContainText(
+      "Fixings: M6 × 60 bolts (16), M6 washers (16) and M6 lock nuts (16)",
+    );
+    await expect(steps).not.toContainText("M6 × 50");
+    const tools = steps.getByRole("list", { name: "Tools for this step" });
+    await expect(tools).toContainText("a 7 mm bit: check your set");
+    await expect(tools).toContainText("10 mm spanner × 2?");
+    await expect(closeUps.nth(-2)).toContainText("Close-up · Tighten");
+    await expect(closeUps.last()).toContainText("Close-up · One bolt, apart");
+    await expect(closeUps.last()).toContainText("Washer only under the nut, against the wood.");
   });
 
   test("hold to ask: what's said goes to the Build's chat about the step, and its answer shows over the picture", async ({
@@ -687,7 +697,7 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await expect(card).toContainText("Long rails × 4");
     await page.getByRole("button", { name: "Done, next step" }).click();
     await expect(
-      page.getByRole("figure", { name: "A castor base, upside down, in 3D" }),
+      page.getByRole("figure", { name: "One end frame, flat on the floor, in 3D" }),
     ).toBeVisible();
     await expect(card).toBeHidden();
   });
@@ -834,7 +844,6 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await expect.poll(async () => (await camera(page)).tilt).toBe(60);
 
     // Another step opens at its own angle: the end frame from above.
-    await page.getByRole("button", { name: "Done, next step" }).click();
     await page.getByRole("button", { name: "Done, next step" }).click();
     await expect(
       page.getByRole("figure", { name: "One end frame, flat on the floor, in 3D" }),
@@ -986,7 +995,7 @@ test.describe("on a desktop", () => {
     await openInFabrication(page);
     await page.getByRole("tab", { name: "Steps" }).click();
     const done = page.getByRole("button", { name: "Done, next step" });
-    for (let step = 1; step < 5; step += 1) await done.click();
+    for (let step = 1; step < 4; step += 1) await done.click();
     const steps = page.getByRole("region", { name: "Steps" });
     const checklist = steps.getByRole("list", { name: "Checklist" });
     await expect(checklist).toContainText("Spread them 460 apart outside to outside.");
@@ -1006,7 +1015,7 @@ test.describe("on a desktop", () => {
     });
     const chat = page.getByRole("region", { name: "Chat" });
     await expect(chat.getByLabel("Message", { exact: true })).toHaveValue(
-      "Step 5, Make the two end frames: Both end frames, flat, from above. Measure corner to corner both ways. The same within 2 mm means it's square. Does it look right?",
+      "Step 4, Make the two end frames: Both end frames, flat, from above. Measure corner to corner both ways. The same within 2 mm means it's square. Does it look right?",
     );
   });
 
