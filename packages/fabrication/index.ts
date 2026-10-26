@@ -52,6 +52,7 @@ export {
 } from "./print/templates.ts";
 export { deriveRecipe } from "./recipe/index.ts";
 export { deriveBench, type Starter, starterRecipe } from "./recipe/starters.ts";
+export { pickRecipeStock } from "./recipe/work-out.ts";
 export type { Scene, SceneMark, ScenePiece } from "./scene.ts";
 export { Fixing, OptionPrices, Price, Sheet, StockOptionId, Timber } from "./stock.ts";
 export { TOOL_NAMES, Tool, toolsFrom } from "./tools.ts";
