@@ -76,8 +76,9 @@ sheet from the right, open on its latest. Folded, it's At the bench alone, stack
 below, and the chat a sheet over it.
 
 **The parts page** (#778): a Build with pieces to cut (not a printed part) opens on it until building starts, before step 1, like a flat pack's inventory: each
-part's tile drawn at one scale, so the longest looks longest, and the fixings bag. Label each piece shows how in full
-until the first part is labelled ("pencil the letter on an end that won't show"), then a How? tap; tapping a tile
+part's tile drawn at one scale, so the longest looks longest, timber and ply each in its own colour, and the fixings
+bag, each fixing drawn. Label each piece says what to do ("pencil its letter on an end that won't show") with a How?
+chip that opens more; tapping a tile
 labels every piece of it, ticked and counted ("12 of 21 labelled"), and tapping again takes it back. Start step 1
 goes on; Back from step 1 comes back to it. Each step then shows its **uses** under its title ("B × 2, C × 2, 5 × 80
 screws (16)"), ticked off when it's Done.

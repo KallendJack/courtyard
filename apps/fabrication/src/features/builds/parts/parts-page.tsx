@@ -3,7 +3,7 @@ import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
-import { Check, CircleHelp } from "lucide-react";
+import { Check } from "lucide-react";
 import { Disclosure } from "@/components/disclosure";
 import { PANEL } from "../at-the-bench.tsx";
 import type { Progress } from "../progress.ts";
@@ -13,10 +13,7 @@ import { Fixing, Piece, pieceScale } from "./pictures.tsx";
 // The parts page (#778; Paper, 2 · Agreed, "Fabrication · Parts page, any build · Fold 933×645
 // (#778)"): before the steps, like a flat pack's inventory, every piece drawn with its letter,
 // count and sizes, and the fixings bag by count. Label each piece ticks them off one part at a
-// time, its how-to in full until the first is labelled, then a How? tap; Start step 1 goes on.
-
-/** The longest piece's length on the page, in pixels: the rest are drawn at its scale. */
-const LONGEST = 120;
+// time, with a How? chip for more; Start step 1 goes on.
 
 /** A piece's sizes as the board has them: "950 · 45 × 95", or a sheet's "1250 × 600 · ply". */
 const sizesOf = (part: BuildPart) =>
@@ -40,62 +37,54 @@ function Tile(props: {
         aria-label={`${part.label}, ${part.name} × ${part.count}`}
         onClick={() => props.label(part.label)}
         className={classes(
-          "flex h-full w-full flex-col gap-3 rounded-tile border p-3.5 text-left",
-          labelled ? "border-success/40 bg-muted" : "border-border bg-muted",
+          "flex h-full w-full flex-col gap-1.5 overflow-hidden rounded-row border bg-secondary p-2.5 text-left",
+          labelled ? "border-success/33" : "border-input",
         )}
       >
-        <span className="flex w-full items-center gap-2.5">
+        <span className="flex w-full items-center gap-2">
           <span
             className={classes(
-              "flex size-8 shrink-0 items-center justify-center rounded-full text-interface font-bold",
-              labelled ? "bg-success text-background" : "bg-background text-foreground",
+              "flex size-6 shrink-0 items-center justify-center rounded-full text-label font-extrabold",
+              labelled ? "bg-success text-background" : "bg-input text-foreground",
             )}
           >
             {part.label}
           </span>
           <span
             className={classes(
-              "min-w-0 flex-1 text-answer leading-tight font-semibold",
+              "min-w-0 flex-1 text-sm/4.5 font-bold",
               labelled ? "text-success" : "text-foreground",
             )}
           >
             {part.name}
-            {labelled && <Check aria-hidden className="ml-1 inline size-4" />}
+            {labelled && <Check aria-hidden className="ml-1 inline size-3.5 align-[-2px]" />}
           </span>
-          <span className="shrink-0 font-mono text-interface text-muted-foreground">
-            × {part.count}
-          </span>
+          <span className="shrink-0 font-mono text-meta text-muted-foreground">× {part.count}</span>
         </span>
-        <span className="flex min-h-12 items-center">
-          <Piece part={part} scale={props.scale} />
-        </span>
-        <span className="font-mono text-meta text-muted-foreground">{sizesOf(part)}</span>
+        <Piece part={part} scale={props.scale} />
+        <span className="font-mono text-label text-muted-foreground">{sizesOf(part)}</span>
       </button>
     </li>
   );
 }
 
-/** Label each piece: in full until one's labelled, then a How? tap. */
-function LabelEach(props: { begun: boolean }) {
-  const how = "Pencil its letter on an end that won't show.";
+/** Label each piece: what to do, and a How? chip that opens how to do it well. */
+function LabelEach() {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <CapsLabel tone="primary">Before you start</CapsLabel>
-      <h2 className="display-title text-sheet-title text-foreground">Label each piece</h2>
-      {props.begun ? (
-        <>
-          <p className="text-interface text-muted-foreground">Tap a piece when it's done.</p>
-          <Disclosure
-            look="tap"
-            icon={<CircleHelp aria-hidden className="size-4 text-primary-text" />}
-            label="How?"
-          >
-            <p className="text-interface text-foreground">{how}</p>
-          </Disclosure>
-        </>
-      ) : (
-        <p className="text-answer text-muted-foreground">{how} Tap a piece when it's done.</p>
-      )}
+      <h2 className="display-title text-title text-foreground">Label each piece</h2>
+      <div className="flex flex-col items-start gap-2.5">
+        <p className="text-sm/5.25 text-muted-foreground">
+          Pencil its letter on an end that won't show. Tap a piece when it's done.
+        </p>
+        <Disclosure look="chip" label="How? Shown the first time">
+          <p className="text-sm/5.25 text-foreground">
+            A pencil, not a pen: it sands off. Pick an end that goes into a joint or onto the floor,
+            so once it's built it won't show.
+          </p>
+        </Disclosure>
+      </div>
     </div>
   );
 }
@@ -104,16 +93,16 @@ function LabelEach(props: { begun: boolean }) {
 function Bag(props: { bag: DerivedBuild["bag"] }) {
   if (props.bag.length === 0) return null;
   return (
-    <section aria-label="Fixings bag" className="flex flex-col gap-2">
+    <section aria-label="Fixings bag" className="flex flex-col gap-2 border-t border-border pt-3.5">
       <CapsLabel tone="muted" heading={{ level: 3 }}>
         Fixings bag
       </CapsLabel>
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-col gap-2">
         {props.bag.map((item) => (
-          <li key={item.name} className="flex min-h-10 items-center gap-3 text-interface">
+          <li key={item.name} className="flex h-8.5 items-center gap-3 text-interface">
             <Fixing item={item} />
             <span className="min-w-0 flex-1 text-foreground">{item.name}</span>
-            <span className="shrink-0 font-mono text-muted-foreground">{item.count}</span>
+            <span className="shrink-0 text-muted-foreground">{item.count}</span>
           </li>
         ))}
       </ul>
@@ -134,23 +123,23 @@ export function PartsPage(props: {
 }) {
   const { derived, progress, narrow } = props;
   const parts = derived.parts.filter((part) => part.material.kind !== "printed");
-  const scale = pieceScale(parts, LONGEST);
+  const scale = pieceScale(parts);
   const { labelled } = progress.progress;
   const pieces = parts.reduce((sum, part) => sum + part.count, 0);
   const done = parts
     .filter((part) => labelled.includes(part.label))
     .reduce((sum, part) => sum + part.count, 0);
   const tiles = (
-    <section aria-label="Your parts" className="flex flex-col gap-3">
+    <section aria-label="Your parts" className="flex flex-1 flex-col gap-3">
       <div className="flex items-baseline justify-between gap-3">
         <CapsLabel tone="muted" heading={{ level: 2 }}>
           Your parts · {pieces} pieces
         </CapsLabel>
-        <p role="status" className="text-interface text-success">
+        <p role="status" className="text-meta text-success">
           {done} of {pieces} labelled
         </p>
       </div>
-      <ul className={classes("grid gap-2.5", narrow ? "grid-cols-2" : "grid-cols-3")}>
+      <ul className={classes("grid gap-2", narrow ? "grid-cols-2" : "grid-cols-3")}>
         {parts.map((part) => (
           <Tile
             key={part.label}
@@ -161,7 +150,7 @@ export function PartsPage(props: {
           />
         ))}
       </ul>
-      <p className="text-interface text-muted-foreground">
+      <p className="mt-auto text-sm text-muted-foreground">
         Lay them out by letter. Each step shows which ones it uses.
       </p>
     </section>
@@ -180,8 +169,7 @@ export function PartsPage(props: {
   );
   const before = (
     <>
-      <LabelEach begun={done > 0} />
-      <hr className="border-border" />
+      <LabelEach />
       <Bag bag={derived.bag} />
     </>
   );
@@ -202,13 +190,13 @@ export function PartsPage(props: {
       <div className={classes(PANEL, "flex-1")}>{stacked}</div>
     </div>
   ) : (
-    <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-3 p-3">
+    <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] gap-3 p-3">
       <div className={PANEL}>
         <Scroller className="flex min-h-0 flex-1 flex-col">{tiles}</Scroller>
       </div>
       <div className={PANEL}>
         <Scroller className="flex min-h-0 flex-1 flex-col">
-          <div className="flex flex-col gap-4 pb-2">{before}</div>
+          <div className="flex flex-col gap-3 pb-2">{before}</div>
         </Scroller>
         {start}
       </div>

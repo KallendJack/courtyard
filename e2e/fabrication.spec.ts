@@ -964,7 +964,7 @@ for (const [fold, viewport] of [
       );
       // The longest piece is drawn longest: the top's 1500 against a leg's 750.
       const drawn = async (name: string) =>
-        (await boxOf(parts.getByRole("button", { name }).locator("svg"))).width;
+        (await boxOf(parts.getByRole("button", { name }).locator("svg [data-piece]"))).width;
       expect(await drawn("G, Top × 1")).toBeGreaterThan(await drawn("A, Legs × 4"));
 
       const bag = page.getByRole("region", { name: "Fixings bag" });
@@ -977,9 +977,11 @@ for (const [fold, viewport] of [
         "Wheelwright TD60 castors4",
       ]);
 
-      // Label each piece: the how-to in full until one's labelled, then a How? tap.
-      const how = "Pencil its letter on an end that won't show.";
-      await expect(page.getByText(`${how} Tap a piece when it's done.`)).toBeVisible();
+      // Label each piece: what to do, kept as pieces are labelled, and a How? chip for more.
+      const what = "Pencil its letter on an end that won't show. Tap a piece when it's done.";
+      const more = /^A pencil, not a pen: it sands off\./;
+      await expect(page.getByText(what)).toBeVisible();
+      await expect(page.getByText(more)).toBeHidden();
       for (const name of ["A, Legs × 4", "B, Long rails × 4", "C, End rails × 4"]) {
         await parts.getByRole("button", { name }).click();
       }
@@ -988,9 +990,9 @@ for (const [fold, viewport] of [
         "aria-pressed",
         "true",
       );
-      await expect(page.getByText(how)).toBeHidden();
-      await page.getByText("How?", { exact: true }).click();
-      await expect(page.getByText(how)).toBeVisible();
+      await expect(page.getByText(what)).toBeVisible();
+      await page.getByText("How? Shown the first time", { exact: true }).click();
+      await expect(page.getByText(more)).toBeVisible();
 
       // Kept: opened again, the same pieces are labelled.
       const buildApi = new URL(page.url()).pathname.replace(/^\/fabrication/, "/api/fabrication");
