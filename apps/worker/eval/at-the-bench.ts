@@ -1,14 +1,12 @@
 import { goldenBench } from "../../../packages/fabrication/bench/fixtures/golden.ts";
 import { END_FRAME } from "./attachments.ts";
 import type { Scenario, Words } from "./scenarios.ts";
+import { toolFile } from "./tools.ts";
 
 // At the bench (#784): the owner on a step of their Build, asking about it. The chat follows the
-// step it is given in full, its way, numbers, screws and check, never one it makes up. Everything
-// here is invented: the golden bench and made-up tools.
-
-/** One of the owner's tools, as Your tools would have saved it (#707). */
-const toolFile = (name: string, count?: number) =>
-  `---\nname: ${name}\nstatus: have\nkind: tool\n${count === undefined ? "" : `count: ${count}\n`}---\n`;
+// step it is given in full, its way, numbers, screws and check, never one it makes up, and answers
+// short, as the step's helper rather than a workspace session. Everything here is invented: the
+// golden bench and made-up tools.
 
 /**
  * A made-up workshop's bench, the golden bench, with the owner at its end frames, the first two
@@ -40,8 +38,21 @@ const AT_END_FRAMES: Pick<Scenario, "workspace" | "context" | "files" | "ownerFi
   },
 };
 
+/** An answer at the bench: a few short lines, never a workspace session's long reply (#784). */
+const SHORT = { atMost: 100 } as const;
+
 /** Giving a screw a measured spot, as the first build's "47 in" and "94 × 94" did (#784). */
-const MEASURED_SPOTS: readonly Words[] = [["47"], ["94"], ["15 mm"], ["30 mm"], ["mm in from"]];
+const MEASURED_SPOTS: readonly Words[] = [
+  ["47"],
+  ["94"],
+  ["15 mm"],
+  ["30 mm"],
+  ["mm in from"],
+  ["mm from the edge", "mm from each edge", "mm from its edge"],
+];
+
+/** A tool named generically, not as the owner's own: their square is a speed square (#784). */
+const GENERIC_TOOLS: readonly Words[] = [["your square"], ["four clamps"], ["4 clamps"]];
 
 /** A step the owner is on, followed rather than made up (#784): each at the end frames. */
 export const AT_THE_BENCH: readonly Scenario[] = [
@@ -54,11 +65,12 @@ export const AT_THE_BENCH: readonly Scenario[] = [
         say: "Where exactly do the screws go on this end frame?",
         expect: [],
         says: [
-          ["2", "two"],
+          ["2 screws", "two screws", "2 in each", "two in each", "2 per", "two per", "2 at each"],
           ["overlap", "where the rail", "over the leg", "crosses"],
+          ["by eye", "anywhere", "fingertip"],
         ],
         omits: MEASURED_SPOTS,
-        words: { atMost: 150 },
+        words: SHORT,
         builds: { action: "none" },
       },
     ],
@@ -72,31 +84,42 @@ export const AT_THE_BENCH: readonly Scenario[] = [
         say: "Here's the first end frame laid out, the legs on their narrow edges. Is that right before I clamp it?",
         attach: [END_FRAME],
         expect: [],
-        says: [["edge"]],
+        says: [
+          ["edge"],
+          [
+            "yes",
+            "that's right",
+            "that’s right",
+            "correct",
+            "spot on",
+            "looks right",
+            "looks good",
+          ],
+        ],
         omits: [["roll"], ["quarter turn"], ["quarter-turn"], ["turn them", "flat"]],
-        words: { atMost: 150 },
+        words: SHORT,
         builds: { action: "none" },
       },
     ],
   },
   {
     name: "bench-step-clamp",
-    rule: "asked how to clamp the end frame, the answer gives the step's one way with the owner's two F-clamps, never another way or a count of its own (#784)",
+    rule: "asked how to clamp the end frame, the answer gives the step's one way with the owner's own tools, their F-clamps and speed square, never another way, a generic tool or a count of its own (#784)",
     ...AT_END_FRAMES,
     turns: [
       {
         say: "How should I clamp this?",
         expect: [],
-        says: [["clamp"], ["square"]],
+        says: [["f-clamp", "f clamp"], ["speed square"]],
         omits: [
-          ["four clamps"],
-          ["4 clamps"],
+          ...GENERIC_TOOLS,
           ["three clamps"],
           ["not needed"],
           ["don't need", "clamp"],
+          ["don’t need", "clamp"],
           ["optional"],
         ],
-        words: { atMost: 150 },
+        words: SHORT,
         builds: { action: "none" },
       },
     ],
@@ -114,7 +137,7 @@ export const AT_THE_BENCH: readonly Scenario[] = [
           ["2 mm", "2mm"],
         ],
         omits: [["3-4-5"], ["3, 4, 5"], ["pythag"], ["another way"], ["or use"]],
-        words: { atMost: 150 },
+        words: SHORT,
         builds: { action: "none" },
       },
     ],

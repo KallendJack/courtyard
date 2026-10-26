@@ -1901,8 +1901,8 @@ With none yet:
 > This workspace has no Builds yet.
 
 Changed with #784, after the owner's first build: the chat was given only each step's title, so it made the steps up
-as it went, three setups for the end frames, the legs rolled flat when the plan has them on edge, screws at "47 in"
-on a 44 mm leg, clamps needed then not. Once the owner has started building a Build, the step they're on follows the
+as it went, three setups for the end frames, the legs rolled flat when the plan has them on edge, screws at "47 in",
+which would miss the leg, clamps needed then not. Once the owner has started building a Build, the step they're on follows the
 `<builds>` markers in full, between `<step>` markers, one for each Build started:
 
 > The step the owner is on in each Build they've started building is below, in full, as Fabrication shows it to them:
@@ -1934,13 +1934,14 @@ moving on, with the photo that shows it.
 
 The eval's `bench-step-*` scenarios (`apps/worker/eval/at-the-bench.ts`) put the owner at the golden bench's end
 frames, two lines ticked, with their own tools saved (a speed square, two F-clamps), and check the answer follows the
-step: where the screws go, two by eye in each overlap and never a measured spot (`bench-step-screw-spots`); a photo of
-the frame laid out, legs on edge, confirmed rather than turned flat (`bench-step-legs-on-edge`); how to clamp, the
-step's one way with no count of its own and never "not needed" (`bench-step-clamp`); and how to check it's square,
-corner to corner within 2 mm and no other check (`bench-step-check-square`). Run 3 times on each provider on
-2026-10-26: Codex passed all four 3 of 3; Claude passed three 3 of 3 and the square check 1 of 3, giving line 3's
-square in the corner, until the check said it's how to know the step is right and the rule said to give it whole when
-asked, then 3 of 3.
+step in 100 words at most: where the screws go, two by eye in each overlap and never a measured spot
+(`bench-step-screw-spots`); a photo of the frame laid out, legs on edge, confirmed rather than turned flat
+(`bench-step-legs-on-edge`); how to clamp, the step's one way with the owner's F-clamps and speed square, never "your
+square", a count of its own or "not needed" (`bench-step-clamp`); and how to check it's square, corner to corner within
+2 mm and no other check (`bench-step-check-square`). Run 3 times on each provider on 2026-10-26, with 150 words
+allowed and the clamp answer checked only for a clamp and a square: Codex passed all four 3 of 3; Claude passed three
+3 of 3 and the square check 1 of 3, giving line 3's square in the corner, until the check said it's how to know the
+step is right and the rule said to give it whole when asked, then 3 of 3.
 
 **The rule** (Every turn, item 11), after the projects':
 
@@ -1979,10 +1980,10 @@ asked, then 3 of 3.
 > short lines about this Build and this step, never the wider workspace. Follow the step as it is: its way, its lines'
 > order, its numbers, how its parts lie, its one check (asked whether it's right or square, give that check whole),
 > its screws placed by eye in the area it gives, never at a measured spot, and each tool the owner's own, its kind and
-> how many as their tools say, never a kind or a count of your own. Never give another way, setup or size. When a photo differs from the step, say what differs, against the step; when you think
-> the step itself is wrong, say so and offer to change the Build, rather than giving another way. A Build's materials live
-> in its buy list, never as wanted Things: offer to remove the
-> wanted Things its buy list now holds, and remove them once the owner agrees. A material becomes a Thing only once the
+> how many as their tools say, never a kind or a count of your own. Never give another way, setup or size. When a
+> photo differs from the step, say what differs, against the step; when you think the step itself is wrong, say so and
+> offer to change the Build, rather than giving another way. A Build's materials live in its buy list, never as wanted
+> Things: offer to remove the wanted Things its buy list now holds, and remove them once the owner agrees. A material becomes a Thing only once the
 > owner has it and it isn't used up in the Build, such as its castors, not its screws. The owner sees each change as a
 > note under your answer, so leave saves unmentioned.
 
