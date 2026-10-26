@@ -1964,13 +1964,11 @@ describe("Builds (#697, ADR 0036)", () => {
         // The legs lie on an edge, as the owner's photo had them, never rolled flat.
         "Its picture, One end frame, flat on the floor: A Legs lying on an edge, 95 up; C End rails flat on a face, 45 up. Marked on it: 2 screws a joint; floor end.",
         "Its lines, in this order:",
-        "1. [ticked] Lay two legs (A) flat, 460 apart outside to outside.",
-        "2. [ticked] Put an end rail (C) across them, flush with the tops.",
-        "3. Clamp it, then check the corner with your square.",
-        "4. Drill a 3 mm pilot hole where each dot is, then drive the screws.",
-        "5. Measure 250 up from the floor end of each leg and square a pencil line across.",
-        "6. Fit the bottom rail the same way, its underside on the lines.",
-        "Its close-up, One end frame: Top rail flush with the leg tops. Bottom rail 250 up from the floor end. 2 screws a joint, one above the other.",
+        "1. [ticked] Lay both legs (A) side by side, ends level. Measure 250 up from the floor end and square one line across both.",
+        "2. [ticked] Spread them 460 apart outside to outside. Lay an end rail (C) across, flush with the tops. Check the corner with your square, then clamp it.",
+        "3. Mark 2 crosses where the rail sits on the leg (below), by eye. Drill a small 3 mm pilot hole at each mark, then drive the screw.",
+        "4. Fit the bottom rail the same way, its underside on your lines.",
+        "Its close-up, One end frame: Top rail flush with the leg tops. Bottom rail 250 up from the floor end. 2 screws a joint, on a diagonal, by eye.",
         // Screw spots are by eye in the overlap (packages/fabrication, How a step reads), never "47 in".
         "Its screws go by eye: 2 in each of the 4 places A and C overlap (45 × 95 mm), anywhere in it, a fingertip from its edges.",
         "Its check, how to know it's right before moving on: Measure corner to corner both ways. The same within 2 mm means it's square. The photo that shows it: Both end frames, flat, from above.",
