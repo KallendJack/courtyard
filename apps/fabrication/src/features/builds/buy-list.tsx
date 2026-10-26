@@ -8,26 +8,15 @@ import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { FormError } from "@courtyard/ui/forms/form-error.tsx";
 import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
-import { Check, ChevronRight } from "lucide-react";
+import { Check } from "lucide-react";
 import { useState } from "react";
 import { type Answer, haveIt, undoHaveIt } from "../../api/fabrication.ts";
-import { listed, pounds, tenths } from "./words.ts";
+import { UndoNote } from "../../components/undo-note.tsx";
+import { pounds, tenths } from "./words.ts";
 
 /** How many to buy: "× 5" of what's sold one at a time, "1 pack" of what's sold in packs. */
 const howMany = (line: BuildBuyLine) =>
   line.packOf === 1 ? `× ${line.packs}` : `${line.packs} ${line.packs === 1 ? "pack" : "packs"}`;
-
-/** Its second line: what Your stock has of it, the shop and its price, then what it's for. */
-const detailOf = (line: BuildBuyLine) =>
-  [
-    line.have === undefined ? undefined : `You have ${line.have}`,
-    [line.price?.shop, line.total === undefined ? "no price" : pounds(line.total)]
-      .filter((part) => part !== undefined)
-      .join(" "),
-    line.for,
-  ]
-    .filter((part) => part !== undefined)
-    .join(" · ");
 
 /** A line's group on the list, as the board heads them. */
 const GROUPS: Record<BuildBuyLine["kind"], string> = {
@@ -95,38 +84,34 @@ function Line(props: {
   waiting: boolean;
 }) {
   const { line, open } = props;
+  // One line, as the board has it: the item, how many, and Have it.
   const body = (
     <>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-interface font-bold text-foreground">{line.item}</span>
-        <span className="truncate text-meta text-muted-foreground">{detailOf(line)}</span>
-      </span>
+      <span className="min-w-0 flex-1 text-sm font-medium text-foreground">{line.item}</span>
       <span className="shrink-0 font-mono text-meta text-muted-foreground">{howMany(line)}</span>
     </>
   );
-  const row = "flex min-w-0 flex-1 items-center gap-3 py-2.5";
+  const row = "flex min-h-11 min-w-0 flex-1 items-center gap-2.5 py-2";
   const link = line.price?.link;
   return (
     <li className="border-b border-border">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         {open !== undefined ? (
           // A timber or sheet with options opens them (#704); its shop's link is there.
           <button type="button" onClick={open} className={`${row} text-left hover:bg-muted/40`}>
             {body}
-            <ChevronRight aria-hidden className="size-4 shrink-0 text-primary-text" />
           </button>
         ) : link === undefined ? (
           <div className={row}>{body}</div>
         ) : (
           <a href={link} target="_blank" rel="noreferrer" className={`${row} hover:bg-muted/40`}>
             {body}
-            <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
           </a>
         )}
         {props.have !== undefined && (
           <Button
             variant="outline"
-            size="sm"
+            size="row"
             aria-label={`Have it: ${line.item}`}
             busy={props.busy}
             busyLabel="Saving…"
@@ -148,11 +133,13 @@ function Had(props: { had: readonly BuildBuyLine[] }) {
   const [open, setOpen] = useState(false);
   if (props.had.length === 0) return null;
   return (
-    <section aria-label="You have" className="flex flex-col gap-1 pt-1">
+    // Clipped across, so Show's edge (its words flush with the Have it buttons) never scrolls the
+    // panel sideways.
+    <section aria-label="You have" className="flex flex-col gap-1 overflow-x-clip pt-1">
       <p className="flex items-center gap-2">
         <Check aria-hidden className="size-4 shrink-0 text-success" />
         <span className="min-w-0 flex-1 truncate text-meta text-success">
-          You have {props.had.length} · {listed(props.had.map((line) => line.item))}
+          You have {props.had.length} · {props.had.map((line) => line.item).join(", ")}
         </span>
         <Button
           variant="quietPrimary"
@@ -199,7 +186,7 @@ export function BuyList(props: {
   /** Reads the Build again, once Have it or its Undo has changed what's left. */
   reread: () => Promise<void>;
 }) {
-  const { lines, had, total, unpriced } = props.buyList;
+  const { lines, had, total } = props.buyList;
   const { reread } = props;
   const [justHad, setJustHad] = useState<{ item: string; change: ChangeId }>();
   const having = useAction(async (line: BuildBuyLine) => {
@@ -227,35 +214,26 @@ export function BuyList(props: {
   const busy = having.busy || undoing.busy;
   return (
     <section aria-label="Buy list" className="flex flex-col gap-1">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="display-title text-sheet-title">
-          {lines.length === 0
-            ? "Nothing left to buy"
-            : `${lines.length} ${lines.length === 1 ? "thing" : "things"} left`}
-        </h2>
-        <span className="shrink-0 font-mono text-xl font-bold text-foreground">
-          <span className="sr-only">Total </span>
-          {pounds(total)}
-        </span>
-      </div>
-      <p className="text-meta text-muted-foreground">
-        Tick Have it and the line drops off the list
-        {unpriced === 0 ? "." : ` · ${unpriced} without a price yet`}
-      </p>
-      {justHad !== undefined && (
-        <p className="flex items-center justify-between gap-3 rounded-row bg-muted px-3 py-1.5 text-meta text-foreground">
-          <span className="min-w-0 truncate">Have it: {justHad.item}</span>
-          <Button
-            variant="quiet"
-            size="xs"
-            busy={undoing.busy}
-            busyLabel="Undoing…"
-            waiting={having.busy}
-            onClick={() => void undoing.run()}
-          >
-            Undo
-          </Button>
+      <div className="flex flex-col gap-1 border-b border-border pb-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="display-title text-sheet-title">
+            {lines.length === 0
+              ? "All to hand"
+              : `${lines.length} ${lines.length === 1 ? "thing" : "things"} left`}
+          </h2>
+          <span className="shrink-0 font-mono text-interface font-semibold text-foreground">
+            <span className="sr-only">Total </span>
+            {pounds(total)}
+          </span>
+        </div>
+        <p className="text-label text-muted-foreground">
+          Tick Have it and the line drops off the list.
         </p>
+      </div>
+      {justHad !== undefined && (
+        <UndoNote undo={() => void undoing.run()} undoing={undoing.busy} waiting={having.busy}>
+          Have it: {justHad.item}
+        </UndoNote>
       )}
       <FormError message={having.error ?? undoing.error} />
       {grouped(lines).map(([group, inGroup]) => (

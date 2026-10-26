@@ -266,7 +266,7 @@ _Avoid_: shopping list, BOM, wanted list (that's Things the owner wants)
 What the owner has for making besides their tools (#760): materials (timber, sheets, filament) and fixings (a screw
 case's sizes and counts, castors), Things of kind material or fixing kept at the owner's level, so every Build's buy
 list leaves off what it covers, buying only the shortfall, and its steps say where each fixing comes from ("from
-your Diall case").
+your red screw case").
 _Avoid_: inventory, materials list, spares
 
 **Build steps**:

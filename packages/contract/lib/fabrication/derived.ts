@@ -204,7 +204,7 @@ export const BuildStep = z.object({
   wayChanged: z.object({ was: z.string(), now: z.string() }).nullable(),
   tools: list(BuildStepTool),
   safety: list(BuildStepTool),
-  /** Each with where the owner keeps theirs, when Your stock has it: "Diall case" (#760). */
+  /** Each with where the owner keeps theirs, when Your stock has it: "red screw case" (#760). */
   fixings: list(z.object({ name: z.string(), count: z.number(), from: z.string().optional() })),
   /** How to batch it, in a few words: "One joint at a time" (#789). */
   batch: z.string(),

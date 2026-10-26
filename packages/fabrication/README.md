@@ -143,9 +143,10 @@ if (recipe) {
   owner has bolts of its thread that are too short, by how much (#763). It's no finding: the old length means nothing
   to the owner.
 - **The buy list is what's left to buy** (#760): Your stock (`stock` in the setting, each by name with how many and
-  where it's kept) comes off each line but a tool to buy. A line it covers whole moves to `had`; one it covers in part
-  buys the shortfall in whole packs, saying how many the owner `have`; and a step's fixing it has says where it's kept
-  (`from`: "Diall case").
+  where it's kept) comes off each line but a tool to buy, a bench's and a printed part's alike. It's counted once: two
+  lines of one item share it, the first taking what it uses. A line it covers whole moves to `had`; one it covers in
+  part buys the shortfall in whole packs, never below one, saying how many the owner `have`; and a step's fixing it
+  has says where it's kept (`from`: "red screw case").
 - **Parts are cut to the whole mm below,** and the steps say every size to the whole mm; the Build keeps it exact.
 - **A part recipe is checked before it's made:** a feature of a kind no recipe knows, a hole or slot off its face, or
   a pocket running out of the part where it isn't open is refused with a finding, and nothing is made. Holes, slots

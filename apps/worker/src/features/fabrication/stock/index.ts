@@ -55,12 +55,19 @@ export const saveHaveIt = async (
       if (named !== undefined && !isStock(named)) {
         return err({ kind: "tool", name: named.summary.name });
       }
-      const there =
-        named ?? things.find((thing) => isStock(thing) && sameStock(thing.summary.name, have.name));
+      const same = things.filter(
+        (thing) => isStock(thing) && sameStock(thing.summary.name, have.name),
+      );
+      const there = named ?? same[0];
       const was = there === undefined ? undefined : readThingText(there.text);
       if (was?.ok === false) return err({ kind: "storage" });
-      const count = Math.max(there?.summary.count ?? 0, have.count);
-      if (there !== undefined && count === (there.summary.count ?? 1)) {
+      // Your stock counted once: what other Things of the same stock hold counts towards the
+      // count given ("5x80 screws" × 10 and Have it on 32 tops this one up to 22, not 32).
+      const elsewhere = same
+        .filter((thing) => thing !== there)
+        .reduce((sum, thing) => sum + (thing.summary.count ?? 1), 0);
+      const count = Math.max(there?.summary.count ?? 0, have.count - elsewhere);
+      if (count <= 0 || (there !== undefined && count === (there.summary.count ?? 1))) {
         return err({ kind: "unchanged" });
       }
       const fields = ThingFields.safeParse({

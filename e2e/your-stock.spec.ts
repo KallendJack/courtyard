@@ -73,6 +73,15 @@ test.describe("on the unfolded Fold", () => {
     await expect(had).toContainText(`You have 1 · ${screws}`);
     await had.getByRole("button", { name: "Show" }).click();
     await expect(had.getByRole("listitem")).toHaveText([`${screws}32 used`]);
+    // Show, flush with the panel's edge, never scrolls the panel sideways.
+    const sideways = await buyList.evaluate((list) => {
+      let scroller = list.parentElement;
+      while (scroller !== null && scroller.scrollWidth <= scroller.clientWidth) {
+        scroller = scroller.parentElement;
+      }
+      return scroller?.scrollLeft ?? 0;
+    });
+    expect(sideways).toBe(0);
 
     await buyList.getByRole("button", { name: "Undo" }).click();
 

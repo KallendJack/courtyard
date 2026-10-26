@@ -105,7 +105,7 @@ describe("Have it", () => {
     await mkdir(join(contextDir, "things"), { recursive: true });
     await writeFile(
       join(contextDir, "things", "4-40-screws.md"),
-      "---\nname: 4x40 screws\nstatus: have\nkind: fixing\ncount: 20\nwhere: Diall case\n---\n",
+      "---\nname: 4x40 screws\nstatus: have\nkind: fixing\ncount: 20\nwhere: red screw case\n---\n",
     );
     const request = await asOwner(testWorker({ root }));
     expect(
@@ -116,13 +116,37 @@ describe("Have it", () => {
 
     expect(response.status).toBe(200);
     expect(await stockFile("4-40-screws")).toBe(
-      "---\nname: 4x40 screws\nstatus: have\nkind: fixing\ncount: 43\nwhere: Diall case\n---\n",
+      "---\nname: 4x40 screws\nstatus: have\nkind: fixing\ncount: 43\nwhere: red screw case\n---\n",
     );
     expect(items((await buyList(request)).had)).toEqual(["4 × 40 screws"]);
     // Having enough already changes nothing.
     const again = await haveIt(request, { name: "4 × 40 screws", kind: "fixing", count: 40 });
     expect(again.status).toBe(400);
     expect(await errorOf(again)).toBe("That changes nothing.");
+  });
+
+  it("counts Your stock once: another Thing of the same screws counts towards the top-up", async () => {
+    await mkdir(join(contextDir, "things"), { recursive: true });
+    await writeFile(
+      join(contextDir, "things", "4-40-screws.md"),
+      "---\nname: 4x40 screws\nstatus: have\nkind: fixing\ncount: 20\n---\n",
+    );
+    await writeFile(
+      join(contextDir, "things", "spare-4-40-screws.md"),
+      "---\nname: 4 × 40  screws\nstatus: have\nkind: fixing\ncount: 10\n---\n",
+    );
+    const request = await asOwner(testWorker({ root }));
+    expect(
+      (await buyList(request)).lines.find((line) => line.item === "4 × 40 screws"),
+    ).toMatchObject({ needed: 13, have: 30 });
+
+    const response = await haveIt(request, { name: "4 × 40 screws", kind: "fixing", count: 43 });
+
+    // 43 in all: the spare 10, and this one up to 33.
+    expect(response.status).toBe(200);
+    expect(await stockFile("4-40-screws")).toContain("count: 33\n");
+    expect(await stockFile("spare-4-40-screws")).toContain("count: 10\n");
+    expect(items((await buyList(request)).had)).toEqual(["4 × 40 screws"]);
   });
 
   it("never takes a tool, nor touches Your tools", async () => {

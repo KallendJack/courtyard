@@ -38,7 +38,7 @@ export const listed = (items: readonly string[]) =>
 
 /**
  * A step's fixing: "5 × 80 screws (16)", as a count before a size would read as one more size,
- * and where Your stock keeps them (#760): "…, from your Diall case".
+ * and where Your stock keeps them (#760): "…, from your red screw case".
  */
 export const fixingLine = (fixing: BuildStep["fixings"][number]) =>
   `${fixing.name} (${fixing.count})${fixing.from === undefined ? "" : `, from your ${fixing.from}`}`;

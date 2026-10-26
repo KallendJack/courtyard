@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Build, BuildSetting } from "../build.ts";
+import { buyLine, buyListOf } from "../buy-list.ts";
+import { goldenHolster } from "../print/fixtures/golden.ts";
+import { derivePrinted } from "../print/index.ts";
 import { deriveBench } from "../recipe/starters.ts";
 import { goldenBench } from "./fixtures/golden.ts";
 
@@ -66,14 +69,47 @@ describe("the buy list less Your stock", () => {
     expect(build.buyList.had).toEqual([]);
   });
 
-  it("has the steps say where a fixing comes from: from your Diall case", () => {
-    const build = built({ stock: [{ name: "5 × 80 screws", count: 100, where: "Diall case" }] });
+  it("has the steps say where a fixing comes from: from your red screw case", () => {
+    const build = built({
+      stock: [{ name: "5 × 80 screws", count: 100, where: "red screw case" }],
+    });
     const fixings = build.steps.flatMap((step) => step.fixings);
 
     expect(fixings.filter((fixing) => fixing.name === "5 × 80 screws")).not.toEqual([]);
     for (const fixing of fixings) {
-      expect(fixing.from).toBe(fixing.name === "5 × 80 screws" ? "Diall case" : undefined);
+      expect(fixing.from).toBe(fixing.name === "5 × 80 screws" ? "red screw case" : undefined);
     }
+  });
+
+  it("counts what Your stock has once: two lines of one item share it, never below none", () => {
+    const screws = (needed: number, use: string) =>
+      buyLine({ item: "5 × 80 screws", kind: "fixing", for: use, needed, price: undefined });
+    const list = buyListOf(
+      [screws(20, "the frame"), screws(20, "the top")],
+      [
+        { name: "5 × 80 screws", count: 15 },
+        { name: "5x80 screws", count: 15 },
+      ],
+    );
+
+    // 30 in all: the frame's 20, then 10 towards the top's, which buys the other 10.
+    expect(list.had.map((line) => line.for)).toEqual(["the frame"]);
+    expect(list.lines).toMatchObject([{ for: "the top", needed: 10, have: 10 }]);
+    expect(list.lines.every((line) => line.needed > 0 && line.packs > 0)).toBe(true);
+  });
+
+  it("takes Your stock off a printed part's list too: a spool to hand", () => {
+    const holster = (stock: NonNullable<BuildSetting["stock"]>) => {
+      const derived = derivePrinted("battery-holster")(goldenHolster, { stock });
+      if (!derived.ok) throw new Error(derived.error.join("\n"));
+      return derived.value.buyList;
+    };
+    const filament = holster([]).lines.find((line) => line.kind === "filament")?.item ?? "";
+
+    const list = holster([{ name: filament, count: 1 }]);
+
+    expect(list.had.map((line) => line.item)).toEqual([filament]);
+    expect(list.lines.map((line) => line.item)).not.toContain(filament);
   });
 
   it("is the whole list with no stock", () => {
