@@ -38,6 +38,14 @@ export const BuildProgress = z.object({
    * for them ("countersink-bit"), which its buy list lists until they have one.
    */
   buying: z.array(z.string().max(60)).max(MOST_STEPS).default([]),
+  /**
+   * The steps the owner can't do now, from Can't do this now at the bench (#793), each with why
+   * ("Out of time", "Missing: 10 mm spanner × 2"), until Do it now takes it off.
+   */
+  parked: z
+    .array(z.object({ step: BuildStepId, why: z.string().max(120) }))
+    .max(MOST_STEPS)
+    .default([]),
 });
 export type BuildProgress = z.infer<typeof BuildProgress>;
 

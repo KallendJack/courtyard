@@ -9,7 +9,6 @@ import { MarkdownAnswer } from "@courtyard/ui/answer/markdown.tsx";
 import { Button, IconButton } from "@courtyard/ui/buttons/button.tsx";
 import { usePress } from "@courtyard/ui/frame/press.ts";
 import { canListen, feel, type Listening, listen } from "@courtyard/ui/frame/speech.ts";
-import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { availableModels, providerDefaults } from "@courtyard/ui/reply/models.ts";
 import { Mic, X } from "lucide-react";
@@ -22,8 +21,16 @@ const ANSWER_SHOWS_MS = 30_000;
 /** How long an answer is waited for, with nothing come and nothing answering, before it's given up. */
 const GIVE_UP_MS = 60_000;
 
-/** What was asked at the bench: the message, and the last entry before it, so its answer shows. */
-export type Asked = { readonly after: number; readonly message: NewMessage };
+/**
+ * What was asked at the bench: the message and its photo, what the owner said or did (`said`, as
+ * the answer's card shows it), and the last entry before it, so its answer shows.
+ */
+export type Asked = {
+  readonly after: number;
+  readonly message: NewMessage;
+  readonly files: readonly File[];
+  readonly said: string;
+};
 
 /** Can't reach the worker: why a question didn't go, or Try again didn't. */
 const UNREACHABLE = "Can't reach Courtyard's worker. Try again.";
@@ -39,14 +46,35 @@ const modelFor = (
     : providerDefaults(providers, availableModels(providers))[0]?.model.ref);
 
 /**
- * Sends `message` in the Build's chat, telling `asked` after which entry its answer will come, or
- * returns why it couldn't go.
+ * Sends what's asked in the Build's chat, telling `asked` after which entry its answer will come,
+ * or returns why it couldn't go.
  */
-const sendAsked = async (talk: BuildTalk, message: NewMessage, asked: (asked: Asked) => void) => {
+const sendAsked = async (
+  talk: BuildTalk,
+  ask: Omit<Asked, "after">,
+  asked: (asked: Asked) => void,
+) => {
   const after = talk.chat?.entries.at(-1)?.seq ?? 0;
-  const failed = await talk.send(message, []);
-  if (failed === undefined) asked({ after, message });
+  const failed = await talk.send(ask.message, ask.files);
+  if (failed === undefined) asked({ ...ask, after });
   return failed;
+};
+
+/** What's asked from the bench: the message's text, what was said or done, and any photo. */
+export type BenchAsk = { text: string; said: string; files: readonly File[] };
+
+/**
+ * Asks `text` in the Build's chat with what was `said` and any photo, from the bench (Is this
+ * right?, #793), its answer over the picture as Hold to ask's is; or returns why it couldn't go.
+ */
+export const askAtTheBench = (talk: BuildTalk, ask: BenchAsk, asked: (asked: Asked) => void) => {
+  const model = modelFor(talk.chat?.model, talk.providers);
+  if (model === undefined) return Promise.resolve(UNREACHABLE);
+  return sendAsked(
+    talk,
+    { message: { text: ask.text, model }, said: ask.said, files: ask.files },
+    asked,
+  );
 };
 
 /** Words said at any bench, which the browser mishears without a nudge ("plant" for plan, #787). */
@@ -120,10 +148,8 @@ export function HoldToAsk(props: {
   const press = usePress({ held: () => feel("thump") });
 
   const ask = async (text: string) => {
-    const model = modelFor(talk.chat?.model, talk.providers);
-    if (model === undefined) return setProblem(UNREACHABLE);
-    const message = { text: about === undefined ? text : `${about}: ${text}`, model };
-    setProblem(await sendAsked(talk, message, props.asked));
+    const full = about === undefined ? text : `${about}: ${text}`;
+    setProblem(await askAtTheBench(talk, { text: full, said: text, files: [] }, props.asked));
   };
   const latestAsk = useRef(ask);
   latestAsk.current = ask;
@@ -257,10 +283,11 @@ export function HoldToAsk(props: {
 }
 
 /**
- * The answer to what was asked at the bench, over the picture (#753): it shows as it comes, then,
- * once it has all come, gets out of the way by itself; × closes it sooner, and Open chat shows it
- * with everything else said. One that fails, or never comes, says so, with Try again, until it's
- * closed.
+ * The answer to what was asked, a card over the picture (#753; at the bench, #793: "Fabrication ·
+ * Asking at the bench: step buttons + answer card · Fold (#793)"): what was asked, then the answer
+ * as it comes; once it has all come, it gets out of the way by itself, and × closes it sooner. In
+ * Plan, Open chat shows it with everything else said; at the bench the chat is a tap away in Plan.
+ * One that fails, or never comes, says so, with Try again, until it's closed.
  */
 export function BenchAnswer(props: {
   talk: BuildTalk;
@@ -268,8 +295,9 @@ export function BenchAnswer(props: {
   /** Asked again, by Try again: the answer to wait for now. */
   again: (asked: Asked) => void;
   close: () => void;
-  openChat: () => void;
+  openChat: (() => void) | undefined;
 }) {
+  const { openChat } = props;
   const { talk, close } = props;
   const { after } = props.asked;
   const since = talk.chat?.entries.filter((entry) => entry.seq > after) ?? [];
@@ -297,7 +325,7 @@ export function BenchAnswer(props: {
 
   const tryAgain = async () => {
     setTrying(true);
-    setProblem(await sendAsked(talk, props.asked.message, props.again));
+    setProblem(await sendAsked(talk, props.asked, props.again));
     setTrying(false);
   };
 
@@ -306,14 +334,16 @@ export function BenchAnswer(props: {
       aria-label="Answer"
       className="flex max-h-full min-h-0 flex-col gap-2 rounded-card border border-primary/35 bg-popover p-4 shadow-raised"
     >
-      <div className="flex shrink-0 items-center justify-between gap-2">
-        <CapsLabel tone="primary" heading={{ level: 3 }}>
-          Answer
-        </CapsLabel>
-        <div className="flex items-center gap-1">
-          <Button variant="quietPrimary" size="sm" onClick={props.openChat}>
-            Open chat
-          </Button>
+      <div className="flex shrink-0 items-start justify-between gap-2">
+        <h3 className="min-w-0 pt-1 text-interface text-primary-text">
+          You asked: {props.asked.said}
+        </h3>
+        <div className="flex shrink-0 items-center gap-1">
+          {openChat !== undefined && (
+            <Button variant="quietPrimary" size="sm" onClick={openChat}>
+              Open chat
+            </Button>
+          )}
           <IconButton
             label="Close"
             look="quiet"

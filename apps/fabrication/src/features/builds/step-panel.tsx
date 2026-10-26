@@ -1,13 +1,12 @@
 import { type BuildStep, type DerivedBuild, tickedIn } from "@courtyard/contract";
-import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
-import { Camera, Check, ChevronDown, Lightbulb, X } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
-import { CloseUp } from "./close-up.tsx";
+import { Check, ChevronDown, Lightbulb, X } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { LengthBar } from "./cut-plan.tsx";
 import { Findings } from "./findings.tsx";
 import { type Detail, type Progress, useDetail } from "./progress.ts";
+import { BeforeMovingOn, WalkThrough } from "./step/how.tsx";
 import { chipOf, listed, stepFindings, wayChanges } from "./words.ts";
 
 // A Build's steps as an instruction manual (#699; Paper, 2 · Agreed, "Fabrication · Build steps
@@ -75,35 +74,32 @@ function Ways(props: { ways: BuildStep["ways"] }) {
 }
 
 /**
- * What "show me how" walks through first (#777): each move in order, numbered, with its close-up
- * where one shows it (the tape's hook, the square's stock).
+ * "Show me how" or "Just the numbers". At the bench, where Show me how opens the close-ups (#793),
+ * it's Just the numbers alone, pressed or not.
  */
-function WalkThrough(props: { step: BuildStep; parts: DerivedBuild["parts"]; big: boolean }) {
-  if (props.step.walkThrough.length === 0) return null;
-  return (
-    <section aria-label="How it's done" className="flex flex-col gap-2">
-      <CapsLabel tone="muted" heading={{ level: 3 }}>
-        How it's done
-      </CapsLabel>
-      <ol className="flex flex-col gap-3">
-        {props.step.walkThrough.map((move, at) => (
-          <li key={move.title} className="flex flex-col gap-2">
-            <p className={classes("text-foreground", props.big ? "text-bench" : "text-answer")}>
-              <span className="font-bold">
-                {at + 1}. {move.title}:
-              </span>{" "}
-              {move.says}
-            </p>
-            {move.closeUp !== null && <CloseUp closeUp={move.closeUp} parts={props.parts} narrow />}
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-/** "Show me how" or "Just the numbers". */
-function DetailSwitch(props: { detail: Detail; choose: (detail: Detail) => void }) {
+function DetailSwitch(props: {
+  detail: Detail;
+  choose: (detail: Detail) => void;
+  atBench: boolean;
+}) {
+  if (props.atBench) {
+    const numbers = props.detail === "numbers";
+    return (
+      <button
+        type="button"
+        aria-pressed={numbers}
+        onClick={() => props.choose(numbers ? "how" : "numbers")}
+        className={classes(
+          "min-h-11 self-start rounded-row border px-4 text-interface",
+          numbers
+            ? "border-primary bg-primary/15 font-semibold text-foreground"
+            : "border-transparent bg-muted text-muted-foreground hover:text-foreground",
+        )}
+      >
+        Just the numbers
+      </button>
+    );
+  }
   const options = [
     { detail: "how", name: "Show me how" },
     { detail: "numbers", name: "Just the numbers" },
@@ -265,59 +261,27 @@ function ToolChips(props: { step: BuildStep; big: boolean }) {
   );
 }
 
-/** How to know it's right before moving on, and a photo of it to the chat to have it checked. */
-function BeforeMovingOn(props: { step: BuildStep; sendPhoto: (photo: File) => void }) {
-  const picker = useRef<HTMLInputElement>(null);
-  return (
-    <section
-      aria-label="Before you move on"
-      className="flex flex-col gap-2 rounded-card border border-border p-4"
-    >
-      <CapsLabel tone="muted" heading={{ level: 3 }}>
-        Before you move on
-      </CapsLabel>
-      <p className="text-answer text-foreground">{props.step.check.says}</p>
-      <div>
-        <Button variant="soft" size="md" onClick={() => picker.current?.click()}>
-          <Camera aria-hidden />
-          Send a photo to check
-        </Button>
-      </div>
-      <input
-        ref={picker}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        aria-label="Photo to check"
-        className="hidden"
-        onChange={(event) => {
-          const photo = event.target.files?.[0];
-          event.target.value = "";
-          if (photo !== undefined) props.sendPhoto(photo);
-        }}
-      />
-    </section>
-  );
-}
-
 /**
  * The step reached, as the instruction manual shows it (#699; at the bench, #753): which step and
  * how long it takes, its title and how to batch it, its checklist, a word's meaning when tapped,
- * its tips behind a tap (#789), its tools, its
- * fixings, what's left before moving on (`children`: its close-up), the check before moving on,
- * and how it's done and how much is said. `big` at the bench on the unfolded Fold, read at arm's
- * length.
+ * its tips behind a tap (#789), its tools, its fixings, then `children`, the check before moving
+ * on, and how it's done and how much is said. `big` at the bench on the unfolded Fold, read at
+ * arm's length. `atBench` (#793), `children` are the step's buttons, which open its walk-through,
+ * close-ups and check, so they aren't shown here; beside the steps on a computer, the photo for
+ * the check goes by `sendPhoto`.
  */
 export function StepPanel(props: {
   derived: DerivedBuild;
   step: BuildStep;
   progress: Progress;
-  sendPhoto: (photo: File) => void;
+  sendPhoto?: (photo: File) => void;
+  atBench?: boolean;
   big?: boolean;
   children?: ReactNode;
 }) {
   const { derived, step, progress } = props;
   const big = props.big === true;
+  const atBench = props.atBench === true;
   const [detail, choose] = useDetail();
   const [word, setWord] = useState<string>();
   const meaning = derived.glossary.find((each) => each.word === word);
@@ -347,7 +311,7 @@ export function StepPanel(props: {
           {change}
         </p>
       ))}
-      {detail === "how" && <WalkThrough step={step} parts={derived.parts} big={big} />}
+      {detail === "how" && !atBench && <WalkThrough step={step} parts={derived.parts} big={big} />}
       <Checklist
         step={step}
         detail={detail}
@@ -387,9 +351,9 @@ export function StepPanel(props: {
       )}
       <Findings findings={stepFindings(derived, step)} label="To check in this step" />
       {props.children}
-      <BeforeMovingOn step={step} sendPhoto={props.sendPhoto} />
+      {!atBench && <BeforeMovingOn step={step} sendPhoto={props.sendPhoto} />}
       <Ways ways={step.ways} />
-      <DetailSwitch detail={detail} choose={choose} />
+      <DetailSwitch detail={detail} choose={choose} atBench={atBench} />
     </section>
   );
 }

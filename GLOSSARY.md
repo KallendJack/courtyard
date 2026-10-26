@@ -341,16 +341,25 @@ _Avoid_: Fabricator, maker mode, workshop
 
 **At the bench**:
 Fabrication's way of working on a Build while making it (#753): one step fills the screen, read at arm's length, with
-the step in 3D beside it, Back and Done at thumb height and a swipe between steps. Where a Build with steps opens on
-the Fold; folded, the only way. Its other way is **Plan**, for planning at a desk: the Build big in 3D with its cut
-plan, buy list and tools beside it. On a computer, the three panels show both.
+the step in 3D beside it, Back and Done at thumb height and a swipe between steps. Under the step's lines, its four
+buttons (#793): Show me how, Is this right?, I don't have… and Can't do this now; there is no chat at the bench. Where
+a Build with steps opens on the Fold; folded, the only way. Its other way is **Plan**, for planning at a desk: the
+Build big in 3D with its cut plan, buy list and tools beside it, and the full chat. On a computer, the three panels
+show both.
 _Avoid_: step mode, workshop mode, focus mode
 
 **Hold to ask**:
 The chat behind one button, at the bench (#753): held, it listens, and let go, what was said is asked in the Build's
-chat about the step, its answer showing over the picture until it gets out of the way. A pause doesn't end it; let
-go on a few words, it waits a moment for more (#787). A tap opens the chat.
+chat about the step, its answer a card over the picture with what was asked and ×, until it gets out of the way; the
+step never changes (#793). A pause doesn't end it; let go on a few words, it waits a moment for more (#787). A tap
+opens the chat, in Plan.
 _Avoid_: push to talk (that's the Talk key's), voice chat
+
+**Parked (a step)**:
+A Build's step the owner can't do now, kept with why ("Out of time", "Missing: 10 mm spanner × 2"), from Can't do this
+now or I don't have… at the bench (#793). The next step not done or parked comes up instead; back on it, it says why,
+with Do it now.
+_Avoid_: skipped, deferred, on hold
 
 **Carry on (a project)**:
 Starting a session from a project, on Home or its page (#603): its first message the project and what's next, and the

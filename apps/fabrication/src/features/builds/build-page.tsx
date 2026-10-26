@@ -13,7 +13,14 @@ import { AtTheBench, PANEL, Plan } from "./at-the-bench.tsx";
 import { BenchPanel } from "./bench-panel.tsx";
 import { BuyList } from "./buy-list.tsx";
 import { BuildChat, useBuildChat } from "./chat/build-chat.tsx";
-import { type Asked, BenchAnswer, benchPhrases, HoldToAsk } from "./chat/hold-to-ask.tsx";
+import {
+  type Asked,
+  askAtTheBench,
+  BenchAnswer,
+  type BenchAsk,
+  benchPhrases,
+  HoldToAsk,
+} from "./chat/hold-to-ask.tsx";
 import { CutPlan } from "./cut-plan.tsx";
 import { FINDINGS_ID, Findings } from "./findings.tsx";
 import { PrintPanel, PrintTab, useMaking } from "./print/print-panel.tsx";
@@ -22,7 +29,7 @@ import { StepDots, StepFoot } from "./step-moves.tsx";
 import { StepPanel } from "./step-panel.tsx";
 import { useStockOptions } from "./stock-options.tsx";
 import { ToolsList } from "./tools-list.tsx";
-import { checkCards, printSizeLine, sizeLine } from "./words.ts";
+import { checkCards, checkQuestion, printSizeLine, sizeLine } from "./words.ts";
 
 /**
  * The side panel's tabs, as the boards have them, for a bench and for a printed part (#702): in
@@ -147,16 +154,18 @@ export function BuildPage(props: { build: BuildOpened }) {
     requestAnimationFrame(() => document.getElementById(FINDINGS_ID)?.focus());
   };
 
-  // "Send a photo to check" (#699): the photo and what it's for go in the chat's Reply box, for
-  // the owner to see and send with one tap.
+  // "Send a photo to check" beside the steps on a computer (#699): the photo and what it's for go
+  // in the chat's Reply box, for the owner to see and send with one tap.
   const sendPhoto = (photo: File) => {
-    if (step === undefined) return;
-    setDraft({
-      text: `Step ${step.number}, ${step.title}: ${step.check.photo} ${step.check.says} Does it look right?`,
-      files: [photo],
-      key: Date.now(),
-    });
-    if (!wide) setChatOpen(true);
+    if (step !== undefined)
+      setDraft({ text: checkQuestion(step), files: [photo], key: Date.now() });
+  };
+  // Is this right? at the bench (#793): asked at once, its answer over the picture.
+  const check = (ask: BenchAsk) => askAtTheBench(talk, ask, setAsked);
+  // At the bench the full chat is in Plan (#793); folded, with no Plan, the sheet over the step.
+  const openChatFromBench = () => {
+    if (!cover) setMode("plan");
+    setChatOpen(true);
   };
 
   const sideContent = (tab: Tab): ReactNode => {
@@ -223,19 +232,19 @@ export function BuildPage(props: { build: BuildOpened }) {
       talk={talk}
       about={atBench && step !== undefined ? `Step ${step.number}, ${step.title}` : undefined}
       phrases={benchPhrases(derived, step)}
-      openChat={openChat}
+      openChat={withChat ? openChat : openChatFromBench}
       asked={setAsked}
       withChat={withChat}
     />
   );
-  const answer =
+  const answer = (withChat: boolean) =>
     asked === undefined ? null : (
       <BenchAnswer
         talk={talk}
         asked={asked}
         again={setAsked}
         close={closeAnswer}
-        openChat={openChat}
+        openChat={withChat ? openChat : undefined}
       />
     );
 
@@ -347,10 +356,10 @@ export function BuildPage(props: { build: BuildOpened }) {
           lit={lit}
           pick={pick}
           ask={ask(false)}
-          answer={answer}
+          answer={answer(false)}
           step={step}
           progress={progress}
-          sendPhoto={sendPhoto}
+          check={check}
           cover={cover}
           printed={printed}
         />
@@ -361,7 +370,7 @@ export function BuildPage(props: { build: BuildOpened }) {
           lit={lit}
           pick={pick}
           ask={ask(true)}
-          answer={answer}
+          answer={answer(true)}
           cover={cover}
           printed={printed}
           side={
