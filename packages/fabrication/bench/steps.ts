@@ -112,7 +112,7 @@ export const benchSteps = (options: {
       title: "Fit the supports",
       minutes: 20,
       parts: p.shelf.on ? ["F", "D"] : ["F"],
-      tools: ["tape-measure", "pencil", "drill-driver", "drill-bits"],
+      tools: ["tape-measure", "pencil", ...drilling(pilots.brackets)],
       safety: ["safety-glasses"],
       fixings: bracketed(p, p.shelf.on ? 4 : 2),
       batch: "One support at a time.",
@@ -218,7 +218,7 @@ export const benchSteps = (options: {
       batch: "One rail at a time: crosses, countersink, screws, then the next.",
       actions: [
         act(
-          `Lay the top (G) on with ${whole(s.overhang)} over the frame on every side, and clamp it so it can't move.`,
+          `Lay the top (G) on with ${whole(s.overhang)} over the frame on every side: measure it at each corner. Clamp it so it can't move.`,
           `G, ${whole(s.overhang)} over all round.`,
         ),
         act(

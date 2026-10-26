@@ -69,25 +69,32 @@ export const markedLengths = (cutPlan: CutPlan): MarkedLength[] =>
     return [...groups.values()];
   });
 
-/**
- * A shop's cut end is often out of square, and the first piece is measured from it: the step a
- * beginner misses.
- */
+/** A shop's cut end is often out of square, and the first piece is measured from it. */
 const squareEnd = act(
   "First check the end is square: hold the square's stock tight against the edge and look along its blade. If there's a gap, square a line 10 mm in and saw off the end, then measure from there.",
   "End square? If not, trim it.",
 );
+
+/** A piece cut again and again from a length, said once: "C 460 four times". */
+const TIMES = ["", "", " twice", " three times", " four times", " five times", " six times"];
 
 /**
  * One length's pieces, one at a time (#789): each measured from the fresh end the last cut left,
  * so a saw cut never shifts a mark and there's no sum to follow. The cut plan still shows the
  * whole length.
  */
-const marking = (length: MarkedLength): Action => {
+const marking = (length: MarkedLength, at: number): Action => {
   const lengths = length.count === 1 ? "one length" : `${length.count} lengths`;
-  const pieces = length.cuts.map((cut) => `${cut.label} ${cut.length}`).join(", then ");
+  const runs: [string, number][] = [];
+  for (const { label, length: mm } of length.cuts) {
+    const last = runs.at(-1);
+    if (last?.[0] === `${label} ${mm}`) last[1] += 1;
+    else runs.push([`${label} ${mm}`, 1]);
+  }
+  const pieces = runs.map(([cut, n]) => `${cut}${TIMES[n] ?? ` ${n} times`}`).join(", then ");
+  // How a piece is marked is said on the first length only; Show me how walks through it.
   return {
-    howTo: `On ${lengths} of ${length.stock}: ${pieces}. Hook the tape over the end, make a pencil tick at the piece's length, put the square on the tick and draw the line across. Cut it, then measure the next piece from the fresh end.`,
+    howTo: `On ${lengths} of ${length.stock}: ${pieces}. ${at === 0 ? "Hook the tape over the end, tick the length, square a line across. Cut it, then measure the next piece from the fresh end." : "The same: each piece from the fresh end."}`,
     numbers: `${length.count} × ${length.stock}: ${pieces}`,
     length,
   };

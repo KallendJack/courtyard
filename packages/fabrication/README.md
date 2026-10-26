@@ -89,8 +89,8 @@ if (recipe) {
   and bolted loosely before the next, so none is off, and each bolt tightened with its head held, the tool's handle
   against the castor. Its tools are the owner's: the nut turned with their socket, adjustable or spanner, the head held
   with what's left (a spanner, an adjustable or pliers), one adjustable never two; what's missing is a chip not to
-  hand. It opens on its batch line and those lines: no walk-through, and its extras (the drill's clutch, starting
-  the nut by hand, how tight is tight) are tips (#789). Its two close-ups are the board's:
+  hand. It opens on its batch line and those lines: no walk-through, and its extras (the drill's clutch, a hole
+  that's off, starting the nut by hand, how tight is tight) are tips (#789). Its two close-ups are the board's:
   tightening, with the owner's tools drawn as their shapes, and one bolt taken apart (the castor, the bolt's head and
   the plate on top, the base, then the washers the Build has under the nut, against the wood, never under the head).
   A castor step started on its lines from before keeps them, so its ticks stay on the lines they were ticked on.

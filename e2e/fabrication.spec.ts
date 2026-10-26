@@ -1001,7 +1001,7 @@ test.describe("on a desktop", () => {
     await expect(checklist).toContainText("Spread them 460 apart outside to outside.");
 
     await steps.getByRole("button", { name: "Just the numbers" }).click();
-    await expect(checklist).toContainText("460 outside; C flush with the tops; clamp, square.");
+    await expect(checklist).toContainText("460 outside; C flush with the tops; square, clamp.");
     await expect(letter(page, "C, End rails")).toHaveAttribute("aria-current", "step");
 
     await steps.getByLabel("Photo to check").setInputFiles({

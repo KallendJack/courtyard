@@ -832,12 +832,19 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     }
   });
 
-  it("keep the castors' extras behind Tips: the clutch, the nut by hand, how tight (#783, #789)", () => {
+  it("keep the castors' extras behind Tips: the clutch, a hole that's off, the nut by hand, how tight (#783, #789)", () => {
     const fitting = stepOf(built(goldenBench), "fit-castors");
 
-    expect(fitting?.batch).toBe("One castor at a time: place, drill, bolt, then the next.");
+    expect(fitting?.batch).toBe(
+      "One castor at a time, placed by eye: each hole drilled and bolted before the next.",
+    );
+    expect(fitting?.closeUps.map((closeUp) => closeUp.title)).toEqual([
+      "Tighten",
+      "One bolt, apart",
+    ]);
     expect(fitting?.tips).toEqual([
       "If the drill seems to stop, turn its collar to the drill symbol: the numbers are for driving screws.",
+      "A hole that's off? Widen it sideways with the same bit (the washer covers it).",
       "Start each nut by hand, a few turns, before the spanner.",
       "Tight is when the washer bites into the wood, then about a quarter turn more. A lock nut is stiff all the way.",
     ]);
@@ -1010,6 +1017,11 @@ describe("the simplest way first (#789)", () => {
     expect(marking[1]?.numbers).toBe("4 × 45 × 95 C16: B 1450, then A 750");
     expect(marking[1]?.howTo).toContain("fresh end");
     for (const action of marking) expect(action.howTo).not.toContain("2203");
+    // How to mark is said once; a piece cut again and again is said once.
+    expect(marking[2]?.howTo).toBe(
+      "On one length of 45 × 95 C16: C 460 four times, then D 460. The same: each piece from the fresh end.",
+    );
+    expect(marking[3]?.numbers).toBe("1 × 45 × 145 C16: E 550 twice, then F 460");
   });
 
   it("mark the screw spots by eye, where the rail sits on the leg, before any screwing", () => {
@@ -1033,6 +1045,32 @@ describe("the simplest way first (#789)", () => {
     for (const step of build.steps) {
       expect(step.actions.map((action) => action.howTo).join(" ")).not.toMatch(/each dot/);
     }
+  });
+
+  it("list drill bits only on bracket steps that drill a pilot hole", () => {
+    const bracketSteps = ["stand-on-bases", "fit-supports"];
+    const bitsOn = (build: Build) =>
+      build.steps
+        .filter((step) => step.tools.some((tool) => tool.tool === "drill-bits"))
+        .map((step) => step.id);
+
+    expect(bitsOn(built(goldenBench))).toEqual(expect.arrayContaining(bracketSteps));
+    // A 60 mm bracket's screws sit 30 in from the corner: past the split risk.
+    const wide = built({
+      ...goldenBench,
+      fixings: {
+        ...goldenBench.fixings,
+        brackets: { ...goldenBench.fixings.brackets, name: "60 mm angle brackets" },
+      },
+    });
+    for (const id of bracketSteps) expect(bitsOn(wide)).not.toContain(id);
+  });
+
+  it("square the corner before clamping it, on the end frames", () => {
+    const frames = stepOf(built(goldenBench), "end-frames");
+
+    expect(frames?.actions[1]?.howTo).toMatch(/Check the corner with your square, then clamp it/);
+    expect(frames?.actions[1]?.numbers).toMatch(/square, clamp\.$/);
   });
 
   it("sand the edges your hands touch, on the top", () => {

@@ -11,8 +11,8 @@ import { act, type Draft, type DraftTool } from "./preparing.ts";
 // hole is drilled through the plate's own hole, one at a time, and bolted loosely before the
 // next, so the holes can't be off. It opens on four short lines and nothing else (packages/
 // fabrication/README.md, "How a step reads"); its two close-ups show tightening and one bolt
-// apart. The extras (the drill's clutch, starting the nut by hand, how tight is tight) are its
-// tips (#789).
+// apart. The extras (the drill's clutch, a hole that's off, starting the nut by hand, how tight
+// is tight) are its tips (#789).
 
 /** What the castor step's lines are, kept with a step started on them (#783). */
 export const CASTOR_LINES = "through-plate";
@@ -103,6 +103,7 @@ export const castorsDraft = (options: {
   const then =
     rest === 1 ? " Then the last one." : rest > 1 ? ` Then the other ${NUMBER_WORDS[rest]}.` : "";
   const pliers = tools.head === "pliers";
+  const washer = castors.washer.perBolt > 0;
   return {
     id: "fit-castors",
     on: true,
@@ -118,7 +119,7 @@ export const castorsDraft = (options: {
       { name: names.washers, count: 4 * castors.boltsEach * castors.washer.perBolt },
       { name: names.nuts, count: 4 * castors.boltsEach },
     ],
-    batch: "One castor at a time: place, drill, bolt, then the next.",
+    batch: "One castor at a time, placed by eye: each hole drilled and bolted before the next.",
     actions: [
       act(
         `${workmate ? "Base in the Workmate's jaws." : "Base upside down on two offcuts."} Castor upside down on its end: same gap both sides, a fingernail from the end.`,
@@ -145,8 +146,9 @@ export const castorsDraft = (options: {
     ],
     tips: [
       "If the drill seems to stop, turn its collar to the drill symbol: the numbers are for driving screws.",
+      `A hole that's off? Widen it sideways with the same bit${washer ? " (the washer covers it)" : ""}.`,
       "Start each nut by hand, a few turns, before the spanner.",
-      "Tight is when the washer bites into the wood, then about a quarter turn more. A lock nut is stiff all the way.",
+      `Tight is when ${washer ? "the washer" : "the nut"} bites into the wood, then about a quarter turn more. A lock nut is stiff all the way.`,
     ],
     closeUps: [
       tightenCloseUp(castors, {

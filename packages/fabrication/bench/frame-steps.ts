@@ -57,8 +57,8 @@ export const frameDrafts = (options: {
           `A × 2: line ${shelfUp} up across both.`,
         ),
         act(
-          `Spread them ${whole(s.endRail)} apart outside to outside. Clamp an end rail (C) across, flush with the tops, and check the corner with your square.`,
-          `${whole(s.endRail)} outside; C flush with the tops; clamp, square.`,
+          `Spread them ${whole(s.endRail)} apart outside to outside. Lay an end rail (C) across, flush with the tops. Check the corner with your square, then clamp it.`,
+          `${whole(s.endRail)} outside; C flush with the tops; square, clamp.`,
         ),
         screwing(
           pilots.endFrames,
