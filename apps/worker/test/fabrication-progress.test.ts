@@ -54,6 +54,7 @@ describe("a Build's progress", () => {
       ticked: [],
       ways: [],
       buying: [],
+      parked: [],
     });
   });
 
@@ -72,9 +73,10 @@ describe("a Build's progress", () => {
     expect(kept.status).toBe(200);
     // The castor step started keeps the lines it was started on (#783).
     const ways = [{ step: "fit-castors", tool: "through-plate" }];
-    expect(BuildProgress.parse(await kept.json())).toEqual({ ...progress, ways, buying: [] });
+    const all = { ...progress, ways, buying: [], parked: [] };
+    expect(BuildProgress.parse(await kept.json())).toEqual(all);
     // Read from the Build again, as another device opening it would.
-    expect((await opened(request)).progress).toEqual({ ...progress, ways, buying: [] });
+    expect((await opened(request)).progress).toEqual(all);
   });
 
   it("isn't a change to undo: it's kept in git without a Recent changes entry", async () => {
@@ -113,7 +115,7 @@ describe("a Build's progress", () => {
     );
 
     const build = await opened(request);
-    expect(build.progress).toEqual({ ...progress, ways: [], buying: [] });
+    expect(build.progress).toEqual({ ...progress, ways: [], buying: [], parked: [] });
     expect(build.derived.steps.find((step) => step.id === "fit-supports")?.number).toBe(6);
   });
 
@@ -130,6 +132,7 @@ describe("a Build's progress", () => {
       ticked: [],
       ways: [],
       buying: [],
+      parked: [],
     });
     // And it's kept the new way from the next tick.
     const kept = await keep(request, {
@@ -169,6 +172,19 @@ describe("a Build's progress", () => {
     // Every line unticked, it follows the tools again.
     await keep(request, { step: "cut-timber", ticked: [] });
     expect((await opened(request)).progress.ways).toEqual([]);
+  });
+
+  it("keeps a step parked with why, for Can't do this now at the bench (#793)", async () => {
+    const request = await owner();
+    const parked = [{ step: "fit-castors", why: "Missing: 10 mm spanner × 2" }];
+
+    const kept = await keep(request, { step: "stand-on-bases", ticked: [], parked });
+
+    expect(BuildProgress.parse(await kept.json()).parked).toEqual(parked);
+    expect((await opened(request)).progress.parked).toEqual(parked);
+    // Taken off, as Do it now does, it's gone.
+    await keep(request, { step: "fit-castors", ticked: [], parked: [] });
+    expect((await opened(request)).progress.parked).toEqual([]);
   });
 
   it("refuses a Build that isn't there", async () => {

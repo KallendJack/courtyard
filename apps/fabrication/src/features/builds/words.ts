@@ -109,6 +109,9 @@ export const stepFindings = (derived: DerivedBuild, step: BuildStep) =>
     (finding) => finding.kind === "too-big-for-stock" && step.parts.includes(finding.label),
   );
 
+/** A photo of a step sent to be checked (#699), with what it's of and how it's checked. */
+export const checkQuestion = (step: BuildStep) =>
+  `Step ${step.number}, ${step.title}: ${step.check.photo} ${step.check.says} Does it look right?`;
 /**
  * What's changed in how the steps are done since the owner's tools did (#777), a line a step:
  * "Cut and label the timber now uses your mitre saw, not the hand saw."

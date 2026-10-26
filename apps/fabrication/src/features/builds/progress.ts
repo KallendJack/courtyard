@@ -18,6 +18,10 @@ const withLines = (progress: BuildProgress, step: string, lines: readonly number
 
 const same = (a: BuildProgress, b: BuildProgress) => JSON.stringify(a) === JSON.stringify(b);
 
+/** Why a step is parked, or undefined when it isn't. */
+const parkedWhy = (progress: BuildProgress, step: string) =>
+  progress.parked.find((each) => each.step === step)?.why;
+
 /**
  * A Build's progress on the page: changed at once, then kept by the worker, one save after
  * another so the last one wins. Progress read again from the worker (from another device) is
@@ -107,12 +111,37 @@ export const useProgress = (
     /** Its Undo: off the buy list again. */
     unbuy: (tool: string) =>
       change({ ...progress, buying: progress.buying.filter((each) => each !== tool) }),
-    /** "Done, next step": every line of this step ticked, and on to the next. */
+    /** Why the step reached is parked (#793), when it is. */
+    parked: step === undefined ? undefined : parkedWhy(progress, step.id),
+    /**
+     * "Can't do this now" (#793): the step reached parked with why, and on to the next step not
+     * done or parked, after it or else before it. Re-ordering round what's missing is #792's.
+     */
+    park: (why: string) => {
+      if (step === undefined) return;
+      const parked = [
+        ...progress.parked.filter((each) => each.step !== step.id),
+        { step: step.id, why },
+      ];
+      const free = (each: (typeof steps)[number]) =>
+        !parked.some((one) => one.step === each.id) &&
+        tickedIn(progress, each.id).length < each.actions.length;
+      const next =
+        steps.slice(step.number).find(free) ?? steps.slice(0, step.number - 1).find(free);
+      change({ ...progress, parked, step: next?.id ?? step.id });
+    },
+    /** "Do it now": the step reached isn't parked any more. */
+    unpark: () => {
+      if (step === undefined) return;
+      change({ ...progress, parked: progress.parked.filter((each) => each.step !== step.id) });
+    },
+    /** "Done, next step": every line of this step ticked, not parked any more, and on to the next. */
     done: () => {
       if (step === undefined) return;
       const all = step.actions.map((_, line) => line);
       const ticked = withLines(progress, step.id, all);
-      change({ ...ticked, step: at(step.number + 1) });
+      const parked = ticked.parked.filter((each) => each.step !== step.id);
+      change({ ...ticked, parked, step: at(step.number + 1) });
     },
   };
 };

@@ -3,8 +3,9 @@ import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import type { ReactNode } from "react";
 import { BenchPanel } from "./bench-panel.tsx";
-import { CloseUp } from "./close-up.tsx";
+import type { BenchAsk } from "./chat/hold-to-ask.tsx";
 import type { Progress } from "./progress.ts";
+import { StepButtons } from "./step/step-buttons.tsx";
 import { StepFoot, useSwipe } from "./step-moves.tsx";
 import { StepPanel } from "./step-panel.tsx";
 
@@ -32,7 +33,7 @@ function Printed(props: { printed: ReactNode; ask: ReactNode; answer: ReactNode 
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {props.printed}
       {props.answer !== null && props.answer !== undefined && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 bottom-18 flex flex-col *:pointer-events-auto">
+        <div className="pointer-events-none absolute inset-x-0 top-0 bottom-18 flex flex-col justify-end *:pointer-events-auto">
           {props.answer}
         </div>
       )}
@@ -48,13 +49,15 @@ function Printed(props: { printed: ReactNode; ask: ReactNode; answer: ReactNode 
  * "· Cover 476×695"): one step at a time, filling the screen. On the unfolded Fold, the step in 3D
  * on the left, with Hold to ask and Reset view, and the step in big type on the right, Back and
  * Done at thumb height; folded, the same stacked. A swipe on the step moves to the next or the one
- * before.
+ * before. Under the step's lines, its four buttons (#793), and no chat: what's asked is answered
+ * over the picture, and the full chat is in Plan.
  */
 export function AtTheBench(
   props: Bench & {
     step: BuildStep;
     progress: Progress;
-    sendPhoto: (photo: File) => void;
+    /** Is this right? (#793): the photo, asked about against the step. */
+    check: (ask: BenchAsk) => Promise<string | undefined>;
     cover: boolean;
   },
 ) {
@@ -80,16 +83,14 @@ export function AtTheBench(
   const theStep = (
     <div {...swipe} className={classes(PANEL, "flex-1 touch-pan-y")}>
       <Scroller className="flex min-h-0 flex-1 flex-col">
-        <StepPanel
-          derived={derived}
-          step={step}
-          progress={progress}
-          sendPhoto={props.sendPhoto}
-          big={!cover}
-        >
-          {step.closeUps.map((closeUp) => (
-            <CloseUp key={closeUp.title} closeUp={closeUp} parts={derived.parts} narrow />
-          ))}
+        <StepPanel derived={derived} step={step} progress={progress} atBench big={!cover}>
+          <StepButtons
+            derived={derived}
+            step={step}
+            progress={progress}
+            check={props.check}
+            big={!cover}
+          />
         </StepPanel>
       </Scroller>
       <StepFoot
