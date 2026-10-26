@@ -8,6 +8,7 @@ import {
   type FailureReason,
   GitHubConnection,
   LeadStatus,
+  NeedsYou,
   SessionSummary,
 } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -484,6 +485,44 @@ describe("a Lead builder's status (#590)", () => {
     expect(told).toHaveLength(2);
     first.open();
     second.open();
+  });
+
+  it("cut off by a restart after its pull request merged, ends quietly: Merged, not in Needs you, no Continue (#755)", async () => {
+    const working = gate();
+    const { provider, told } = playing([
+      async ({ input }) => {
+        await working.pass();
+        await input.emit("Opened its pull request.");
+        return ok(null);
+      },
+    ]);
+    await signedIn(provider);
+    const builder = await build();
+    await working.reached;
+    const number = github.openPullRequest({
+      repo: onGitHub,
+      branch: builder.branch ?? "",
+      head: "c0ffee1",
+    });
+    github.setChecks(number, [{ name: "Checks", outcome: "passed" }]);
+    github.merge(number);
+    await followPullRequests();
+    await becomes("merged");
+
+    // The worker restarts while its turn still runs.
+    await restart();
+    await expect
+      .poll(async () => (await sessionsList()).find((each) => each.id === builder.id)?.busy, SLOW)
+      .toBe(false);
+
+    const listed = (await sessionsList()).find((each) => each.id === builder.id);
+    expect(listed?.waiting).toBe("nothing");
+    const needs = NeedsYou.parse(await (await request("/api/needs-you")).json());
+    expect(needs.needs).toEqual([]);
+    expect(await statusOf()).toMatchObject({ kind: "merged", pullRequest: number });
+    await runJobs();
+    expect(told).toHaveLength(1);
+    working.open();
   });
 
   it("is told its task has ended while an Update waits (#610)", async () => {
