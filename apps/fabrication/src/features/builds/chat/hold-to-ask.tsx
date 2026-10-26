@@ -117,7 +117,6 @@ export function HoldToAsk(props: {
   const said = useRef("");
   const carryOn = useRef<number>(undefined);
   const [waiting, setWaiting] = useState(false);
-  useEffect(() => () => window.clearTimeout(carryOn.current), []);
   const press = usePress({ held: () => feel("thump") });
 
   const ask = async (text: string) => {
@@ -126,6 +125,17 @@ export function HoldToAsk(props: {
     const message = { text: about === undefined ? text : `${about}: ${text}`, model };
     setProblem(await sendAsked(talk, message, props.asked));
   };
+  const latestAsk = useRef(ask);
+  latestAsk.current = ask;
+  // Gone (Plan opened, say): the microphone goes off, and what was let go is asked, not lost.
+  useEffect(
+    () => () => {
+      listening.current?.cancel();
+      window.clearTimeout(carryOn.current);
+      if (said.current !== "") void latestAsk.current(said.current);
+    },
+    [],
+  );
 
   /** What was said is done with: asked now, or, sounding unfinished, after a moment for more. */
   const settle = (text: string, now: boolean) => {
@@ -148,14 +158,26 @@ export function HoldToAsk(props: {
     setProblem(undefined);
     setHeard(said.current);
     feel("tick");
-    listening.current = listen(
+    /** This hold's listening, and the words it heard. */
+    let mine: Listening | undefined;
+    let heardHere = "";
+    /** Held again before the browser settled this hold's words: that hold carries on from them. */
+    const heldAgain = () => listening.current !== undefined && listening.current !== mine;
+    mine = listen(
       {
         heard: (now) => {
+          heardHere = now;
           words.current = now;
           setHeard(joined(said.current, now));
         },
-        finished: (now) => settle(joined(said.current, now === "" ? words.current : now), false),
+        finished: (now) => {
+          const text = joined(said.current, now === "" ? heardHere : now);
+          if (!heldAgain()) return settle(text, false);
+          said.current = text;
+          setHeard(joined(text, words.current));
+        },
         failed: (why) => {
+          if (heldAgain()) return;
           press.cancel();
           listening.current = undefined;
           said.current = "";
@@ -165,6 +187,7 @@ export function HoldToAsk(props: {
       },
       props.phrases,
     );
+    listening.current = mine;
   };
   const letGo = (event: PointerEvent<HTMLButtonElement>) => {
     const how = press.end(event);

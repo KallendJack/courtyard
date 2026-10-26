@@ -3,7 +3,14 @@ import { BuildChat, BuildOpened } from "../packages/contract/index.ts";
 import { goldenBench } from "../packages/fabrication/bench/fixtures/golden.ts";
 import { goldenHolster } from "../packages/fabrication/print/fixtures/golden.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
-import { hear, listenedFor, pause, standInSpeechRecognition } from "./speech-recognition.ts";
+import {
+  hear,
+  listenedFor,
+  pause,
+  settle,
+  settleSlowly,
+  standInSpeechRecognition,
+} from "./speech-recognition.ts";
 
 // Fabrication (#698, ADR 0036): a project step's Build opens in Fabrication, served under
 // /fabrication behind Courtyard's login, with a chat in its session. On the Fold (#753; Paper,
@@ -697,6 +704,46 @@ test.describe("on the unfolded Fold", () => {
       timeout: 60_000,
     });
     await expect(page.getByRole("button", { name: "Hold to ask" })).toBeVisible();
+  });
+
+  test("hold to ask: held again before the browser has settled the words, it carries on from them", async ({
+    page,
+  }) => {
+    test.slow();
+    await standInSpeechRecognition(page);
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await chatSettled(page);
+
+    const ask = page.getByRole("button", { name: "Hold to ask" });
+    const { x, y, width, height } = await boxOf(ask);
+    await page.mouse.move(x + width / 2, y + height / 2);
+    await page.mouse.down();
+    await hear(page, "Is the floor level enough");
+    // The finger slips off and straight back on, before the browser has handed over the words.
+    await settleSlowly(page);
+    await page.mouse.up();
+    await page.mouse.down();
+    await settle(page);
+    const heard = page.getByRole("status").filter({ hasText: "Is the floor" });
+    await expect(heard).toHaveText("Step 1, Check what's arrived: Is the floor level enough");
+    await expect(page.getByRole("button", { name: "Let go to ask" })).toBeVisible();
+    await hear(page, "for the clamps?");
+    await expect(heard).toHaveText(
+      "Step 1, Check what's arrived: Is the floor level enough for the clamps?",
+    );
+    await page.mouse.up();
+
+    const answer = page.getByRole("region", { name: "Answer" });
+    await expect(answer).toContainText(
+      "You said: Step 1, Check what's arrived: Is the floor level enough for the clamps?",
+      { timeout: 60_000 },
+    );
+    await answer.getByRole("button", { name: "Open chat" }).click();
+    const messages = page
+      .getByRole("dialog", { name: "Chat" })
+      .getByRole("list", { name: "Messages" });
+    await expect(messages.getByText(/^Step 1, Check what's arrived:/)).toHaveCount(1);
   });
 });
 

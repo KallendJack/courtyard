@@ -33,6 +33,11 @@ declare global {
  * natural log of how many times likelier, so 3 is some twenty times.
  */
 const PHRASE_BOOST = 3;
+/**
+ * Whether this browser takes phrases. One that refuses them ends that listen at once, so once
+ * refused, every listen after goes without, rather than losing its first words to starting again.
+ */
+let phrasesTaken = true;
 
 const recogniser = () => window.SpeechRecognition ?? window.webkitSpeechRecognition;
 
@@ -82,7 +87,6 @@ export const listen = (
   phrases: readonly string[] = [],
 ): Listening => {
   const Recogniser = recogniser();
-  let biasing = phrases.length > 0;
   /** What the recognisers that have ended heard, and the one listening now, result by result. */
   let before: string[] = [];
   let now: string[] = [];
@@ -119,11 +123,11 @@ export const listen = (
     recognition.continuous = true;
     recognition.interimResults = true;
     const Phrase = window.SpeechRecognitionPhrase;
-    if (biasing && Phrase !== undefined) {
+    if (phrases.length > 0 && phrasesTaken && Phrase !== undefined) {
       try {
         recognition.phrases = phrases.map((phrase) => new Phrase(phrase, PHRASE_BOOST));
       } catch {
-        biasing = false;
+        phrasesTaken = false;
       }
     }
     recognition.onresult = (event) => {
@@ -134,9 +138,9 @@ export const listen = (
       on.heard(words());
     };
     recognition.onerror = (event) => {
-      // A recogniser that can't be told phrases ends at once: the next listens without them.
+      // A recogniser that can't be told phrases ends at once: it starts again without them.
       if (String(event.error) === "phrases-not-supported") {
-        biasing = false;
+        phrasesTaken = false;
         return;
       }
       // Vivaldi, Brave and Opera have Chrome's recogniser but not Google's speech service, so

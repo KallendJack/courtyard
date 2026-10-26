@@ -6,7 +6,8 @@ import type { Page } from "@playwright/test";
  * (`hear`), and can make it stop on its own in a pause as Chrome on Android does (`pause`), or
  * refuse the microphone (`refuse`), or fail to reach its speech service (`loseConnection`), or
  * send the page out of sight (`goOutOfSight`) and back
- * (`comeBack`). It stands in for the screen's wake lock too, released out of sight as browsers do.
+ * (`comeBack`), or take its time settling the words when asked to stop (`settleSlowly`, until
+ * `settle`). It stands in for the screen's wake lock too, released out of sight as browsers do.
  * What the page asked for (the language, the phrases to listen out for, the microphone on or off,
  * each vibration, the screen kept awake) is kept in the page's storage for the test to read. Everything from the words on (the talk strip, the
  * message sent) is real.
@@ -19,6 +20,9 @@ export const standInSpeechRecognition = (page: Page) =>
     let listening: StandIn | undefined;
     /** Words said while nothing listened (between a pause and listening again), heard once it does. */
     let unheard: string | undefined;
+    /** Settling slowly: asked to stop, it stops listening but ends only once told to settle. */
+    let slowly = false;
+    let unsettled: StandIn | undefined;
 
     class StandIn {
       lang = "";
@@ -74,7 +78,9 @@ export const standInSpeechRecognition = (page: Page) =>
         }, 50);
       }
       stop() {
-        this.end();
+        if (!slowly) return this.end();
+        if (listening === this) stopListening();
+        unsettled = this;
       }
       abort() {
         if (listening === this) stopListening();
@@ -114,6 +120,14 @@ export const standInSpeechRecognition = (page: Page) =>
       if (typeof words === "string") listening?.hearAnew(words, final === true);
     });
     addEventListener("stand-in-pause", () => listening?.end());
+    addEventListener("stand-in-settle-slowly", () => {
+      slowly = true;
+    });
+    addEventListener("stand-in-settle", () => {
+      slowly = false;
+      unsettled?.end();
+      unsettled = undefined;
+    });
     /** The screen's wake locks the page holds, as the browser keeps them. */
     const locks = new Set<{ released: boolean; release: () => Promise<void> }>();
     const keptAwake = () => localStorage.setItem("stand-in-awake", locks.size > 0 ? "yes" : "no");
@@ -200,6 +214,17 @@ export const hearAnew = (page: Page, words: string, final: boolean) =>
 /** The browser stops listening on its own, as Chrome on Android does in a pause. */
 export const pause = (page: Page) =>
   page.evaluate(() => dispatchEvent(new CustomEvent("stand-in-pause")));
+
+/**
+ * The browser takes its time settling the words once asked to stop, as Chrome on Android can:
+ * listening has stopped, but the words aren't handed over until `settle`.
+ */
+export const settleSlowly = (page: Page) =>
+  page.evaluate(() => dispatchEvent(new CustomEvent("stand-in-settle-slowly")));
+
+/** The browser settles the words it was asked to stop on, and hands them over. */
+export const settle = (page: Page) =>
+  page.evaluate(() => dispatchEvent(new CustomEvent("stand-in-settle")));
 
 /** The owner, or the browser, says no to the microphone. */
 export const refuse = (page: Page) =>
