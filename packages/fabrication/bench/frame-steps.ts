@@ -86,8 +86,8 @@ export const frameDrafts = (options: {
           `On edge, on offcuts; C flush with the tops, ${whole(s.endRail)} outside.`,
         ),
         act(
-          "Bottom rail's lower edge on your line. Mark the 2 crosses first, then clamp beside them.",
-          "Bottom C on the line; crosses, then clamp.",
+          "Bottom rail's lower edge on your line, square to the leg. Mark 2 crosses, clamp beside them.",
+          "Bottom C on the line, square; crosses, then clamp.",
         ),
         act(
           "Screw where the clamp isn't. Move the clamp, second screw. Next joint.",
@@ -95,7 +95,6 @@ export const frameDrafts = (options: {
         ),
       ],
       tips: [
-        "Check the corner with your square before the first screw.",
         ...(pilots.endFrames
           ? ["The crosses are near the leg's end: drill a 3 mm pilot hole at each first."]
           : [SPLIT_TIP]),

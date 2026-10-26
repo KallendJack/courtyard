@@ -1130,7 +1130,7 @@ describe("the simplest way first (#789)", () => {
     expect(spots?.type).toBe("screwed-overlap");
     expect(spots?.fixings).toHaveLength(2);
     // The crosses before the clamp, so it never covers where a screw goes (#826, its board).
-    expect(said(build, "end-frames")).toContain("Mark the 2 crosses first, then clamp beside them");
+    expect(said(build, "end-frames")).toContain("Mark 2 crosses, clamp beside them");
     expect(said(build, "long-rails")).toContain("2 crosses where the rail sits on each leg");
     for (const step of build.steps) {
       expect(step.actions.map((action) => action.howTo).join(" ")).not.toMatch(/each dot/);
@@ -1156,10 +1156,10 @@ describe("the simplest way first (#789)", () => {
     for (const id of bracketSteps) expect(bitsOn(wide)).not.toContain(id);
   });
 
-  it("square the corner before the first screw, on the end frames, behind Show me how (#826)", () => {
+  it("square the corner before the clamp, on the end frames, in its line (#826)", () => {
     const frames = stepOf(built(goldenBench), "end-frames");
 
-    expect(frames?.tips[0]).toBe("Check the corner with your square before the first screw.");
+    expect(frames?.actions[2]?.howTo).toContain("square to the leg");
     expect(frames?.tools.map((tool) => tool.tool)).toContain("square");
   });
 
