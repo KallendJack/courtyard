@@ -21,20 +21,6 @@ export const BuildBox = z.object({
 });
 export type BuildBox = z.infer<typeof BuildBox>;
 
-/** A part, once for all its pieces: its label, what it does, its cut size and its boxes. */
-export const BuildPart = z.object({
-  label: z.string(),
-  name: z.string(),
-  does: z.string(),
-  count: z.number().int(),
-  material: z.object({ kind: z.enum(["timber", "sheet", "printed"]), stock: z.string() }),
-  length: z.number(),
-  width: z.number(),
-  thickness: z.number(),
-  boxes: list(BuildBox),
-});
-export type BuildPart = z.infer<typeof BuildPart>;
-
 /** The cut plan: each timber's lengths with their cuts, each sheet's pieces where they sit. */
 export const BuildCutPlan = z.object({
   kerf: z.number(),
@@ -157,18 +143,22 @@ const BuildSceneMark = z.discriminatedUnion("kind", [
     more: z.string().optional(),
     tone: z.enum(["yours", "next"]),
   }),
+  /** The badge of the step's line `line` (from 1), at what it acts on (#826). */
+  z.object({ kind: z.literal("badge"), at: At, line: z.number().int() }),
+  /** A screw spot, drilled first or just screwed (#826). */
+  z.object({ kind: z.literal("spot"), at: At, first: z.boolean() }),
 ]);
 
 /**
- * A step's picture (#754): the job as it's done, its pieces (parts, fitted, tools, the offcut)
- * each lit, faint or plain, where it opens from, and its marks.
+ * A step's picture (#754): the job as it's done, its pieces (parts, fitted, tools, what holds the
+ * work, the offcut) each lit, faint or plain, where it opens from, and its marks.
  */
 const BuildScene = z.object({
   title: z.string(),
   view: z.object({ turn: z.number(), tilt: z.number() }),
   pieces: list(
     z.object({
-      kind: z.enum(["part", "fitted", "tool", "offcut"]),
+      kind: z.enum(["part", "fitted", "tool", "support", "offcut"]),
       name: z.string(),
       label: z.string().nullable(),
       tone: z.enum(["lit", "built", "plain"]),
@@ -176,6 +166,10 @@ const BuildScene = z.object({
     }),
   ),
   marks: list(BuildSceneMark),
+  /** What the picture frames, nearly to its edges: what the step works on (#826). All of it when none. */
+  framed: list(BuildBox).optional(),
+  /** What the step's pieces make, as Where this goes says it: "The two ends" (#826). */
+  goes: z.string().optional(),
 });
 
 /** A step's ID, the slug of what it does ("fit-castors"), the same whatever else a Build has. */
@@ -314,6 +308,24 @@ export const BuildPrint = z.object({
   sizes: list(z.object({ name: z.string(), says: z.string(), source: SizeSource.nullable() })),
 });
 export type BuildPrint = z.infer<typeof BuildPrint>;
+
+/**
+ * A part, once for all its pieces: its label, what it does, its cut size and its boxes; and a
+ * printed part's in a wooden build, its print, sized from the wood it fits (#773).
+ */
+export const BuildPart = z.object({
+  label: z.string(),
+  name: z.string(),
+  does: z.string(),
+  count: z.number().int(),
+  material: z.object({ kind: z.enum(["timber", "sheet", "printed"]), stock: z.string() }),
+  length: z.number(),
+  width: z.number(),
+  thickness: z.number(),
+  boxes: list(BuildBox),
+  print: BuildPrint.optional(),
+});
+export type BuildPart = z.infer<typeof BuildPart>;
 
 /** Everything a Build shows, worked out from its template and parameters. */
 export const DerivedBuild = z.object({

@@ -24,6 +24,8 @@ const CloseUpShape = z.discriminatedUnion("kind", [
     jaw: z.number(),
     length: z.number(),
     turn: z.number(),
+    /** Turned from underneath, in red as the castors' board draws it (#826). */
+    under: z.boolean().optional(),
   }),
   z.object({ kind: z.literal("clockwise"), x: z.number(), y: z.number(), r: z.number() }),
   z.object({
@@ -67,6 +69,11 @@ export const BuildCloseUp = z.object({
       heading: z.boolean().optional(),
       /** What the drawing is about, picked out: the washer under the nut. */
       key: z.boolean().optional(),
+      /**
+       * What's done or goes underneath, in red (#826, the castors' board); a quiet note under
+       * the drawing; or a piece's name, in its wood's colour (the end frames' board).
+       */
+      tone: z.enum(["under", "note", "wood"]).optional(),
     }),
   ).optional(),
   /**
@@ -107,4 +114,15 @@ export const BuildCloseUp = z.object({
       tone: z.enum(["plain", "warn", "fine"]).optional(),
     }),
   ).optional(),
+  /**
+   * What its screw spots or mark ask (#826): placed by eye or measured (with its number), and
+   * whether to drill first (with its bit) or just screw.
+   */
+  answers: z
+    .object({
+      placed: z.enum(["eye", "measure"]),
+      mm: z.number().optional(),
+      drill: z.object({ first: z.boolean(), bit: z.number().optional() }).optional(),
+    })
+    .optional(),
 });

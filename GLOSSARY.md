@@ -250,7 +250,8 @@ _Avoid_: weight rating, capacity (that's a saw's), load (that's the owner's word
 **Part recipe**:
 A printed part as data (#702): a base (box, plate, cylinder or L-bracket) and the features cut into it or raised on it
 (holes, slots, pockets sized from an object, fillets, chamfers, lettering). A model fills one; code checks it and makes
-the solid. A new shape is a new recipe, never new code. In a Build's recipe, it's a printed part's piece.
+the solid. A new shape is a new recipe, never new code. In a Build's recipe, a printed piece names only which part (a
+holder or bracket) and the wood it fits, and code writes its part recipe from that wood's size (#773).
 _Avoid_: model (that's who fills it in, or the 3D file), script, CAD
 
 **Cut plan**:

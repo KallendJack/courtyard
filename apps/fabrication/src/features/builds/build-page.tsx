@@ -315,22 +315,17 @@ export function BuildPage(props: { build: BuildOpened }) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border px-3 py-2.5">
-        <a
-          href={back.href}
-          aria-label={`Back to ${back.name}`}
-          className="flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft aria-hidden className="size-5" />
-        </a>
-        <h1
-          className={classes(
-            "display-title shrink-0 truncate",
-            cover ? "text-sheet-title" : "text-title",
-          )}
-        >
-          {build.name}
-        </h1>
+      <header className="flex h-13 shrink-0 items-center gap-3 border-b border-border pr-4 pl-2">
+        <div className="flex min-w-0 shrink-0 items-center">
+          <a
+            href={back.href}
+            aria-label={`Back to ${back.name}`}
+            className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+          >
+            <ChevronLeft aria-hidden className="size-3.5" />
+          </a>
+          <h1 className="display-title truncate text-talk">{build.name}</h1>
+        </div>
         {atBench && step !== undefined ? (
           <StepDots derived={derived} step={step} />
         ) : (
@@ -346,7 +341,7 @@ export function BuildPage(props: { build: BuildOpened }) {
             options={MODES}
             value={mode}
             onChange={setMode}
-            look="switch"
+            look="slim"
           />
         )}
       </header>

@@ -1,18 +1,18 @@
 import type { DerivedBuild } from "@courtyard/contract";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
-import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { CALLOUT_FILL, isSmall, outlineOf, placeWords } from "./picture/callouts.ts";
+import { CALLOUT_FILL, dimensionLine, isSmall, outlineOf, placeWords } from "./picture/callouts.ts";
+import { type PartWords, SceneWords } from "./picture/scene-words.tsx";
 import {
   anchorOf,
   type BuildScene,
   drawMark,
+  fitCamera,
+  framedCorners,
   hatching,
   letteredOf,
-  markClass,
-  markWords,
   placing,
   TILT,
   themed,
@@ -21,9 +21,10 @@ import {
   wholeScene,
 } from "./scene.ts";
 
-// The Build in 3D (#698), and at a step the job as it's done (#754): the scene's pieces as boxes,
-// turnable within limits, its marks drawn over it, each part lit at the step labelled. Loaded
-// lazily (`bench-panel.tsx`), so `three` is in this view's own file and nowhere else.
+// The Build in 3D (#698), and at a step the job as it's done (#754): the scene's pieces as boxes
+// in their wood's colour, turnable within limits, its marks drawn over it, each part lit at the
+// step labelled: a letter on a computer, a pill off the wood at the bench (#826). Loaded lazily
+// (`bench-panel.tsx`), so `three` is in this view's own file and nowhere else.
 
 const KIND_COLOUR: Readonly<Record<"timber" | "sheet" | "printed", string>> = {
   timber: "timber",
@@ -31,11 +32,22 @@ const KIND_COLOUR: Readonly<Record<"timber" | "sheet" | "printed", string>> = {
   printed: "printed",
 };
 
+/** What isn't a part, by its kind: fitted things and supports grey, hand tools orange (#826). */
+const PIECE_COLOUR: Readonly<Record<"fitted" | "support" | "tool", string>> = {
+  fitted: "fitted",
+  support: "support",
+  tool: "tool",
+};
+
 /** How far a press may move and still be a tap on a part, not a turn, in pixels. */
 const TAP_SLOP = 6;
 
 /** How much of the view's shorter half the scene reaches, from its middle, once fitted (#753). */
 const FILL = 0.9;
+/** At the bench, as its boards draw the model: nearly to the panel's edges (#826). */
+const BENCH_FILL = 0.85;
+/** Where this goes, in the picture's top right corner at the bench: its middle and size, in px. */
+const WHERE_THIS_GOES = { y: 80, w: 112, h: 160 } as const;
 
 /**
  * The scene, drawn when something changes it (a turn, a part lit, a new step), never in a loop.
@@ -53,10 +65,19 @@ export default function BenchView(props: {
   pick: (label: string) => void;
   /** Changes when Reset view is tapped. */
   reset: number;
-  /** Whether the marks' words are at the bench's size, as the step beside it is. */
-  big: boolean;
+  /**
+   * At the bench (#826, its boards): the parts named in pills off the wood, and the picture's
+   * title left to the panel above it.
+   */
+  bench: boolean;
+  /**
+   * With the Fold open at the bench, the parts in pills off the wood and Where this goes in its
+   * corner; folded, the picture has room for the parts' letters only.
+   */
+  pills: boolean;
 }) {
-  const { derived, lit, reset } = props;
+  const { derived, lit, reset, bench } = props;
+  const pills = bench && props.pills;
   const host = useRef<HTMLElement>(null);
   const labels = useRef(new Map<string, HTMLElement>());
   const leaders = useRef(new Map<string, SVGLineElement>());
@@ -73,6 +94,10 @@ export default function BenchView(props: {
   const [drawn, setDrawn] = useState({ scene: wanted, id: props.sceneId, shape });
   if (drawn.shape !== shape) setDrawn({ scene: wanted, id: props.sceneId, shape });
   const { scene: built, id: builtId } = drawn;
+  // The parts named as the boards have them: pills off the wood, but none where the picture's
+  // callouts already say what's what (the castors' board); folded and on a computer, letters.
+  const withCallouts = built.marks.some((mark) => mark.kind === "callout");
+  const naming: PartWords = !pills ? "letters" : withCallouts ? "none" : "pills";
   // Which way the camera looked, and at which picture: kept only while it's the same.
   const kept = useRef<{ id: string; from: THREE.Vector3 }>(undefined);
 
@@ -80,7 +105,6 @@ export default function BenchView(props: {
   // as a new object, and only new numbers build the scene again.
   const parts = useRef(derived.parts);
   parts.current = derived.parts;
-  const lettered = letteredOf(built);
 
   useEffect(() => {
     const element = host.current;
@@ -116,7 +140,7 @@ export default function BenchView(props: {
     });
     const glow = themed("primary");
     const hatch = hatching();
-    const tool = themed("fitted");
+    const fitted = themed("fitted");
     const meshes: {
       label: string | null;
       colour: THREE.Color;
@@ -126,11 +150,13 @@ export default function BenchView(props: {
     for (const piece of built.pieces) {
       const part = parts.current.find((each) => each.label === piece.label);
       const colour =
-        piece.kind === "part" && part !== undefined
-          ? themed(KIND_COLOUR[part.material.kind])
+        piece.kind === "part"
+          ? part === undefined
+            ? fitted
+            : themed(KIND_COLOUR[part.material.kind])
           : piece.kind === "offcut"
             ? new THREE.Color(0xffffff)
-            : tool;
+            : themed(PIECE_COLOUR[piece.kind]);
       for (const box of piece.boxes) {
         const geometry = new THREE.BoxGeometry(box.w, box.h, box.d);
         const material = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.85 });
@@ -157,10 +183,23 @@ export default function BenchView(props: {
     const anchored = built.marks.map((mark, at) => ({
       key: `mark ${at}`,
       at: point(anchorOf(mark)),
-      callout: mark.kind === "callout",
+      kind: mark.kind,
     }));
-    const marks = anchored.filter((mark) => !mark.callout);
-    const callouts = anchored.filter((mark) => mark.callout);
+    // A size's ends, for its dimension line over the scene.
+    const sizes = built.marks.flatMap((mark, at) =>
+      mark.kind === "size"
+        ? [{ key: `mark ${at}`, from: point(mark.from), to: point(mark.to) }]
+        : [],
+    );
+    // A screw spot stays on its spot; the parts' pills go off the wood at the bench, like callouts.
+    const spots = anchored.filter((mark) => mark.kind === "spot");
+    const marks = anchored.filter(
+      (mark) => mark.kind !== "callout" && mark.kind !== "spot" && mark.kind !== "size",
+    );
+    const callouts = [
+      ...anchored.filter((mark) => mark.kind === "callout"),
+      ...(naming === "pills" ? letters : []),
+    ];
     const draw = () => {
       renderer.render(world, camera);
       const { clientWidth: width, clientHeight: height } = element;
@@ -178,50 +217,44 @@ export default function BenchView(props: {
         const leader = leaders.current.get(key);
         return [{ label, leader, ...onScreen(at), w: label.offsetWidth, h: label.offsetHeight }];
       };
+      const outlines = meshes.map(({ mesh }) => outlineOf(mesh, onScreen));
+      const sizeTags = sizes.flatMap((size) => {
+        const tag = measured(size.key, size.from)[0];
+        if (tag === undefined) return [];
+        return [{ ...tag, ...dimensionLine(size, onScreen, outlines, tag, leaders.current) }];
+      });
       placeWords({
-        shown: [...marks, ...letters].flatMap(({ key, at }) => measured(key, at)),
-        callouts: callouts.flatMap(({ key, at }) => measured(key, at)),
-        outlines: meshes.map(({ mesh }) => outlineOf(mesh, onScreen)),
+        pinned: spots.flatMap(({ key, at }) => measured(key, at)),
+        shown: [
+          ...sizeTags,
+          ...[...marks, ...(naming === "letters" ? letters : [])].flatMap(({ key, at }) =>
+            measured(key, at),
+          ),
+        ],
+        // A part's pill steps aside when there's no room for it; a mark never does.
+        callouts: callouts.flatMap(({ key, at }) =>
+          measured(key, at).map((each) => ({ ...each, optional: key.startsWith("part ") })),
+        ),
+        keepClear: pills ? [{ ...WHERE_THIS_GOES, x: width - WHERE_THIS_GOES.w / 2 }] : [],
+        outlines,
         bounds: { width, height },
       });
     };
+    const framed = framedCorners(built, point);
     /**
-     * Turns the camera to look from `from` (else as it looks now) at the scene, near enough that
-     * it fills the view: moved in or out until its farthest corner is at `FILL`.
+     * Turns the camera to look from `from` (else as it looks now) at what the picture frames,
+     * filling the view (`fitCamera`).
      */
     const fit = (from?: THREE.Vector3) => {
-      const fill = built.marks.some((mark) => mark.kind === "callout") ? CALLOUT_FILL : FILL;
-      const shown = new THREE.Box3();
-      for (const { mesh } of meshes) shown.expandByObject(mesh);
-      if (shown.isEmpty()) return;
+      // At the bench the parts' pills sit on and beside the wood, as the boards have them (#826).
+      const fill = pills ? BENCH_FILL : withCallouts ? CALLOUT_FILL : FILL;
       const direction = (from ?? camera.position.clone().sub(controls.target)).normalize();
-      const centre = shown.getCenter(new THREE.Vector3());
-      const corners = [0, 1, 2, 3, 4, 5, 6, 7].map(
-        (corner) =>
-          new THREE.Vector3(
-            corner & 1 ? shown.max.x : shown.min.x,
-            corner & 2 ? shown.max.y : shown.min.y,
-            corner & 4 ? shown.max.z : shown.min.z,
-          ),
-      );
-      let distance = shown.getSize(new THREE.Vector3()).length() * 1.5;
-      // Nearly in proportion, so a few rounds settle it.
-      for (let round = 0; round < 5; round += 1) {
-        camera.position.copy(direction).multiplyScalar(distance).add(centre);
-        camera.lookAt(centre);
-        camera.updateMatrixWorld();
-        const reaches = Math.max(
-          ...corners.map((corner) => {
-            const onScreen = corner.clone().project(camera);
-            return Math.max(Math.abs(onScreen.x), Math.abs(onScreen.y));
-          }),
-        );
-        if (reaches > 0) distance *= reaches / fill;
-      }
-      controls.target.copy(centre);
-      camera.position.copy(direction).multiplyScalar(distance).add(centre);
-      controls.minDistance = distance * 0.4;
-      controls.maxDistance = distance * 3;
+      const fitted = fitCamera(camera, framed, direction, { fill, from: reach * 2 });
+      if (fitted === undefined) return;
+      controls.target.copy(fitted.target);
+      camera.position.copy(direction).multiplyScalar(fitted.distance).add(fitted.target);
+      controls.minDistance = fitted.distance * 0.4;
+      controls.maxDistance = fitted.distance * 3;
       controls.update();
     };
 
@@ -267,12 +300,12 @@ export default function BenchView(props: {
     renderer.domElement.addEventListener("pointerup", released);
 
     scene.current = {
-      // The step's own parts are violet, those put on before faint; the part whose card is open
-      // glows either way.
+      // Everything in its own colour, the step's own parts full and those put on before faint
+      // (#826, its boards); the part whose card is open glows.
       light: (label) => {
         for (const each of meshes) {
           const { mesh } = each;
-          mesh.material.color.copy(each.tone === "lit" ? glow : each.colour);
+          mesh.material.color.copy(each.colour);
           mesh.material.transparent = each.tone === "built";
           mesh.material.opacity = each.tone === "built" ? 0.35 : 1;
           mesh.material.emissive.copy(
@@ -307,7 +340,7 @@ export default function BenchView(props: {
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [built, builtId]);
+  }, [built, builtId, pills, naming, withCallouts]);
 
   useEffect(() => scene.current?.light(lit), [lit]);
   useEffect(() => {
@@ -317,6 +350,10 @@ export default function BenchView(props: {
   const place = (key: string) => (element: HTMLElement | null) => {
     if (element === null) labels.current.delete(key);
     else labels.current.set(key, element);
+  };
+  const lead = (key: string) => (line: SVGLineElement | null) => {
+    if (line === null) leaders.current.delete(key);
+    else leaders.current.set(key, line);
   };
 
   if (cantDraw) {
@@ -332,68 +369,19 @@ export default function BenchView(props: {
       aria-label={`${built.title}, in 3D`}
       className="group relative h-full w-full touch-none overflow-hidden select-none"
     >
-      {props.scene !== undefined && (
+      {props.scene !== undefined && !bench && (
         <CapsLabel tone="muted" className="pointer-events-none absolute top-0 left-0">
           {built.title}
         </CapsLabel>
       )}
-      <svg aria-hidden className="pointer-events-none absolute inset-0 size-full">
-        {built.marks.map((mark, at) =>
-          mark.kind === "callout" ? (
-            <line
-              // biome-ignore lint/suspicious/noArrayIndexKey: a scene's marks are in a fixed order.
-              key={at}
-              ref={(line) => {
-                if (line === null) leaders.current.delete(`mark ${at}`);
-                else leaders.current.set(`mark ${at}`, line);
-              }}
-              strokeWidth={1.5}
-              className={mark.tone === "yours" ? "stroke-yours" : "stroke-success"}
-            />
-          ) : null,
-        )}
-      </svg>
-      {built.marks.map((mark, at) => (
-        <span
-          // biome-ignore lint/suspicious/noArrayIndexKey: a scene's marks are in a fixed order.
-          key={at}
-          ref={place(`mark ${at}`)}
-          className={classes(
-            "pointer-events-none absolute top-0 left-0 rounded-sm px-1 whitespace-nowrap",
-            markClass(mark, props.big),
-          )}
-        >
-          {mark.kind === "callout" ? (
-            <>
-              <span className="block font-semibold">{mark.says}</span>
-              {mark.more !== undefined && (
-                <span className="block group-data-small:hidden">{mark.more}</span>
-              )}
-            </>
-          ) : (
-            markWords(mark)
-          )}
-        </span>
-      ))}
-      {lettered.map((part) => (
-        <button
-          key={part.label}
-          ref={place(`part ${part.label}`)}
-          type="button"
-          aria-label={`${part.label}, ${part.name}`}
-          aria-pressed={lit === part.label}
-          aria-current={part.lit ? "step" : undefined}
-          onClick={() => props.pick(part.label)}
-          className={classes(
-            "absolute top-0 left-0 flex size-8 items-center justify-center rounded-full border-2 font-mono text-meta font-bold",
-            lit === part.label || part.lit
-              ? "border-primary-text bg-primary text-primary-foreground"
-              : "border-primary bg-background text-foreground",
-          )}
-        >
-          {part.label}
-        </button>
-      ))}
+      <SceneWords
+        scene={built}
+        lit={lit}
+        pick={props.pick}
+        parts={naming}
+        place={place}
+        lead={lead}
+      />
     </figure>
   );
 }

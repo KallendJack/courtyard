@@ -55,6 +55,8 @@ export type Part = {
   readonly width: number;
   readonly thickness: number;
   readonly boxes: readonly Box[];
+  /** A printed part's in a wooden build (#773): its print, sized from the wood it fits. */
+  readonly print?: BuildPrint;
 };
 
 /**

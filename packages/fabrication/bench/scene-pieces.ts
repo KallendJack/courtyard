@@ -31,10 +31,21 @@ export const tenth = (mm: number) => Math.round(mm * 10) / 10;
 export const part = (label: string, name: string, tone: ScenePiece["tone"], boxes: Box[]) =>
   ({ kind: "part", name, label, tone, boxes }) satisfies ScenePiece;
 
+/** The tools that hold the work rather than work it, drawn as supports, grey (#826). */
+const SUPPORTS: ReadonlySet<Tool> = new Set(["folding-workbench", "long-end-support"]);
+
 /** A tool, drawn only when it's to hand. */
 export const toolIf = (toHand: ReadonlySet<Tool>, tool: Tool, boxes: Box[]): ScenePiece[] =>
   toHand.has(tool)
-    ? [{ kind: "tool", name: TOOL_NAMES[tool], label: null, tone: "plain", boxes }]
+    ? [
+        {
+          kind: SUPPORTS.has(tool) ? "support" : "tool",
+          name: TOOL_NAMES[tool],
+          label: null,
+          tone: "plain",
+          boxes,
+        },
+      ]
     : [];
 
 /** A folding workbench whose jaws run from `from` and grip something `gap` wide from y = 0. */

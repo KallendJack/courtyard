@@ -26,6 +26,13 @@ const LOOKS = {
     chosen: "bg-primary-text font-bold text-background",
     other: "border border-input bg-secondary font-semibold text-foreground/80 hover:bg-muted",
   },
+  /** A slim switch in a top bar, the chosen side ringed violet (a Build's At the bench / Plan, #826). */
+  slim: {
+    set: "gap-0.5 rounded-full bg-secondary p-0.75",
+    choice: "flex h-7.5 items-center border px-3.5 text-meta/4",
+    chosen: "border-primary bg-primary/15 font-semibold text-foreground",
+    other: "border-transparent font-medium text-muted-foreground hover:text-foreground",
+  },
   /** A thumb-sized switch, the chosen side filled violet (New workspace's Planning / Code, #258). */
   switch: {
     set: "gap-1 rounded-full border bg-surface p-1",
