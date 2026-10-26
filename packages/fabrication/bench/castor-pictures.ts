@@ -1,9 +1,8 @@
-import type { Box, CloseUp } from "../build.ts";
+import type { Box } from "../build.ts";
 import type { Scene, SceneMark } from "../scene.ts";
 import { TOOL_NAMES } from "../tools.ts";
 import { CASTOR_INSET } from "./close-ups.ts";
-import type { Shape } from "./frame.ts";
-import { type Castors, castorFixingNames } from "./parameters.ts";
+import { castorFixingNames } from "./parameters.ts";
 import {
   at,
   box,
@@ -16,12 +15,10 @@ import {
   workmate,
 } from "./scene-pieces.ts";
 
-// The castor step's pictures (#783; Paper, 2 · Agreed, "Fabrication · Castors in 3D, your kit ·
+// The castor step's picture (#783; Paper, 2 · Agreed, "Fabrication · Castors in 3D, your kit ·
 // Fold (#783)"): the base in 3D with a castor on it, the first bolt in and the drill through the
-// plate's next hole, its words off the model; and two close-ups, tightening, with the head held
-// and the nut turned by the owner's own tools drawn as their shape, and one bolt taken apart, so
-// it's plain which side each piece goes. The close-ups are spaced for their words, which read the
-// same size whatever a drawing's scale, so the pieces taken apart are spread wider than they are.
+// plate's next hole, its words off the model. Its close-ups are a bolt through a plate's
+// (`close-ups/bolt-through.ts`, #813).
 
 /**
  * A drill held straight up and down, its bit's tip at `tip`: the bit, the chuck, the body above
@@ -168,155 +165,5 @@ export const castorScene = (setting: SceneSetting): Scene => {
       ...toolIf(setting.toHand, "drill-driver", drillAt({ ...next, z: top + plate }, bit)),
     ],
     marks,
-  };
-};
-
-/** What holds a bolt's head or turns its nut, as the close-ups draw it. */
-export type Holder = "open-spanner" | "adjustable" | "pliers" | "socket";
-
-/** How far a spanner's handle reaches from the head to the castor's body, as drawn. */
-const REACH = 110;
-/** Where the second half of the tightening close-up starts, from the left. */
-const UNDER = 200;
-
-/**
- * Tightening a castor's bolt: on top, the head held, its tool's handle resting against the
- * castor's body so it can't spin; underneath, the nut turned clockwise with the owner's tool,
- * named as theirs, until the washer bites.
- */
-export const tightenCloseUp = (
-  castors: Castors,
-  hold: { head: Holder; nut: Holder; size: number | undefined; yours: boolean },
-): CloseUp => {
-  const across = hold.size ?? 2 * castors.bolt.diameter.value;
-  const x = 22;
-  const y = 46;
-  const body = { x: x + REACH, y: y - 25, w: 56, h: 50 };
-  const named: Readonly<Record<Holder, string>> = {
-    "open-spanner": hold.size === undefined ? "spanner" : `${hold.size} mm spanner`,
-    adjustable: "adjustable",
-    pliers: "pliers",
-    socket: "socket",
-  };
-  const bites = castors.washer.perBolt > 0 ? "the washer" : "the nut";
-  return {
-    title: "Tighten",
-    width: UNDER + body.x + body.w - x,
-    height: 92,
-    pieces: [{ label: "castor", ...body }],
-    dimensions: [],
-    fixings: [],
-    shapes: [
-      { kind: hold.head, x, y, jaw: across, length: REACH, turn: 0 },
-      { kind: "hex", x, y, across },
-      { kind: hold.nut, x: UNDER + x, y, jaw: across, length: REACH, turn: 0 },
-      { kind: "hex", x: UNDER + x, y, across },
-      { kind: "clockwise", x: UNDER + x, y, r: 2 * across },
-    ],
-    labels: [
-      { x: 0, y: 6, says: "On top: hold the head", heading: true },
-      { x: body.x + 6, y, says: "castor" },
-      {
-        x: 0,
-        y: 84,
-        says: hold.head === "pliers" ? "handles rest on the castor" : "handle rests on the castor",
-      },
-      { x: UNDER, y: 6, says: "Under: turn the nut", heading: true },
-      {
-        x: UNDER,
-        y: 84,
-        says: `${hold.yours ? "your" : "a"} ${named[hold.nut]}, clockwise`,
-        key: true,
-      },
-    ],
-    notes: [`Stop when ${bites} bites.`],
-  };
-};
-
-/** How far apart a bolt's pieces are drawn, taken apart: room for each one's word. */
-const APART = 16;
-
-/**
- * One castor bolt taken apart, from the side: the castor's side on top (the castor upside down,
- * its plate, and the bolt's head), then the base, then underneath (the washer and the nut). The
- * washers are the Build's own, under the nut, against the wood, never under the head: the
- * castor's steel plate takes the head.
- */
-export const boltApartCloseUp = (s: Shape, castors: Castors, size: number | undefined): CloseUp => {
-  const across = size ?? 2 * castors.bolt.diameter.value;
-  const bolt = castors.bolt.diameter.value;
-  const washer = castors.washer.thickness.value;
-  const nut = castors.nut.height.value;
-  const plateLength = castors.plate.length.value;
-  // The bolt through the plate's hole near its end, the castor's swivel and wheel beside it.
-  const middle = 12;
-  const named = plateLength + 12;
-  const label = (y: number, says: string, key?: boolean) => ({
-    x: named,
-    y,
-    says,
-    ...(key ? { key } : {}),
-  });
-
-  const wheel = Math.min(48, s.castor * 0.55);
-  const plateY = 22 + wheel + 14;
-  const headY = plateY - APART - 4;
-  const baseY = plateY + castors.plate.thickness.value + APART;
-  const base = Math.min(s.wideThick, 40);
-  const under = baseY + base + 14;
-  const washers = Array.from(
-    { length: castors.washer.perBolt },
-    (_, at) => under + APART + at * (washer + 4),
-  );
-  const nutY = (washers.at(-1) ?? under) + washer + APART;
-  return {
-    title: "One bolt, apart",
-    width: named + 70,
-    height: nutY + nut + 6,
-    pieces: [
-      { label: "E", x: 0, y: baseY, w: plateLength, h: base },
-      // The bolt's shank, through the plate and the base, to past the nut.
-      { label: "bolt", x: middle - bolt / 2, y: headY + 4, w: bolt, h: nutY + nut + 3 - headY - 4 },
-      { label: "bolt", x: middle - across / 2, y: headY, w: across, h: 4 },
-      ...washers.map((y) => ({
-        label: "washer",
-        x: middle - 0.9 * across,
-        y,
-        w: 1.8 * across,
-        h: washer,
-      })),
-      { label: "nut", x: middle - across / 2, y: nutY, w: across, h: nut },
-    ],
-    shapes: [
-      {
-        kind: "castor",
-        x: 0,
-        y: plateY,
-        w: plateLength,
-        plate: castors.plate.thickness.value,
-        wheel,
-      },
-    ],
-    dimensions: [],
-    fixings: [],
-    labels: [
-      { x: 0, y: 6, says: "Top · castor side", heading: true },
-      label(22 + wheel / 2, "castor"),
-      label(headY + 2, "bolt head"),
-      label(plateY + 2, "plate"),
-      label(baseY + base / 2, "base"),
-      { x: named, y: under, says: "Underneath", heading: true },
-      ...washers
-        .slice(0, 1)
-        .map((y) =>
-          label(y + washer / 2, washers.length > 1 ? `${washers.length} washers` : "washer", true),
-        ),
-      label(nutY + nut / 2, "nut"),
-    ],
-    notes: [
-      washers.length === 0
-        ? "No washer: the nut goes on against the wood."
-        : "Washer only under the nut, against the wood.",
-    ],
   };
 };

@@ -196,39 +196,22 @@ describe("show me how (#777)", () => {
   const walkOf = (id: string) =>
     built(goldenBench).steps.find((step) => step.id === id)?.walkThrough ?? [];
 
-  it("walks through marking: the tape, the tick, the square, the line, with two close-ups", () => {
+  it("walks through marking: the tape, the tick, the square, the line, drawn by measure and mark", () => {
     const walk = walkOf("mark-lengths");
 
     expect(walk.map((move) => move.title)).toEqual(["Tape", "Tick", "Square", "Line"]);
-    expect(walk.map((move) => move.closeUp?.title ?? null)).toEqual([
-      "The tape's hook over the end",
-      null,
-      "The square's stock against the edge",
-      null,
-    ]);
     // The tick at B's 1450, the first piece marked.
     expect(walk[1]?.says).toContain("At 1450");
-    // The line drawn across B's 95 mm face, along the square's blade.
-    const [across] = walk[2]?.closeUp?.dimensions ?? [];
-    expect(across?.mm).toBe(95);
-    // The hook over the end of the 45 mm length.
-    const [length, ...tape] = walk[0]?.closeUp?.pieces ?? [];
-    expect(length).toMatchObject({ label: "B", x: 0, h: 45 });
-    expect(tape.every((piece) => piece.label === "tape" && piece.x < 0)).toBe(true);
+    // The moves are drawn once, by the step's measure and mark close-up (#813).
+    expect(walk.map((move) => move.closeUp)).toEqual([null, null, null, null]);
   });
 
-  it("shows where a joint's screws can go the first time a rail is screwed to a leg (#789)", () => {
-    const [edge] = walkOf("end-frames");
-    const pieces = edge?.closeUp?.pieces ?? [];
-
-    expect(pieces.map((piece) => piece.label)).toEqual(["A", "C"]);
-    // Both crosses inside the strip where the rail sits on the leg.
-    const [leg, rail] = pieces;
-    for (const cross of edge?.closeUp?.fixings ?? []) {
-      expect(cross.x).toBeGreaterThan(leg?.x ?? 0);
-      expect(cross.x).toBeLessThan((leg?.x ?? 0) + (leg?.w ?? 0));
-      expect(cross.y).toBeLessThan((rail?.y ?? 0) + (rail?.h ?? 0));
-    }
+  it("walks through a joint's screw spots the first time a rail is screwed to a leg (#789)", () => {
+    expect(walkOf("end-frames").map((move) => move.title)).toEqual([
+      "The leg's edge",
+      "Two crosses",
+      "A fingertip in",
+    ]);
     expect(walkOf("long-rails")).toEqual([]);
   });
 
@@ -283,35 +266,40 @@ describe("the castors' close-ups (#783)", () => {
   });
 });
 
-describe("where the brackets go (#777)", () => {
-  it("points to both faces of a leg's foot when the frame stands on its bases", () => {
-    const build = built(goldenBench);
-    const arrows = marks(sceneOf(build, "stand-on-bases"), "arrow");
-    const leg = build.parts.find((part) => part.label === "A")?.boxes[0];
+describe("where the brackets go (#777, drawn as L-shapes #813)", () => {
+  const bracketsIn = (scene: Scene) =>
+    scene.pieces.find((piece) => piece.name === "40 mm angle brackets");
 
-    expect(arrows.map((arrow) => arrow.says)).toEqual([
-      "bracket on the face to the middle",
-      "bracket on the face to the other leg",
-    ]);
-    // At the leg's foot, on its face towards the middle and its face towards the back leg.
-    expect(arrows[0]?.to.x).toBe((leg?.x ?? 0) + (leg?.w ?? 0));
-    expect(arrows[1]?.to.y).toBe((leg?.y ?? 0) + (leg?.d ?? 0));
-    for (const arrow of arrows) expect(arrow.to.z).toBeGreaterThan(leg?.z ?? 0);
+  it("draws two at each leg's foot as the frame stands on its bases, lit, in place of arrows", () => {
+    const build = built(goldenBench);
+    const scene = sceneOf(build, "stand-on-bases");
+    const brackets = bracketsIn(scene);
+    const legs = build.parts.find((part) => part.label === "A")?.boxes ?? [];
+    const [leg] = legs;
+
+    expect(brackets?.tone).toBe("lit");
+    // Two plates a bracket, two brackets a leg.
+    expect(brackets?.boxes).toHaveLength(2 * 2 * legs.length);
+    // The first leg's: one up its face towards the middle, one up its face towards the back leg,
+    // each standing on the base at the leg's foot and 40 mm up it.
+    const [middleUp, , otherUp] = brackets?.boxes ?? [];
+    expect(middleUp).toMatchObject({ x: (leg?.x ?? 0) + (leg?.w ?? 0), z: leg?.z, h: 40 });
+    expect(otherUp).toMatchObject({ y: (leg?.y ?? 0) + (leg?.d ?? 0), z: leg?.z, h: 40 });
+    expect(marks(scene, "arrow")).toEqual([]);
   });
 
-  it("points to the end of each support when they're fitted", () => {
+  it("draws one in the corner at each end of each support", () => {
     const build = built(goldenBench);
-    const arrows = marks(sceneOf(build, "fit-supports"), "arrow");
-    const end = (label: string) => {
-      const box = build.parts.find((part) => part.label === label)?.boxes[0];
-      return box && { x: box.x + box.w, y: box.y };
-    };
+    const scene = sceneOf(build, "fit-supports");
+    const supports = build.parts.filter((part) => part.label === "F" || part.label === "D");
+    const top = supports.find((part) => part.label === "F")?.boxes[0];
 
-    expect(arrows.map((arrow) => arrow.says)).toEqual([
-      "a bracket at each end",
-      "and at each end of D",
-    ]);
-    expect(arrows.map((arrow) => ({ x: arrow.to.x, y: arrow.to.y }))).toEqual([end("F"), end("D")]);
+    expect(bracketsIn(scene)?.boxes).toHaveLength(2 * 2 * supports.length);
+    // F's front end: along its side from the rail, and along the rail from its side.
+    const [alongSide, alongRail] = bracketsIn(scene)?.boxes ?? [];
+    expect(alongSide).toMatchObject({ x: (top?.x ?? 0) + (top?.w ?? 0), y: top?.y, d: 40 });
+    expect(alongRail).toMatchObject({ x: (top?.x ?? 0) + (top?.w ?? 0), y: top?.y, w: 40 });
+    expect(marks(scene, "arrow")).toEqual([]);
   });
 });
 

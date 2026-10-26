@@ -4,7 +4,7 @@ import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Camera, Check, ChevronDown, Lightbulb, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
-import { CloseUp } from "./close-up.tsx";
+import { CloseUp, Techniques } from "./close-up.tsx";
 import { LengthBar } from "./cut-plan.tsx";
 import { Findings } from "./findings.tsx";
 import { type Detail, type Progress, useDetail } from "./progress.ts";
@@ -304,7 +304,8 @@ function BeforeMovingOn(props: { step: BuildStep; sendPhoto: (photo: File) => vo
  * The step reached, as the instruction manual shows it (#699; at the bench, #753): which step and
  * how long it takes, its title and how to batch it, its checklist, a word's meaning when tapped,
  * its tips behind a tap (#789), its tools, its
- * fixings, what's left before moving on (`children`: its close-up), the check before moving on,
+ * fixings, what's left before moving on (`children`: its close-up), its techniques in full the
+ * first time or a "how?" tap (#813), the check before moving on,
  * and how it's done and how much is said. `big` at the bench on the unfolded Fold, read at arm's
  * length.
  */
@@ -387,6 +388,7 @@ export function StepPanel(props: {
       )}
       <Findings findings={stepFindings(derived, step)} label="To check in this step" />
       {props.children}
+      <Techniques step={step} parts={derived.parts} />
       <BeforeMovingOn step={step} sendPhoto={props.sendPhoto} />
       <Ways ways={step.ways} />
       <DetailSwitch detail={detail} choose={choose} />

@@ -1,3 +1,5 @@
+import { bracketArm, bracketCloseUp } from "../close-ups/bracket.ts";
+import { overlapCloseUp } from "../close-ups/overlap.ts";
 import { endFrameCloseUp, longSideCloseUp, screwSpotsWalk } from "./close-ups.ts";
 import { type Shape, whole } from "./frame.ts";
 import type { BenchParameters } from "./parameters.ts";
@@ -23,12 +25,20 @@ const BRACKETS_PER_LEG = 2;
 
 /** Angle brackets, each with its screws. */
 export const bracketed = (p: BenchParameters, count: number) => [
-  { name: p.fixings.brackets.name, count },
-  {
-    name: (p.fixings.bracketScrews ?? p.fixings.sheetScrews).name,
-    count: count * SCREWS_PER_BRACKET,
-  },
+  { name: p.fixings.brackets.name, count, joint: "bracket" as const },
+  { name: bracketScrewsOf(p), count: count * SCREWS_PER_BRACKET, joint: "bracket" as const },
 ];
+
+/** The screws a bracket takes: their own, or the sheet's. */
+export const bracketScrewsOf = (p: BenchParameters) =>
+  (p.fixings.bracketScrews ?? p.fixings.sheetScrews).name;
+
+/** A rail screwed on a leg: the rail's face as it lies, `rail` wide, on the leg's, `leg` (#813). */
+const railOnLeg = (s: Shape, rail: number, leg: number) =>
+  overlapCloseUp({
+    over: { across: rail, thick: s.thick, name: "rail" },
+    under: { across: leg, thick: s.wide, name: "leg" },
+  });
 
 export const frameDrafts = (options: {
   parameters: BenchParameters;
@@ -38,8 +48,18 @@ export const frameDrafts = (options: {
   castors: Draft | null;
 }): Draft[] => {
   const { parameters: p, shape: s, pilots } = options;
-  const frameScrews = { name: p.fixings.frameScrews.name, count: 16 };
+  const frameScrews = {
+    name: p.fixings.frameScrews.name,
+    count: 16,
+    joint: "screwed-overlap" as const,
+  };
   const shelfUp = whole(s.shelfHeight);
+  /** The frame's screws driven into a rail: its end zone, and the clutch the first time. */
+  const driving = {
+    type: "driving-screw" as const,
+    piece: { wide: s.wide, thick: s.thick, name: "rail" },
+    screw: p.fixings.frameScrews.name,
+  };
   return [
     {
       id: "end-frames",
@@ -70,9 +90,14 @@ export const frameDrafts = (options: {
           "Bottom C on the lines.",
         ),
       ],
-      closeUp: endFrameCloseUp(s),
+      // The rail lies on the leg's narrow face, flat on the floor.
+      closeUps: [railOnLeg(s, s.wide, s.thick), endFrameCloseUp(s)],
+      techniques: [
+        { type: "measure-mark", piece: { wide: s.wide, thick: s.thick, name: "A" }, at: shelfUp },
+        driving,
+      ],
       // The first step that screws a rail to a leg shows where its screws can go.
-      walkThrough: screwSpotsWalk(s),
+      walkThrough: screwSpotsWalk(),
       check: {
         says: "Measure corner to corner both ways. The same within 2 mm means it's square.",
         photo: "Both end frames, flat, from above.",
@@ -109,7 +134,9 @@ export const frameDrafts = (options: {
           `Lower B ${shelfUp} up; back the same.`,
         ),
       ],
-      closeUp: longSideCloseUp(s),
+      // The rail on the leg's wide face, the frame standing.
+      closeUps: [railOnLeg(s, s.wide, s.wide), longSideCloseUp(s)],
+      techniques: [driving],
       check: {
         says: "Measure corner to corner across the top, both ways: the same within 2 mm.",
         photo: "The frame standing, from a front corner.",
@@ -144,6 +171,21 @@ export const frameDrafts = (options: {
           `${BRACKETS_PER_LEG} brackets a leg.`,
         ),
         bracketing(pilots.brackets),
+      ],
+      // A leg's face towards the middle, on its base (#813).
+      closeUps: [
+        bracketCloseUp({
+          upright: { across: s.thick, deep: s.wide, name: "leg" },
+          flat: { across: s.wideWidth, thick: s.wideThick, name: "base" },
+          arm: bracketArm(p.fixings.brackets.name),
+        }),
+      ],
+      techniques: [
+        {
+          type: "driving-screw",
+          piece: { wide: s.wideWidth, thick: s.wideThick, name: "base" },
+          screw: bracketScrewsOf(p),
+        },
       ],
       check: {
         says: "Stood up, all four castors touch the floor and the frame doesn't rock.",

@@ -18,7 +18,9 @@ import {
   bitSetsFrom,
   NO_SPANNERS,
   type SpannerKit,
+  type SquareKind,
   spannerKitFrom,
+  squareKindFrom,
   standInFor,
   Tool,
   toolsFrom,
@@ -73,6 +75,7 @@ export const deriveBench = (
     kept: setting.kept ?? [],
     started: setting.started ?? [],
     capacities: capacitiesFrom(setting.sizes ?? []),
+    square: squareKindFrom(setting.tools ?? []),
   });
   const build = benchOf(parameters);
   if (!build.ok) return build;
@@ -102,6 +105,8 @@ type Setting = {
   /** The steps with a line ticked, by ID: a step started keeps its lines (#783). */
   readonly started: readonly string[];
   readonly capacities: Capacities;
+  /** The kind of square the owner has, for the close-ups (#813). */
+  readonly square: SquareKind | undefined;
 };
 
 /**
@@ -109,7 +114,7 @@ type Setting = {
  * tools to hand and the ways kept.
  */
 const benchWith =
-  ({ toHand, standIns, have, bitSets, buying, kit, kept, started, capacities }: Setting) =>
+  ({ toHand, standIns, have, bitSets, buying, kit, kept, started, capacities, square }: Setting) =>
   (parameters: BenchParameters): Result<Omit<Build, "options">, string[]> => {
     const shape = shapeOf(parameters);
     const problems = shapeProblems(shape);
@@ -156,6 +161,7 @@ const benchWith =
       kept,
       started,
       capacities,
+      square,
     });
 
     const { frameScrews, sheetScrews, brackets, bracketScrews } = parameters.fixings;

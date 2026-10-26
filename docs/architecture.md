@@ -417,7 +417,10 @@ numbers, with its tools, kit, fixings, close-up and check; and the making-rule f
 sizes assumed). A bolt too short for what it passes through is bought at the length to use, its line saying why and
 when the owner's own are short (#763). A size without a source is refused. It's plain
 functions with no worker, web app, file system or model in it, so it could ship on its own; its Courtyard imports
-are the contract's `SourcedSize` and part recipe. The first template is the framed bench (`bench/`). Printed parts
+are the contract's `SourcedSize` and part recipe. The first template is the framed bench (`bench/`). The close-ups
+by type (`close-ups/`, #813) are any template's: a fixing (a bracket, a bolt through a plate, a screwed overlap) or a
+technique (measure and mark, driving a screw) drawn in 3D from the pieces it joins, laid flat for the app to draw,
+and which step shows a technique in full, the first to use it. Printed parts
 (`print/`, #702) are the holster, shim and bracket templates and a part recipe as written: each becomes a recipe
 (a base and its features), checked by the making rules (on the plate, holes on their faces, walls the nozzle prints),
 and made into a solid with manifold-3d (WebAssembly) and its lettering with opentype.js and the bundled Figtree font,
