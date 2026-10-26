@@ -1,8 +1,10 @@
 import { type BuildStep, type DerivedBuild, tickedIn } from "@courtyard/contract";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
-import { Check, ChevronDown, Lightbulb, X } from "lucide-react";
+import { Check, Lightbulb, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { Disclosure } from "@/components/disclosure";
+import { Techniques } from "./close-up.tsx";
 import { LengthBar } from "./cut-plan.tsx";
 import { Findings } from "./findings.tsx";
 import { type Detail, type Progress, useDetail } from "./progress.ts";
@@ -208,23 +210,18 @@ function Checklist(props: {
 function Tips(props: { tips: readonly string[]; big: boolean }) {
   if (props.tips.length === 0) return null;
   return (
-    <details
-      className={classes(
-        "group rounded-row bg-muted text-foreground",
-        props.big ? "text-answer" : "text-interface",
-      )}
+    <Disclosure
+      look="row"
+      big={props.big}
+      icon={<Lightbulb aria-hidden className="size-4 text-primary-text" />}
+      label="Tips"
     >
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3.5 font-semibold">
-        <Lightbulb aria-hidden className="size-4 text-primary-text" />
-        Tips
-        <ChevronDown aria-hidden className="ml-auto size-4 group-open:rotate-180" />
-      </summary>
       <ul className="flex flex-col gap-2 px-3.5 pb-3.5">
         {props.tips.map((tip) => (
           <li key={tip}>{tip}</li>
         ))}
       </ul>
-    </details>
+    </Disclosure>
   );
 }
 
@@ -264,11 +261,12 @@ function ToolChips(props: { step: BuildStep; big: boolean }) {
 /**
  * The step reached, as the instruction manual shows it (#699; at the bench, #753): which step and
  * how long it takes, its title and how to batch it, its checklist, a word's meaning when tapped,
- * its tips behind a tap (#789), its tools, its fixings, then `children`, the check before moving
- * on, and how it's done and how much is said. `big` at the bench on the unfolded Fold, read at
- * arm's length. `atBench` (#793), `children` are the step's buttons, which open its walk-through,
- * close-ups and check, so they aren't shown here; beside the steps on a computer, the photo for
- * the check goes by `sendPhoto`.
+ * its tips behind a tap (#789), its tools, its fixings, then `children`, its techniques in full
+ * the first time or a "how?" tap (#813), the check before moving on, and how it's done and how
+ * much is said. `big` at the bench on the unfolded Fold, read at arm's length. `atBench` (#793),
+ * `children` are the step's buttons, which open its walk-through, close-ups, techniques and
+ * check, so they aren't shown here; beside the steps on a computer, the photo for the check goes
+ * by `sendPhoto`.
  */
 export function StepPanel(props: {
   derived: DerivedBuild;
@@ -351,6 +349,7 @@ export function StepPanel(props: {
       )}
       <Findings findings={stepFindings(derived, step)} label="To check in this step" />
       {props.children}
+      {!atBench && <Techniques step={step} parts={derived.parts} />}
       {!atBench && <BeforeMovingOn step={step} sendPhoto={props.sendPhoto} />}
       <Ways ways={step.ways} />
       <DetailSwitch detail={detail} choose={choose} atBench={atBench} />

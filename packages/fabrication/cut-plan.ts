@@ -1,4 +1,4 @@
-import type { CutPlan, Finding, Part } from "./build.ts";
+import type { CutPlan, Finding, MarkedLength, Part } from "./build.ts";
 import type { Sheet, Timber } from "./stock.ts";
 
 // Packing pieces into stock (ADR 0036): timber pieces into lengths, sheet pieces into sheets,
@@ -233,3 +233,22 @@ export const cutPlanOf = (options: {
   });
   return { cutPlan: { kerf, timber, sheets }, findings };
 };
+
+/** Lengths cut the same way, together, as they're marked: 4 lengths of B 1450 and A 750. */
+export const markedLengths = (cutPlan: CutPlan): MarkedLength[] =>
+  cutPlan.timber.flatMap((plan) => {
+    const groups = new Map<string, MarkedLength>();
+    for (const length of plan.lengths) {
+      const key = length.cuts.map((cut) => `${cut.label} ${cut.length}`).join(", ");
+      const same = groups.get(key);
+      groups.set(key, {
+        stock: plan.stock,
+        stockLength: plan.stockLength,
+        count: (same?.count ?? 0) + 1,
+        kerf: cutPlan.kerf,
+        cuts: length.cuts,
+        offcut: length.offcut,
+      });
+    }
+    return [...groups.values()];
+  });

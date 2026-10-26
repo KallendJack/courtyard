@@ -4,7 +4,7 @@ import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { Camera } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 import type { BenchAsk } from "../chat/hold-to-ask.tsx";
-import { CloseUp } from "../close-up.tsx";
+import { CloseUp, Techniques } from "../close-up.tsx";
 import type { Progress } from "../progress.ts";
 import { checkQuestion } from "../words.ts";
 import { BeforeMovingOn, PhotoPicker, WalkThrough } from "./how.tsx";
@@ -98,7 +98,7 @@ function Missing(props: { needed: Needed[]; park: (why: string) => void }) {
 /**
  * The step's four buttons under its lines (#793; Paper, 2 · Agreed, "Fabrication · Asking at the
  * bench: step buttons + answer card · Fold (#793)"), so asking never leaves the step: Show me how
- * opens its walk-through, close-ups and check; Is this right? takes a photo, checked against the
+ * opens its walk-through, close-ups, techniques (#813) and check; Is this right? takes a photo, checked against the
  * step, its answer over the picture; I don't have… picks one of the step's tools or parts and says
  * what stands in, or parks the step; Can't do this now parks it with why. A parked step says why,
  * with Do it now.
@@ -190,6 +190,7 @@ export function StepButtons(props: {
           {step.closeUps.map((closeUp) => (
             <CloseUp key={closeUp.title} closeUp={closeUp} parts={derived.parts} narrow />
           ))}
+          <Techniques step={step} parts={derived.parts} />
           <BeforeMovingOn step={step} />
         </>
       )}

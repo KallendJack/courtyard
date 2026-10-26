@@ -36,7 +36,8 @@ their set, and the countersink bit, with Have it and Add to list.
 | `step/how.tsx` | A step's walk-through, its check before moving on, and the photo picker for it |
 | `step/step-buttons.tsx` | At the bench (#793), the step's four buttons under its lines: Show me how, Is this right?, I don't have… and Can't do this now, what each opens, and a parked step's line with Do it now |
 | `step-moves.tsx` | Moving between steps: Back and Done, a swipe, and the dots that show how far |
-| `close-up.tsx` | A step's close-up, drawn to scale: its sizes, where each fixing goes, tools as their shape (an open spanner, an adjustable, pliers, a socket on a hex) and a castor as one (#783), and its words over it at the type's own sizes, never under 12 px |
+| `close-up.tsx` | A step's close-up, drawn to scale: its sizes, where each fixing goes, and its words over it at the type's own sizes, never under 12 px; a close-up by type (#813) as the engine draws it in 3D, its faces, pencil marks and screws' ways in, with its labels as pills, a badge for each move and a leader to what it's about; and a step's techniques, in full the first time, a "How?" tap after |
+| `picture/close-up-shapes.tsx` | Tools as their shape in a close-up (an open spanner, an adjustable, pliers, a socket on a hex) and a castor as one (#783) |
 | `progress.ts` | The step reached, the lines ticked, the tools chosen to buy and the steps parked, kept for every device |
 | `print/print-panel.tsx` | A printed part's own (#702; "Fabrication · Text to print · Tablet (#702)"): the part on the plate, and the Print tab with its sizes and sources, its file, Open in Bambu Studio (its 3MF) and Send to printer, waiting for one |
 | `print/print-view.tsx` | The printed part's scene, `three`, on the printer's plate, loaded lazily as the bench's is |
@@ -76,7 +77,7 @@ by your tools · Tablet (#699)" and "· Build steps · Cover (#699)"): the step 
 "Fabrication · At the bench · Fold 933×645"), the job as it's done, worked out by the engine: the length on the
 Workmate with its first piece's line, the length in its jaws with the line, the saw, the support under the long
 end and the offcut hatched on the waste side, an end frame flat on the floor with its diagonals, a castor base in the
-Workmate's jaws with a bolt in and the drill in the plate's next hole, its words callouts off the model with short leaders, gold for the owner's own tools and green for what's next (#783; "Castors in 3D, your kit · Fold"), or the frame so far (the parts put on before faint, the step's own violet, the rest hidden). Its
+Workmate's jaws with a bolt in and the drill in the plate's next hole, its words callouts off the model with short leaders, gold for the owner's own tools and green for what's next (#783; "Castors in 3D, your kit · Fold"), or the frame so far (the parts put on before faint, the step's own violet, the rest hidden; the brackets a step fits as the L-shapes they are, violet, #813). Its
 marks are the Build's own numbers; only the tools to hand are drawn. Each step opens at its own angle, fitted to the
 view; turning stays between 15° and 60° above level, and Reset view (or another step) puts it back. Only the step's
 own parts have their letter, and a new step closes a part's card. The marks' words are the step's own type size (20 px
@@ -84,13 +85,15 @@ beside a step in big type, 16 px otherwise), and none sits on another or on a le
 under its title, how to batch it ("One joint at a time", #789); a
 line in violet when Your tools have changed how a step is done ("Cut and label the timber now uses your mitre saw, not
 the hand saw.", #777); under "Show me how", a walk-through the first time a move comes up (marking as 1. Tape,
-2. Tick, 3. Square, 4. Line, with close-ups of the tape's hook and the square's stock; marking the screw spots on the
-end frames, with a close-up of where the rail sits on the leg, #789); a checklist whose ticked lines
+2. Tick, 3. Square, 4. Line; marking the screw spots on the end frames, #789); a checklist whose ticked lines
 go grey and whose next line is lit (marking puts a bar under each length's line, "B 1450 · 3 mm saw cut · A 750 ·
 offcut 197"), words such as "flush" to tap for a line saying what they mean, Tips closed until tapped (#789), its tools (drill bits by size, "a 7 mm
 bit: check your set" in gold while the set's sizes aren't known; a stand-in by name, "Support for the long end: your
 step stool", #763), its fixings, what the making rules found about it in gold (a part too big for its stock), its
-close-ups (the castors' two: tightening with the owner's tools, and one bolt apart), "Before you move
+close-ups (each fixing it makes by its type, #813: a bracket in a corner pulled out, a screwed overlap's green, the
+castors' bolt through a plate, tightening with the owner's tools and one bolt apart), its techniques (measure and
+mark, with the owner's square; driving a screw, its end zone and, the first time a long screw goes in, the drill's
+clutch ring) in full the first time the Build's steps use each, then a "How?" tap that opens it, "Before you move
 on" with Send a photo to check (the photo and what it's for go in the chat's Reply box, to send), how it's done ("Hand
 saw", "Circular saw · not yet", "Mitre saw · not yet") and "Show me how" or "Just the numbers" (kept on the device). On a computer the steps
 are the side panel's Steps tab, with the close-up under the 3D view. The page opens on the steps once building has

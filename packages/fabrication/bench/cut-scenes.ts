@@ -1,6 +1,7 @@
 import type { Box } from "../build.ts";
+import { markedLengths } from "../cut-plan.ts";
 import type { Scene, ScenePiece } from "../scene.ts";
-import { markedLengths, type Saw } from "./preparing.ts";
+import type { Saw } from "./preparing.ts";
 import {
   at,
   box,
