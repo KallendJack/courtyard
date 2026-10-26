@@ -1938,6 +1938,97 @@ describe("Builds (#697, ADR 0036)", () => {
     );
   });
 
+  it("gives the step the owner is on in full, so the chat follows it rather than making one up (#784)", async () => {
+    await mkdir(join(builds(), "progress"), { recursive: true });
+    await writeFile(
+      join(builds(), "workbench.json"),
+      JSON.stringify({ name: "Workbench", template: "framed-bench", parameters: goldenBench }),
+    );
+    await writeFile(
+      join(builds(), "progress", "workbench.json"),
+      JSON.stringify({ step: "end-frames", ticked: [{ step: "end-frames", lines: [0, 1] }] }),
+    );
+    const saver = await savingTurns([[]]);
+
+    expect(saver.framings[0]?.instructions).toContain(
+      [
+        "</builds>",
+        "",
+        await quotedInGuide("The step the owner is on in each Build"),
+        "",
+        '<step build="B1">',
+        "Step 4 of 12: Make the two end frames, about 20 min.",
+        "Its tools, as the step names them: Tape measure, Pencil, Square, Clamps, Drill driver, Drill bits (3 mm for pilot holes).",
+        "Its safety kit: Safety glasses.",
+        "Its fixings: 5 × 80 screws × 16.",
+        // The legs lie on an edge, as the owner's photo had them, never rolled flat.
+        "Its picture, One end frame, flat on the floor: A Legs lying on an edge, 95 up; C End rails flat on a face, 45 up. Marked on it: 2 screws a joint; floor end.",
+        "Its lines, in this order:",
+        "1. [ticked] Lay both legs (A) side by side, ends level. Measure 250 up from the floor end and square one line across both.",
+        "2. [ticked] Spread them 460 apart outside to outside. Lay an end rail (C) across, flush with the tops. Check the corner with your square, then clamp it.",
+        "3. Mark 2 crosses where the rail sits on the leg (below), by eye. Drill a small 3 mm pilot hole at each mark, then drive the screw.",
+        "4. Fit the bottom rail the same way, its underside on your lines.",
+        "Its close-up, Mark your screw spots: Screws only in the green: where the rail sits on the leg. The red line is its edge, drawn. By eye: 2 crosses on a diagonal, a fingertip from the edges.",
+        "Its close-up, One end frame: Top rail flush with the leg tops. Bottom rail 250 up from the floor end. 2 screws a joint, on a diagonal, by eye.",
+        // Screw spots are by eye in the overlap (packages/fabrication, How a step reads), never "47 in".
+        "Its screws go by eye: 2 in each of the 4 places A and C overlap (45 × 95 mm), anywhere in it, a fingertip from its edges.",
+        "Its check, how to know it's right before moving on: Measure corner to corner both ways. The same within 2 mm means it's square. The photo that shows it: Both end frames, flat, from above.",
+        "</step>",
+      ].join("\n"),
+    );
+    const rule = await quotedInGuide("Anything the owner will make");
+    for (const words of [
+      "given in full below the Builds",
+      "Never give another way, setup or size",
+      "say what differs, against the step",
+      "offer to change the Build",
+    ]) {
+      expect(rule).toContain(words);
+    }
+  });
+
+  /** What a turn is told with the owner on `step` of the golden bench, its first line ticked. */
+  const onStep = async (step: string) => {
+    await mkdir(join(builds(), "progress"), { recursive: true });
+    await writeFile(
+      join(builds(), "workbench.json"),
+      JSON.stringify({ name: "Workbench", template: "framed-bench", parameters: goldenBench }),
+    );
+    await writeFile(
+      join(builds(), "progress", "workbench.json"),
+      JSON.stringify({ step, ticked: [{ step, lines: [0] }] }),
+    );
+    const saver = await savingTurns([[]]);
+    return saver.framings[0]?.instructions ?? "";
+  };
+
+  it("gives screws through one piece as spread out by eye (#784)", async () => {
+    expect(await onStep("fit-shelf")).toContain(
+      "Its screws go by eye: 10 through H, spread out, each into the wood under it.",
+    );
+  });
+
+  it("says when a step needs a helper (#784)", async () => {
+    expect(await onStep("long-rails")).toContain(
+      "Step 5 of 12: Join the end frames with the long rails, about 30 min, with a helper.",
+    );
+  });
+
+  it("gives the way a step is done when it could be done more than one (#784)", async () => {
+    expect(await onStep("cut-timber")).toContain("Its way: Hand saw.");
+  });
+
+  it("gives no step before the owner starts building (#784)", async () => {
+    await mkdir(builds(), { recursive: true });
+    await writeFile(
+      join(builds(), "workbench.json"),
+      JSON.stringify({ name: "Workbench", template: "framed-bench", parameters: goldenBench }),
+    );
+    const saver = await savingTurns([[]]);
+
+    expect(saver.framings[0]?.instructions).not.toContain("<step");
+  });
+
   it("keeps the owner on their step when steps before it go, as the castors' do when they come off (#699)", async () => {
     await mkdir(join(builds(), "progress"), { recursive: true });
     await writeFile(

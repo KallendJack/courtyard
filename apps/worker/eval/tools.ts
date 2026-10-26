@@ -6,7 +6,7 @@ import type { ExpectedTool, Scenario, Words } from "./scenarios.ts";
 // them without asking, and ticked on Your tools from what the owner said, saving nothing.
 
 /** A tool of the owner's, as Your tools would have saved it. */
-const toolFile = (name: string, count?: number) =>
+export const toolFile = (name: string, count?: number) =>
   `---\nname: ${name}\nstatus: have\nkind: tool\n${count === undefined ? "" : `count: ${count}\n`}---\n`;
 
 /** Asking which tools the owner has, when they're known. */
