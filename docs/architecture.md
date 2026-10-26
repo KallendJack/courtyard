@@ -420,7 +420,12 @@ numbers, with its tools, kit, fixings, close-up and check; and the making-rule f
 sizes assumed). A bolt too short for what it passes through is bought at the length to use, its line saying why and
 when the owner's own are short (#763). A size without a source is refused. It's plain
 functions with no worker, web app, file system or model in it, so it could ship on its own; its Courtyard imports
-are the contract's `SourcedSize` and part recipe. The first template is the framed bench (`bench/`). Printed parts
+are the contract's `SourcedSize`, its stock and tools (`materials.ts`), part recipe and Build recipe. A Build's recipe
+(`recipe/`, ADR 0039, #769) is its stock, pieces, groups and joints, checked against the contract's `BuildRecipe`
+(sizes and counts within `RECIPE_MOST`, every ID once, every reference to the right kind). The framed bench
+(`bench/`) is its first starter: the template's parameters are loaded as the bench's recipe, and a recipe that is a
+framed bench is worked out by the bench's own code, to exactly its numbers; any other recipe is refused until
+#770–#772 work any recipe out. Printed parts
 (`print/`, #702) are the holster, shim and bracket templates and a part recipe as written: each becomes a recipe
 (a base and its features), checked by the making rules (on the plate, holes on their faces, walls the nozzle prints),
 and made into a solid with manifold-3d (WebAssembly) and its lettering with opentype.js and the bundled Figtree font,

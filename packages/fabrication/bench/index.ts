@@ -24,29 +24,21 @@ import {
   toolsFrom,
 } from "../tools.ts";
 import { benchFitted, benchParts, shapeOf, shapeProblems } from "./frame.ts";
-import { BenchParameters, castorFixingNames } from "./parameters.ts";
+import { type BenchParameters, castorFixingNames } from "./parameters.ts";
 import { benchSteps } from "./steps.ts";
 import { BENCH_SLOTS } from "./stock-slots.ts";
 
 /**
- * The framed bench: its parameters in, everything its Build shows out. Parameters that aren't a
- * bench (a size with no source, a bench too low for its castors) are refused with what's wrong.
- * Its steps follow the owner's tools when they're given, and keep the ways the steps started were
- * done (#777).
+ * The framed bench worked out from its checked parameters: everything its Build shows. A bench of
+ * sizes that can't be built (too low for its castors) is refused with what's wrong. Its steps
+ * follow the owner's tools when they're given, and keep the ways the steps started were done
+ * (#777). Its recipe (#769) is worked out with this until any recipe is (#770).
  */
-export const deriveBench = (
-  input: unknown,
+export const workOutBench = (
+  checked: BenchParameters,
   setting: BuildSetting = {},
 ): Result<Build, string[]> => {
-  const parsed = BenchParameters.safeParse(input);
-  if (!parsed.success) {
-    return err(
-      parsed.error.issues.map(
-        (issue) => `${issue.path.join(".") || "parameters"}: ${issue.message}`,
-      ),
-    );
-  }
-  const parameters = oneSheetEach(parsed.data, BENCH_SLOTS);
+  const parameters = oneSheetEach(checked, BENCH_SLOTS);
   const own = new Set(setting.tools === undefined ? parameters.tools : toolsFrom(setting.tools));
   // What the owner has besides Your tools stands in for a tool they haven't: a step stool (#763).
   const have = setting.have ?? [];
@@ -89,7 +81,7 @@ export const deriveBench = (
   });
 };
 
-/** What the bench is worked out with besides its parameters, as `deriveBench` reads its setting. */
+/** What the bench is worked out with besides its parameters, as `workOutBench` reads its setting. */
 type Setting = {
   readonly toHand: ReadonlySet<Tool>;
   readonly standIns: ReadonlyMap<Tool, string>;

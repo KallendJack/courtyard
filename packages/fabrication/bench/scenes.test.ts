@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Build } from "../build.ts";
+import { deriveBench } from "../recipe/starters.ts";
 import type { Scene, SceneMark } from "../scene.ts";
 import { goldenBench } from "./fixtures/golden.ts";
-import { deriveBench } from "./index.ts";
 
 // Each step's picture (#754): the job as it's done, worked out from the Build and the tools to
 // hand, with every number drawn on it the Build's own.
