@@ -1968,6 +1968,7 @@ describe("Builds (#697, ADR 0036)", () => {
         "2. [ticked] Spread them 460 apart outside to outside. Lay an end rail (C) across, flush with the tops. Check the corner with your square, then clamp it.",
         "3. Mark 2 crosses where the rail sits on the leg (below), by eye. Drill a small 3 mm pilot hole at each mark, then drive the screw.",
         "4. Fit the bottom rail the same way, its underside on your lines.",
+        "Its close-up, Mark your screw spots: Screws only in the green: where the rail sits on the leg. The red line is its edge, drawn. By eye: 2 crosses on a diagonal, a fingertip from the edges.",
         "Its close-up, One end frame: Top rail flush with the leg tops. Bottom rail 250 up from the floor end. 2 screws a joint, on a diagonal, by eye.",
         // Screw spots are by eye in the overlap (packages/fabrication, How a step reads), never "47 in".
         "Its screws go by eye: 2 in each of the 4 places A and C overlap (45 × 95 mm), anywhere in it, a fingertip from its edges.",
