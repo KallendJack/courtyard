@@ -1,6 +1,11 @@
 import type { KeptWay } from "../build.ts";
+import {
+  type BoltThrough,
+  boltApartCloseUp,
+  type Holder,
+  tightenCloseUp,
+} from "../close-ups/bolt-through.ts";
 import type { SpannerKit, Tool } from "../tools.ts";
-import { boltApartCloseUp, type Holder, tightenCloseUp } from "./castor-pictures.ts";
 import { baseCloseUp, CASTOR_INSET } from "./close-ups.ts";
 import type { Shape } from "./frame.ts";
 import { type Castors, castorFixingNames, spannerFor } from "./parameters.ts";
@@ -13,6 +18,30 @@ import { act, type Draft, type DraftTool } from "./preparing.ts";
 // fabrication/README.md, "How a step reads"); its two close-ups show tightening and one bolt
 // apart. The extras (the drill's clutch, a hole that's off, starting the nut by hand, how tight
 // is tight) are its tips (#789).
+
+/** A castor's bolt through its plate and the base, as its close-ups draw it (#813). */
+const castorBolt = (castors: Castors, s: Shape): BoltThrough => ({
+  bolt: castors.bolt.diameter.value,
+  plate: {
+    name: "castor",
+    length: castors.plate.length.value,
+    thick: castors.plate.thickness.value,
+    high: s.castor,
+  },
+  piece: { label: "E", thick: s.wideThick },
+  washers: { count: castors.washer.perBolt, thick: castors.washer.thickness.value },
+  nut: castors.nut.height.value,
+});
+
+/** The castors' bolts, washers and nuts, each a bolt through a plate. */
+const castorFixings = (castors: Castors, names: ReturnType<typeof castorFixingNames>) => {
+  const bolts = 4 * castors.boltsEach;
+  return [
+    { name: names.bolts, count: bolts, joint: "bolt-through" as const },
+    { name: names.washers, count: bolts * castors.washer.perBolt, joint: "bolt-through" as const },
+    { name: names.nuts, count: bolts, joint: "bolt-through" as const },
+  ];
+};
 
 /** What the castor step's lines are, kept with a step started on them (#783). */
 export const CASTOR_LINES = "through-plate";
@@ -114,11 +143,7 @@ export const castorsDraft = (options: {
     tools: [drill, ...tools.chips],
     bits: [{ mm: bit, for: `the M${castors.bolt.diameter.value} bolts` }],
     safety: ["safety-glasses"],
-    fixings: [
-      { name: names.bolts, count: 4 * castors.boltsEach },
-      { name: names.washers, count: 4 * castors.boltsEach * castors.washer.perBolt },
-      { name: names.nuts, count: 4 * castors.boltsEach },
-    ],
+    fixings: castorFixings(castors, names),
     batch: "One castor at a time, placed by eye: each hole drilled and bolted before the next.",
     actions: [
       act(
@@ -151,13 +176,13 @@ export const castorsDraft = (options: {
       `Tight is when ${washer ? "the washer" : "the nut"} bites into the wood, then about a quarter turn more. A lock nut is stiff all the way.`,
     ],
     closeUps: [
-      tightenCloseUp(castors, {
+      tightenCloseUp(castorBolt(castors, s), {
         head: tools.head ?? "open-spanner",
         nut: tools.nut ?? "open-spanner",
         size,
         yours: tools.nut !== undefined,
       }),
-      boltApartCloseUp(s, castors, size),
+      boltApartCloseUp(castorBolt(castors, s), size),
     ],
     check: {
       says: "Each castor turns and swivels freely, and every nut is tight.",
@@ -192,11 +217,7 @@ const castorsAsStarted = (options: {
       { mm: castors.bolt.diameter.value + 1, for: `the M${castors.bolt.diameter.value} bolts` },
     ],
     safety: ["safety-glasses"],
-    fixings: [
-      { name: names.bolts, count: 4 * castors.boltsEach },
-      { name: names.washers, count: 4 * castors.boltsEach * castors.washer.perBolt },
-      { name: names.nuts, count: 4 * castors.boltsEach },
-    ],
+    fixings: castorFixings(castors, names),
     batch: "One castor at a time: mark, drill, bolt, then the next.",
     actions: [
       act(
@@ -212,7 +233,11 @@ const castorsAsStarted = (options: {
         "Washer, plate, base, washer, nut.",
       ),
     ],
-    closeUp: baseCloseUp(s, castors),
+    // Its fixing drawn as its type too (#813): a close-up isn't a line, so its ticks stay put.
+    closeUps: [
+      baseCloseUp(s, castors),
+      boltApartCloseUp(castorBolt(castors, s), spannerFor(castors)),
+    ],
     check: {
       says: "Each castor turns and swivels freely, and every nut is tight.",
       photo: "Both bases from below, castors on.",

@@ -525,12 +525,14 @@ test.describe("on the unfolded Fold", () => {
     await expect(letter(page, "E, Castor bases")).toHaveCount(0);
     await expect(letter(page, "B, Long rails")).toHaveCount(0);
     expect(await overlappingLetters(page)).toEqual([]);
-    // How to batch it, then Show me how marking the screw spots by eye, the first step that
-    // screws a rail to a leg (#789); the step's own close-up follows.
+    // How to batch it, then the screw spots marked by eye in the green, the first step that
+    // screws a rail to a leg (#789, #813); the end frame's own close-up follows, then driving a
+    // screw, in full the first time.
     await expect(steps).toContainText("One joint at a time");
     const closeUps = page.getByRole("region", { name: "Close-up" });
     await expect(closeUps.first()).toContainText("Close-up · Mark your screw spots");
-    await expect(closeUps.last()).toContainText("Close-up · One end frame");
+    await expect(closeUps.nth(1)).toContainText("Close-up · One end frame");
+    await expect(closeUps.last()).toContainText("Close-up · Driving a screw");
     await expect(steps).toContainText("Fixings: 5 × 80 screws (16)");
     const checklist = steps.getByRole("list", { name: "Checklist" });
     await checklist.getByRole("checkbox", { name: "Line 1 done" }).click();
@@ -856,7 +858,7 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await expect(steps.getByRole("list", { name: "Checklist" })).not.toContainText("Countersink");
   });
 
-  test("the marking step's Show me how walks through the tape, tick, square and line, with its close-ups (#777)", async ({
+  test("the marking step's Show me how walks through the tape, tick, square and line (#777)", async ({
     page,
   }) => {
     await workspaceWithBuild(page);
@@ -872,12 +874,8 @@ test.describe("each step's picture, on the unfolded Fold", () => {
       await expect(moves.nth(at)).toContainText(move);
     }
     await expect(moves.nth(1)).toContainText("At 1450");
-    // The tape's hook over the end, and the square's stock against the edge, drawn close.
-    const closeUps = walk.getByRole("region", { name: "Close-up" });
-    await expect(closeUps).toHaveCount(2);
-    await expect(closeUps.first()).toContainText("The tape's hook over the end");
-    await expect(closeUps.last()).toContainText("The square's stock against the edge");
-    await expect(closeUps.last().getByRole("img")).toHaveAccessibleName(/95 mm marked/);
+    // The moves are drawn once, by the step's measure and mark close-up (#813), not in the walk.
+    await expect(walk.getByRole("region", { name: "Close-up" })).toHaveCount(0);
 
     // Just the numbers leaves it out.
     await steps.getByRole("button", { name: "Just the numbers" }).click();
@@ -885,6 +883,76 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await steps.getByRole("button", { name: "Show me how" }).click();
     await expect(walk).toBeVisible();
   });
+
+  // The close-ups by type (#813; Paper, 2 · Agreed, "Fabrication · Bracket close-up, any build",
+  // "· Measure and mark a length, your kit" and "· Driving a screw: clutch and end zone · Fold
+  // (#772)"), unfolded and folded.
+  for (const [fold, viewport] of [
+    ["unfolded", UNFOLDED],
+    ["folded", FOLDED],
+  ] as const) {
+    test(`the steps show their close-ups by type, a technique in full once then a how? tap, ${fold} (#813)`, async ({
+      page,
+    }) => {
+      await workspaceWithBuild(page);
+      await openInFabrication(page);
+      await page.setViewportSize(viewport);
+      const steps = page.getByRole("region", { name: "Steps" });
+      const closeUp = (title: string) =>
+        steps.getByRole("region", { name: "Close-up" }).filter({ hasText: `Close-up · ${title}` });
+
+      // Marking: measure and mark in full, the first time a step uses it, ticked at B's 1450.
+      await toStep(page, 2);
+      const mark = closeUp("Measure and mark a length");
+      await expect(mark).toBeVisible();
+      for (const pill of ["Hook the end", "Tick 1450", "Square a line", "X the offcut"]) {
+        await expect(mark).toContainText(pill);
+      }
+      await expect(steps.getByText("How? Measure and mark a length")).toHaveCount(0);
+
+      // The end frames: the screw spots in the green, the end zone in full, and measure and
+      // mark now a how? tap that opens it.
+      for (let at = 2; at < 4; at += 1) {
+        await page.getByRole("button", { name: "Done, next step" }).click();
+      }
+      await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
+      await expect(closeUp("Mark your screw spots")).toContainText("Only in green");
+      const driving = closeUp("Driving a screw");
+      await expect(driving).toBeVisible();
+      await expect(driving).toContainText("Drill first");
+      await expect(driving).toContainText("Just screw");
+      await expect(driving).toContainText("Clutch ring");
+      const how = steps.getByText("How? Measure and mark a length");
+      await expect(how).toBeVisible();
+      await expect(closeUp("Measure and mark a length")).toBeHidden();
+      await how.click();
+      await expect(closeUp("Measure and mark a length")).toBeVisible();
+
+      // Standing on the bases: the brackets on the model, lit, and one taken apart close up.
+      for (let at = 4; at < 7; at += 1) {
+        await page.getByRole("button", { name: "Done, next step" }).click();
+      }
+      await expect(
+        steps.getByRole("heading", { name: "Stand the frame on its bases" }),
+      ).toBeVisible();
+      const bracket = closeUp("One bracket, apart");
+      await expect(bracket).toBeVisible();
+      for (const pill of ["Tight in corner", "Mark the holes", "2 screws each"]) {
+        await expect(bracket).toContainText(pill);
+      }
+      await expect(page.getByRole("region", { name: "In 3D" })).not.toContainText(
+        "bracket on the face",
+      );
+      const buildApi = new URL(page.url()).pathname.replace(/^\/fabrication/, "/api/fabrication");
+      const { derived } = BuildOpened.parse(await (await page.request.get(buildApi)).json());
+      const standing = derived.steps.find((step) => step.id === "stand-on-bases");
+      expect(
+        standing?.scene?.pieces
+          .filter((piece) => piece.name === "40 mm angle brackets")
+          .map((piece) => [piece.tone, piece.boxes.length]),
+      ).toEqual([["lit", 16]]);
+    });
+  }
 
   test("the pictures' words are as big as the step's, and none sits on another (#777)", async ({
     page,

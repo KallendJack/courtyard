@@ -107,6 +107,7 @@ const stepsOf = (options: {
         },
       ],
       closeUps: [],
+      techniques: [],
       walkThrough: [],
       scene: null,
       check: {
@@ -139,6 +140,7 @@ const stepsOf = (options: {
               },
             ],
             closeUps: [],
+            techniques: [],
             walkThrough: [],
             scene: null,
             check: {
@@ -177,6 +179,7 @@ const stepsOf = (options: {
               },
             ],
             closeUps: [],
+            techniques: [],
             walkThrough: [],
             scene: null,
             check: {

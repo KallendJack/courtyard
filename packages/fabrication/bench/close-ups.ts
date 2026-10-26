@@ -1,4 +1,5 @@
 import type { CloseUp, MarkedLength, WalkStep } from "../build.ts";
+import type { Technique } from "../close-ups/techniques.ts";
 import { type Shape, whole } from "./frame.ts";
 import type { Castors } from "./parameters.ts";
 
@@ -39,29 +40,6 @@ const jointScrews = (legX: number, legWidth: number, railY: number, railHeight: 
  */
 export const jointFromEnd = (legWidth: number, railHeight: number) =>
   Math.min(legWidth / 3, railHeight / 4);
-
-/**
- * Where a rail's screws can go (#789): only where it sits on the leg, the strip a leg offcut on
- * the rail's end draws. Two crosses in it, by eye; the strip's width is the one size.
- */
-export const screwSpotsCloseUp = (s: Shape): CloseUp => {
-  const width = 3 * s.thick;
-  return {
-    title: "Mark your screw spots",
-    width,
-    height: s.wide + s.thick,
-    pieces: [
-      { label: "A", x: 0, y: 0, w: s.thick, h: s.wide + s.thick },
-      { label: "C", x: 0, y: 0, w: width, h: s.wide },
-    ],
-    dimensions: [line(0, s.wide + s.thick / 2, s.thick, s.wide + s.thick / 2)],
-    fixings: jointScrews(0, s.thick, 0, s.wide),
-    notes: [
-      "By eye: anywhere where the rail sits on the leg, a fingertip from the edges.",
-      "On a diagonal, so the wood doesn't split, each driven straight down.",
-    ],
-  };
-};
 
 const line = (x1: number, y1: number, x2: number, y2: number) => ({
   from: { x: x1, y: y1 },
@@ -199,70 +177,33 @@ export const braceCloseUp = (s: Shape): CloseUp => ({
 
 export const SHEET_SCREWS_PER_BRACE = 4;
 
-// The moves a beginner may never have made (#777), each drawn close: the tape's hook over the
-// length's end, and the square's stock against its edge. The tools are only pictures, their
-// sizes a usual tape's and square's; every size marked is the Build's own.
-
-/** How much of a length a marking close-up shows, either side of what it's about. */
-const NEAR = 150;
-/** Room above and below a length, for the tool on it. */
-const ROOM = 30;
-
-/** The tape hooked over the length's square end, from the side: the hook is the tape's 0. */
-export const tapeHookCloseUp = (label: string, thick: number): CloseUp => ({
-  title: "The tape's hook over the end",
-  width: NEAR,
-  height: thick + 2 * ROOM,
-  pieces: [
-    { label, x: 0, y: ROOM, w: NEAR, h: thick },
-    // The tape's blade along the top, and its hook down over the end.
-    { label: "tape", x: -3, y: ROOM - 4, w: NEAR + 3, h: 4 },
-    { label: "tape", x: -3, y: ROOM - 4, w: 3, h: 16 },
-  ],
-  dimensions: [line(0, ROOM + thick, 100, ROOM + thick)],
-  fixings: [],
-  notes: [
-    "The hook is the tape's 0: hook it tight over the end you checked.",
-    "Pull the tape straight along one edge, not across the face.",
-  ],
-});
-
-/** The square at a tick, from above: its stock tight on the edge, its blade across the face. */
-export const squareStockCloseUp = (label: string, wide: number): CloseUp => ({
-  title: "The square's stock against the edge",
-  width: 2 * NEAR,
-  height: wide + 2 * ROOM,
-  pieces: [
-    { label, x: 0, y: ROOM, w: 2 * NEAR, h: wide },
-    // The stock along the near edge, off the face, and the blade from it across the face.
-    { label: "square", x: NEAR, y: ROOM - 20, w: NEAR, h: 20 },
-    { label: "square", x: NEAR, y: ROOM, w: 25, h: wide + ROOM / 2 },
-  ],
-  // The line drawn along the blade's edge, right across the face.
-  dimensions: [line(NEAR, ROOM, NEAR, ROOM + wide)],
-  fixings: [],
-  notes: [
-    "Hold the stock tight against the edge and slide it until the blade touches the tick.",
-    `Draw along the blade, right across the ${whole(wide)} mm face.`,
-  ],
-});
-
 // What "show me how" walks through the first time a step needs a move a beginner may never have
 // made (#777): marking a length, in the order it's done, and marking a joint's screw spots
-// (#789). Each with its close-up where one shows the move, from the Build's own numbers.
+// (#789). The moves are drawn by the close-ups' types (#813): measure and mark, a screwed overlap.
 
 /** A length's section as it lies flat: how wide its face is, and how thick. */
 export type Section = { readonly wide: number; readonly thick: number };
 
+/** Marking the first length's first piece, as measure and mark draws it (#813). */
+export const markingTechnique = (
+  length: MarkedLength | undefined,
+  sectionOf: (stock: string) => Section,
+): Technique[] => {
+  const first = length?.cuts[0];
+  if (length === undefined || first === undefined) return [];
+  const piece = { ...sectionOf(length.stock), name: first.label };
+  return [{ type: "measure-mark", piece, at: first.length }];
+};
+
 /** Marking a length, as the first is marked: the tape, a tick, the square, the line. */
-export const markingWalk = (length: MarkedLength | undefined, section: Section): WalkStep[] => {
+export const markingWalk = (length: MarkedLength | undefined): WalkStep[] => {
   const first = length?.cuts[0];
   if (first === undefined) return [];
   return [
     {
       title: "Tape",
       says: "Hook the tape over the end you checked and pull it straight along one edge.",
-      closeUp: tapeHookCloseUp(first.label, section.thick),
+      closeUp: null,
     },
     {
       title: "Tick",
@@ -272,7 +213,7 @@ export const markingWalk = (length: MarkedLength | undefined, section: Section):
     {
       title: "Square",
       says: "Put the square's stock tight against the edge, and slide it until its blade touches the V's point.",
-      closeUp: squareStockCloseUp(first.label, section.wide),
+      closeUp: null,
     },
     {
       title: "Line",
@@ -286,11 +227,11 @@ export const markingWalk = (length: MarkedLength | undefined, section: Section):
  * Marking a joint's screw spots, the first time a rail is screwed to a leg (#789): no tape, as the
  * screws only have to hit the leg hidden under the rail. An offcut draws where it is.
  */
-export const screwSpotsWalk = (s: Shape): WalkStep[] => [
+export const screwSpotsWalk = (): WalkStep[] => [
   {
     title: "The leg's edge",
     says: "Lay an offcut of leg timber on the rail's end, flush with it, and draw along its inside edge. The strip it covered is where the leg is underneath.",
-    closeUp: screwSpotsCloseUp(s),
+    closeUp: null,
   },
   {
     title: "Two crosses",

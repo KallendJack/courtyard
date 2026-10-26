@@ -73,6 +73,26 @@ export const toolsFrom = (names: readonly string[]): Tool[] => {
 };
 
 /**
+ * The kind of square the owner has (#813), by the words in its name: a speed square (a triangle
+ * with a lip) or an L-square (a try, combination or framing square, a blade and a stock). None
+ * when Your tools doesn't say, and the close-ups draw a plain one.
+ */
+export type SquareKind = "speed" | "l-square";
+
+export const squareKindFrom = (names: readonly string[]): SquareKind | undefined => {
+  const said = names.map(wordsOf);
+  if (said.some((name) => /\b(speed|rafter|triangle) square\b/.test(name))) return "speed";
+  if (
+    said.some((name) =>
+      /\b(l|try|combination|framing|carpenter s?|engineer s?) square\b/.test(name),
+    )
+  ) {
+    return "l-square";
+  }
+  return undefined;
+};
+
+/**
  * The owner's tools that turn or hold a bolt's head and nut (#783), by what each is: fixed
  * spanners, adjustables, a socket set and pliers. Your tools has no tile for these, so they're
  * the owner's own names ("Adjustable spanner", "Pliers", "Socket set"); a name in the plural or a

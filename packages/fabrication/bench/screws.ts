@@ -1,4 +1,5 @@
 import type { Action } from "../build.ts";
+import { bracketArm } from "../close-ups/bracket.ts";
 import type { Word } from "../glossary.ts";
 import type { Tool } from "../tools.ts";
 import { jointFromEnd, SCREW_INSET } from "./close-ups.ts";
@@ -11,8 +12,8 @@ import { act } from "./preparing.ts";
 // near a piece's end, where the wood splits; into MDF or hardwood, too dense to push aside; and
 // for thick screws. Said once, at the screws, where it's needed.
 
-/** Within this of a piece's end a screw can split it, mm. */
-const SPLIT_RISK = 25;
+/** Within this of a piece's end a screw can split it, mm: the end zone driving a screw shows. */
+export const SPLIT_RISK = 25;
 /** Screws thicker than this need a pilot hole whatever they go into, mm. */
 const THICK_SCREW = 6;
 /** Stock too dense for a screw to push its own way in. */
@@ -35,9 +36,6 @@ const needsPilot = (joint: {
   joint.fromEnd < SPLIT_RISK ||
   joint.into.some((stock) => DENSE.test(stock)) ||
   (screwDiameter(joint.screw) ?? 0) > THICK_SCREW;
-
-/** A bracket's arm from its name, "40 mm angle brackets"; a usual 40 when it doesn't say. */
-const bracketArm = (name: string) => Number(/(\d+)\s*mm/.exec(name)?.[1] ?? 40);
 
 /** An angle bracket's screws: two through each of its arms. */
 export const SCREWS_PER_BRACKET = 4;

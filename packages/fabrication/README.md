@@ -39,13 +39,14 @@ if (recipe) {
 | `stock.ts` | What parts are cut from and fixed with: timber, sheets, fixings and their prices. A template takes each slot's stock as a parameter, so a slot can be swapped |
 | `catalog.ts` | The stock options (#704): each timber's and sheet's sizes, what it's like, and the jobs it suits, and what each is like for the slots it would fill, judged by the strictest |
 | `options.ts` | A template's slots offered those options, each costed by working the Build out again with it, the stock in use as it is; a pick swapped in, keeping the old one's price and size; and the making rule that flags stock wrong for its slot |
-| `cut-plan.ts` | Packing: timber pieces into lengths and sheet pieces into sheets, the kerf between every two, each sheet's first cut along it or across it, whichever needs fewer sheets |
+| `cut-plan.ts` | Packing: timber pieces into lengths and sheet pieces into sheets, the kerf between every two, each sheet's first cut along it or across it, whichever needs fewer sheets; and the lengths cut the same way, together, as they're marked |
+| `close-ups/` | The close-ups by type (#813), for any Build, each drawn in 3D from the pieces it joins and their sizes (`drawing.ts` lays it flat, its pills in a column): an angle bracket in a corner (`bracket.ts`, and the brackets' plates for a 3D view), a bolt through a plate (`bolt-through.ts`, the castors' two), a screwed overlap (`overlap.ts`), measuring and marking a length with the owner's square (`measure.ts`), and driving a screw, its end zone and the drill's clutch (`driving.ts`); `techniques.ts` gives each step its techniques, in full the first time the steps use each |
 | `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed; and the tools the owner chose to buy, while they're missing, a set's missing bits by size (#763) |
 | `findings.ts` | The making rules code checks: a bolt's length to use, long enough for what it passes through plus two threads, and the owner's own that are short (`boltLength`), tools needed and not to hand, sizes assumed |
 | `capacity.ts` | What a mitre or circular saw cuts (#780): its width at 90° and depth, read from its size in Your tools, assumed until given, and whether a timber fits it |
 | `tools.ts`, `glossary.ts` | The tools and kit a step can need, which of them each of Your tools, or something else the owner has, is by the words in its name, one tool or several ("Drill and drill bits", `toolsFrom`; a step stool for the long end, and only that, `standInFor`), a bit set's sizes and whether it has a bit (`bitSetsFrom`, `bitInSets`), the spanners, adjustables, socket set and pliers among them (`spannerKitFrom`, #783), and the words a beginner may not know |
 | `recipe/` | A Build's recipe (ADR 0039, #769), checked by the contract's `BuildRecipe` first: `index.ts` (`deriveRecipe`: a recipe in, its Build out, or what's wrong by where it is in the recipe), `bench.ts` (the bench's recipe from its parameters, `benchRecipe`, and back, `benchFromRecipe`, only when the recipe is exactly a bench's), `starters.ts` (the starters, each a recipe from its template's parameters, and `deriveBench`, the bench template loaded as its recipe). Only a framed bench's recipe is worked out so far; any recipe is from #770–#772 |
-| `bench/` | The first template and starter, the framed bench: `index.ts` (`workOutBench`, what its recipe is worked out with), `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts`, `frame-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `step-tools.ts` (a step's tools against the owner's: a stand-in, bits by size, #763), `screws.ts` (where a pilot hole goes first, #789), `close-ups.ts` (each step's close-up, and the walk-throughs: marking as tape, tick, square and line, #777, and a joint's screw spots, #789; with `close-up.ts`, the close-up's types: tools and a castor drawn as their shape, and words on the drawing, #783), `castor-pictures.ts` (the castor step's picture, its drill drawn as a drill and its words as callouts, and its two close-ups, #783), `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
+| `bench/` | The first template and starter, the framed bench: `index.ts` (`workOutBench`, what its recipe is worked out with), `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts`, `frame-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `step-tools.ts` (a step's tools against the owner's: a stand-in, bits by size, #763), `screws.ts` (where a pilot hole goes first, #789), `close-ups.ts` (each step's own close-up, and the walk-throughs: marking as tape, tick, square and line, #777, and a joint's screw spots, #789; with `close-up.ts`, what a close-up is: tools and a castor drawn as their shape, words on the drawing, #783, and a type's faces and pills, #813), `castor-pictures.ts` (the castor step's picture, its drill drawn as a drill and its words as callouts, #783), `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
 | `print/` | Printed parts (#702): `templates.ts` (the holster, shim and bracket, each made into a part recipe, and `printed-part`, a recipe as written), `recipe.ts` (each face's frame, and the checks that refuse a recipe before it's made), `index.ts` (a printed part's Build: its part, buy list, steps and findings), `make.ts` (the solid, with manifold-3d), `lettering.ts` (text as outlines, with opentype.js), `files.ts` (3MF, zipped with fflate, and STL) |
 | `print/font/` | Figtree Bold, for lettering: `figtree-bold.ttf` from Fontsource (`@fontsource/figtree` 5.2.10, latin 700), under the SIL Open Font License in `OFL.txt`, from github.com/erikdkennedy/figtree |
 
@@ -96,8 +97,14 @@ if (recipe) {
   Tools are drawn only when they're to hand, and nothing the owner doesn't have is drawn as if they did.
 - **Marking starts by checking the end is square,** then one line per length, its pieces one at a time: each marked,
   cut and measured on from the fresh end, with no running totals (#789). Show me how walks through the first length's
-  tape, tick, square and line, with close-ups of the tape's hook over the end and the square's stock against the edge
-  (#777).
+  tape, tick, square and line (#777), and measure and mark draws them.
+- **Every fixing a step makes is drawn by its type** (#813), on that step: an angle bracket in a corner, a bolt
+  through a plate or a screwed overlap, each step's fixing saying its type (`joint`); a package test fails a step
+  with a fixing whose type it doesn't show, or a pill longer than 3 words. **A technique** (measure and mark, driving a
+  screw) is drawn in full the first time the steps use it, a "how?" tap after; the drill's clutch ring with the first
+  long screw (60 mm or more), in full there too. The square drawn is the owner's kind, from Your tools (a speed square
+  or an L-square, a plain one when it doesn't say), and their drill driver. Where brackets go on, the picture draws
+  them as L-shapes, lit, in place of arrows.
 - **The simplest way first** (#789): each step opens with how to batch it ("One joint at a time"), and has at most
   four lines. Sizes that decide how it turns out are measured; the rest is by eye (a joint's screw spots are 2
   crosses where the rail sits on the leg, a fingertip in, shown the first time). A pilot hole goes first only within
@@ -162,7 +169,9 @@ are always there, and the essays never are.
 
 `cut-plan.test.ts` (packing, whatever the pieces), `recipe/recipe.test.ts` (the golden bench as a recipe, written by
 hand in `recipe/fixtures/golden-bench.ts`, giving the template's own Build, by tools and variants; its starter
-writing exactly that recipe; and what a recipe is refused for), `bench/bench.test.ts` (the golden bench, the garage workbench's
+writing exactly that recipe; and what a recipe is refused for), `close-ups/close-ups.test.ts` (each close-up type following its
+pieces' sizes, a made-up 70 × 70 corner's bracket sized to it; the guard; and which bench steps show which, in full
+or as a tap), `bench/bench.test.ts` (the golden bench, the garage workbench's
 hand-checked numbers with invented names, in `bench/fixtures/golden.ts`), `bench/scenes.test.ts` (each step's picture
 for the golden bench, by the tools to hand, and the walk-throughs), `bench/your-tools.test.ts` (the steps following
 the owner's tools, a step started kept as it was started, tools found by the words in their names, a stand-in, bits by
