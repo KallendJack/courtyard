@@ -1,4 +1,4 @@
-import type { CloseUp } from "../build.ts";
+import type { CloseUp, MarkedLength, WalkStep } from "../build.ts";
 import { type Shape, whole } from "./frame.ts";
 import type { Castors } from "./parameters.ts";
 
@@ -6,8 +6,11 @@ import type { Castors } from "./parameters.ts";
 // and a dot where each fixing goes. Two screws a joint, one above the other and a little apart
 // (staggered), so they don't split the wood along one grain line.
 
-/** How far a screw sits in from the end of a piece, mm. */
-const SCREW_INSET = 50;
+/** A pilot hole's width, mm: a 3 mm bit for the bench's screws. */
+export const PILOT = 3;
+
+/** How far a sheet's screw sits in from the end of an edge, mm: two fingers. */
+export const SCREW_INSET = 50;
 /** The most a sheet's screws are apart along an edge, mm. */
 const SCREW_EVERY = 300;
 
@@ -21,11 +24,44 @@ const screwPlaces = (length: number) => {
   return Array.from({ length: count }, (_, at) => SCREW_INSET + (span * at) / (count - 1));
 };
 
-/** Two screws through a rail into a leg, staggered across the joint. */
+/**
+ * Two screws through a rail into a leg, on a diagonal across where they overlap: one near the top
+ * corner, one near the opposite bottom corner.
+ */
 const jointScrews = (legX: number, legWidth: number, railY: number, railHeight: number) => [
   { x: legX + legWidth / 3, y: railY + railHeight / 4 },
   { x: legX + (2 * legWidth) / 3, y: railY + (3 * railHeight) / 4 },
 ];
+
+/**
+ * The closest a joint's screw comes to a piece's end, mm: the rail's end over the leg's edge, or
+ * the leg's top under the rail's.
+ */
+export const jointFromEnd = (legWidth: number, railHeight: number) =>
+  Math.min(legWidth / 3, railHeight / 4);
+
+/**
+ * Where a rail's screws can go (#789): only where it sits on the leg, the strip a leg offcut on
+ * the rail's end draws. Two crosses in it, by eye; the strip's width is the one size.
+ */
+export const screwSpotsCloseUp = (s: Shape): CloseUp => {
+  const width = 3 * s.thick;
+  return {
+    title: "Mark your screw spots",
+    width,
+    height: s.wide + s.thick,
+    pieces: [
+      { label: "A", x: 0, y: 0, w: s.thick, h: s.wide + s.thick },
+      { label: "C", x: 0, y: 0, w: width, h: s.wide },
+    ],
+    dimensions: [line(0, s.wide + s.thick / 2, s.thick, s.wide + s.thick / 2)],
+    fixings: jointScrews(0, s.thick, 0, s.wide),
+    notes: [
+      "By eye: anywhere where the rail sits on the leg, a fingertip from the edges.",
+      "On a diagonal, so the wood doesn't split, each driven straight down.",
+    ],
+  };
+};
 
 const line = (x1: number, y1: number, x2: number, y2: number) => ({
   from: { x: x1, y: y1 },
@@ -91,7 +127,7 @@ export const endFrameCloseUp = (s: Shape): CloseUp => {
     notes: [
       "Top rail flush with the leg tops.",
       `Bottom rail ${whole(s.shelfHeight)} up from the floor end.`,
-      "2 screws a joint, one above the other.",
+      "2 screws a joint, on a diagonal, by eye.",
     ],
   };
 };
@@ -211,34 +247,59 @@ export const squareStockCloseUp = (label: string, wide: number): CloseUp => ({
   ],
 });
 
-/** How much of a drill bit shows above the wood, in a pilot hole's close-up. */
-const BIT_ABOVE = 40;
-/** A pilot hole's width, mm: a 3 mm bit for the frame's screws. */
-export const PILOT = 3;
+// What "show me how" walks through the first time a step needs a move a beginner may never have
+// made (#777): marking a length, in the order it's done, and marking a joint's screw spots
+// (#789). Each with its close-up where one shows the move, from the Build's own numbers.
+
+/** A length's section as it lies flat: how wide its face is, and how thick. */
+export type Section = { readonly wide: number; readonly thick: number };
+
+/** Marking a length, as the first is marked: the tape, a tick, the square, the line. */
+export const markingWalk = (length: MarkedLength | undefined, section: Section): WalkStep[] => {
+  const first = length?.cuts[0];
+  if (first === undefined) return [];
+  return [
+    {
+      title: "Tape",
+      says: "Hook the tape over the end you checked and pull it straight along one edge.",
+      closeUp: tapeHookCloseUp(first.label, section.thick),
+    },
+    {
+      title: "Tick",
+      says: `At ${first.length}, make a small V in pencil, its point on the mark: a dot gets lost, a V points.`,
+      closeUp: null,
+    },
+    {
+      title: "Square",
+      says: "Put the square's stock tight against the edge, and slide it until its blade touches the V's point.",
+      closeUp: squareStockCloseUp(first.label, section.wide),
+    },
+    {
+      title: "Line",
+      says: "Hold the square still and draw along its blade, right across the face: that's the line you cut to.",
+      closeUp: null,
+    },
+  ];
+};
 
 /**
- * A pilot hole drilled through a rail into a leg, from the side: the bit in to `depth`, a mark on
- * it where it meets the wood.
+ * Marking a joint's screw spots, the first time a rail is screwed to a leg (#789): no tape, as the
+ * screws only have to hit the leg hidden under the rail. An offcut draws where it is.
  */
-export const pilotCloseUp = (s: Shape, depth: number): CloseUp => {
-  const width = 2 * s.wide;
-  const bit = width / 2 - PILOT / 2;
-  return {
-    title: "A pilot hole's depth",
-    width,
-    height: BIT_ABOVE + s.thick + s.wide,
-    pieces: [
-      { label: "C", x: 0, y: BIT_ABOVE, w: width, h: s.thick },
-      { label: "A", x: 0, y: BIT_ABOVE + s.thick, w: width, h: s.wide },
-      { label: "bit", x: bit, y: 0, w: PILOT, h: BIT_ABOVE + depth },
-      // The depth mark: a strip of tape round the bit, at the wood once it's deep enough.
-      { label: "bit", x: bit - 6, y: BIT_ABOVE - 6, w: PILOT + 12, h: 6 },
-    ],
-    dimensions: [line(width - 10, BIT_ABOVE, width - 10, BIT_ABOVE + depth)],
-    fixings: [],
-    notes: [
-      `Mark the bit ${whole(depth)} mm from its tip, as long as the screw.`,
-      "Stop drilling when the mark reaches the wood.",
-    ],
-  };
-};
+export const screwSpotsWalk = (s: Shape): WalkStep[] => [
+  {
+    title: "The leg's edge",
+    says: "Lay an offcut of leg timber on the rail's end, flush with it, and draw along its inside edge. The strip it covered is where the leg is underneath.",
+    closeUp: screwSpotsCloseUp(s),
+  },
+  {
+    title: "Two crosses",
+    says: "Draw 2 pencil crosses in the strip, on a diagonal: one near the top corner, one near the opposite bottom corner.",
+    closeUp: null,
+  },
+  {
+    title: "A fingertip in",
+    says: "By eye: each cross about a fingertip from the strip's edges. It only has to hit the leg, and the diagonal keeps the wood from splitting.",
+    closeUp: null,
+  },
+];

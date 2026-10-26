@@ -137,18 +137,17 @@ describe("the cut step's scene", () => {
 });
 
 describe("the marking step", () => {
-  it("lays the length on the Workmate with the tape and square, a pencil line at each piece's end", () => {
+  it("lays the length on the Workmate with the tape and square, the first piece's line from the end", () => {
     const scene = sceneOf(built(goldenBench), "mark-lengths");
 
     expect(scene.title).toBe("On the Workmate");
     expect(tools(scene)).toEqual(["Folding workbench", "Tape measure", "Square"]);
     expect(pieces(scene)[0]).toBe("part B lit ×1");
-    // B's end at 1450; A's after the 3 mm kerf and its 750.
+    // Only B's 1450: A is measured from the fresh end B's cut leaves, with no running total (#789).
     expect(marks(scene, "line").map((line) => [line.says, line.from.x])).toEqual([
       ["B 1450", 1450],
-      ["A 750", 2203],
     ]);
-    expect(marks(scene, "size").map((size) => size.mm)).toEqual([1450, 2203]);
+    expect(marks(scene, "size").map((size) => size.mm)).toEqual([1450]);
     expect(marks(scene, "note")).toContainEqual(
       expect.objectContaining({ says: "check this end is square", tone: "check" }),
     );
@@ -189,7 +188,7 @@ describe("the marking step", () => {
     const order = ["tape", "tick", "square", "line"].map((word) => said.indexOf(word));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(lengths[0]?.numbers).toBe("4 × 45 × 95 C16: ticks at 1450, 2203");
+    expect(lengths[0]?.numbers).toBe("4 × 45 × 95 C16: B 1450, then A 750");
   });
 });
 
@@ -218,16 +217,18 @@ describe("show me how (#777)", () => {
     expect(tape.every((piece) => piece.label === "tape" && piece.x < 0)).toBe(true);
   });
 
-  it("shows how deep a pilot hole goes the first time one's drilled: a mark on the bit at the screw's length", () => {
-    const [pilot] = walkOf("end-frames");
+  it("shows where a joint's screws can go the first time a rail is screwed to a leg (#789)", () => {
+    const [edge] = walkOf("end-frames");
+    const pieces = edge?.closeUp?.pieces ?? [];
 
-    expect(pilot?.says).toContain("3 mm bit 80 mm from its tip");
-    expect(pilot?.closeUp?.dimensions.map((line) => line.mm)).toEqual([80]);
-    const pieces = pilot?.closeUp?.pieces ?? [];
-    expect(pieces.map((piece) => piece.label)).toEqual(["C", "A", "bit", "bit"]);
-    // The mark sits where the bit meets the rail's face.
-    const [rail, , , mark] = pieces;
-    expect((mark?.y ?? 0) + (mark?.h ?? 0)).toBe(rail?.y);
+    expect(pieces.map((piece) => piece.label)).toEqual(["A", "C"]);
+    // Both crosses inside the strip where the rail sits on the leg.
+    const [leg, rail] = pieces;
+    for (const cross of edge?.closeUp?.fixings ?? []) {
+      expect(cross.x).toBeGreaterThan(leg?.x ?? 0);
+      expect(cross.x).toBeLessThan((leg?.x ?? 0) + (leg?.w ?? 0));
+      expect(cross.y).toBeLessThan((rail?.y ?? 0) + (rail?.h ?? 0));
+    }
     expect(walkOf("long-rails")).toEqual([]);
   });
 
