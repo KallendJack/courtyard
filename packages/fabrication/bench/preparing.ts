@@ -1,8 +1,11 @@
 import type { Action, CloseUp, CutPlan, KeptWay, MarkedLength, WalkStep, Way } from "../build.ts";
 import { type Capacities, capacityFor, type TooBig, tooBig } from "../capacity.ts";
+import type { FixingType } from "../close-up.ts";
+import type { Technique } from "../close-ups/techniques.ts";
+import { markedLengths } from "../cut-plan.ts";
 import type { Word } from "../glossary.ts";
 import { TOOL_NAMES, type Tool } from "../tools.ts";
-import { markingWalk, type Section } from "./close-ups.ts";
+import { markingTechnique, markingWalk, type Section } from "./close-ups.ts";
 
 // The bench's first steps, before anything is joined: check the stock, mark it and cut it. They
 // read the cut plan, and the cutting step reads the tools to hand: a hand saw on a folding
@@ -33,7 +36,10 @@ export type Draft = {
   /** The bits it drills with, when its tools have drill bits: 3 mm pilots unless it says. */
   bits?: readonly { mm: number; for: string }[];
   safety?: readonly Tool[];
-  fixings?: readonly { name: string; count: number }[];
+  /** Its fixings, each with the type of close-up that shows it made (#813), which it must show. */
+  fixings?: readonly { name: string; count: number; joint: FixingType }[];
+  /** The techniques it uses (#813): drawn in full the first time the steps use each. */
+  techniques?: readonly Technique[];
   /** How to batch it, in a few words (#789). */
   batch: string;
   /** At most four (#789): anything more is another step, or a tip. */
@@ -49,25 +55,6 @@ export type Draft = {
 
 /** One action: how to do it, for a beginner, and just the numbers. */
 export const act = (howTo: string, numbers: string): Action => ({ howTo, numbers });
-
-/** Lengths cut the same way, together, as they're marked: 4 lengths of B 1450 and A 750. */
-export const markedLengths = (cutPlan: CutPlan): MarkedLength[] =>
-  cutPlan.timber.flatMap((plan) => {
-    const groups = new Map<string, MarkedLength>();
-    for (const length of plan.lengths) {
-      const key = length.cuts.map((cut) => `${cut.label} ${cut.length}`).join(", ");
-      const same = groups.get(key);
-      groups.set(key, {
-        stock: plan.stock,
-        stockLength: plan.stockLength,
-        count: (same?.count ?? 0) + 1,
-        kerf: cutPlan.kerf,
-        cuts: length.cuts,
-        offcut: length.offcut,
-      });
-    }
-    return [...groups.values()];
-  });
 
 /** A shop's cut end is often out of square, and the first piece is measured from it. */
 const squareEnd = act(
@@ -366,7 +353,8 @@ export const preparingSteps = (options: {
       tools: ["tape-measure", "pencil", "square"],
       batch: "One piece at a time, with the next step: mark it, cut it, then mark the next.",
       actions: [squareEnd, ...marked.map(marking)],
-      walkThrough: first === undefined ? [] : markingWalk(first, options.sectionOf(first.stock)),
+      walkThrough: markingWalk(first),
+      techniques: markingTechnique(first, options.sectionOf),
       check: {
         says: "Every line square across the face, each piece measured from a square end.",
         photo: "One marked length, close up.",

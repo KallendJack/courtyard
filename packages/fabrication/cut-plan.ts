@@ -1,4 +1,4 @@
-import type { CutPlan, Finding, Part } from "./build.ts";
+import type { CutPlan, Finding, MarkedLength, Part } from "./build.ts";
 import type { Sheet, Timber } from "./stock.ts";
 
 // Packing pieces into stock (ADR 0036): timber pieces into lengths, sheet pieces into sheets,
@@ -178,15 +178,77 @@ const piecesOf = (parts: readonly Part[]) =>
   );
 
 /**
+ * Stock the owner has already that a stock's pieces go on first (#770): so many lengths or sheets
+ * of it, by the name of the stock it stands in for.
+ */
+export type Spares = ReadonlyMap<string, readonly Spare[]>;
+type Spare = { readonly stock: Timber | Sheet; readonly count: number };
+
+type Piece = ReturnType<typeof piecesOf>[number];
+
+/** A length or a sheet packed, and the pieces on it. */
+type Packed<Item> = { readonly item: Item; readonly pieces: readonly Piece[] };
+
+/** Pieces packed into a stock: each length or sheet, and the pieces too big for it. */
+type Pack<Item> = (
+  stock: Timber | Sheet,
+  pieces: readonly Piece[],
+) => { packed: Packed<Item>[]; uncut: Piece[] };
+
+/**
+ * The pieces that go on spares: each spare's first lengths or sheets as it packs them (the biggest
+ * pieces first, so the most is cut from what's had), and the pieces left for the stock bought.
+ */
+const onSpares = <Item>(spares: readonly Spare[], pieces: readonly Piece[], pack: Pack<Item>) => {
+  let left = pieces;
+  const used = spares.flatMap(({ stock, count }) => {
+    const packed = pack(stock, left).packed.slice(0, count);
+    const on = new Set(packed.flatMap((each) => each.pieces));
+    left = left.filter((piece) => !on.has(piece));
+    return packed.length === 0 ? [] : [{ stock, items: packed.map((each) => each.item) }];
+  });
+  return { used, left };
+};
+
+const packLengths =
+  (kerf: number): Pack<PlannedLength<Piece>> =>
+  (stock, pieces) => {
+    const plan = planLengths({ stockLength: stock.length.value, kerf, pieces });
+    return {
+      packed: plan.lengths.map((length) => ({ item: length, pieces: length.cuts })),
+      uncut: plan.uncut,
+    };
+  };
+
+const packSheetsOf =
+  (kerf: number): Pack<{ pieces: PlacedPiece<Piece>[] }> =>
+  (stock, pieces) => {
+    const plan = planSheets({
+      sheetLength: stock.length.value,
+      sheetWidth: stock.width.value,
+      kerf,
+      pieces,
+    });
+    return {
+      packed: plan.sheets.map((sheet) => ({
+        item: sheet,
+        pieces: sheet.pieces.map((placed) => placed.piece),
+      })),
+      uncut: plan.uncut,
+    };
+  };
+
+/**
  * A Build's cut plan: its timber parts packed into the lengths of the timber each is cut from, and
- * its sheet parts into sheets, the kerf between every cut. Printed parts are printed, not cut. A
- * part bigger than its stock is left out and found.
+ * its sheet parts into sheets, the kerf between every cut, on its spares first. Printed parts are
+ * printed, not cut. A part bigger than its stock is left out and found.
  */
 export const cutPlanOf = (options: {
   parts: readonly Part[];
   timbers: readonly Timber[];
   sheets: readonly Sheet[];
   kerf: number;
+  spares?: Spares;
 }): { cutPlan: CutPlan; findings: Finding[] } => {
   const { kerf } = options;
   const findings: Finding[] = [];
@@ -195,41 +257,72 @@ export const cutPlanOf = (options: {
       findings.push({ kind: "too-big-for-stock", label: piece.label, stock });
     }
   };
+  /** A stock's entries: its spares' first, then its own, left out when the spares took all. */
+  const entries = <Item, Entry>(
+    name: string,
+    stock: Timber | Sheet,
+    parts: readonly Part[],
+    pack: Pack<Item>,
+    entry: (stock: Timber | Sheet, items: readonly Item[]) => Entry,
+  ): Entry[] => {
+    const spared = onSpares(options.spares?.get(name) ?? [], piecesOf(parts), pack);
+    const bought = pack(stock, spared.left);
+    bought.uncut.forEach(tooBig(name));
+    return [
+      ...spared.used.map((spare) => entry(spare.stock, spare.items)),
+      ...(spared.used.length > 0 && spared.left.length === 0
+        ? []
+        : [
+            entry(
+              stock,
+              bought.packed.map((each) => each.item),
+            ),
+          ]),
+    ];
+  };
   const timber = byStock(options.parts, "timber").flatMap(([name, parts]) => {
     const stock = options.timbers.find((timber) => timber.name === name);
     if (!stock) return [];
-    const stockLength = stock.length.value;
-    const plan = planLengths({ stockLength, kerf, pieces: piecesOf(parts) });
-    plan.uncut.forEach(tooBig(name));
-    return [
-      {
-        stock: name,
-        stockLength,
-        lengths: plan.lengths.map((length) => ({
-          cuts: length.cuts.map(({ label, length: cut }) => ({ label, length: cut })),
-          used: length.used,
-          offcut: length.offcut,
-        })),
-      },
-    ];
+    return entries(name, stock, parts, packLengths(kerf), (using, lengths) => ({
+      stock: using.name,
+      stockLength: using.length.value,
+      lengths: lengths.map((length) => ({
+        cuts: length.cuts.map(({ label, length: cut }) => ({ label, length: cut })),
+        used: length.used,
+        offcut: length.offcut,
+      })),
+    }));
   });
   const sheets = byStock(options.parts, "sheet").flatMap(([name, parts]) => {
     const stock = options.sheets.find((sheet) => sheet.name === name);
     if (!stock) return [];
-    const sheetLength = stock.length.value;
-    const sheetWidth = stock.width.value;
-    const plan = planSheets({ sheetLength, sheetWidth, kerf, pieces: piecesOf(parts) });
-    plan.uncut.forEach(tooBig(name));
-    return [
-      {
-        stock: name,
-        sheetLength,
-        sheetWidth,
-        sheets: plan.sheets.map((sheet) => ({
-          pieces: sheet.pieces.map(({ piece, ...placed }) => ({ label: piece.label, ...placed })),
-        })),
-      },
-    ];
+    return entries(name, stock, parts, packSheetsOf(kerf), (using, packed) => ({
+      stock: using.name,
+      sheetLength: using.length.value,
+      sheetWidth: using.width.value,
+      sheets: packed.map((sheet) => ({
+        pieces: sheet.pieces.map(({ piece, ...placed }) => ({ label: piece.label, ...placed })),
+      })),
+    }));
   });
   return { cutPlan: { kerf, timber, sheets }, findings };
 };
+
+/** Lengths cut the same way, together, as they're marked: 4 lengths of B 1450 and A 750. */
+export const markedLengths = (cutPlan: CutPlan): MarkedLength[] =>
+  cutPlan.timber.flatMap((plan) => {
+    const groups = new Map<string, MarkedLength>();
+    for (const length of plan.lengths) {
+      const key = length.cuts.map((cut) => `${cut.label} ${cut.length}`).join(", ");
+      const same = groups.get(key);
+      groups.set(key, {
+        stock: plan.stock,
+        stockLength: plan.stockLength,
+        count: (same?.count ?? 0) + 1,
+        kerf: cutPlan.kerf,
+        cuts: length.cuts,
+        offcut: length.offcut,
+      });
+    }
+    return [...groups.values()];
+  });

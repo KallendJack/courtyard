@@ -1,4 +1,3 @@
-export { deriveBench } from "./bench/index.ts";
 export { BenchParameters, Castors } from "./bench/parameters.ts";
 export { pickBenchStock } from "./bench/stock-slots.ts";
 export type {
@@ -51,6 +50,9 @@ export {
   PrintedPartParameters,
   ShimParameters,
 } from "./print/templates.ts";
+export { deriveRecipe } from "./recipe/index.ts";
+export { deriveBench, type Starter, starterRecipe } from "./recipe/starters.ts";
+export { pickRecipeStock } from "./recipe/work-out.ts";
 export type { Scene, SceneMark, ScenePiece } from "./scene.ts";
 export { Fixing, OptionPrices, Price, Sheet, StockOptionId, Timber } from "./stock.ts";
 export { TOOL_NAMES, Tool, toolsFrom } from "./tools.ts";

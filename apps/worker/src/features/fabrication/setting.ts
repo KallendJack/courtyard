@@ -70,7 +70,13 @@ const thingsHad = async (contextDir: string): Promise<string[]> => {
 };
 
 /** Where a Build's steps start. */
-export const NOT_STARTED: BuildProgress = { step: null, ticked: [], ways: [], buying: [] };
+export const NOT_STARTED: BuildProgress = {
+  step: null,
+  ticked: [],
+  ways: [],
+  buying: [],
+  parked: [],
+};
 
 /**
  * What a Build is worked out with: the owner's things, the ways its steps were done, the steps

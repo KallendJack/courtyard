@@ -1,12 +1,16 @@
 import type { BuildPart, BuildStep } from "@courtyard/contract";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
+import { CircleHelp } from "lucide-react";
 import { type RefObject, useEffect, useRef, useState } from "react";
+import { Disclosure } from "@/components/disclosure";
+import { Shape } from "./picture/close-up-shapes.tsx";
 import { mm } from "./words.ts";
 
 // A step's close-up (#699; Paper, "Fabrication · Build steps v2, teaching · Tablet (#699)"): what
 // the step makes, drawn flat to scale from the engine's numbers, its key sizes as dimension lines
-// and a violet dot where each screw or bolt goes, with the notes beside it.
+// and a violet dot where each screw or bolt goes, with the notes beside it. A close-up by type
+// (#813) is drawn in 3D by the engine, as faces laid flat, with its labels as pills off it.
 
 type BuildCloseUp = BuildStep["closeUps"][number];
 
@@ -14,6 +18,43 @@ const FILL: Readonly<Record<BuildPart["material"]["kind"], string>> = {
   timber: "fill-timber",
   sheet: "fill-sheet",
   printed: "fill-printed",
+};
+
+type Pill = NonNullable<BuildCloseUp["pills"]>[number];
+type Face = NonNullable<BuildCloseUp["faces"]>[number];
+type Stroke = NonNullable<BuildCloseUp["strokes"]>[number];
+
+/** A pill's words: plain, where to drill first, or where to just screw (#813). */
+const PILL_TONE: Readonly<Record<NonNullable<Pill["tone"]>, string>> = {
+  plain: "text-foreground",
+  warn: "text-destructive",
+  fine: "text-success",
+};
+
+/** What a face drawn in 3D is (#813): wood, steel, the tape, a tool, the clutch ring, a zone. */
+const FACE_FILL: Readonly<Record<Face["fill"], string>> = {
+  timber: "fill-timber",
+  sheet: "fill-sheet",
+  steel: "fill-muted-foreground",
+  tape: "fill-warning",
+  tool: "fill-fitted",
+  ring: "fill-primary",
+  "drill-first": "fill-destructive",
+  "just-screw": "fill-success",
+};
+
+/** A side or an end drawn darker than a top, so the wood reads as a block. */
+const SHADE: Readonly<Record<NonNullable<Face["shade"]>, string>> = {
+  side: "fill-background/35",
+  end: "fill-background/20",
+};
+
+const STROKE: Readonly<
+  Record<Stroke["look"], { className: string; width: number; dash?: string }>
+> = {
+  pencil: { className: "stroke-background", width: 2 },
+  edge: { className: "stroke-destructive", width: 2 },
+  path: { className: "stroke-primary", width: 1.5, dash: "4 3" },
 };
 
 /** Where a drawing's mm land in its box once fitted: its scale, in px a mm, and its top left. */
@@ -71,6 +112,33 @@ function Drawing(props: {
       style={props.ownHeight ? { aspectRatio: view.w / view.h } : undefined}
     >
       <Lines closeUp={closeUp} pad={pad} text={text} gap={gap} view={view} fillOf={fillOf} />
+      {(closeUp.pills ?? []).map((pill) => (
+        <span
+          key={pill.says}
+          className={classes(
+            "pointer-events-none absolute flex -translate-y-1/2 items-center gap-1.5 whitespace-nowrap",
+            fitted === undefined && "invisible",
+          )}
+          style={{
+            left: (fitted?.left ?? 0) + (pill.x + pad) * (fitted?.scale ?? 0),
+            top: (fitted?.top ?? 0) + (pill.y + pad) * (fitted?.scale ?? 0),
+          }}
+        >
+          {pill.badge !== undefined && (
+            <span className="flex size-5 items-center justify-center rounded-full bg-primary text-caption font-bold text-primary-foreground">
+              {pill.badge}
+            </span>
+          )}
+          <span
+            className={classes(
+              "rounded-full border border-border bg-background px-2.5 py-0.5 text-label font-semibold",
+              PILL_TONE[pill.tone ?? "plain"],
+            )}
+          >
+            {pill.says}
+          </span>
+        </span>
+      ))}
       {(closeUp.labels ?? []).map((label) => (
         <span
           key={`${label.says} ${label.x} ${label.y}`}
@@ -111,7 +179,7 @@ function Lines(props: {
   return (
     <svg
       role="img"
-      aria-label={`${closeUp.title}, with ${closeUp.dimensions.map((line) => `${mm(line.mm)} mm`).join(", ")} marked and ${closeUp.fixings.length} fixings`}
+      aria-label={`${closeUp.title}, with ${closeUp.dimensions.map((line) => `${mm(line.mm)} mm`).join(", ")} marked and ${closeUp.fixings.length} fixings${(closeUp.pills ?? []).map((pill) => `, ${pill.says}`).join("")}`}
       viewBox={`${-pad} ${-pad} ${props.view.w} ${props.view.h}`}
       className="absolute inset-0 h-full w-full"
     >
@@ -127,6 +195,57 @@ function Lines(props: {
           vectorEffect="non-scaling-stroke"
         />
       ))}
+      {(closeUp.faces ?? []).map((face, at) => {
+        const points = face.points.map((point) => `${point.x},${point.y}`).join(" ");
+        return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: a drawing's faces are in a fixed order, far to near.
+          <g key={at}>
+            <polygon
+              points={points}
+              className={classes(FACE_FILL[face.fill], "stroke-background")}
+              strokeWidth={1}
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+            {face.shade !== undefined && <polygon points={points} className={SHADE[face.shade]} />}
+          </g>
+        );
+      })}
+      {(closeUp.strokes ?? []).map((stroke, at) => {
+        const look = STROKE[stroke.look];
+        return (
+          <line
+            // biome-ignore lint/suspicious/noArrayIndexKey: a drawing's lines are in a fixed order.
+            key={at}
+            x1={stroke.from.x}
+            y1={stroke.from.y}
+            x2={stroke.to.x}
+            y2={stroke.to.y}
+            className={look.className}
+            strokeWidth={look.width}
+            strokeDasharray={look.dash}
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        );
+      })}
+      {(closeUp.pills ?? []).flatMap((pill) =>
+        pill.to === undefined
+          ? []
+          : [
+              // A leader from the pill to what it's about.
+              <line
+                key={pill.says}
+                x1={pill.x}
+                y1={pill.y}
+                x2={pill.to.x}
+                y2={pill.to.y}
+                className="stroke-primary"
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />,
+            ],
+      )}
       {closeUp.dimensions.map((line) => {
         const across = line.from.y === line.to.y;
         // Outside the drawing, on the side the line is nearer.
@@ -175,7 +294,8 @@ function Lines(props: {
           key={`${dot.x} ${dot.y}`}
           cx={dot.x}
           cy={dot.y}
-          r={text * 0.28}
+          // A close-up by type's screw spots and heads are small, beside its crosses (#813).
+          r={text * (closeUp.type === undefined ? 0.28 : 0.1)}
           className="fill-primary"
         />
       ))}
@@ -186,148 +306,6 @@ function Lines(props: {
   );
 }
 
-type CloseUpShape = NonNullable<BuildCloseUp["shapes"]>[number];
-
-/**
- * A tool or a nut drawn as its shape (#783), never as a bar: a hex nut or bolt head, an open
- * spanner, an adjustable, pliers or a socket on one, its jaw at the shape's point and its handle
- * out `length` at `turn` degrees, and a clockwise arrow round one.
- */
-function Shape(props: { shape: CloseUpShape }) {
-  const { shape } = props;
-  if (shape.kind === "hex") {
-    // Flats top and bottom, as a spanner's jaws hold it.
-    const r = shape.across / Math.sqrt(3);
-    const points = Array.from({ length: 6 }, (_, at) => {
-      const angle = (at * Math.PI) / 3;
-      return `${shape.x + r * Math.cos(angle)},${shape.y + r * Math.sin(angle)}`;
-    }).join(" ");
-    return (
-      <polygon
-        points={points}
-        className="fill-fitted stroke-background"
-        strokeWidth={1}
-        vectorEffect="non-scaling-stroke"
-      />
-    );
-  }
-  if (shape.kind === "castor") {
-    // Upside down: its plate, the swivel standing on it, and the wheel on top with its axle.
-    const swivel = { w: shape.w * 0.45, h: Math.max(shape.wheel * 0.3, 6) };
-    const middle = shape.x + shape.w / 2;
-    const r = shape.wheel / 2;
-    const axle = shape.y - swivel.h - r;
-    return (
-      <g
-        className="fill-fitted stroke-background"
-        strokeWidth={1}
-        vectorEffect="non-scaling-stroke"
-      >
-        <rect
-          x={shape.x}
-          y={shape.y}
-          width={shape.w}
-          height={shape.plate}
-          vectorEffect="non-scaling-stroke"
-        />
-        <path
-          d={`M ${middle - swivel.w / 2} ${shape.y} L ${middle - swivel.w / 3} ${shape.y - swivel.h} L ${middle + swivel.w / 3} ${shape.y - swivel.h} L ${middle + swivel.w / 2} ${shape.y} Z`}
-          vectorEffect="non-scaling-stroke"
-        />
-        <circle cx={middle} cy={axle} r={r} vectorEffect="non-scaling-stroke" />
-        <circle cx={middle} cy={axle} r={r * 0.6} className="fill-muted" />
-        <circle cx={middle} cy={axle} r={r * 0.18} vectorEffect="non-scaling-stroke" />
-      </g>
-    );
-  }
-  if (shape.kind === "clockwise") {
-    // Three quarters of a turn, clockwise from the left, ending in its head.
-    const { x, y, r } = shape;
-    const head = r * 0.35;
-    return (
-      <g className="fill-none stroke-primary" strokeWidth={2} vectorEffect="non-scaling-stroke">
-        <path
-          d={`M ${x - r} ${y} A ${r} ${r} 0 1 1 ${x} ${y + r}`}
-          vectorEffect="non-scaling-stroke"
-        />
-        <path
-          d={`M ${x + head} ${y + r - head} L ${x} ${y + r} L ${x + head} ${y + r + head}`}
-          vectorEffect="non-scaling-stroke"
-        />
-      </g>
-    );
-  }
-  const j = shape.jaw;
-  const half = j / 2;
-  return (
-    <g
-      transform={`translate(${shape.x} ${shape.y}) rotate(${shape.turn})`}
-      className="fill-foreground/85"
-    >
-      {shape.kind === "pliers" ? (
-        <>
-          {/* Two jaws either side of what they grip, a pivot, and the handles opening out. */}
-          <rect x={-0.3 * j} y={-half - 0.4 * j} width={1.9 * j} height={0.4 * j} rx={0.1 * j} />
-          <rect x={-0.3 * j} y={half} width={1.9 * j} height={0.4 * j} rx={0.1 * j} />
-          <circle cx={1.8 * j} cy={0} r={0.55 * j} />
-          <polygon
-            points={`${1.8 * j},${-0.3 * j} ${shape.length},${-1.1 * j} ${shape.length},${-0.6 * j} ${1.8 * j},${0.1 * j}`}
-          />
-          <polygon
-            points={`${1.8 * j},${0.3 * j} ${shape.length},${1.1 * j} ${shape.length},${0.6 * j} ${1.8 * j},${-0.1 * j}`}
-          />
-        </>
-      ) : shape.kind === "socket" ? (
-        <>
-          {/* The socket over the nut, and the ratchet's handle. */}
-          <circle cx={0} cy={0} r={0.95 * j} />
-          <circle cx={1.4 * j} cy={0} r={0.7 * j} />
-          <rect
-            x={1.4 * j}
-            y={-0.3 * j}
-            width={shape.length - 1.4 * j}
-            height={0.6 * j}
-            rx={0.3 * j}
-          />
-        </>
-      ) : (
-        <>
-          {/* An open jaw round the hex, the rest of the head round it, and the handle. */}
-          <OpenHead jaw={j} radius={shape.kind === "adjustable" ? 1.35 * j : 1.1 * j} />
-          <rect
-            x={0.8 * j}
-            y={-(shape.kind === "adjustable" ? 0.42 : 0.32) * j}
-            width={shape.length - 0.8 * j}
-            height={(shape.kind === "adjustable" ? 0.84 : 0.64) * j}
-            rx={0.3 * j}
-          />
-          {shape.kind === "adjustable" && (
-            // The worm that winds the jaw, and the hole in the handle's end.
-            <>
-              <circle cx={0.25 * j} cy={0.95 * j} r={0.22 * j} className="fill-muted" />
-              <circle cx={shape.length - 0.5 * j} cy={0} r={0.18 * j} className="fill-muted" />
-            </>
-          )}
-        </>
-      )}
-    </g>
-  );
-}
-
-/** A spanner's open head: round, with a slot `jaw` wide opening away from its handle. */
-function OpenHead(props: { jaw: number; radius: number }) {
-  const half = props.jaw / 2;
-  const r = props.radius;
-  const mouth = -Math.sqrt(r * r - half * half);
-  // The slot's floor sits just past the hex's far corner.
-  const floor = 0.6 * props.jaw;
-  return (
-    <path
-      d={`M ${mouth} ${-half} L ${floor} ${-half} L ${floor} ${half} L ${mouth} ${half} A ${r} ${r} 0 1 0 ${mouth} ${-half} Z`}
-    />
-  );
-}
-
 /** The close-up, its title in capitals and its notes beside the drawing, or under it when narrow. */
 export function CloseUp(props: {
   closeUp: BuildCloseUp;
@@ -335,8 +313,9 @@ export function CloseUp(props: {
   narrow?: boolean;
 }) {
   const { closeUp } = props;
-  // A drawing with words on it is as tall as it needs to be for them, when narrow (#783).
-  const ownHeight = props.narrow === true && (closeUp.labels ?? []).length > 0;
+  // A drawing with words on it is as tall as it needs to be for them, when narrow (#783, #813).
+  const ownHeight =
+    props.narrow === true && (closeUp.labels ?? []).length + (closeUp.pills ?? []).length > 0;
   return (
     <section
       aria-label="Close-up"
@@ -365,4 +344,27 @@ export function CloseUp(props: {
       </div>
     </section>
   );
+}
+
+/**
+ * The techniques a step uses (#813): each close-up in full the first time the Build's steps use
+ * it, and after that a small "how?" tap that opens it.
+ */
+export function Techniques(props: { step: BuildStep; parts: readonly BuildPart[] }) {
+  return props.step.techniques.map(({ closeUp, first }) => {
+    // Keyed by its step too, so a tap opened on one step starts closed on the next.
+    const key = `${props.step.id} ${closeUp.title}`;
+    return first ? (
+      <CloseUp key={key} closeUp={closeUp} parts={props.parts} narrow />
+    ) : (
+      <Disclosure
+        key={key}
+        look="tap"
+        icon={<CircleHelp aria-hidden className="size-4 text-primary-text" />}
+        label={`How? ${closeUp.title}`}
+      >
+        <CloseUp closeUp={closeUp} parts={props.parts} narrow />
+      </Disclosure>
+    );
+  });
 }

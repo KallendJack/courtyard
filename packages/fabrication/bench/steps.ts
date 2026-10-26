@@ -1,15 +1,26 @@
 import type { CutPlan, Fitted, KeptWay, Part, Step } from "../build.ts";
 import type { Capacities } from "../capacity.ts";
-import { type SpannerKit, TOOL_NAMES, type Tool } from "../tools.ts";
+import { bracketArm, bracketCloseUp } from "../close-ups/bracket.ts";
+import { overlapCloseUp } from "../close-ups/overlap.ts";
+import { techniquesOf } from "../close-ups/techniques.ts";
+import { type SpannerKit, type SquareKind, TOOL_NAMES, type Tool } from "../tools.ts";
 import { castorsDraft } from "./castor-steps.ts";
 import { braceCloseUp, SHEET_SCREWS_PER_BRACE, sheetCloseUp } from "./close-ups.ts";
 import { type Shape, whole } from "./frame.ts";
-import { bracketed, frameDrafts } from "./frame-steps.ts";
+import { bracketed, bracketScrewsOf, frameDrafts } from "./frame-steps.ts";
 import type { BenchParameters } from "./parameters.ts";
 import { act, CUT_STEP, type Draft, handedOn, preparingSteps, sawInUse } from "./preparing.ts";
 import { nameOf, type SceneSetting, sectionOf } from "./scene-pieces.ts";
 import { stepScene } from "./scenes.ts";
-import { benchPilots, bracketing, drilling, SPLIT_TIP, screwing, wordsWith } from "./screws.ts";
+import {
+  benchPilots,
+  bracketing,
+  drilling,
+  SPLIT_RISK,
+  SPLIT_TIP,
+  screwing,
+  wordsWith,
+} from "./screws.ts";
 import { stepToolsOf } from "./step-tools.ts";
 
 // The framed bench's steps, in the order it's built, each said twice: "show me how" for a
@@ -43,6 +54,8 @@ export const benchSteps = (options: {
   kit: SpannerKit;
   /** What the owner's powered saws can cut (#780). */
   capacities: Capacities;
+  /** The kind of square the owner has, which the close-ups draw (#813); none when not known. */
+  square: SquareKind | undefined;
 }): Step[] => {
   const { parameters: p, shape: s, cutPlan, toHand, kept } = options;
   const castors = p.castors;
@@ -84,7 +97,24 @@ export const benchSteps = (options: {
     across: [s.left + s.wide + s.thick / 2, s.length / 2, s.right - s.wide - s.thick / 2],
     note: `${whole(s.overhang)} over the frame on every side.`,
   });
-  const fixing = (name: string, count: number) => ({ name, count });
+  /** Sheet screws: a sheet on what it rests on, a screwed overlap (#813). */
+  const fixing = (name: string, count: number) => ({
+    name,
+    count,
+    joint: "screwed-overlap" as const,
+  });
+  /** A sheet `thick` screwed down onto a rail's or leg's narrow face. */
+  const sheetOn = (name: string, thick: number, under: string) =>
+    overlapCloseUp({
+      over: { across: 4 * s.thick, thick, name },
+      under: { across: s.thick, thick: s.wide, name: under },
+    });
+  /** Screws driven into a rail or leg, as a piece of the frame timber. */
+  const driving = (screw: string) => ({
+    type: "driving-screw" as const,
+    piece: { wide: s.wide, thick: s.thick, name: "rail" },
+    screw,
+  });
   const middle = whole(s.frameLength / 2);
   const rearInset = whole((s.frameLength - s.endRail) / 2);
   // Where the top's screws hit: the middle of the rails under it, from the top's edges.
@@ -130,6 +160,18 @@ export const benchSteps = (options: {
           : []),
         bracketing(pilots.brackets),
       ],
+      // The support's side, and the rail it meets (#813).
+      closeUps: [
+        bracketCloseUp({
+          upright: { across: s.wideWidth, deep: s.wideThick, name: "support" },
+          flat: { across: s.wide, thick: s.thick, name: "rail" },
+          arm: bracketArm(p.fixings.brackets.name),
+        }),
+      ],
+      techniques: [
+        { type: "measure-mark", piece: { wide: s.wide, thick: s.thick, name: "B" }, at: middle },
+        driving(bracketScrewsOf(p)),
+      ],
       check: {
         says: "Each support's top flush with its rails: run a hand across.",
         photo: "The supports in.",
@@ -157,7 +199,8 @@ export const benchSteps = (options: {
         "Want it neater? Countersink the shelf's screws too, so nothing catches on their heads.",
         ...(pilots.shelf ? [] : [SPLIT_TIP]),
       ],
-      closeUp: shelfCloseUp,
+      closeUps: [shelfCloseUp, sheetOn("shelf", s.shelfSheet, "rail")],
+      techniques: [driving(sheetScrews)],
       check: { says: "The shelf lies flat and doesn't rock.", photo: "The shelf in." },
       words: wordsWith(pilots.shelf),
     },
@@ -199,7 +242,8 @@ export const benchSteps = (options: {
         ),
       ],
       tips: pilots.braces ? [] : [SPLIT_TIP],
-      closeUp: braceCloseUp(s),
+      closeUps: [braceCloseUp(s), sheetOn("brace", s.braceSheet, "leg")],
+      techniques: [driving(sheetScrews)],
       check: {
         says: "Push a top corner sideways: the frame doesn't sway.",
         photo: "The bench from a back corner.",
@@ -235,7 +279,8 @@ export const benchSteps = (options: {
         ),
       ],
       tips: pilots.top ? [] : [SPLIT_TIP],
-      closeUp: topCloseUp,
+      closeUps: [topCloseUp, sheetOn("top", s.top, "rail")],
+      techniques: [driving(sheetScrews)],
       check: {
         says: "The overhang the same all round, within 2 mm, and every screw head flush.",
         photo: "The top, from above.",
@@ -268,6 +313,12 @@ export const benchSteps = (options: {
 
   const stepTool = stepToolsOf(options);
   const on = drafts.filter((draft) => draft.on);
+  const techniques = techniquesOf(on, {
+    square: options.square,
+    marking: (["tape-measure", "pencil", "square"] as const).every((tool) => toHand.has(tool)),
+    drill: toHand.has("drill-driver"),
+    zone: SPLIT_RISK,
+  });
   return on.map((draft, at) => ({
     id: draft.id,
     number: at + 1,
@@ -286,6 +337,7 @@ export const benchSteps = (options: {
     actions: draft.actions,
     tips: draft.tips ?? [],
     closeUps: draft.closeUps ?? (draft.closeUp === undefined ? [] : [draft.closeUp]),
+    techniques: techniques[at] ?? [],
     walkThrough: draft.walkThrough ?? [],
     scene: stepScene(setting, {
       id: draft.id,

@@ -3,7 +3,14 @@ import { BuildChat, BuildOpened } from "../packages/contract/index.ts";
 import { goldenBench } from "../packages/fabrication/bench/fixtures/golden.ts";
 import { goldenHolster } from "../packages/fabrication/print/fixtures/golden.ts";
 import { newWorkspace, startSaving } from "./saving.ts";
-import { hear, standInSpeechRecognition } from "./speech-recognition.ts";
+import {
+  hear,
+  listenedFor,
+  pause,
+  settle,
+  settleSlowly,
+  standInSpeechRecognition,
+} from "./speech-recognition.ts";
 
 // Fabrication (#698, ADR 0036): a project step's Build opens in Fabrication, served under
 // /fabrication behind Courtyard's login, with a chat in its session. On the Fold (#753; Paper,
@@ -518,12 +525,15 @@ test.describe("on the unfolded Fold", () => {
     await expect(letter(page, "E, Castor bases")).toHaveCount(0);
     await expect(letter(page, "B, Long rails")).toHaveCount(0);
     expect(await overlappingLetters(page)).toEqual([]);
-    // How to batch it, then Show me how marking the screw spots by eye, the first step that
-    // screws a rail to a leg (#789); the step's own close-up follows.
+    // How to batch it, then the screw spots marked by eye in the green, the first step that
+    // screws a rail to a leg (#789, #813); the end frame's own close-up follows, then driving a
+    // screw, in full the first time, all behind Show me how (#793).
     await expect(steps).toContainText("One joint at a time");
+    await steps.getByRole("button", { name: "Show me how" }).click();
     const closeUps = page.getByRole("region", { name: "Close-up" });
     await expect(closeUps.first()).toContainText("Close-up · Mark your screw spots");
-    await expect(closeUps.last()).toContainText("Close-up · One end frame");
+    await expect(closeUps.nth(1)).toContainText("Close-up · One end frame");
+    await expect(closeUps.last()).toContainText("Close-up · Driving a screw");
     await expect(steps).toContainText("Fixings: 5 × 80 screws (16)");
     const checklist = steps.getByRole("list", { name: "Checklist" });
     await checklist.getByRole("checkbox", { name: "Line 1 done" }).click();
@@ -571,6 +581,7 @@ test.describe("on the unfolded Fold", () => {
     const tools = steps.getByRole("list", { name: "Tools for this step" });
     await expect(tools).toContainText("a 7 mm bit: check your set");
     await expect(tools).toContainText("10 mm spanner × 2?");
+    await steps.getByRole("button", { name: "Show me how" }).click();
     await expect(closeUps.nth(-2)).toContainText("Close-up · Tighten");
     await expect(closeUps.last()).toContainText("Close-up · One bolt, apart");
     await expect(closeUps.last()).toContainText("Washer only under the nut, against the wood.");
@@ -601,7 +612,9 @@ test.describe("on the unfolded Fold", () => {
       "You said: Step 1, Check what's arrived: Is the floor level enough?",
       { timeout: 60_000 },
     );
-    await answer.getByRole("button", { name: "Open chat" }).click();
+    // The full chat is in Plan (#793).
+    await toPlan(page);
+    await page.getByRole("button", { name: "Chat", exact: true }).click();
     const chat = page.getByRole("dialog", { name: "Chat" });
     await expect(chat.getByRole("list", { name: "Messages" })).toContainText(
       "Step 1, Check what's arrived: Is the floor level enough?",
@@ -632,6 +645,277 @@ test.describe("on the unfolded Fold", () => {
     await expect(answer.getByRole("button", { name: "Try again" })).toBeVisible();
     await answer.getByRole("button", { name: "Close" }).click();
     await expect(answer).toBeHidden();
+  });
+
+  // #793 (Paper, 2 · Agreed, "Fabrication · Asking at the bench: step buttons + answer card · Fold
+  // (#793)"): asking never leaves the step, and the full chat is in Plan.
+  test("at the bench: the four step buttons and no chat; held to ask, the answer card shows what was asked over the picture and keeps the step", async ({
+    page,
+  }) => {
+    test.slow();
+    await standInSpeechRecognition(page);
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await chatSettled(page);
+
+    const steps = page.getByRole("region", { name: "Steps" });
+    const buttons = steps.getByRole("group", { name: "This step" });
+    await expect(buttons.getByRole("button")).toHaveText([
+      "Show me how",
+      "Is this right?",
+      "I don't have…",
+      "Can't do this now",
+    ]);
+    await expect(page.getByRole("region", { name: "Chat" })).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Chat" })).toHaveCount(0);
+
+    const ask = page.getByRole("button", { name: "Hold to ask" });
+    const { x, y, width, height } = await boxOf(ask);
+    await page.mouse.move(x + width / 2, y + height / 2);
+    await page.mouse.down();
+    await hear(page, "Is the floor level enough for the bench?");
+    await page.mouse.up();
+
+    const answer = page.getByRole("region", { name: "Answer" });
+    await expect(answer).toContainText("You asked: Is the floor level enough for the bench?");
+    await expect(answer).toContainText(
+      "You said: Step 1, Check what's arrived: Is the floor level enough for the bench?",
+      { timeout: 60_000 },
+    );
+    // Over the picture, and the step stays.
+    const [card, picture] = [
+      await boxOf(answer),
+      await boxOf(page.getByRole("region", { name: "In 3D" })),
+    ];
+    expect(card.x).toBeGreaterThanOrEqual(picture.x);
+    expect(card.x + card.width).toBeLessThanOrEqual(picture.x + picture.width + 1);
+    await expect(steps.getByRole("heading", { name: "Check what's arrived" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Chat" })).toHaveCount(0);
+    await answer.getByRole("button", { name: "Close" }).click();
+    await expect(answer).toBeHidden();
+
+    // The full chat is in Plan, one tap away, with what was asked in it.
+    await toPlan(page);
+    await page.getByRole("button", { name: "Chat", exact: true }).click();
+    await expect(
+      page.getByRole("dialog", { name: "Chat" }).getByRole("list", { name: "Messages" }),
+    ).toContainText("Step 1, Check what's arrived: Is the floor level enough for the bench?");
+  });
+
+  test("at the bench: Show me how opens the close-ups, and Is this right? sends a photo of the step to be checked, answered over the picture", async ({
+    page,
+  }) => {
+    test.slow();
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await chatSettled(page);
+    await toStep(page, 4);
+
+    const steps = page.getByRole("region", { name: "Steps" });
+    const closeUps = steps.getByRole("region", { name: "Close-up" });
+    await expect(closeUps).toHaveCount(0);
+    const showMe = steps.getByRole("button", { name: "Show me how" });
+    await showMe.click();
+    await expect(showMe).toHaveAttribute("aria-expanded", "true");
+    await expect(closeUps.filter({ hasText: "Close-up · One end frame" })).toBeVisible();
+    await expect(closeUps.last()).toContainText("Close-up · Driving a screw");
+    await expect(steps.getByRole("region", { name: "Before you move on" })).toContainText(
+      "Measure corner to corner both ways.",
+    );
+
+    await steps.getByLabel("Photo to check").setInputFiles({
+      name: "frames.png",
+      mimeType: "image/png",
+      // One grey pixel.
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNoAAAAggCBd81ytgAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    });
+    const answer = page.getByRole("region", { name: "Answer" });
+    await expect(answer).toContainText("You asked: Is this right? (a photo)");
+    await expect(answer).toContainText(
+      "You said: Step 4, Make the two end frames: Both end frames, flat, from above.",
+      { timeout: 60_000 },
+    );
+    await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
+  });
+
+  test("at the bench: I don't have… lists only the step's tools and parts, and Can't do this now parks the step until Do it now", async ({
+    page,
+  }) => {
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await toStep(page, 6);
+
+    const steps = page.getByRole("region", { name: "Steps" });
+    await expect(
+      steps.getByRole("heading", { name: "Fit the castors to the bases" }),
+    ).toBeVisible();
+    await steps.getByRole("button", { name: "I don't have…" }).click();
+    const missing = steps.getByRole("region", { name: "What you don't have" });
+    await expect(missing.getByRole("button")).toHaveText([
+      "Drill, 7 mm bit",
+      "10 mm spanner × 2",
+      "Safety glasses",
+      "Castor bases (E)",
+      "M6 × 60 bolts",
+      "M6 washers",
+      "M6 lock nuts",
+    ]);
+    await missing.getByRole("button", { name: "10 mm spanner × 2" }).click();
+    await expect(missing).toContainText("No 10 mm spanner × 2");
+    await expect(missing).toContainText("Nothing in Your tools will do instead.");
+    await missing.getByRole("button", { name: "Park this step" }).click();
+
+    // Parked, the next step comes up; back on it, it says why, and Do it now takes it off.
+    await expect(
+      steps.getByRole("heading", { name: "Stand the frame on its bases" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Back" }).click();
+    const parked = steps.getByRole("status").filter({ hasText: "Parked" });
+    await expect(parked).toHaveText(/Parked: Missing: 10 mm spanner × 2/);
+    await parked.getByRole("button", { name: "Do it now" }).click();
+    await expect(parked).toHaveCount(0);
+
+    // Can't do this now, with a reason.
+    await steps.getByRole("button", { name: "Can't do this now" }).click();
+    await steps
+      .getByRole("region", { name: "Why not now" })
+      .getByRole("button", { name: "Out of time" })
+      .click();
+    await expect(
+      steps.getByRole("heading", { name: "Stand the frame on its bases" }),
+    ).toBeVisible();
+    const buildApi = new URL(page.url()).pathname.replace(/^\/fabrication/, "/api/fabrication");
+    await expect
+      .poll(
+        async () =>
+          BuildOpened.parse(await (await page.request.get(buildApi)).json()).progress.parked,
+      )
+      .toEqual([{ step: "fit-castors", why: "Out of time" }]);
+
+    // Done after all, it isn't parked any more.
+    await page.getByRole("button", { name: "Back" }).click();
+    await expect(parked).toHaveText(/Parked: Out of time/);
+    await page.getByRole("button", { name: "Done, next step" }).click();
+    await expect
+      .poll(
+        async () =>
+          BuildOpened.parse(await (await page.request.get(buildApi)).json()).progress.parked,
+      )
+      .toEqual([]);
+  });
+
+  // #787: half-sentences went as messages of their own, and the step's words were misheard.
+  test("hold to ask: a pause mid-sentence, or letting go after a few words, still asks once", async ({
+    page,
+  }) => {
+    test.slow();
+    await standInSpeechRecognition(page);
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await chatSettled(page);
+
+    const ask = page.getByRole("button", { name: "Hold to ask" });
+    const { x, y, width, height } = await boxOf(ask);
+    await page.mouse.move(x + width / 2, y + height / 2);
+    await page.mouse.down();
+    // The step's own words are listened out for.
+    expect(await listenedFor(page)).toEqual(expect.arrayContaining(["Tape measure", "clamp"]));
+    await hear(page, "Is the floor");
+    // The browser stops on its own in the pause, as Chrome on Android does; the owner carries on.
+    await pause(page);
+    await hear(page, "level");
+    const heard = page.getByRole("status").filter({ hasText: "Is the floor" });
+    await expect(heard).toHaveText("Step 1, Check what's arrived: Is the floor level");
+    await page.mouse.up();
+
+    // A few words: a moment to carry on before it's asked.
+    await expect(page.getByRole("button", { name: "Hold to add more" })).toBeVisible();
+    await page.mouse.down();
+    await hear(page, "enough for the clamps?");
+    await expect(heard).toHaveText(
+      "Step 1, Check what's arrived: Is the floor level enough for the clamps?",
+    );
+    await page.mouse.up();
+
+    const answer = page.getByRole("region", { name: "Answer" });
+    await expect(answer).toContainText(
+      "You said: Step 1, Check what's arrived: Is the floor level enough for the clamps?",
+      { timeout: 60_000 },
+    );
+    // The full chat is in Plan (#793).
+    await toPlan(page);
+    await page.getByRole("button", { name: "Chat", exact: true }).click();
+    const messages = page
+      .getByRole("dialog", { name: "Chat" })
+      .getByRole("list", { name: "Messages" });
+    await expect(messages.getByText(/^Step 1, Check what's arrived:/)).toHaveCount(1);
+  });
+
+  test("hold to ask: a few words with nothing more are asked after a moment", async ({ page }) => {
+    test.slow();
+    await standInSpeechRecognition(page);
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await chatSettled(page);
+
+    const ask = page.getByRole("button", { name: "Hold to ask" });
+    const { x, y, width, height } = await boxOf(ask);
+    await page.mouse.move(x + width / 2, y + height / 2);
+    await page.mouse.down();
+    await hear(page, "Which screws?");
+    await page.mouse.up();
+    await expect(page.getByRole("button", { name: "Hold to add more" })).toBeVisible();
+
+    const answer = page.getByRole("region", { name: "Answer" });
+    await expect(answer).toContainText("You said: Step 1, Check what's arrived: Which screws?", {
+      timeout: 60_000,
+    });
+    await expect(page.getByRole("button", { name: "Hold to ask" })).toBeVisible();
+  });
+
+  test("hold to ask: held again before the browser has settled the words, it carries on from them", async ({
+    page,
+  }) => {
+    test.slow();
+    await standInSpeechRecognition(page);
+    await workspaceWithBuild(page);
+    await openInFabrication(page);
+    await chatSettled(page);
+
+    const ask = page.getByRole("button", { name: "Hold to ask" });
+    const { x, y, width, height } = await boxOf(ask);
+    await page.mouse.move(x + width / 2, y + height / 2);
+    await page.mouse.down();
+    await hear(page, "Is the floor level enough");
+    // The finger slips off and straight back on, before the browser has handed over the words.
+    await settleSlowly(page);
+    await page.mouse.up();
+    await page.mouse.down();
+    await settle(page);
+    const heard = page.getByRole("status").filter({ hasText: "Is the floor" });
+    await expect(heard).toHaveText("Step 1, Check what's arrived: Is the floor level enough");
+    await expect(page.getByRole("button", { name: "Let go to ask" })).toBeVisible();
+    await hear(page, "for the clamps?");
+    await expect(heard).toHaveText(
+      "Step 1, Check what's arrived: Is the floor level enough for the clamps?",
+    );
+    await page.mouse.up();
+
+    const answer = page.getByRole("region", { name: "Answer" });
+    await expect(answer).toContainText(
+      "You said: Step 1, Check what's arrived: Is the floor level enough for the clamps?",
+      { timeout: 60_000 },
+    );
+    // The full chat is in Plan (#793).
+    await toPlan(page);
+    await page.getByRole("button", { name: "Chat", exact: true }).click();
+    const messages = page
+      .getByRole("dialog", { name: "Chat" })
+      .getByRole("list", { name: "Messages" });
+    await expect(messages.getByText(/^Step 1, Check what's arrived:/)).toHaveCount(1);
   });
 });
 
@@ -742,7 +1026,7 @@ test.describe("each step's picture, on the unfolded Fold", () => {
     await expect(steps.getByRole("list", { name: "Checklist" })).not.toContainText("Countersink");
   });
 
-  test("the marking step's Show me how walks through the tape, tick, square and line, with its close-ups (#777)", async ({
+  test("the marking step's Show me how walks through the tape, tick, square and line (#777)", async ({
     page,
   }) => {
     await workspaceWithBuild(page);
@@ -751,6 +1035,9 @@ test.describe("each step's picture, on the unfolded Fold", () => {
 
     const steps = page.getByRole("region", { name: "Steps" });
     const walk = steps.getByRole("region", { name: "How it's done" });
+    await expect(walk).toBeHidden();
+    const showMe = steps.getByRole("button", { name: "Show me how" });
+    await showMe.click();
     // Its own moves, not the close-ups' notes.
     const moves = walk.locator("ol > li");
     await expect(moves).toHaveCount(4);
@@ -758,19 +1045,94 @@ test.describe("each step's picture, on the unfolded Fold", () => {
       await expect(moves.nth(at)).toContainText(move);
     }
     await expect(moves.nth(1)).toContainText("At 1450");
-    // The tape's hook over the end, and the square's stock against the edge, drawn close.
-    const closeUps = walk.getByRole("region", { name: "Close-up" });
-    await expect(closeUps).toHaveCount(2);
-    await expect(closeUps.first()).toContainText("The tape's hook over the end");
-    await expect(closeUps.last()).toContainText("The square's stock against the edge");
-    await expect(closeUps.last().getByRole("img")).toHaveAccessibleName(/95 mm marked/);
+    // The moves are drawn once, by the step's measure and mark close-up (#813), not in the walk.
+    await expect(walk.getByRole("region", { name: "Close-up" })).toHaveCount(0);
 
-    // Just the numbers leaves it out.
-    await steps.getByRole("button", { name: "Just the numbers" }).click();
+    // Tapped again, it closes; Just the numbers shortens the lines.
+    await showMe.click();
     await expect(walk).toBeHidden();
-    await steps.getByRole("button", { name: "Show me how" }).click();
-    await expect(walk).toBeVisible();
+    const firstLine = steps.getByRole("list", { name: "Checklist" }).locator("p").first();
+    const said = await firstLine.innerText();
+    await steps.getByRole("button", { name: "Just the numbers" }).click();
+    await expect(firstLine).not.toHaveText(said);
+    await steps.getByRole("button", { name: "Just the numbers" }).click();
+    await expect(firstLine).toHaveText(said);
   });
+
+  // The close-ups by type (#813; Paper, 2 · Agreed, "Fabrication · Bracket close-up, any build",
+  // "· Measure and mark a length, your kit" and "· Driving a screw: clutch and end zone · Fold
+  // (#772)"), unfolded and folded.
+  for (const [fold, viewport] of [
+    ["unfolded", UNFOLDED],
+    ["folded", FOLDED],
+  ] as const) {
+    test(`the steps show their close-ups by type, a technique in full once then a how? tap, ${fold} (#813)`, async ({
+      page,
+    }) => {
+      await workspaceWithBuild(page);
+      await openInFabrication(page);
+      await page.setViewportSize(viewport);
+      const steps = page.getByRole("region", { name: "Steps" });
+      const closeUp = (title: string) =>
+        steps.getByRole("region", { name: "Close-up" }).filter({ hasText: `Close-up · ${title}` });
+      // At the bench, folded or not, a step's close-ups are behind Show me how (#793).
+      const showMe = () => steps.getByRole("button", { name: "Show me how" }).click();
+
+      // Marking: measure and mark in full, the first time a step uses it, ticked at B's 1450.
+      await toStep(page, 2);
+      await showMe();
+      const mark = closeUp("Measure and mark a length");
+      await expect(mark).toBeVisible();
+      for (const pill of ["Hook the end", "Tick 1450", "Square a line", "X the offcut"]) {
+        await expect(mark).toContainText(pill);
+      }
+      await expect(steps.getByText("How? Measure and mark a length")).toHaveCount(0);
+
+      // The end frames: the screw spots in the green, the end zone in full, and measure and
+      // mark now a how? tap that opens it.
+      for (let at = 2; at < 4; at += 1) {
+        await page.getByRole("button", { name: "Done, next step" }).click();
+      }
+      await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
+      await showMe();
+      await expect(closeUp("Mark your screw spots")).toContainText("Only in green");
+      const driving = closeUp("Driving a screw");
+      await expect(driving).toBeVisible();
+      await expect(driving).toContainText("Drill first");
+      await expect(driving).toContainText("Just screw");
+      await expect(driving).toContainText("Clutch ring");
+      const how = steps.getByText("How? Measure and mark a length");
+      await expect(how).toBeVisible();
+      await expect(closeUp("Measure and mark a length")).toBeHidden();
+      await how.click();
+      await expect(closeUp("Measure and mark a length")).toBeVisible();
+
+      // Standing on the bases: the brackets on the model, lit, and one taken apart close up.
+      for (let at = 4; at < 7; at += 1) {
+        await page.getByRole("button", { name: "Done, next step" }).click();
+      }
+      await expect(
+        steps.getByRole("heading", { name: "Stand the frame on its bases" }),
+      ).toBeVisible();
+      await showMe();
+      const bracket = closeUp("One bracket, apart");
+      await expect(bracket).toBeVisible();
+      for (const pill of ["Tight in corner", "Mark the holes", "2 screws each"]) {
+        await expect(bracket).toContainText(pill);
+      }
+      await expect(page.getByRole("region", { name: "In 3D" })).not.toContainText(
+        "bracket on the face",
+      );
+      const buildApi = new URL(page.url()).pathname.replace(/^\/fabrication/, "/api/fabrication");
+      const { derived } = BuildOpened.parse(await (await page.request.get(buildApi)).json());
+      const standing = derived.steps.find((step) => step.id === "stand-on-bases");
+      expect(
+        standing?.scene?.pieces
+          .filter((piece) => piece.name === "40 mm angle brackets")
+          .map((piece) => [piece.tone, piece.boxes.length]),
+      ).toEqual([["lit", 16]]);
+    });
+  }
 
   test("the pictures' words are as big as the step's, and none sits on another (#777)", async ({
     page,

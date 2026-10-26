@@ -27,8 +27,8 @@ rest is worked out again.
   and the project whose step makes it, #698), and how far the owner has got with its steps (#699). Answers
   `BuildOpened`.
 - `PUT /api/fabrication/workspaces/:id/builds/:slug/progress`: `BuildProgress`, the step reached and the lines
-  ticked (#699), and the tools chosen to buy from the Tools tab (#763); a step the Build doesn't have is refused
-  (400). Answers it as kept.
+  ticked (#699), the tools chosen to buy from the Tools tab (#763), and the steps parked with why, from Can't do
+  this now at the bench (#793); a step the Build doesn't have is refused (400). Answers it as kept.
 - `GET /api/fabrication/workspaces/:id/builds/:slug/chat`: its chat (#698), from its project's latest session, or
   else the latest that saved it: what was said and each change saved, and whether an answer is coming. Answers
   `BuildChat`.

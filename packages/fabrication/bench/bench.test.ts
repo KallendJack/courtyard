@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Build, BuildSetting } from "../build.ts";
+import { deriveBench } from "../recipe/starters.ts";
 import { goldenBench } from "./fixtures/golden.ts";
-import { deriveBench } from "./index.ts";
 import { pickBenchStock } from "./stock-slots.ts";
 
 // The framed bench, through the one function a caller has: parameters in, a Build out. The
@@ -237,7 +237,11 @@ describe("the castor bolts", () => {
     const build = built(goldenBench);
     const fitting = build.steps.find((step) => step.id === "fit-castors");
 
-    expect(fitting?.fixings[0]).toEqual({ name: "M6 × 60 bolts", count: 16 });
+    expect(fitting?.fixings[0]).toEqual({
+      name: "M6 × 60 bolts",
+      count: 16,
+      joint: "bolt-through",
+    });
     expect(build.buyList.lines.map((line) => line.item)).not.toContain("M6 × 50 bolts");
     // The price given was for the 50s.
     expect(
@@ -747,10 +751,11 @@ describe("the golden bench's steps", () => {
   it("make the end frames with their sizes, two screws a joint and a check for square", () => {
     const step = built(goldenBench).steps.find((step) => step.number === 4);
 
-    expect(step?.fixings).toEqual([{ name: "5 × 80 screws", count: 16 }]);
+    expect(step?.fixings).toEqual([{ name: "5 × 80 screws", count: 16, joint: "screwed-overlap" }]);
     expect(step?.safety.map((tool) => tool.tool)).toEqual(["safety-glasses"]);
-    expect(step?.closeUps[0]?.dimensions.map((line) => line.mm)).toEqual([460, 750, 250]);
-    expect(step?.closeUps[0]?.fixings).toHaveLength(8);
+    const frame = step?.closeUps.find((closeUp) => closeUp.title === "One end frame");
+    expect(frame?.dimensions.map((line) => line.mm)).toEqual([460, 750, 250]);
+    expect(frame?.fixings).toHaveLength(8);
     expect(step?.check.says).toBe(
       "Measure corner to corner both ways. The same within 2 mm means it's square.",
     );
@@ -830,16 +835,16 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     const standing = stepOf(build, "stand-on-bases");
 
     expect(standing?.fixings).toEqual([
-      { name: "40 mm angle brackets", count: 8 },
-      { name: "4 × 30 screws", count: 32 },
+      { name: "40 mm angle brackets", count: 8, joint: "bracket" },
+      { name: "4 × 30 screws", count: 32, joint: "bracket" },
     ]);
     expect(standing?.actions.map((action) => action.numbers)).toContain("2 brackets a leg.");
     expect(standing?.actions.at(-1)?.howTo).toBe(
       "Hold each bracket tight into its corner and mark through its holes. Drill a small 3 mm pilot hole at each mark, then drive the screw.",
     );
     expect(stepOf(build, "fit-supports")?.fixings).toEqual([
-      { name: "40 mm angle brackets", count: 4 },
-      { name: "4 × 30 screws", count: 16 },
+      { name: "40 mm angle brackets", count: 4, joint: "bracket" },
+      { name: "4 × 30 screws", count: 16, joint: "bracket" },
     ]);
   });
 
@@ -848,8 +853,8 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     const build = built({ ...goldenBench, fixings });
 
     expect(stepOf(build, "fit-supports")?.fixings).toEqual([
-      { name: "40 mm angle brackets", count: 4 },
-      { name: "4 × 40 screws", count: 16 },
+      { name: "40 mm angle brackets", count: 4, joint: "bracket" },
+      { name: "4 × 40 screws", count: 16, joint: "bracket" },
     ]);
     expect(build.buyList.lines.find((line) => line.item === "4 × 40 screws")?.needed).toBe(43 + 48);
   });
@@ -924,7 +929,11 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     const apart = fitting?.closeUps[1];
 
     // The bench is costed with one washer a bolt: the drawing, its note and the fixings agree.
-    expect(fitting?.fixings).toContainEqual({ name: "M6 washers", count: 16 });
+    expect(fitting?.fixings).toContainEqual({
+      name: "M6 washers",
+      count: 16,
+      joint: "bolt-through",
+    });
     expect(apart?.title).toBe("One bolt, apart");
     expect(apart?.labels?.map((label) => label.says)).toEqual([
       "Top · castor side",
@@ -1093,11 +1102,11 @@ describe("the simplest way first (#789)", () => {
     ]);
     expect(frames?.walkThrough[0]?.says).toContain("offcut");
     expect(frames?.walkThrough[2]?.says).toContain("By eye");
-    const spots = frames?.walkThrough[0]?.closeUp;
+    // Drawn on the step as a screwed overlap (#813): 2 crosses in the green.
+    const spots = frames?.closeUps[0];
     expect(spots?.title).toBe("Mark your screw spots");
+    expect(spots?.type).toBe("screwed-overlap");
     expect(spots?.fixings).toHaveLength(2);
-    // The strip the screws must hit: the leg's 45 mm under the rail.
-    expect(spots?.dimensions.map((line) => line.mm)).toEqual([45]);
     expect(said(build, "end-frames")).toContain("Mark 2 crosses where the rail sits on the leg");
     expect(said(build, "long-rails")).toContain("2 crosses where the rail sits on the leg");
     for (const step of build.steps) {

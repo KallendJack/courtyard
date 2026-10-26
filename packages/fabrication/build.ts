@@ -1,11 +1,11 @@
 import type { BuildTemplate, SizeSource, SourcedSize } from "@courtyard/contract";
 import type { ToolSize } from "./capacity.ts";
-import type { CloseUp } from "./close-up.ts";
+import type { CloseUp, FixingType } from "./close-up.ts";
 import type { CheckedRecipe } from "./print/recipe.ts";
 import type { Scene } from "./scene.ts";
 import type { Tool } from "./tools.ts";
 
-export type { CloseUp, CloseUpShape } from "./close-up.ts";
+export type { CloseUp, CloseUpShape, CloseUpType, FixingType } from "./close-up.ts";
 
 // What any template derives from its parameters (ADR 0036): everything a Build shows. Code works
 // every number out; a model only reads them.
@@ -249,12 +249,22 @@ export type Step = {
   readonly wayChanged: { readonly was: string; readonly now: string } | null;
   readonly tools: readonly StepTool[];
   readonly safety: readonly StepTool[];
-  readonly fixings: readonly { readonly name: string; readonly count: number }[];
+  /** Its fixings, each with the type of close-up that shows how it's made (#813). */
+  readonly fixings: readonly {
+    readonly name: string;
+    readonly count: number;
+    readonly joint?: FixingType;
+  }[];
   readonly batch: string; // How to batch it: "One joint at a time" (#789).
   readonly actions: readonly Action[];
   readonly tips: readonly string[]; // Extras, behind a Tips tap, never in the lines (#789).
   /** Its close-ups: most steps have one, a fixing two (tightening it, and taken apart, #783). */
   readonly closeUps: readonly CloseUp[];
+  /**
+   * The techniques it uses, each as its close-up (#813): open in full the first time the Build's
+   * steps use it (`first`), a "how?" tap after.
+   */
+  readonly techniques: readonly { readonly closeUp: CloseUp; readonly first: boolean }[];
   /** What "show me how" walks through first, the first time it comes up; none otherwise. */
   readonly walkThrough: readonly WalkStep[];
   /** The step's picture (#754); null where another view shows it, as a printed part's plate. */
@@ -373,7 +383,7 @@ export type StockOptions = {
 };
 
 export type Build = {
-  readonly template: BuildTemplate;
+  readonly template: BuildTemplate | "recipe"; // A recipe that's no template's (#770).
   /** The finished size, mm. */
   readonly size: { readonly length: number; readonly depth: number; readonly height: number };
   readonly parts: readonly Part[];

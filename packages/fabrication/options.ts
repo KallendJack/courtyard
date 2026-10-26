@@ -50,28 +50,49 @@ const optionOf = (stock: Timber | Sheet, kind: StockOption["kind"]) =>
     );
   });
 
+/**
+ * What a sheet is made of, whatever size it's given in: its option, or the sheet option of its
+ * thickness its name says, else its name.
+ */
+const materialOf = (sheet: Sheet) =>
+  sheet.option ??
+  IDS.find((id) => {
+    const option = STOCK_OPTIONS[id];
+    return (
+      option.kind === "sheet" &&
+      option.thickness === sheet.thickness.value &&
+      option.known.test(sheet.name)
+    );
+  }) ??
+  sheet.name;
+
+/**
+ * Whether stock the owner has will do for a stock (#770): a timber of the same option (or, being
+ * none, the same name) and section, or a sheet of the same material and thickness, whatever its
+ * size; never by its price, as what's had has none.
+ */
+export const standsInFor = (
+  had: Timber | Sheet,
+  stock: Timber | Sheet,
+  kind: StockOption["kind"],
+) =>
+  had.thickness.value === stock.thickness.value &&
+  (kind === "sheet"
+    ? materialOf(had) === materialOf(stock)
+    : had.width.value === stock.width.value &&
+      (optionOf(had, kind) ?? had.name) === (optionOf(stock, kind) ?? stock.name));
+
 const kindOf = (role: Role) => (role === "sheet" ? "sheet" : "timber");
 
 /**
- * Which sheet a sheet is, whatever size it's given in: what it's made of (its option, or the sheet
- * option of its thickness its name says, else its name), its thickness, and its price at its shop.
- * One with no price, such as offcuts the owner has, is only ever the sheet of its own name.
+ * Which sheet a sheet is, whatever size it's given in: what it's made of, its thickness, and its
+ * price at its shop. One with no price, such as offcuts the owner has, is only ever the sheet of
+ * its own name.
  */
 const sheetBoughtAs = (sheet: Sheet) => {
-  const material =
-    sheet.option ??
-    IDS.find((id) => {
-      const option = STOCK_OPTIONS[id];
-      return (
-        option.kind === "sheet" &&
-        option.thickness === sheet.thickness.value &&
-        option.known.test(sheet.name)
-      );
-    }) ??
-    sheet.name;
   const { price } = sheet;
   return JSON.stringify([
-    material,
+    materialOf(sheet),
     sheet.thickness.value,
     price === undefined
       ? { unpriced: sheet.name }

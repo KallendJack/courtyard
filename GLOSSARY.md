@@ -215,12 +215,42 @@ _Avoid_: plan, verdict, answer
 Something the owner makes, worked out by code (ADR 0036): a template (a framed bench, wall shelving, a printed part)
 and its parameters, from which code derives the parts, the **cut plan**, the **buy list** and the build steps. A
 project step can own one. The model sets and explains its parameters; it never writes a length or a quantity itself.
+A Build becomes a **recipe** (ADR 0039), its templates **starters**.
 _Avoid_: design (that's what it looks like), plan (that's a floor plan or a project), cut list (that's one part of it)
+
+**Recipe**:
+What a Build is made of, as the model writes it (ADR 0039): its **pieces**, grouped, and the **joints** that hold
+them, every size with its source. Code derives the rest: the parts, cut plan, buy list, steps, close-ups and checks.
+A new kind of build is a new recipe, never new code. Pocket holes, dowels, glue-only joints, hinges, drawers and
+furniture are outside it; asked for one, the model offers the nearest build a recipe can make.
+_Avoid_: design, template (that's a starter), parts list (code derives that)
+
+**Piece**:
+One thing a recipe is made of (ADR 0039): a **timber member**, a **sheet panel** or a **printed part**. Pieces come in
+**groups**: a rectangle frame, a box or carcass, legs, a shelf on rails or cleats, a brace. Each piece the owner
+handles is a part, with its letter (A × 4).
+_Avoid_: component, member (on its own), board
+
+**Joint**:
+How a recipe holds two pieces together (ADR 0039): screws timber into timber (staggered), screws through a sheet into
+an edge, an angle bracket, a bolt with its nut and washer, or a printed holder or bracket. Each is checked, drawn
+and given its close-up by code.
+_Avoid_: connection, fixing (that's the screw or bolt a joint uses)
+
+**Starter**:
+A tested recipe a Build starts from and changes (ADR 0039), such as the bench, a box or crate, a freestanding storage
+rack, or a stand for a printer or tools. Once its recipe gives exactly its numbers, a template is one.
+_Avoid_: template, preset, example (and not Get to know, or a workspace's first files)
+
+**Load class**:
+How much a Build carries, as code works it out from the load said in plain words (#771), such as "paint tins" or "a 3D
+printer", set conservatively from a sourced table. Its checks for sag and tipping use it.
+_Avoid_: weight rating, capacity (that's a saw's), load (that's the owner's words)
 
 **Part recipe**:
 A printed part as data (#702): a base (box, plate, cylinder or L-bracket) and the features cut into it or raised on it
 (holes, slots, pockets sized from an object, fillets, chamfers, lettering). A model fills one; code checks it and makes
-the solid. A new shape is a new recipe, never new code.
+the solid. A new shape is a new recipe, never new code. In a Build's recipe, it's a printed part's piece.
 _Avoid_: model (that's who fills it in, or the 3D file), script, CAD
 
 **Cut plan**:
@@ -238,8 +268,11 @@ A Build's instruction manual in Fabrication (#699), worked out by code from its 
 **picture** (#754): the job in 3D as it's done (the length in the Workmate, an end frame on the floor, the frame so
 far), with marks drawn from the Build's numbers. A move a beginner may never have made gets a **walk-through** in
 "show me how" the first time it comes up (#777): marking as tape, tick, square and line, or marking a joint's screw
-spots by eye (#789), each with its close-up where one shows it. The castor step shows its holes drilled through
-the plate and its bolt's head held while the nut turns (#783). Each step is the **simplest way first** (#789): it
+spots by eye (#789). The castor step shows its holes drilled through the plate and its bolt's head held while the
+nut turns (#783). **Close-ups by type** (#813) are drawn by code for any Build from the pieces they join and their
+sizes, their labels 2-3 word pills: a **fixing** type (an angle bracket in a corner, a bolt through a plate, a
+screwed overlap) on every step that makes one, and a **technique** (measure and mark a length, driving a screw) in
+full the first time the steps use it, a "How?" tap after. Each step is the **simplest way first** (#789): it
 opens with how to **batch** it ("One joint at a time"), has at most four lines, measures only what decides how it
 turns out and says "by eye" for the rest, drills a pilot hole only where the wood would split, and keeps extras as
 **tips** behind a tap. A step that can be done more than one **way** (a hand saw, a circular saw, a
@@ -277,7 +310,8 @@ _Avoid_: fact (that's a context file line), dimension, measurement (as a record'
 
 **Space**:
 A Thing of kind space, such as the garage or a van's interior (ADR 0037): its sizes, its openings and what's kept in
-it, which the room in Fabrication is drawn from.
+it, which the room in Fabrication is drawn from. Spaces are Fabrication's, kept outside any workspace once its own
+store lands (ADR 0040, #818).
 _Avoid_: room (one kind of space), area, zone (that's a part of a space to keep clear)
 
 **Tool**:
@@ -292,22 +326,43 @@ first Build and from any Build's Tools. A workspace's Thing that looks like a to
 where from ("F-clamps · from Garage"), and moves to the owner's tools with Save, keeping its name; Save has Undo.
 _Avoid_: toolbox, tool list, inventory
 
+**Your stock**:
+The materials and fixings the owner has, kept in Fabrication at the owner's level beside Your tools (ADR 0040, #760),
+so a Build's buy list shows only what's left to buy.
+_Avoid_: inventory, materials list, leftovers
+
+**At the shop**:
+Fabrication's shop trip for a Build (ADR 0040, #757): what's left to buy, the swaps when something isn't on the shelf,
+and the cutting card for the shop's saw.
+_Avoid_: shopping mode, shopping list (that's the buy list)
+
 **Fabrication**:
-The app the owner opens a Build in (`apps/fabrication`, ADR 0036): the chat about it, its 3D view and its build list.
-The engine behind it is `packages/fabrication`.
+The app for making (`apps/fabrication`, ADRs 0036, 0040): its spaces, projects and Builds, each Build's chat, 3D view
+and build list, Your tools, Your stock and At the shop. It stands on its own, with its own Home, data and sign-in;
+Courtyard links in with **Open in Fabrication** and keeps no copy. The engine behind it is `packages/fabrication`.
 _Avoid_: Fabricator, maker mode, workshop
 
 **At the bench**:
 Fabrication's way of working on a Build while making it (#753): one step fills the screen, read at arm's length, with
-the step in 3D beside it, Back and Done at thumb height and a swipe between steps. Where a Build with steps opens on
-the Fold; folded, the only way. Its other way is **Plan**, for planning at a desk: the Build big in 3D with its cut
-plan, buy list and tools beside it. On a computer, the three panels show both.
+the step in 3D beside it, Back and Done at thumb height and a swipe between steps. Under the step's lines, its four
+buttons (#793): Show me how, Is this right?, I don't have… and Can't do this now; there is no chat at the bench. Where
+a Build with steps opens on the Fold; folded, the only way. Its other way is **Plan**, for planning at a desk: the
+Build big in 3D with its cut plan, buy list and tools beside it, and the full chat. On a computer, the three panels
+show both.
 _Avoid_: step mode, workshop mode, focus mode
 
 **Hold to ask**:
 The chat behind one button, at the bench (#753): held, it listens, and let go, what was said is asked in the Build's
-chat about the step, its answer showing over the picture until it gets out of the way. A tap opens the chat.
+chat about the step, its answer a card over the picture with what was asked and ×, until it gets out of the way; the
+step never changes (#793). A pause doesn't end it; let go on a few words, it waits a moment for more (#787). A tap
+opens the chat, in Plan.
 _Avoid_: push to talk (that's the Talk key's), voice chat
+
+**Parked (a step)**:
+A Build's step the owner can't do now, kept with why ("Out of time", "Missing: 10 mm spanner × 2"), from Can't do this
+now or I don't have… at the bench (#793). The next step not done or parked comes up instead; back on it, it says why,
+with Do it now.
+_Avoid_: skipped, deferred, on hold
 
 **Carry on (a project)**:
 Starting a session from a project, on Home or its page (#603): its first message the project and what's next, and the
