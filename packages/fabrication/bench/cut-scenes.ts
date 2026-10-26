@@ -1,6 +1,6 @@
 import type { Box } from "../build.ts";
-import type { Scene, SceneMark, ScenePiece } from "../scene.ts";
-import { markedLengths, type Saw, ticksOf } from "./preparing.ts";
+import type { Scene, ScenePiece } from "../scene.ts";
+import { markedLengths, type Saw } from "./preparing.ts";
 import {
   at,
   box,
@@ -25,16 +25,17 @@ import {
 /** A mitre saw's base, as a picture: how long, deep and high its bed is. */
 const MITRE = { length: 500, depth: 450, bed: 100 } as const;
 
-/** The first length marked, flat on the Workmate: the tape hooked on its end, a tick at each piece. */
+/**
+ * The first length on the Workmate, its first piece marked: the tape hooked on its end, a line at
+ * the piece's length. Each piece after is measured from the fresh end its cut leaves (#789).
+ */
 export const markScene = (setting: SceneSetting): Scene => {
   const length = markedLengths(setting.cutPlan)[0];
   const first = length?.cuts[0];
   if (length === undefined || first === undefined) return whole(setting, []);
   const { wide, thick } = sectionOf(setting, length.stock);
   const top = JAWS.top;
-  const ticks = ticksOf(length);
-  const last = ticks.at(-1)?.at ?? 0;
-  const square = ticks[0]?.at ?? 0;
+  const square = first.length;
   const benched = setting.toHand.has("folding-workbench");
   return {
     title: benched ? "On the Workmate" : "On something flat",
@@ -51,7 +52,7 @@ export const markScene = (setting: SceneSetting): Scene => {
       ),
       ...toolIf(setting.toHand, "tape-measure", [
         box(-3, 0, top - thick, 3, 25, thick + 3),
-        box(last + 40, 10, top, 70, 70, 35),
+        box(square + 40, 10, top, 70, 70, 35),
       ]),
       ...toolIf(setting.toHand, "square", [
         box(square, -20, top - 30, 150, 20, 35),
@@ -59,22 +60,13 @@ export const markScene = (setting: SceneSetting): Scene => {
       ]),
     ],
     marks: [
-      ...ticks.map(
-        (tick): SceneMark => ({
-          kind: "line",
-          from: at(tick.at, 0, top),
-          to: at(tick.at, wide, top),
-          says: `${tick.label} ${tick.length}`,
-        }),
-      ),
-      ...ticks.map(
-        (tick, index): SceneMark => ({
-          kind: "size",
-          from: at(0, -OUT * (index + 1), top),
-          to: at(tick.at, -OUT * (index + 1), top),
-          mm: tick.at,
-        }),
-      ),
+      {
+        kind: "line",
+        from: at(square, 0, top),
+        to: at(square, wide, top),
+        says: `${first.label} ${first.length}`,
+      },
+      { kind: "size", from: at(0, -OUT, top), to: at(square, -OUT, top), mm: first.length },
       { kind: "note", at: at(0, wide / 2, top), says: "check this end is square", tone: "check" },
     ],
   };

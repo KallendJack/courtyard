@@ -99,6 +99,7 @@ describe("a Build's steps with Your tools", () => {
       "Ear defenders",
       "Sawhorses",
       "Spirit level",
+      "Sandpaper",
     ];
 
     expect(missing(theirs)).toBeDefined();
