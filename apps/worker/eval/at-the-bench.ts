@@ -65,7 +65,17 @@ export const AT_THE_BENCH: readonly Scenario[] = [
         say: "Where exactly do the screws go on this end frame?",
         expect: [],
         says: [
-          ["2 screws", "two screws", "2 in each", "two in each", "2 per", "two per", "2 at each"],
+          [
+            "2 screws",
+            "two screws",
+            "2 in each",
+            "two in each",
+            "2 per",
+            "two per",
+            "2 at each",
+            "two at each",
+            "one above the other",
+          ],
           ["overlap", "where the rail", "over the leg", "crosses"],
           ["by eye", "anywhere", "fingertip"],
         ],
