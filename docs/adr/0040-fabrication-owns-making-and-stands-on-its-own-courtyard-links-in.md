@@ -11,9 +11,8 @@ be used independently."
 What drew the line:
 - On 2026-10-24 the Garage chat did a 30-message shopping job by hand, and the owner's last request ("what's left")
   went unanswered. Fabrication must do that job itself.
-- On 2026-10-25 the owner opened the Workbench Build and its chat was Courtyard's project session ("Carry on with
-  Split the garage in two: Validate the garage layout, services, wall substrates and storage loads."). "This chat
-  should be separate to Courtyard, right?"
+- On 2026-10-25 the owner opened a Build and its chat was the Courtyard project session it sat under, carrying
+  on with the project's planning rather than the Build. "This chat should be separate to Courtyard, right?"
 - ADR 0037 kept the boundary so Fabrication could be a product, but still had Courtyard host its records, its chat
   and its login.
 
