@@ -637,6 +637,8 @@ test.describe("on the unfolded Fold", () => {
     expect(card.x + card.width).toBeLessThanOrEqual(picture.x + picture.width + 1);
     await expect(steps.getByRole("heading", { name: "Check what's arrived" })).toBeVisible();
     await expect(page.getByRole("dialog", { name: "Chat" })).toHaveCount(0);
+    // Kept for the side by side with its board (#826).
+    await page.screenshot({ path: "test-results/bench-boards/asking-unfolded.png" });
     await answer.getByRole("button", { name: "Close" }).click();
     await expect(answer).toBeHidden();
 
