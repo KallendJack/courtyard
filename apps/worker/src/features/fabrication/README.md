@@ -129,6 +129,7 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   roughly ("about 140", "I reckon it's 140"). It's offered only in planning workspaces.
 - **The chat** (`chat.ts`): which session is the Build's, and its events read as the chat's lines, through
   `sessions/`. A photo sent once building has started keeps the step the owner is on (`takenAt`, #786), so a later
-  turn is told it shows the Build as it was then.
+  turn is told it shows the Build as it was then. Every planning turn, the chat's too, is given the step the owner is
+  on in full (`prompts/build-step.ts`, #784), and told to follow it.
 - **The API** (`routes.ts`, a printed part's in `print-routes.ts`, sizes in `size-routes.ts`): under
   `/api/fabrication`, mounted by `worker.ts`, which also serves the Fabrication app's files under `/fabrication`.
