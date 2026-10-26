@@ -2,7 +2,7 @@ import type { Action } from "../build.ts";
 import { bracketArm } from "../close-ups/bracket.ts";
 import type { Word } from "../glossary.ts";
 import type { Tool } from "../tools.ts";
-import { jointFromEnd, SCREW_INSET } from "./close-ups.ts";
+import { jointFromEnd, PILOT, SCREW_INSET } from "./close-ups.ts";
 import type { Shape } from "./frame.ts";
 import type { BenchParameters } from "./parameters.ts";
 import { act } from "./preparing.ts";
@@ -85,6 +85,10 @@ export const bracketing = (pilot: boolean) =>
     "Bracket tight in its corner: mark its holes.",
     `${SCREWS_PER_BRACKET} screws a bracket.`,
   );
+
+/** What a step's close-ups say of its screw spots (#826): drill first with the pilot bit, or just screw. */
+export const drillsFor = (pilot: boolean) =>
+  pilot ? { first: true, bit: PILOT } : { first: false };
 
 /** The drill, and its bits only when the step drills a pilot hole. */
 export const drilling = (pilot: boolean): Tool[] =>

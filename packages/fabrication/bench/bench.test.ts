@@ -754,14 +754,20 @@ describe("the golden bench's steps", () => {
     }
   });
 
-  it("make the end frames with their sizes, two screws a joint and a check for square", () => {
+  it("make the end frames as their board has it: two screws a joint, legs end on, a check for square", () => {
     const step = built(goldenBench).steps.find((step) => step.number === 4);
 
     expect(step?.fixings).toEqual([{ name: "5 × 80 screws", count: 16, joint: "screwed-overlap" }]);
     expect(step?.safety.map((tool) => tool.tool)).toEqual(["safety-glasses"]);
-    const frame = step?.closeUps.find((closeUp) => closeUp.title === "One end frame");
-    expect(frame?.dimensions.map((line) => line.mm)).toEqual([460, 750, 250]);
-    expect(frame?.fixings).toHaveLength(8);
+    // The screw spots, then how a leg lies: on its edge, not flat (#826).
+    expect(step?.closeUps.map((closeUp) => closeUp.title)).toEqual([
+      "Mark your screw spots",
+      "Leg end on",
+    ]);
+    expect(step?.closeUps[1]?.labels?.map((label) => label.says)).toEqual([
+      "like this",
+      "not flat",
+    ]);
     expect(step?.check.says).toBe(
       "Measure corner to corner both ways. The same within 2 mm means it's square.",
     );
@@ -1007,18 +1013,23 @@ describe("the simplest way first (#789)", () => {
     braces: { ...goldenBench.braces, sheet: { ...goldenBench.braces.sheet, name } },
   });
 
-  it("drill pilot holes only for screws within 25 mm of a piece's end, as one line at the screws", () => {
+  it("drill pilot holes only for screws within 25 mm of a piece's end, said on the picture and at most one line", () => {
     const build = built(goldenBench);
     const piloted = build.steps
-      .filter((step) => /pilot/i.test(step.actions.map((action) => action.howTo).join(" ")))
+      .filter((step) =>
+        step.closeUps.some(
+          (closeUp) => closeUp.answers?.drill?.first === true && closeUp.answers.drill.bit === 3,
+        ),
+      )
       .map((step) => step.id);
 
     // The frame's joints and the brackets' screws are near an end; the sheets' screws are 50 in.
     expect(piloted).toEqual(["end-frames", "long-rails", "stand-on-bases", "fit-supports"]);
     for (const id of piloted) {
       const lines = stepOf(build, id)?.actions.filter((action) => /pilot/i.test(action.howTo));
-      expect(lines).toHaveLength(1);
-      expect(lines?.[0]?.howTo).toContain("3 mm pilot hole");
+      // The end frames' board says it on the screw spots' close-up alone (#826).
+      expect(lines?.length).toBe(id === "end-frames" ? 0 : 1);
+      for (const line of lines ?? []) expect(line.howTo).toContain("3 mm pilot hole");
     }
     for (const step of build.steps) {
       expect(step.walkThrough.map((move) => move.title)).not.toContain("Pilot holes");
@@ -1113,7 +1124,8 @@ describe("the simplest way first (#789)", () => {
     expect(spots?.title).toBe("Mark your screw spots");
     expect(spots?.type).toBe("screwed-overlap");
     expect(spots?.fixings).toHaveLength(2);
-    expect(said(build, "end-frames")).toContain("Mark 2 crosses where the rail sits on each leg");
+    // The crosses before the clamp, so it never covers where a screw goes (#826, its board).
+    expect(said(build, "end-frames")).toContain("Mark the 2 crosses first, then clamp beside them");
     expect(said(build, "long-rails")).toContain("2 crosses where the rail sits on each leg");
     for (const step of build.steps) {
       expect(step.actions.map((action) => action.howTo).join(" ")).not.toMatch(/each dot/);
@@ -1139,11 +1151,47 @@ describe("the simplest way first (#789)", () => {
     for (const id of bracketSteps) expect(bitsOn(wide)).not.toContain(id);
   });
 
-  it("square the corner before clamping it, on the end frames", () => {
+  it("square the corner before the first screw, on the end frames, behind Show me how (#826)", () => {
     const frames = stepOf(built(goldenBench), "end-frames");
 
-    expect(frames?.actions[1]?.howTo).toMatch(/Square the corner, then clamp\.$/);
-    expect(frames?.actions[1]?.numbers).toMatch(/square, clamp\.$/);
+    expect(frames?.tips[0]).toBe("Check the corner with your square before the first screw.");
+    expect(frames?.tools.map((tool) => tool.tool)).toContain("square");
+  });
+
+  it("say on every screw spot and mark whether it's by eye or measured, and whether to drill first (#826)", () => {
+    const wideBrackets = {
+      ...goldenBench,
+      fixings: {
+        ...goldenBench.fixings,
+        brackets: { ...goldenBench.fixings.brackets, name: "60 mm angle brackets" },
+      },
+    };
+    for (const build of [built(goldenBench), built(wideBrackets)]) {
+      for (const step of build.steps) {
+        for (const closeUp of step.closeUps.filter((each) => each.fixings.length > 0)) {
+          expect(closeUp.answers?.placed, `${step.id}: ${closeUp.title}`).toBeDefined();
+          expect(closeUp.answers?.drill, `${step.id}: ${closeUp.title}`).toBeDefined();
+        }
+        // A step that screws anything says both on its picture. The castors' bolts go through
+        // their plate's holes, and the model says the drill and bit, as their board has it.
+        if (step.fixings.length > 0 && step.id !== "fit-castors") {
+          const said = step.closeUps.filter((each) => each.answers?.drill !== undefined);
+          expect(said.length, step.id).toBeGreaterThan(0);
+        }
+        for (const { closeUp } of step.techniques) {
+          if (closeUp.type === "measure-mark") {
+            expect(closeUp.answers, step.id).toEqual({ placed: "measure", mm: expect.any(Number) });
+          }
+        }
+      }
+    }
+    // As the end frames' board has it: by eye, and a 3 mm pilot near the leg's end.
+    const frames = stepOf(built(goldenBench), "end-frames");
+    expect(frames?.closeUps[0]?.answers).toEqual({ placed: "eye", drill: { first: true, bit: 3 } });
+    // 60 mm brackets put their screws past the end zone: just screw.
+    expect(stepOf(built(wideBrackets), "fit-supports")?.closeUps[0]?.answers?.drill).toEqual({
+      first: false,
+    });
   });
 
   it("say each line as short as the bench's boards do, the rest behind Show me how (#826)", () => {

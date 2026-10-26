@@ -104,19 +104,24 @@ export const hatching = () => {
   return texture;
 };
 
-/** Each mark's colour by the theme: sizes gold as the board has them, the saw violet, checks moss. */
-const MARK_COLOUR: Readonly<Record<BuildSceneMark["kind"], string>> = {
+/** A mark drawn as a line in the scene, rather than words or a badge at a place. */
+type LineMark = Extract<BuildSceneMark, { from: At }>;
+const isLine = (mark: BuildSceneMark): mark is LineMark => "from" in mark;
+
+/** Each line's colour by the theme: sizes gold as the board has them, the saw violet, checks moss. */
+const MARK_COLOUR: Readonly<Record<LineMark["kind"], string>> = {
   size: "warning",
   line: "foreground",
   arrow: "primary",
   check: "success",
-  note: "muted-foreground",
-  callout: "yours",
 };
 
-/** Where a mark's words go: a line's middle, an arrow's tail, a note's or a callout's place. */
+/**
+ * Where a mark's words go: a line's middle, an arrow's tail, a note's, a callout's, a badge's or
+ * a spot's place.
+ */
 export const anchorOf = (mark: BuildSceneMark): At => {
-  if (mark.kind === "note" || mark.kind === "callout") return mark.at;
+  if (!isLine(mark)) return mark.at;
   if (mark.kind === "arrow") return mark.from;
   if (mark.kind === "line") return mark.to;
   return {
@@ -127,33 +132,44 @@ export const anchorOf = (mark: BuildSceneMark): At => {
 };
 
 /**
- * How a mark's words look: as big as the step's own lines, read at arm's length (#777), sizes in
- * gold, checks moss, a waste note red; a callout's two lines a little smaller, so they sit off the
- * model, in the owner's colour or the next action's green (#783).
+ * How a mark's words look: sizes a gold tag and checks moss in mono, a waste note red; a
+ * callout's two lines smaller, so they sit off the model, in the owner's colour or the next
+ * action's green (#783); a line's badge a violet disc with its number, and a screw spot a dot,
+ * red where it's drilled first (#826, its boards).
  */
-export const markClass = (mark: BuildSceneMark, big: boolean) => {
+export const markClass = (mark: BuildSceneMark) => {
+  if (mark.kind === "badge") {
+    return "flex size-6 items-center justify-center rounded-full bg-primary text-meta font-bold text-primary-foreground";
+  }
+  if (mark.kind === "spot") {
+    return `size-2 rounded-full border border-background/60 ${mark.first ? "bg-destructive" : "bg-success"}`;
+  }
   if (mark.kind === "callout") {
     // On the background in a small picture, so it still reads where there's no room off the model.
     const tone = mark.tone === "yours" ? "text-yours" : "text-success";
-    return `${big ? "text-meta" : "text-label"} group-data-small:bg-background/80 ${tone}`;
+    return `text-meta group-data-small:bg-background/80 ${tone}`;
   }
-  const size = big ? "text-bench" : "text-answer";
   if (mark.kind === "size") {
-    return `${size} border border-warning/60 bg-background/80 font-mono text-warning`;
+    return "rounded-full bg-warning px-2 font-mono text-meta font-bold text-background";
   }
-  if (mark.kind === "check") return `${size} bg-background/80 font-mono text-success`;
-  if (mark.kind === "line") return `${size} font-mono text-foreground`;
-  if (mark.kind === "arrow") return `${size} text-primary-text`;
-  return `${size} ${mark.tone === "waste" ? "text-destructive-text" : mark.tone === "check" ? "text-success" : "text-muted-foreground"}`;
+  if (mark.kind === "check") return "bg-background/80 font-mono text-meta text-success";
+  if (mark.kind === "line") return "font-mono text-meta text-foreground";
+  if (mark.kind === "arrow") return "text-meta text-primary-text";
+  return `text-meta ${mark.tone === "waste" ? "text-destructive-text" : mark.tone === "check" ? "text-success" : "text-muted-foreground"}`;
 };
 
-/** What a mark says: a size or check by its whole mm, the others in their own words. */
-export const markWords = (mark: BuildSceneMark) =>
-  mark.kind === "size" || mark.kind === "check" ? String(Math.round(mark.mm)) : mark.says;
+/** What a mark says: a size or check by its whole mm, a badge its line's number, a spot nothing. */
+export const markWords = (mark: BuildSceneMark) => {
+  if (mark.kind === "size" || mark.kind === "check") return String(Math.round(mark.mm));
+  if (mark.kind === "badge") return String(mark.line);
+  if (mark.kind === "spot") return "";
+  return mark.says;
+};
 
 /**
- * A mark's lines in the scene: a dashed dimension or check, a pencil line, an arrow with its head.
- * Notes and callouts are words only. Returns what to dispose of.
+ * A mark's lines in the scene: a size as a gold line (#826, its boards), a dashed check, a pencil
+ * line, an arrow with its head. Notes, callouts, badges and spots are over the scene only.
+ * Returns what to dispose of.
  */
 export const drawMark = (
   world: THREE.Scene,
@@ -161,12 +177,12 @@ export const drawMark = (
   point: (at: At) => THREE.Vector3,
   reach: number,
 ) => {
-  if (mark.kind === "note" || mark.kind === "callout") return [];
+  if (!isLine(mark)) return [];
   const colour = themed(MARK_COLOUR[mark.kind]);
   const from = point(mark.from);
   const to = point(mark.to);
   const geometry = new THREE.BufferGeometry().setFromPoints([from, to]);
-  const dashed = mark.kind === "size" || mark.kind === "check";
+  const dashed = mark.kind === "check";
   const material = dashed
     ? new THREE.LineDashedMaterial({ color: colour, dashSize: reach / 80, gapSize: reach / 120 })
     : new THREE.LineBasicMaterial({ color: colour });

@@ -29,12 +29,12 @@ export type BoltThrough = {
 
 /** How far a spanner's handle reaches from the head to the plate's body, as drawn. */
 const REACH = 110;
-/** Where the second half of the tightening close-up starts, from the left. */
-const UNDER = 200;
+/** Where the second half of the tightening close-up starts, from the top: under the first. */
+const UNDER = 100;
 
 /**
- * Tightening a bolt: on top, the head held, its tool's handle resting against the body on the
- * plate so it can't spin; underneath, the nut turned clockwise with the owner's tool, named as
+ * Tightening a bolt, drawn top to bottom as its board has it: on top, the head held, its tool's
+ * handle resting against the body on the plate so it can't spin; under it, the nut turned clockwise with the owner's tool, named as
  * theirs, until the washer bites.
  */
 export const tightenCloseUp = (
@@ -56,17 +56,17 @@ export const tightenCloseUp = (
   return {
     title: "Tighten",
     type: "bolt-through",
-    width: UNDER + body.x + body.w - x,
-    height: 92,
+    width: body.x + body.w,
+    height: UNDER + 92,
     pieces: [{ label: thing, ...body }],
     dimensions: [],
     fixings: [],
     shapes: [
       { kind: hold.head, x, y, jaw: across, length: REACH, turn: 0 },
       { kind: "hex", x, y, across },
-      { kind: hold.nut, x: UNDER + x, y, jaw: across, length: REACH, turn: 0 },
-      { kind: "hex", x: UNDER + x, y, across },
-      { kind: "clockwise", x: UNDER + x, y, r: 2 * across },
+      { kind: hold.nut, x, y: UNDER + y, jaw: across, length: REACH, turn: 0 },
+      { kind: "hex", x, y: UNDER + y, across },
+      { kind: "clockwise", x, y: UNDER + y, r: 2 * across },
     ],
     labels: [
       { x: 0, y: 6, says: "On top: hold the head", heading: true },
@@ -77,10 +77,10 @@ export const tightenCloseUp = (
         says:
           hold.head === "pliers" ? `handles rest on the ${thing}` : `handle rests on the ${thing}`,
       },
-      { x: UNDER, y: 6, says: "Under: turn the nut", heading: true },
+      { x: 0, y: UNDER + 6, says: "Under: turn the nut", heading: true },
       {
-        x: UNDER,
-        y: 84,
+        x: 0,
+        y: UNDER + 84,
         says: `${hold.yours ? "your" : "a"} ${named[hold.nut]}, clockwise`,
         key: true,
       },

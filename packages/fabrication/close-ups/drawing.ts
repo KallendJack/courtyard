@@ -1,5 +1,12 @@
 import type { Box } from "../build.ts";
-import type { CloseUp, CloseUpFace, CloseUpPill, CloseUpStroke, CloseUpType } from "../close-up.ts";
+import type {
+  CloseUp,
+  CloseUpAnswers,
+  CloseUpFace,
+  CloseUpPill,
+  CloseUpStroke,
+  CloseUpType,
+} from "../close-up.ts";
 
 // How a close-up by type is drawn (#813): its pieces in 3D, in mm (`x` along, `y` back, `z` up),
 // seen from above one corner, the way the wood lies, then laid flat for the app to draw as it is.
@@ -108,6 +115,8 @@ export const drawn = (options: {
   /** Its words, each a pill in the column off the drawing, never on the wood: a piece's name too. */
   pills: readonly Pill3[];
   notes: readonly string[];
+  /** By eye or measured, and whether to drill first (#826), when it has spots or a mark. */
+  answers?: CloseUpAnswers;
   extra?: (place: { left: number; top: number; right: number }) => {
     faces: CloseUpFace[];
     pills: { says: string; to: Point; tone?: CloseUpPill["tone"] }[];
@@ -167,5 +176,6 @@ export const drawn = (options: {
     faces: flatFaces.map((face) => ({ ...face, points: face.points.map(at) })),
     strokes: strokes.map((stroke) => ({ ...stroke, from: at(stroke.from), to: at(stroke.to) })),
     pills,
+    ...(options.answers === undefined ? {} : { answers: options.answers }),
   };
 };

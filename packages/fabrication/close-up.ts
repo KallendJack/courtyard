@@ -81,6 +81,17 @@ export type CloseUpShape =
     };
 
 /**
+ * What a close-up's screw spots or mark ask, said by code so it's never left to guess (#826):
+ * placed by eye or measured (a measured mark with its number), and for screw spots whether to
+ * drill a pilot hole first (with its bit) or just screw, by the pilot rule (#789).
+ */
+export type CloseUpAnswers = {
+  readonly placed: "eye" | "measure";
+  readonly mm?: number;
+  readonly drill?: { readonly first: boolean; readonly bit?: number };
+};
+
+/**
  * A step's close-up: a flat view of what it makes, in mm from the view's top left corner (`y`
  * down), with its key sizes as dimension lines and where each fixing goes.
  */
@@ -122,4 +133,5 @@ export type CloseUp = {
   readonly faces?: readonly CloseUpFace[];
   readonly strokes?: readonly CloseUpStroke[];
   readonly pills?: readonly CloseUpPill[];
+  readonly answers?: CloseUpAnswers;
 };

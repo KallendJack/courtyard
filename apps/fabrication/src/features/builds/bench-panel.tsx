@@ -5,6 +5,8 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import { RotateCcw, X } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useState } from "react";
 import { CloseUp } from "./close-up.tsx";
+import { CloseUpCard } from "./picture/close-up-card.tsx";
+import { WhereThisGoes } from "./picture/where-this-goes.tsx";
 import { cutFrom, listed, partSize, stepsUsing } from "./words.ts";
 
 /** The 3D view, with `three`, in a file of its own: only a Build's page loads it. */
@@ -58,11 +60,17 @@ function PartCard(props: { derived: DerivedBuild; label: string; close: () => vo
 /** The Build at a step (#699): the step, with its picture (#754). */
 export type AtStep = { step: BuildStep };
 
+/** The most close-ups beside the model at the bench, at the board's size (#826). */
+const AT_THE_BENCH = 2;
+
 /**
  * The Build in 3D (#698; #753's boards): fitted to its panel, drag to turn it, Reset view to turn
  * it back, and tap a part or its letter for its card. While the steps show (#699), it's the step's
  * picture (#754): the job as it's done. Along its foot, what the page puts there (Hold to ask)
- * and Reset view; on a computer, the step's close-up below it and the parts' key.
+ * and Reset view; on a computer, the step's close-up below it and the parts' key. At the bench
+ * (#826, its boards), titled with what the picture shows, with no Reset view; unfolded, the
+ * step's close-ups as cards under the model (or beside it, for diagrams read top to bottom) and
+ * where its pieces go in the corner.
  */
 export function BenchPanel(props: {
   name: string;
@@ -76,70 +84,125 @@ export function BenchPanel(props: {
   withKey?: boolean;
   /** Whether it has Reset view: not on the cover screen, where the panel is small. */
   resettable?: boolean;
-  /** Whether the marks' words are at the bench's size: beside a step in big type (#777). */
-  big?: boolean;
+  /** Whether it's beside a step at the bench, as its boards draw it (#826): no Reset view. */
+  bench?: boolean;
+  /**
+   * Whether the step's close-ups and where it goes show as cards over the model at the bench: not
+   * folded, where the model needs the room and the close-ups are under Show me how.
+   */
+  withCards?: boolean;
   /** What sits at the view's foot, left of Reset view: Hold to ask. */
   children?: ReactNode;
   /** What shows over the view in place of a part's card: an answer, at its foot. */
   over?: ReactNode;
 }) {
-  const { derived, lit, pick, atStep, resettable = true } = props;
+  const { derived, lit, pick, atStep } = props;
+  const bench = props.bench === true && atStep !== undefined;
+  const resettable = props.resettable !== false && !bench;
   const [reset, setReset] = useState(0);
   const closeUps = props.closeUp === true ? (atStep?.step.closeUps ?? []) : [];
+  const cards = bench && props.withCards === true;
+  const benchCloseUps = cards ? atStep.step.closeUps.slice(0, AT_THE_BENCH) : [];
+  // Diagrams with headed words (a bolt, tightened and apart) read top to bottom, so they stack in
+  // a column beside the model, as the castors' board has them; pictures sit in a row under it.
+  const column =
+    benchCloseUps.length > 0 &&
+    benchCloseUps.every((closeUp) => (closeUp.labels ?? []).some((label) => label.heading));
   const over =
     props.over ??
     (lit === undefined ? undefined : (
       <PartCard derived={derived} label={lit} close={() => pick(lit)} />
     ));
+  const view = (
+    <Suspense fallback={null}>
+      <BenchView
+        derived={derived}
+        lit={lit}
+        scene={atStep?.step.scene ?? undefined}
+        sceneId={atStep?.step.id ?? "whole"}
+        pick={pick}
+        reset={reset}
+        bench={bench}
+      />
+    </Suspense>
+  );
+  // What's over the view: a part's card or an answer, and along its foot Hold to ask and Reset view.
+  const overIt = (
+    <>
+      {over !== undefined && over !== null && (
+        // Clear of the foot, as tall as what's in it: a part's card at the top, an answer just
+        // above Hold to ask (#793's board).
+        <div
+          className={classes(
+            "pointer-events-none absolute inset-x-0 top-0 bottom-18 z-20 flex flex-col *:pointer-events-auto",
+            props.over !== undefined && props.over !== null && "justify-end",
+          )}
+        >
+          {over}
+        </div>
+      )}
+      <div
+        className={classes(
+          "pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end gap-3 *:pointer-events-auto",
+          resettable ? "justify-between" : "justify-start",
+        )}
+      >
+        {props.children}
+        {resettable && (
+          <Button variant="outline" size="lg" onClick={() => setReset((count) => count + 1)}>
+            <RotateCcw aria-hidden />
+            Reset view
+          </Button>
+        )}
+      </div>
+    </>
+  );
   return (
     <section aria-label="In 3D" className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       <div className="flex items-baseline justify-between gap-3">
         <CapsLabel tone="muted" heading={{ level: 2 }} className="min-w-0 truncate">
-          {atStep === undefined ? props.name : `Step ${atStep.step.number} · ${atStep.step.title}`}
+          {atStep === undefined
+            ? props.name
+            : bench
+              ? (atStep.step.scene?.title ?? atStep.step.title)
+              : `Step ${atStep.step.number} · ${atStep.step.title}`}
         </CapsLabel>
         <span className="shrink-0 text-meta text-muted-foreground">
           {atStep === undefined ? "Drag to turn · tap a part" : "Drag to turn"}
         </span>
       </div>
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <Suspense fallback={null}>
-          <BenchView
-            derived={derived}
-            lit={lit}
-            scene={atStep?.step.scene ?? undefined}
-            sceneId={atStep?.step.id ?? "whole"}
-            pick={pick}
-            reset={reset}
-            big={props.big === true}
-          />
-        </Suspense>
-        {over !== undefined && over !== null && (
-          // Over the view, clear of its foot, as tall as what's in it: a part's card at the top,
-          // an answer just above Hold to ask (#793's board).
-          <div
-            className={classes(
-              "pointer-events-none absolute inset-x-0 top-0 bottom-18 flex flex-col *:pointer-events-auto",
-              props.over !== undefined && props.over !== null && "justify-end",
+      {bench ? (
+        // At the bench, Hold to ask and an answer sit over the close-ups too, as the board has them.
+        // Folded, with no cards, Hold to ask sits over the model, which keeps the room.
+        <div className={classes("relative flex min-h-0 flex-1 flex-col gap-3", cards && "pb-14")}>
+          <div className="flex min-h-0 flex-1 gap-3">
+            <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+              {view}
+              {cards && !column && <WhereThisGoes derived={derived} step={atStep.step} />}
+            </div>
+            {column && (
+              <div className="flex w-50 shrink-0 flex-col gap-3 *:flex-1">
+                {benchCloseUps.map((closeUp) => (
+                  <CloseUpCard key={closeUp.title} closeUp={closeUp} parts={derived.parts} />
+                ))}
+              </div>
             )}
-          >
-            {over}
           </div>
-        )}
-        <div
-          className={classes(
-            "pointer-events-none absolute inset-x-0 bottom-0 flex items-end gap-3 *:pointer-events-auto",
-            resettable ? "justify-between" : "justify-end",
+          {!column && benchCloseUps.length > 0 && (
+            <div className="flex h-38 shrink-0 gap-3 *:flex-1 *:last:flex-[0.6]">
+              {benchCloseUps.map((closeUp) => (
+                <CloseUpCard key={closeUp.title} closeUp={closeUp} parts={derived.parts} />
+              ))}
+            </div>
           )}
-        >
-          {props.children}
-          {resettable && (
-            <Button variant="outline" size="lg" onClick={() => setReset((count) => count + 1)}>
-              <RotateCcw aria-hidden />
-              Reset view
-            </Button>
-          )}
+          {overIt}
         </div>
-      </div>
+      ) : (
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          {view}
+          {overIt}
+        </div>
+      )}
       {closeUps.length > 0 && (
         <div className="flex max-h-[45%] shrink-0 gap-3">
           {closeUps.map((closeUp) => (

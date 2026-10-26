@@ -159,21 +159,32 @@ const HEAD = 40;
 type Shown = Placing & { label: HTMLElement };
 
 /**
- * Where every word over the picture goes, each moved there: the marks' words and the parts'
- * letters clear of each other and inside the picture (#777), then the callouts off the model,
- * each leader drawn from its place to the nearest edge of its words (#783).
+ * Where every word over the picture goes, each moved there: what's pinned (a screw spot, #826)
+ * exactly on its place, the marks' words and the parts' letters clear of each other and inside
+ * the picture (#777), then the callouts off the model, each leader drawn from its place to the
+ * nearest edge of its words (#783).
  */
 export const placeWords = (options: {
+  pinned: readonly Shown[];
   shown: readonly Shown[];
   callouts: readonly (Shown & { leader: SVGLineElement | undefined })[];
   outlines: readonly (readonly Point[])[];
   bounds: { width: number; height: number };
+  /** Room over the picture the callouts keep clear of: Where this goes, at the bench (#826). */
+  keepClear?: readonly Placing[];
 }) => {
   const spots = spread(options.shown, options.bounds);
-  const placed: Shown[] = options.shown.map((each, at) => ({ ...each, ...spots[at] }));
+  const placed: Shown[] = [
+    ...options.pinned,
+    ...options.shown.map((each, at) => ({ ...each, ...spots[at] })),
+  ];
   // Never under the view's foot, where Hold to ask and Reset view sit, nor over its title.
   const bounds = { ...options.bounds, height: options.bounds.height - FOOT, top: HEAD };
-  const off = offModel(options.callouts, { ...options, bounds, placed });
+  const off = offModel(options.callouts, {
+    ...options,
+    bounds,
+    placed: [...placed, ...(options.keepClear ?? [])],
+  });
   options.callouts.forEach((each, at) => {
     const spot = { ...each, ...off[at] };
     const end = leaderEnd(each, spot);

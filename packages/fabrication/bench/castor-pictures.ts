@@ -111,7 +111,7 @@ export const castorScene = (setting: SceneSetting): Scene => {
       ]),
       inWorkmate
         ? {
-            kind: "tool",
+            kind: "support",
             name: TOOL_NAMES["folding-workbench"],
             label: null,
             tone: "plain",
@@ -119,7 +119,7 @@ export const castorScene = (setting: SceneSetting): Scene => {
             boxes: workmate(jawsFrom, s.wideWidth),
           }
         : {
-            kind: "offcut",
+            kind: "support",
             name: "Offcuts",
             label: null,
             tone: "plain",

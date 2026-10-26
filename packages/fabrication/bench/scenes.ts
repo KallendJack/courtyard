@@ -1,5 +1,6 @@
+import type { Box } from "../build.ts";
 import { bracketArm, bracketBoxes, bracketWidth } from "../close-ups/bracket.ts";
-import type { Scene, SceneMark, ScenePiece } from "../scene.ts";
+import type { At, Scene, SceneMark, ScenePiece } from "../scene.ts";
 import { castorScene } from "./castor-pictures.ts";
 import { cutScene, markScene } from "./cut-scenes.ts";
 import {
@@ -22,52 +23,117 @@ import {
 // long and 780 high) and only drawn when they're to hand; where one isn't, its place is still
 // marked.
 
-/** One end frame flat on the floor, outside down: two legs, the rails across them, a square. */
-const endFrameScene = (setting: SceneSetting): Scene => {
+/**
+ * One end frame on the floor (Paper, 2 · Agreed, "Fabrication · End frames in 3D, your kit · Fold
+ * (#785, #788)"): the legs tall and thin on offcuts, the rails across them, the clamps at a joint
+ * and the square in the corner; the length marked from the floor end in gold, and each joint's
+ * two screw spots, red where they're drilled first.
+ */
+const endFrameScene = (setting: SceneSetting, first: boolean): Scene => {
   const s = setting.shape;
-  const top = s.wide + s.thick;
+  // The legs on offcuts as thick as the timber, so a clamp's jaw fits under.
+  const lift = s.thick;
+  const legTop = lift + s.wide;
+  const top = legTop + s.thick;
   const lower = s.leg - s.shelfHeight - s.wide;
-  const diagonal = tenth(Math.hypot(s.endRail, s.leg));
+  const legsAt = [0, s.endRail - s.thick];
+  const far = s.endRail - s.thick;
   return {
-    title: "One end frame, flat on the floor",
-    view: { turn: -20, tilt: 60 },
+    title: "On the floor, on offcuts",
+    // From the floor end, as the board looks: the legs run away to the right, the clamps far off.
+    view: { turn: 215, tilt: 35 },
     pieces: [
+      {
+        kind: "support",
+        name: "Offcuts",
+        label: null,
+        tone: "plain",
+        boxes: legsAt.flatMap((x) =>
+          [0.2, 0.75].map((along) => box(x - 25, s.leg * along, 0, s.thick + 50, s.wide, lift)),
+        ),
+      },
       part(
         "A",
         nameOf(setting, "A"),
         "lit",
-        [0, s.endRail - s.thick].map((x) => box(x, 0, 0, s.thick, s.leg, s.wide)),
+        legsAt.map((x) => box(x, 0, lift, s.thick, s.leg, s.wide)),
       ),
       part(
         "C",
         nameOf(setting, "C"),
         "lit",
-        [0, lower].map((y) => box(0, y, s.wide, s.endRail, s.wide, s.thick)),
+        [0, lower].map((y) => box(0, y, legTop, s.endRail, s.wide, s.thick)),
       ),
+      // A clamp beside the top joint's crosses, on the far leg: its bar, and a jaw each side.
+      ...toolIf(setting.toHand, "clamps", [
+        box(far + s.thick + 10, s.wide - 25, 5, 20, 20, top + 60),
+        box(far - 30, s.wide - 30, top, s.thick + 60, 30, 20),
+        box(far - 30, s.wide - 30, 5, s.thick + 60, 30, lift - 10),
+      ]),
       ...toolIf(setting.toHand, "square", [
         box(-20, 0, top - 30, 20, 250, 35),
         box(0, 0, top, 200, 25, 2),
       ]),
     ],
     marks: [
-      { kind: "check", from: at(0, 0, top), to: at(s.endRail, s.leg, top), mm: diagonal },
-      { kind: "check", from: at(s.endRail, 0, top), to: at(0, s.leg, top), mm: diagonal },
-      { kind: "size", from: at(0, -OUT, top), to: at(s.endRail, -OUT, top), mm: s.endRail },
       {
         kind: "size",
-        from: at(s.endRail + OUT, s.leg - s.shelfHeight, top),
-        to: at(s.endRail + OUT, s.leg, top),
+        from: at(-OUT / 2, s.leg - s.shelfHeight, legTop),
+        to: at(-OUT / 2, s.leg, legTop),
         mm: s.shelfHeight,
       },
-      {
-        kind: "arrow",
-        from: at(s.thick / 2, s.wide / 2, top + 200),
-        to: at(s.thick / 2, s.wide / 2, top),
-        says: "2 screws a joint",
-      },
-      { kind: "note", at: at(s.endRail / 2, s.leg, 0), says: "floor end", tone: "plain" },
+      // Two crosses a joint, on a diagonal in the green, as the screw spots' close-up draws them.
+      ...legsAt.flatMap((x) =>
+        [0, lower].flatMap((y) =>
+          [
+            at(x + s.thick / 3, y + s.wide / 4, top),
+            at(x + (2 * s.thick) / 3, y + (3 * s.wide) / 4, top),
+          ].map((spot): SceneMark => ({ kind: "spot", at: spot, first })),
+        ),
+      ),
     ],
   };
+};
+
+/**
+ * Where each of a step's lines is done, for its badge (#826), in its scene's mm: what the line
+ * acts on, as its board places them. A step with none given has its badges on its lit pieces in
+ * turn, each on its top.
+ */
+const lineSpots = (setting: SceneSetting, id: string, scene: Scene): At[] => {
+  const s = setting.shape;
+  const topOf = (b: Box) => at(b.x + b.w / 2, b.y + b.d / 2, b.z + b.h);
+  switch (id) {
+    case "end-frames": {
+      const legTop = s.thick + s.wide;
+      const top = legTop + s.thick;
+      const lower = s.leg - s.shelfHeight - s.wide;
+      return [
+        at(0, s.leg - s.shelfHeight / 2, legTop),
+        at(s.endRail - s.thick / 2, s.wide / 2, top + 120),
+        at(s.endRail / 2, lower + s.wide / 2, top),
+        at(s.endRail, s.wide / 2, top + 220),
+      ];
+    }
+    default: {
+      const lit = scene.pieces.filter((piece) => piece.tone === "lit").flatMap((p) => p.boxes);
+      const shown = lit.length > 0 ? lit : scene.pieces.flatMap((piece) => piece.boxes);
+      return shown.map(topOf);
+    }
+  }
+};
+
+/** A scene with the badge of each of its step's `lines` lines, at what each acts on (#826). */
+const withBadges = (setting: SceneSetting, id: string, scene: Scene, lines: number): Scene => {
+  const spots = lineSpots(setting, id, scene);
+  const badges = Array.from({ length: lines }, (_, line): SceneMark[] => {
+    const spot = spots[line % spots.length];
+    if (spot === undefined) return [];
+    // A line past the spots given goes on one again, a little higher so the two don't sit as one.
+    const up = Math.floor(line / spots.length) * 120;
+    return [{ kind: "badge", at: { ...spot, z: spot.z + up }, line: line + 1 }];
+  }).flat();
+  return { ...scene, marks: [...scene.marks, ...badges] };
 };
 
 /** What an assembly step marks on the frame so far, from the shape's own numbers. */
@@ -187,11 +253,23 @@ const ASSEMBLY_VIEWS: Readonly<Record<string, Scene["view"]>> = {
 
 /**
  * A step's scene, by its ID: the parts shown so far (this step's included) and its own parts,
- * lit, for an assembly step.
+ * lit, for an assembly step; with a badge for each of its `lines` (#826).
  */
 export const stepScene = (
   setting: SceneSetting,
-  step: { id: string; shown: readonly string[]; lit: readonly string[] },
+  step: {
+    id: string;
+    shown: readonly string[];
+    lit: readonly string[];
+    lines: number;
+    /** Whether its screw spots are drilled first. */
+    first: boolean;
+  },
+): Scene => withBadges(setting, step.id, sceneOf(setting, step), step.lines);
+
+const sceneOf = (
+  setting: SceneSetting,
+  step: { id: string; shown: readonly string[]; lit: readonly string[]; first: boolean },
 ): Scene => {
   switch (step.id) {
     case "check-delivery":
@@ -203,7 +281,7 @@ export const stepScene = (
     case "fit-castors":
       return castorScene(setting);
     case "end-frames":
-      return endFrameScene(setting);
+      return endFrameScene(setting, step.first);
     case "check-bench": {
       const s = setting.shape;
       return whole(setting, [

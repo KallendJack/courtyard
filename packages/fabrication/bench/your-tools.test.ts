@@ -51,10 +51,8 @@ describe("a Build's steps with Your tools", () => {
     expect(sawOf(after)).toBe("mitre-saw");
     const cut = stepOf(after, "cut-timber");
     expect(cut?.scene?.title).toBe("On the mitre saw");
-    expect(cut?.scene?.pieces.filter((piece) => piece.kind === "tool").map((p) => p.name)).toEqual([
-      "Folding workbench",
-      "Mitre saw",
-    ]);
+    const tools = cut?.scene?.pieces.filter((piece) => ["tool", "support"].includes(piece.kind));
+    expect(tools?.map((piece) => piece.name)).toEqual(["Folding workbench", "Mitre saw"]);
   });
 
   it("say in one line what changed, on the step it changed", () => {

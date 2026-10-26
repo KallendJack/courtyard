@@ -107,4 +107,15 @@ export const BuildCloseUp = z.object({
       tone: z.enum(["plain", "warn", "fine"]).optional(),
     }),
   ).optional(),
+  /**
+   * What its screw spots or mark ask (#826): placed by eye or measured (with its number), and
+   * whether to drill first (with its bit) or just screw.
+   */
+  answers: z
+    .object({
+      placed: z.enum(["eye", "measure"]),
+      mm: z.number().optional(),
+      drill: z.object({ first: z.boolean(), bit: z.number().optional() }).optional(),
+    })
+    .optional(),
 });

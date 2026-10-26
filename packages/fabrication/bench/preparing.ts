@@ -36,6 +36,8 @@ export type Draft = {
   /** The bits it drills with, when its tools have drill bits: 3 mm pilots unless it says. */
   bits?: readonly { mm: number; for: string }[];
   safety?: readonly Tool[];
+  /** Whether its spots are drilled first, by the pilot rule, said on its close-ups (#826). */
+  drills?: { first: boolean; bit?: number };
   /** Its fixings, each with the type of close-up that shows it made (#813), which it must show. */
   fixings?: readonly { name: string; count: number; joint: FixingType }[];
   /** The techniques it uses (#813): drawn in full the first time the steps use each. */

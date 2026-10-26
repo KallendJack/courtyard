@@ -1,14 +1,16 @@
 import { bracketArm, bracketCloseUp } from "../close-ups/bracket.ts";
 import { overlapCloseUp } from "../close-ups/overlap.ts";
-import { endFrameCloseUp, longSideCloseUp, screwSpotsWalk } from "./close-ups.ts";
+import { legEndOnCloseUp, longSideCloseUp, screwSpotsWalk } from "./close-ups.ts";
 import { type Shape, whole } from "./frame.ts";
 import type { BenchParameters } from "./parameters.ts";
 import { act, type Draft } from "./preparing.ts";
 import {
   bracketing,
   drilling,
+  drillsFor,
   type Pilots,
   SCREWS_PER_BRACKET,
+  SPLIT_TIP,
   screwing,
   wordsWith,
 } from "./screws.ts";
@@ -69,26 +71,37 @@ export const frameDrafts = (options: {
       parts: ["A", "C"],
       tools: ["tape-measure", "pencil", "square", "clamps", ...drilling(pilots.endFrames)],
       safety: ["safety-glasses"],
+      drills: drillsFor(pilots.endFrames),
       fixings: [frameScrews],
       batch: "One joint at a time: crosses, screws, then the next. Both frames the same way.",
+      // In the board's words (#826): where the screws go and whether to drill first are on the
+      // picture, the screw spots' close-up.
       actions: [
         act(
           `Both legs (A) side by side, ends level: mark ${shelfUp} from the floor end across both.`,
           `A × 2: line ${shelfUp} up across both.`,
         ),
         act(
-          "Top rail (C) across them, flush with the top ends. Square the corner, then clamp.",
-          `${whole(s.endRail)} outside; C flush with the tops; square, clamp.`,
+          "Lay them tall and thin on offcuts. Top rail (C) flush with the top ends.",
+          `On edge, on offcuts; C flush with the tops, ${whole(s.endRail)} outside.`,
         ),
-        screwing(
-          pilots.endFrames,
-          "Mark 2 crosses where the rail sits on each leg.",
-          "2 crosses a joint.",
+        act(
+          "Bottom rail's lower edge on your line. Mark the 2 crosses first, then clamp beside them.",
+          "Bottom C on the line; crosses, then clamp.",
         ),
-        act("Bottom rail (C) the same, its lower edge on your line.", "Bottom C on the lines."),
+        act(
+          "Screw where the clamp isn't. Move the clamp, second screw. Next joint.",
+          pilots.endFrames ? "Screw, 3 mm pilots; move the clamp." : "Screw; move the clamp.",
+        ),
       ],
-      // The rail lies on the leg's narrow face, flat on the floor.
-      closeUps: [railOnLeg(s, s.wide, s.thick), endFrameCloseUp(s)],
+      tips: [
+        "Check the corner with your square before the first screw.",
+        ...(pilots.endFrames
+          ? ["The crosses are near the leg's end: drill a 3 mm pilot hole at each first."]
+          : [SPLIT_TIP]),
+      ],
+      // The rail lies across the leg's narrow face, the leg on its edge.
+      closeUps: [railOnLeg(s, s.wide, s.thick), legEndOnCloseUp(s)],
       techniques: [
         { type: "measure-mark", piece: { wide: s.wide, thick: s.thick, name: "A" }, at: shelfUp },
         driving,
@@ -110,6 +123,7 @@ export const frameDrafts = (options: {
       parts: ["B"],
       tools: ["tape-measure", "clamps", "square", ...drilling(pilots.longRails)],
       safety: ["safety-glasses"],
+      drills: drillsFor(pilots.longRails),
       fixings: [frameScrews],
       batch: "One joint at a time: the front's top rail, its bottom rail, then the back the same.",
       actions: [
@@ -152,6 +166,7 @@ export const frameDrafts = (options: {
       adds: [],
       tools: ["square", "clamps", "pencil", ...drilling(pilots.brackets)],
       safety: ["safety-glasses"],
+      drills: drillsFor(pilots.brackets),
       fixings: bracketed(p, 4 * BRACKETS_PER_LEG),
       batch: "One leg at a time: square, clamp, both brackets, then the next.",
       actions: [

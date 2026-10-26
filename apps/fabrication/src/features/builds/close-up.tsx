@@ -87,13 +87,20 @@ const useFitted = (
  * top and a 460 mm end frame read the same; lines stay a hair wide however it's scaled. Its words
  * (#783) are over it at the type's own sizes, never under 12 px, placed where they belong.
  */
-function Drawing(props: {
+export function Drawing(props: {
   closeUp: BuildCloseUp;
   parts: readonly BuildPart[];
   /** As tall as its width makes it, up to a limit, rather than filling its box. */
   ownHeight?: boolean;
+  /** The drawing alone, without its pills' column: a card at the bench (#826). */
+  bare?: boolean;
 }) {
-  const { closeUp, parts } = props;
+  const { closeUp: drawn, parts } = props;
+  // Bare, the drawing ends where its pills' column starts.
+  const closeUp =
+    props.bare === true
+      ? { ...drawn, width: drawn.pills?.[0]?.x ?? drawn.width, pills: [] }
+      : drawn;
   const text = Math.max(closeUp.width, closeUp.height) / 16;
   const gap = text * 0.9;
   // Room round it for the sizes' figures; a drawing with none needs only a little.

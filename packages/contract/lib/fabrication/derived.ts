@@ -154,18 +154,22 @@ const BuildSceneMark = z.discriminatedUnion("kind", [
     more: z.string().optional(),
     tone: z.enum(["yours", "next"]),
   }),
+  /** The badge of the step's line `line` (from 1), at what it acts on (#826). */
+  z.object({ kind: z.literal("badge"), at: At, line: z.number().int() }),
+  /** A screw spot, drilled first or just screwed (#826). */
+  z.object({ kind: z.literal("spot"), at: At, first: z.boolean() }),
 ]);
 
 /**
- * A step's picture (#754): the job as it's done, its pieces (parts, fitted, tools, the offcut)
- * each lit, faint or plain, where it opens from, and its marks.
+ * A step's picture (#754): the job as it's done, its pieces (parts, fitted, tools, what holds the
+ * work, the offcut) each lit, faint or plain, where it opens from, and its marks.
  */
 const BuildScene = z.object({
   title: z.string(),
   view: z.object({ turn: z.number(), tilt: z.number() }),
   pieces: list(
     z.object({
-      kind: z.enum(["part", "fitted", "tool", "offcut"]),
+      kind: z.enum(["part", "fitted", "tool", "support", "offcut"]),
       name: z.string(),
       label: z.string().nullable(),
       tone: z.enum(["lit", "built", "plain"]),

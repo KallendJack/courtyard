@@ -143,6 +143,8 @@ export const castorsDraft = (options: {
     tools: [drill, ...tools.chips],
     bits: [{ mm: bit, for: `the M${castors.bolt.diameter.value} bolts` }],
     safety: ["safety-glasses"],
+    // Each bolt's hole drilled through first, at the bolt's bit.
+    drills: { first: true, bit },
     fixings: castorFixings(castors, names),
     batch: "One castor at a time, placed by eye: each hole drilled and bolted before the next.",
     actions: [

@@ -68,8 +68,8 @@ export function AtTheBench(
         lit={props.lit}
         pick={props.pick}
         atStep={{ step }}
-        resettable={!cover}
-        big={!cover}
+        bench
+        withCards={!cover}
         over={props.answer}
       >
         {props.ask}

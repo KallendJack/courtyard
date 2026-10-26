@@ -30,8 +30,11 @@ const pieces = (scene: Scene) =>
     (piece) => `${piece.kind} ${piece.label ?? piece.name} ${piece.tone} ×${piece.boxes.length}`,
   );
 
+/** The tools drawn, those that hold the work (#826) among them. */
 const tools = (scene: Scene) =>
-  scene.pieces.filter((piece) => piece.kind === "tool").map((piece) => piece.name);
+  scene.pieces
+    .filter((piece) => piece.kind === "tool" || piece.kind === "support")
+    .map((piece) => piece.name);
 
 const marks = <K extends SceneMark["kind"]>(scene: Scene, kind: K) =>
   scene.marks.filter((mark): mark is Extract<SceneMark, { kind: K }> => mark.kind === kind);
@@ -44,7 +47,7 @@ describe("the cut step's scene", () => {
     expect(pieces(scene)).toEqual([
       "part B lit ×1",
       "offcut Offcut plain ×1",
-      "tool Folding workbench plain ×4",
+      "support Folding workbench plain ×4",
       "tool Hand saw plain ×1",
     ]);
     const [piece, offcut] = scene.pieces;
@@ -305,15 +308,44 @@ describe("where the brackets go (#777, drawn as L-shapes #813)", () => {
   });
 });
 
-describe("the end frames' scene", () => {
-  it("lays two legs flat with the rails across them, a square in the corner and the diagonals to check", () => {
+describe("the end frames' scene, as its board has it (#826)", () => {
+  it("lays the legs tall and thin on offcuts, the rails across, with the clamps and square to hand", () => {
     const scene = sceneOf(built(goldenBench), "end-frames");
 
-    expect(pieces(scene)).toEqual(["part A lit ×2", "part C lit ×2", "tool Square plain ×2"]);
-    const diagonal = Math.round(Math.hypot(460, 750) * 10) / 10;
-    expect(marks(scene, "check").map((check) => check.mm)).toEqual([diagonal, diagonal]);
-    expect(marks(scene, "size").map((size) => size.mm)).toEqual([460, 250]);
-    expect(scene.view.tilt).toBe(60);
+    expect(scene.title).toBe("On the floor, on offcuts");
+    expect(pieces(scene)).toEqual([
+      "support Offcuts plain ×4",
+      "part A lit ×2",
+      "part C lit ×2",
+      "tool Clamps plain ×3",
+      "tool Square plain ×2",
+    ]);
+    // Two crosses at each of the four joints, drilled first: they're near the leg's end.
+    expect(marks(scene, "spot")).toHaveLength(8);
+    expect(marks(scene, "spot").every((spot) => spot.first)).toBe(true);
+    // Only the board's marks: the gold length from the floor end, and the lines' badges.
+    expect(marks(scene, "size").map((size) => size.mm)).toEqual([250]);
+    expect(scene.marks.filter((mark) => !["size", "spot", "badge"].includes(mark.kind))).toEqual(
+      [],
+    );
+  });
+});
+
+describe("each step's badges (#826)", () => {
+  it("map one-to-one to its numbered lines, whatever the tools", () => {
+    for (const build of [
+      built(goldenBench),
+      built(withTools("circular-saw")),
+      built({ ...goldenBench, tools: ["drill-driver", "tape-measure", "pencil", "square"] }),
+    ]) {
+      for (const step of build.steps) {
+        const lines = marks(sceneOf(build, step.id), "badge").map((badge) => badge.line);
+        expect(
+          [...lines].sort((a, b) => a - b),
+          step.id,
+        ).toEqual(step.actions.map((_, at) => at + 1));
+      }
+    }
   });
 });
 
@@ -324,7 +356,7 @@ describe("the castors' scene", () => {
     expect(scene.title).toBe("In your Workmate");
     expect(pieces(scene)).toEqual([
       "part E lit ×1",
-      "tool Folding workbench plain ×4",
+      "support Folding workbench plain ×4",
       // The castor's plate, its swivel and its wheel.
       "fitted Wheelwright TD60 castors plain ×3",
       "fitted M6 × 60 bolts plain ×1",
@@ -332,8 +364,11 @@ describe("the castors' scene", () => {
       "tool Drill driver plain ×5",
     ]);
     // Its words are callouts, off the model with a leader, as the board has them: the owner's
-    // tools and where things go in their colour, the next thing to do in green. Nothing else.
-    expect(scene.marks.every((mark) => mark.kind === "callout")).toBe(true);
+    // tools and where things go in their colour, the next thing to do in green; and the lines'
+    // badges (#826). Nothing else.
+    expect(scene.marks.every((mark) => mark.kind === "callout" || mark.kind === "badge")).toBe(
+      true,
+    );
     expect(marks(scene, "callout").map(({ says, more, tone }) => [says, more, tone])).toEqual([
       ["your drill, 7 mm bit", "straight down through the plate's hole", "yours"],
       ["1 bolt in", "then drill the next hole", "next"],
@@ -358,8 +393,8 @@ describe("the castors' scene", () => {
     const scene = sceneOf(built({ ...goldenBench, tools: ["drill-bits"] }), "fit-castors");
 
     expect(scene.title).toBe("On two offcuts");
-    expect(tools(scene)).toEqual([]);
-    expect(pieces(scene)).toContain("offcut Offcuts plain ×2");
+    expect(tools(scene)).toEqual(["Offcuts"]);
+    expect(pieces(scene)).toContain("support Offcuts plain ×2");
     expect(marks(scene, "callout").map((callout) => callout.says)).toEqual([
       "drill 7 mm here",
       "1 bolt in",

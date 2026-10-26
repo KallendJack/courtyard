@@ -1,18 +1,16 @@
 import type { DerivedBuild } from "@courtyard/contract";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
-import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { CALLOUT_FILL, isSmall, outlineOf, placeWords } from "./picture/callouts.ts";
+import { SceneWords } from "./picture/scene-words.tsx";
 import {
   anchorOf,
   type BuildScene,
   drawMark,
   hatching,
   letteredOf,
-  markClass,
-  markWords,
   placing,
   TILT,
   themed,
@@ -21,9 +19,10 @@ import {
   wholeScene,
 } from "./scene.ts";
 
-// The Build in 3D (#698), and at a step the job as it's done (#754): the scene's pieces as boxes,
-// turnable within limits, its marks drawn over it, each part lit at the step labelled. Loaded
-// lazily (`bench-panel.tsx`), so `three` is in this view's own file and nowhere else.
+// The Build in 3D (#698), and at a step the job as it's done (#754): the scene's pieces as boxes
+// in their wood's colour, turnable within limits, its marks drawn over it, each part lit at the
+// step labelled: a letter on a computer, a pill off the wood at the bench (#826). Loaded lazily
+// (`bench-panel.tsx`), so `three` is in this view's own file and nowhere else.
 
 const KIND_COLOUR: Readonly<Record<"timber" | "sheet" | "printed", string>> = {
   timber: "timber",
@@ -31,11 +30,22 @@ const KIND_COLOUR: Readonly<Record<"timber" | "sheet" | "printed", string>> = {
   printed: "printed",
 };
 
+/** What isn't a part, by its kind: fitted things and supports grey, hand tools orange (#826). */
+const PIECE_COLOUR: Readonly<Record<"fitted" | "support" | "tool", string>> = {
+  fitted: "fitted",
+  support: "support",
+  tool: "tool",
+};
+
 /** How far a press may move and still be a tap on a part, not a turn, in pixels. */
 const TAP_SLOP = 6;
 
 /** How much of the view's shorter half the scene reaches, from its middle, once fitted (#753). */
 const FILL = 0.9;
+/** At the bench, as its boards draw the model: nearly to the panel's edges (#826). */
+const BENCH_FILL = 0.85;
+/** Where this goes, in the picture's top right corner at the bench: its middle and size, in px. */
+const WHERE_THIS_GOES = { y: 80, w: 112, h: 160 } as const;
 
 /**
  * The scene, drawn when something changes it (a turn, a part lit, a new step), never in a loop.
@@ -53,10 +63,13 @@ export default function BenchView(props: {
   pick: (label: string) => void;
   /** Changes when Reset view is tapped. */
   reset: number;
-  /** Whether the marks' words are at the bench's size, as the step beside it is. */
-  big: boolean;
+  /**
+   * At the bench (#826, its boards): the parts named in pills off the wood, and the picture's
+   * title left to the panel above it.
+   */
+  bench: boolean;
 }) {
-  const { derived, lit, reset } = props;
+  const { derived, lit, reset, bench } = props;
   const host = useRef<HTMLElement>(null);
   const labels = useRef(new Map<string, HTMLElement>());
   const leaders = useRef(new Map<string, SVGLineElement>());
@@ -80,7 +93,6 @@ export default function BenchView(props: {
   // as a new object, and only new numbers build the scene again.
   const parts = useRef(derived.parts);
   parts.current = derived.parts;
-  const lettered = letteredOf(built);
 
   useEffect(() => {
     const element = host.current;
@@ -116,7 +128,7 @@ export default function BenchView(props: {
     });
     const glow = themed("primary");
     const hatch = hatching();
-    const tool = themed("fitted");
+    const fitted = themed("fitted");
     const meshes: {
       label: string | null;
       colour: THREE.Color;
@@ -126,11 +138,13 @@ export default function BenchView(props: {
     for (const piece of built.pieces) {
       const part = parts.current.find((each) => each.label === piece.label);
       const colour =
-        piece.kind === "part" && part !== undefined
-          ? themed(KIND_COLOUR[part.material.kind])
+        piece.kind === "part"
+          ? part === undefined
+            ? fitted
+            : themed(KIND_COLOUR[part.material.kind])
           : piece.kind === "offcut"
             ? new THREE.Color(0xffffff)
-            : tool;
+            : themed(PIECE_COLOUR[piece.kind]);
       for (const box of piece.boxes) {
         const geometry = new THREE.BoxGeometry(box.w, box.h, box.d);
         const material = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.85 });
@@ -157,10 +171,15 @@ export default function BenchView(props: {
     const anchored = built.marks.map((mark, at) => ({
       key: `mark ${at}`,
       at: point(anchorOf(mark)),
-      callout: mark.kind === "callout",
+      kind: mark.kind,
     }));
-    const marks = anchored.filter((mark) => !mark.callout);
-    const callouts = anchored.filter((mark) => mark.callout);
+    // A screw spot stays on its spot; the parts' pills go off the wood at the bench, like callouts.
+    const spots = anchored.filter((mark) => mark.kind === "spot");
+    const marks = anchored.filter((mark) => mark.kind !== "callout" && mark.kind !== "spot");
+    const callouts = [
+      ...anchored.filter((mark) => mark.kind === "callout"),
+      ...(bench ? letters : []),
+    ];
     const draw = () => {
       renderer.render(world, camera);
       const { clientWidth: width, clientHeight: height } = element;
@@ -179,8 +198,10 @@ export default function BenchView(props: {
         return [{ label, leader, ...onScreen(at), w: label.offsetWidth, h: label.offsetHeight }];
       };
       placeWords({
-        shown: [...marks, ...letters].flatMap(({ key, at }) => measured(key, at)),
+        pinned: spots.flatMap(({ key, at }) => measured(key, at)),
+        shown: [...marks, ...(bench ? [] : letters)].flatMap(({ key, at }) => measured(key, at)),
         callouts: callouts.flatMap(({ key, at }) => measured(key, at)),
+        keepClear: bench ? [{ ...WHERE_THIS_GOES, x: width - WHERE_THIS_GOES.w / 2 }] : [],
         outlines: meshes.map(({ mesh }) => outlineOf(mesh, onScreen)),
         bounds: { width, height },
       });
@@ -190,7 +211,12 @@ export default function BenchView(props: {
      * it fills the view: moved in or out until its farthest corner is at `FILL`.
      */
     const fit = (from?: THREE.Vector3) => {
-      const fill = built.marks.some((mark) => mark.kind === "callout") ? CALLOUT_FILL : FILL;
+      // At the bench the parts' pills sit on and beside the wood, as the boards have them (#826).
+      const fill = bench
+        ? BENCH_FILL
+        : built.marks.some((mark) => mark.kind === "callout")
+          ? CALLOUT_FILL
+          : FILL;
       const shown = new THREE.Box3();
       for (const { mesh } of meshes) shown.expandByObject(mesh);
       if (shown.isEmpty()) return;
@@ -267,12 +293,12 @@ export default function BenchView(props: {
     renderer.domElement.addEventListener("pointerup", released);
 
     scene.current = {
-      // The step's own parts are violet, those put on before faint; the part whose card is open
-      // glows either way.
+      // Everything in its own colour, the step's own parts full and those put on before faint
+      // (#826, its boards); the part whose card is open glows.
       light: (label) => {
         for (const each of meshes) {
           const { mesh } = each;
-          mesh.material.color.copy(each.tone === "lit" ? glow : each.colour);
+          mesh.material.color.copy(each.colour);
           mesh.material.transparent = each.tone === "built";
           mesh.material.opacity = each.tone === "built" ? 0.35 : 1;
           mesh.material.emissive.copy(
@@ -307,7 +333,7 @@ export default function BenchView(props: {
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [built, builtId]);
+  }, [built, builtId, bench]);
 
   useEffect(() => scene.current?.light(lit), [lit]);
   useEffect(() => {
@@ -317,6 +343,10 @@ export default function BenchView(props: {
   const place = (key: string) => (element: HTMLElement | null) => {
     if (element === null) labels.current.delete(key);
     else labels.current.set(key, element);
+  };
+  const lead = (key: string) => (line: SVGLineElement | null) => {
+    if (line === null) leaders.current.delete(key);
+    else leaders.current.set(key, line);
   };
 
   if (cantDraw) {
@@ -332,68 +362,19 @@ export default function BenchView(props: {
       aria-label={`${built.title}, in 3D`}
       className="group relative h-full w-full touch-none overflow-hidden select-none"
     >
-      {props.scene !== undefined && (
+      {props.scene !== undefined && !bench && (
         <CapsLabel tone="muted" className="pointer-events-none absolute top-0 left-0">
           {built.title}
         </CapsLabel>
       )}
-      <svg aria-hidden className="pointer-events-none absolute inset-0 size-full">
-        {built.marks.map((mark, at) =>
-          mark.kind === "callout" ? (
-            <line
-              // biome-ignore lint/suspicious/noArrayIndexKey: a scene's marks are in a fixed order.
-              key={at}
-              ref={(line) => {
-                if (line === null) leaders.current.delete(`mark ${at}`);
-                else leaders.current.set(`mark ${at}`, line);
-              }}
-              strokeWidth={1.5}
-              className={mark.tone === "yours" ? "stroke-yours" : "stroke-success"}
-            />
-          ) : null,
-        )}
-      </svg>
-      {built.marks.map((mark, at) => (
-        <span
-          // biome-ignore lint/suspicious/noArrayIndexKey: a scene's marks are in a fixed order.
-          key={at}
-          ref={place(`mark ${at}`)}
-          className={classes(
-            "pointer-events-none absolute top-0 left-0 rounded-sm px-1 whitespace-nowrap",
-            markClass(mark, props.big),
-          )}
-        >
-          {mark.kind === "callout" ? (
-            <>
-              <span className="block font-semibold">{mark.says}</span>
-              {mark.more !== undefined && (
-                <span className="block group-data-small:hidden">{mark.more}</span>
-              )}
-            </>
-          ) : (
-            markWords(mark)
-          )}
-        </span>
-      ))}
-      {lettered.map((part) => (
-        <button
-          key={part.label}
-          ref={place(`part ${part.label}`)}
-          type="button"
-          aria-label={`${part.label}, ${part.name}`}
-          aria-pressed={lit === part.label}
-          aria-current={part.lit ? "step" : undefined}
-          onClick={() => props.pick(part.label)}
-          className={classes(
-            "absolute top-0 left-0 flex size-8 items-center justify-center rounded-full border-2 font-mono text-meta font-bold",
-            lit === part.label || part.lit
-              ? "border-primary-text bg-primary text-primary-foreground"
-              : "border-primary bg-background text-foreground",
-          )}
-        >
-          {part.label}
-        </button>
-      ))}
+      <SceneWords
+        scene={built}
+        lit={lit}
+        pick={props.pick}
+        bench={bench}
+        place={place}
+        lead={lead}
+      />
     </figure>
   );
 }

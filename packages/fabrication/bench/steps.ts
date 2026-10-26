@@ -16,6 +16,7 @@ import {
   benchPilots,
   bracketing,
   drilling,
+  drillsFor,
   SPLIT_RISK,
   SPLIT_TIP,
   screwing,
@@ -140,6 +141,7 @@ export const benchSteps = (options: {
       parts: p.shelf.on ? ["F", "D"] : ["F"],
       tools: ["tape-measure", "pencil", ...drilling(pilots.brackets)],
       safety: ["safety-glasses"],
+      drills: drillsFor(pilots.brackets),
       fixings: bracketed(p, p.shelf.on ? 4 : 2),
       batch: "One support at a time.",
       actions: [
@@ -179,6 +181,7 @@ export const benchSteps = (options: {
       parts: ["H"],
       tools: drilling(pilots.shelf),
       safety: ["safety-glasses"],
+      drills: drillsFor(pilots.shelf),
       fixings: [fixing(sheetScrews, shelfCloseUp.fixings.length)],
       batch: "One rail at a time, then the support.",
       actions: [
@@ -210,6 +213,7 @@ export const benchSteps = (options: {
         ...drilling(pilots.braces),
       ],
       safety: ["safety-glasses"],
+      drills: drillsFor(pilots.braces),
       fixings: [fixing(sheetScrews, braces * SHEET_SCREWS_PER_BRACE)],
       batch: "One brace at a time.",
       actions: [
@@ -255,6 +259,7 @@ export const benchSteps = (options: {
       parts: ["G"],
       tools: ["tape-measure", "clamps", ...drilling(pilots.top), "countersink-bit", "sandpaper"],
       safety: ["safety-glasses"],
+      drills: drillsFor(pilots.top),
       fixings: [fixing(sheetScrews, topCloseUp.fixings.length)],
       batch: "One rail at a time: crosses, countersink, screws, then the next.",
       actions: [
@@ -330,13 +335,21 @@ export const benchSteps = (options: {
     batch: draft.batch,
     actions: draft.actions,
     tips: draft.tips ?? [],
-    closeUps: draft.closeUps ?? (draft.closeUp === undefined ? [] : [draft.closeUp]),
+    // Every close-up with screw spots says they're placed by eye, and whether to drill first (#826).
+    closeUps: (draft.closeUps ?? (draft.closeUp === undefined ? [] : [draft.closeUp])).map(
+      (closeUp) =>
+        draft.drills === undefined || closeUp.fixings.length === 0
+          ? closeUp
+          : { ...closeUp, answers: { placed: "eye" as const, drill: draft.drills } },
+    ),
     techniques: techniques[at] ?? [],
     walkThrough: draft.walkThrough ?? [],
     scene: stepScene(setting, {
       id: draft.id,
       shown: on.slice(0, at + 1).flatMap((each) => each.adds ?? each.parts),
       lit: draft.parts,
+      lines: draft.actions.length,
+      first: draft.drills?.first ?? false,
     }),
     check: draft.check,
     words: draft.words ?? [],
