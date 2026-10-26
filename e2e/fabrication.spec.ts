@@ -86,7 +86,7 @@ const pickTheFrameTimber = async (page: Page) => {
   await page.getByRole("tab", { name: "Buy list" }).click();
   await page
     .getByRole("region", { name: "Buy list" })
-    .getByRole("button", { name: /45 × 95 C16, 2\.4 m/ })
+    .getByRole("button", { name: /^45 × 95 C16, 2\.4 m/ })
     .click();
   const options = page.getByRole("region", { name: "Frame timber options" });
   await expect(options).toContainText("Legs, long rails, end rails and shelf support");
