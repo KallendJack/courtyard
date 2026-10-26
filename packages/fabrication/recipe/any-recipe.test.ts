@@ -192,6 +192,26 @@ describe("a box with two shelves on cleats", () => {
     });
     expect(box.buyList.total).toBe((sheets ?? 0) * 5000 + 420);
   });
+
+  it("takes a worktop screwed down into its sides' and back's edges", () => {
+    const overhang = { value: 20, unit: "mm", source: { kind: "measured" } } as const;
+    const topped = {
+      ...shelfBox,
+      pieces: [{ kind: "panel", id: "worktop", stock: "18-mm-plywood", place: "top", overhang }],
+    };
+    const screwed = worked({
+      ...topped,
+      joints: [{ kind: "sheet-screwed", joins: ["worktop", "cupboard"], fixing: "4-40-screws" }],
+    });
+    expect(screwed.parts.find((part) => part.name === "Worktop")).toMatchObject({
+      length: 800,
+      width: 400,
+    });
+    fits(screwed);
+    // Along the back's top edge (3 across the 800) and each side's (2 across the 400), never
+    // into the box's own top under it.
+    expect(needs(screwed)["4 × 40 screws"]).toBe((needs(worked(topped))["4 × 40 screws"] ?? 0) + 7);
+  });
 });
 
 describe("a freestanding rack", () => {

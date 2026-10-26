@@ -159,7 +159,8 @@ export const legsBody = (ctx: Ctx, legs: Legs): Body => {
       group.kind === "brace" && frames.some((frame) => frame.id === group.on),
   );
   for (const brace of braces) {
-    const frame = frames.find((each) => each.id === brace.on) as Frame;
+    const frame = frames.find((each) => each.id === brace.on);
+    if (frame === undefined) continue;
     const sheet = ctx.sheet(brace.stock).thickness.value;
     const height = leg - frame.lower.value;
     const z = lowerOf(frame);

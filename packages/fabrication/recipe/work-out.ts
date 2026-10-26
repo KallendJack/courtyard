@@ -15,7 +15,7 @@ import { assumedSizes } from "../findings.ts";
 import { pickStock, type Slot, standsInFor, stockOptions, wrongStock } from "../options.ts";
 import type { Sheet, StockOptionId, Timber } from "../stock.ts";
 import { fixingsOf } from "./fixings.ts";
-import { layoutOf, type Placed, said, words } from "./layout.ts";
+import { layoutOf, type Placed, said, stockIn, words } from "./layout.ts";
 
 // Any recipe worked out (#770): its pieces placed, so its parts, each lettered with its cut size;
 // its cut plan, on the stock the owner has first; its buy list, less what they have; the stock
@@ -99,7 +99,7 @@ const slotsOf = (
         ...SLOT[role],
         parts: cut.map(({ part }) => part.label),
         inUse: () => true,
-        stock: (now) => asStock(now.stock.find((each) => each.id === item.id) as CutStock),
+        stock: (now) => asStock(stockIn(now)(item.id, item.kind)),
         set: (now, stock) => ({
           ...now,
           stock: now.stock.map((each) =>
@@ -134,8 +134,8 @@ const recipeBuild = (
   const parts = labelled.map(({ part }) => part);
   const slots = slotsOf(recipe, labelled);
   const partOf = (from: string) => labelled.find(({ piece }) => piece.from === from)?.part;
-  const castorOf = (id: string) =>
-    recipe.stock.find((item) => item.id === id) as Extract<RecipeStock, { kind: "castor" }>;
+  const of = stockIn(recipe);
+  const castorOf = (id: string) => of(id, "castor");
 
   const cut = recipe.stock.filter(isCut);
   const timbers = cut.filter((item) => item.kind === "timber").map(asStock);

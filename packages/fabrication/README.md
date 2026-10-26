@@ -74,7 +74,8 @@ if (recipe) {
   the end frames; a support across the middle under a top or shelf; a base under each end, castors under that. Parts
   are lettered as they're cut (timber, then sheets; each stock's legs first, then the longest down). Each joint's
   fixings are counted where its pieces touch: two screws where a timber sits on another, a line along each timber a
-  sheet rests on (spaced across the sheet), an angle bracket a corner (two where castors push it), bolts through
+  sheet rests on and each edge of the sheet pieces it's screwed to (a box's sides and back under a worktop, never
+  into a face), spaced across the sheet, an angle bracket a corner (two where castors push it), bolts through
   everything they pass through, and a box's panels along every edge. A recipe that can't be placed (a joint between
   pieces that don't touch, a shelf in a box on rails, a printed part, for now) is refused with the reason.
 - **The owner's stock first** (#770): a timber or sheet the recipe says the owner has (`have`) is bought less by

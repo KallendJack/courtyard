@@ -1,11 +1,11 @@
-import type { BuildRecipe, RecipeStock } from "@courtyard/contract";
+import type { BuildRecipe } from "@courtyard/contract";
 import { screwsAlong } from "../bench/close-ups.ts";
 import { SCREWS_PER_BRACKET } from "../bench/screws.ts";
 import { type BoltLength, type Box, err, ok, type Result } from "../build.ts";
 import { boltLength } from "../findings.ts";
 import type { Price } from "../stock.ts";
 import { alongOf, type Contact, contactOf, extent, thinnest } from "./geometry.ts";
-import { type Layout, type Placed, type PlacedFitted, said } from "./layout.ts";
+import { type Layout, type Placed, type PlacedFitted, said, stockIn } from "./layout.ts";
 
 // Each joint's fixings (#770), counted where its two pieces really touch: two screws where one
 // timber sits on another; screws along each timber a sheet rests on, spaced across the sheet; an
@@ -44,8 +44,8 @@ export const fixingsOf = (options: {
   have: readonly string[];
 }): Result<FixingLine[], string[]> => {
   const { recipe, layout, name } = options;
-  const stock = new Map(recipe.stock.map((item) => [item.id, item]));
-  const fixing = (id: string) => stock.get(id) as Extract<RecipeStock, { kind: "fixing" }>;
+  const of = stockIn(recipe);
+  const fixing = (id: string) => of(id, "fixing");
   const held = (id: string): Held[] => [
     ...layout.placed
       .filter((piece) => piece.from === id)
@@ -86,18 +86,24 @@ export const fixingsOf = (options: {
         problems.push(`${where}: "${a}" isn't cut from a sheet: sheet screws go through a sheet.`);
         return;
       }
-      // A line of screws along each timber the sheet's face rests on, spread across the sheet. A
-      // frame it's screwed to is its rails and the legs they join.
+      // A line of screws along each timber the sheet's face rests on, and each edge of the sheet
+      // pieces it's screwed to (a box's sides and back under a worktop), spread across the sheet.
+      // A frame it's screwed to is its rails and the legs they join.
       const frame = recipe.groups.find((group) => group.id === b);
       const onto = new Set([b, ...(frame?.kind === "frame" ? [frame.legs] : [])]);
       let count = 0;
       let meets = false;
       for (const sheet of sheets.flatMap((piece) => piece.boxes)) {
         const across = thinnest(sheet);
-        for (const under of layout.placed.filter((piece) => piece.kind === "timber")) {
+        const beneath = layout.placed.filter(
+          (piece) => piece.kind === "timber" || (piece.from !== a && onto.has(piece.from)),
+        );
+        for (const under of beneath) {
           for (const at of under.boxes) {
             const contact = contactOf(sheet, at);
             if (contact?.across !== across) continue;
+            // A sheet's face under it (a box's own top) isn't an edge to screw into.
+            if (under.kind === "sheet" && thinnest(at) === across) continue;
             const along = alongOf(contact);
             if (contact.face[along] < extent(sheet, along) / 2) continue;
             count += screwsAlong(extent(sheet, along));
@@ -157,7 +163,7 @@ export const fixingsOf = (options: {
     const thread = `M${joint.bolt.diameter.value}`;
     const through = (side: Held, contact: Contact) => {
       if (side.fitted) {
-        const castor = stock.get(side.fitted.stock) as Extract<RecipeStock, { kind: "castor" }>;
+        const castor = of(side.fitted.stock, "castor");
         return { what: `${one(name(side.fitted.from))} plate`, mm: castor.plate.thickness.value };
       }
       return { what: one(side.piece?.name ?? ""), mm: extent(side.box, contact.across) };

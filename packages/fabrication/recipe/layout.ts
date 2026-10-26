@@ -42,7 +42,6 @@ export type Layout = {
 
 type Timber = Extract<RecipeStock, { kind: "timber" }>;
 type Sheet = Extract<RecipeStock, { kind: "sheet" }>;
-type Castor = Extract<RecipeStock, { kind: "castor" }>;
 type Member = Extract<RecipePiece, { kind: "member" }>;
 
 /** What a body (legs and frames, or a box) is placed from: the recipe and its overall sizes. */
@@ -90,18 +89,34 @@ export const words = (id: string) => {
 
 export const said = (name: string) => name.toLowerCase();
 
+const isKind = <K extends RecipeStock["kind"]>(
+  item: RecipeStock | undefined,
+  kind: K,
+): item is Extract<RecipeStock, { kind: K }> => item?.kind === kind;
+
+/**
+ * A checked recipe's stock by its ID, of the kind it must be. The contract checked every
+ * reference, so one that isn't is a bug.
+ */
+export const stockIn = (recipe: BuildRecipe) => {
+  const stock = new Map(recipe.stock.map((item) => [item.id, item]));
+  return <K extends RecipeStock["kind"]>(id: string, kind: K) => {
+    const found = stock.get(id);
+    if (!isKind(found, kind)) throw new Error(`The recipe was checked: "${id}" is a ${kind}.`);
+    return found;
+  };
+};
+
 /** The recipe's pieces placed, or why it can't be. */
 export const layoutOf = (recipe: BuildRecipe): Result<Layout, string[]> => {
-  const stock = new Map(recipe.stock.map((item) => [item.id, item]));
-  const of = <K extends RecipeStock["kind"]>(id: string, kind: K) => {
-    const found = stock.get(id);
-    if (found?.kind !== kind) throw new Error(`The recipe was checked: "${id}" is a ${kind}.`);
-    return found as Extract<RecipeStock, { kind: K }>;
-  };
-  const at = (item: RecipeGroup | RecipePiece) => {
-    const group = recipe.groups.indexOf(item as RecipeGroup);
-    return group >= 0 ? `groups.${group}` : `pieces.${recipe.pieces.indexOf(item as RecipePiece)}`;
-  };
+  const of = stockIn(recipe);
+  const at = (item: RecipeGroup | RecipePiece) =>
+    item.kind === "panel" ||
+    item.kind === "member" ||
+    item.kind === "fitted" ||
+    item.kind === "printed"
+      ? `pieces.${recipe.pieces.indexOf(item)}`
+      : `groups.${recipe.groups.indexOf(item)}`;
 
   const printed = [
     ...recipe.pieces.flatMap((piece) =>
@@ -128,9 +143,8 @@ export const layoutOf = (recipe: BuildRecipe): Result<Layout, string[]> => {
       `recipe: A recipe stands on one set of legs or one box, and this has ${stands.length === 0 ? "neither" : stands.length}.`,
     ]);
   }
-  const panels = recipe.pieces.filter((piece) => piece.kind === "panel");
-  if (panels.length > 1) return err([`${at(panels[1] as RecipePiece)}: A recipe has one top.`]);
-  const top = panels[0];
+  const [top, secondTop] = recipe.pieces.filter((piece) => piece.kind === "panel");
+  if (secondTop) return err([`${at(secondTop)}: A recipe has one top.`]);
 
   // What's under each end: a base under the legs, their frames or the box, and castors under it.
   const holding = new Set([
@@ -149,19 +163,18 @@ export const layoutOf = (recipe: BuildRecipe): Result<Layout, string[]> => {
       );
     }
   }
-  if (bases.length > 1) problems.push(`${at(bases[1] as Member)}: A recipe has one base each end.`);
-  const base = bases[0];
+  const [base, secondBase] = bases;
+  if (secondBase) problems.push(`${at(secondBase)}: A recipe has one base each end.`);
   const fitted = recipe.pieces.filter((piece) => piece.kind === "fitted");
   for (const piece of fitted) {
     if (piece.under !== base?.id) {
       problems.push(`${at(piece)}: A castor is fitted under the base under each end.`);
     }
   }
-  if (fitted.length > 1) {
-    problems.push(`${at(fitted[1] as RecipePiece)}: A recipe has one castor under each end.`);
-  }
+  const [fit, secondFit] = fitted;
+  if (secondFit) problems.push(`${at(secondFit)}: A recipe has one castor under each end.`);
   if (problems.length > 0) return err(problems);
-  const castor = fitted[0] && (of(fitted[0].stock, "castor") as Castor);
+  const castor = fit && of(fit.stock, "castor");
 
   const overhang = top?.overhang.value ?? 0;
   const length = recipe.size.length.value;
