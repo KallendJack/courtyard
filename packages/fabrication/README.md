@@ -1,17 +1,21 @@
 # Fabrication's engine
 
-`@courtyard/fabrication` turns a Build's template and parameters into everything the Build shows (ADR 0036): its
-parts, cut plan, buy list, steps and making-rule findings; and a printed part's recipe into a solid and the files to
-print it (#702). Plain functions, importing nothing from the worker, the web app, the file system or a model, so it
-could ship on its own. Its only Courtyard imports are the contract's `SourcedSize`, the value-with-source shape every
-size takes, and its part recipe.
+`@courtyard/fabrication` turns a Build's recipe (ADR 0039), or its template and parameters (ADR 0036), into
+everything the Build shows: its parts, cut plan, buy list, steps and making-rule findings; and a printed part's
+recipe into a solid and the files to print it (#702). Plain functions, importing nothing from the worker, the web
+app, the file system or a model, so it could ship on its own. Its only Courtyard imports are the contract's
+`SourcedSize`, the value-with-source shape every size takes, the stock and tools (`Timber`, `Sheet`, `Tool`…, which
+`stock.ts` and `tools.ts` give by their own names), its part recipe and its Build recipe.
 
 ## Example
 
 ```ts
-import { deriveBench, derivePrinted, makePart, to3mf } from "@courtyard/fabrication";
+import { deriveBench, derivePrinted, deriveRecipe, makePart, starterRecipe, to3mf } from "@courtyard/fabrication";
 
-const derived = deriveBench(parameters); // a framed bench's parameters, as JSON
+const derived = deriveBench(parameters); // a framed bench's parameters, as JSON, loaded as its recipe
+const starter = starterRecipe("framed-bench", parameters); // the bench's recipe: stock, pieces, groups, joints
+if (starter.ok) deriveRecipe(starter.value); // the same Build, to the last number
+deriveRecipe({ ...recipe, size: { ...recipe.size, length: tooLong } }); // ["size.length: The length is 5000 mm: it must be more than 0 and at most 3000 mm."]
 // Its steps following the owner's tools, a step started keeping the saw it was cut with (#777):
 deriveBench(parameters, { tools: ["Hand saw", "Mitre saw"], kept: [{ step: "cut-timber", tool: "hand-saw" }] });
 if (derived.ok) derived.value.cutPlan; // 4 lengths of B 1450 + A 750, 1 of 5 × 460…
@@ -41,7 +45,8 @@ if (recipe) {
 | `findings.ts` | The making rules code checks: a bolt's length to use, long enough for what it passes through plus two threads, and the owner's own that are short (`boltLength`), tools needed and not to hand, sizes assumed |
 | `capacity.ts` | What a mitre or circular saw cuts (#780): its width at 90° and depth, read from its size in Your tools, assumed until given, and whether a timber fits it |
 | `tools.ts`, `glossary.ts` | The tools and kit a step can need, which of them each of Your tools, or something else the owner has, is by the words in its name, one tool or several ("Drill and drill bits", `toolsFrom`; a step stool for the long end, and only that, `standInFor`), a bit set's sizes and whether it has a bit (`bitSetsFrom`, `bitInSets`), the spanners, adjustables, socket set and pliers among them (`spannerKitFrom`, #783), and the words a beginner may not know |
-| `bench/` | The first template, the framed bench: `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts`, `frame-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `step-tools.ts` (a step's tools against the owner's: a stand-in, bits by size, #763), `screws.ts` (where a pilot hole goes first, #789), `close-ups.ts` (each step's own close-up, and the walk-throughs: marking as tape, tick, square and line, #777, and a joint's screw spots, #789; with `close-up.ts`, what a close-up is: tools and a castor drawn as their shape, words on the drawing, #783, and a type's faces and pills, #813), `castor-pictures.ts` (the castor step's picture, its drill drawn as a drill and its words as callouts, #783), `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
+| `recipe/` | A Build's recipe (ADR 0039, #769), checked by the contract's `BuildRecipe` first: `index.ts` (`deriveRecipe`: a recipe in, its Build out, or what's wrong by where it is in the recipe), `bench.ts` (the bench's recipe from its parameters, `benchRecipe`, and back, `benchFromRecipe`, only when the recipe is exactly a bench's), `starters.ts` (the starters, each a recipe from its template's parameters, and `deriveBench`, the bench template loaded as its recipe). Only a framed bench's recipe is worked out so far; any recipe is from #770–#772 |
+| `bench/` | The first template and starter, the framed bench: `index.ts` (`workOutBench`, what its recipe is worked out with), `parameters.ts`, `frame.ts` (where each piece goes), `preparing.ts`, `castor-steps.ts`, `frame-steps.ts` and `steps.ts` (each action in "show me how" and "just the numbers"), `step-tools.ts` (a step's tools against the owner's: a stand-in, bits by size, #763), `screws.ts` (where a pilot hole goes first, #789), `close-ups.ts` (each step's own close-up, and the walk-throughs: marking as tape, tick, square and line, #777, and a joint's screw spots, #789; with `close-up.ts`, what a close-up is: tools and a castor drawn as their shape, words on the drawing, #783, and a type's faces and pills, #813), `castor-pictures.ts` (the castor step's picture, its drill drawn as a drill and its words as callouts, #783), `stock-slots.ts` (its frame, wide timber, top, shelf and braces, and `pickBenchStock`), and `scenes.ts` with `cut-scenes.ts` and `scene-pieces.ts` (each step's picture, #754) |
 | `print/` | Printed parts (#702): `templates.ts` (the holster, shim and bracket, each made into a part recipe, and `printed-part`, a recipe as written), `recipe.ts` (each face's frame, and the checks that refuse a recipe before it's made), `index.ts` (a printed part's Build: its part, buy list, steps and findings), `make.ts` (the solid, with manifold-3d), `lettering.ts` (text as outlines, with opentype.js), `files.ts` (3MF, zipped with fflate, and STL) |
 | `print/font/` | Figtree Bold, for lettering: `figtree-bold.ttf` from Fontsource (`@fontsource/figtree` 5.2.10, latin 700), under the SIL Open Font License in `OFL.txt`, from github.com/erikdkennedy/figtree |
 
@@ -49,6 +54,15 @@ if (recipe) {
 
 - **Every size has a source** (`measured`, `specified` with its reference, or `assumed`); one without is refused. A
   size the owner chooses for a printed part (its walls) is a plain number.
+- **A recipe stays within its bounds** (`RECIPE_MOST`, #769): the build's length, depth and height at most 3000 mm, a
+  stock's sizes at most 6000, the kerf at most 10 and an overhang at most 300; at most 16 stocks, 24 pieces, 12
+  groups and 32 joints. Over them, or naming two things with one ID, or pointing at what isn't there or isn't the
+  right kind (a panel cut from a timber), or joining a piece to itself, it's refused with the reason, by where it is
+  in the recipe. A kind it doesn't have is refused saying the kinds it has, and one out of version 1 (pocket holes,
+  dowels, glue-only joints, hinges, drawers) saying what to make instead (`recipe-refusals.ts` in the contract).
+- **A bench's recipe is the bench, to the last number** (#769): the bench template loads its parameters as its
+  recipe, and a recipe is read back as a bench only when the bench's starter would write exactly it, whatever its
+  IDs; anything else is refused, saying what it has that a bench doesn't, until any recipe is worked out (#770).
 - **Castors left out are none,** so a change that takes them out (a merge patch's `null`) leaves a bench on its legs.
 - **A cut plan never overruns** a length or a sheet, with the kerf counted between pieces; a part bigger than its
   stock is found and left out.
@@ -153,7 +167,9 @@ are always there, and the essays never are.
 
 ## Tests
 
-`cut-plan.test.ts` (packing, whatever the pieces), `close-ups/close-ups.test.ts` (each close-up type following its
+`cut-plan.test.ts` (packing, whatever the pieces), `recipe/recipe.test.ts` (the golden bench as a recipe, written by
+hand in `recipe/fixtures/golden-bench.ts`, giving the template's own Build, by tools and variants; its starter
+writing exactly that recipe; and what a recipe is refused for), `close-ups/close-ups.test.ts` (each close-up type following its
 pieces' sizes, a made-up 70 × 70 corner's bracket sized to it; the guard; and which bench steps show which, in full
 or as a tap), `bench/bench.test.ts` (the golden bench, the garage workbench's
 hand-checked numbers with invented names, in `bench/fixtures/golden.ts`), `bench/scenes.test.ts` (each step's picture

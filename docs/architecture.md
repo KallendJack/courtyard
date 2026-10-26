@@ -261,7 +261,10 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`fresh-start/`](../apps/web/src/features/fresh-start/README.md): what a fresh start would clear.
   - [`login/`](../apps/web/src/features/login/README.md): the setup and login form.
 - **`api/workspace-page.ts`** asks for everything a workspace's page shows; its route's loader imports it, so that
-  code and its schemas aren't on the first load. What to show when the worker gives no data is
+  code and its schemas aren't on the first load. A page opened before shows its loader's last data at once while it
+  asks again behind (the router keeps it for the tab's lifetime, #808); a workspace's tile, on the rail and on Home,
+  starts loading its page as a finger, pointer or focus lands on it; and a move between pages once logged in goes on
+  the root route's last answer, asking `/auth` behind it rather than first. What to show when the worker gives no data is
   `components/layout/problems.tsx`, and how dates read is `lib/when.ts`.
 - **`components/`:** Courtyard's shared pieces (buttons, copy buttons, text fields, file pickers, sheets, notices, Connections' cards and so on), used
   on every page ([ADR 0012](adr/0012-courtyards-own-building-blocks-safe-on-the-first-load.md)), in groups by kind
@@ -417,10 +420,14 @@ numbers, with its tools, kit, fixings, close-up and check; and the making-rule f
 sizes assumed). A bolt too short for what it passes through is bought at the length to use, its line saying why and
 when the owner's own are short (#763). A size without a source is refused. It's plain
 functions with no worker, web app, file system or model in it, so it could ship on its own; its Courtyard imports
-are the contract's `SourcedSize` and part recipe. The first template is the framed bench (`bench/`). The close-ups
-by type (`close-ups/`, #813) are any template's: a fixing (a bracket, a bolt through a plate, a screwed overlap) or a
-technique (measure and mark, driving a screw) drawn in 3D from the pieces it joins, laid flat for the app to draw,
-and which step shows a technique in full, the first to use it. Printed parts
+are the contract's `SourcedSize`, its stock and tools (`materials.ts`), part recipe and Build recipe. A Build's recipe
+(`recipe/`, ADR 0039, #769) is its stock, pieces, groups and joints, checked against the contract's `BuildRecipe`
+(sizes and counts within `RECIPE_MOST`, every ID once, every reference to the right kind). The framed bench
+(`bench/`) is its first starter: the template's parameters are loaded as the bench's recipe, and a recipe that is a
+framed bench is worked out by the bench's own code, to exactly its numbers; any other recipe is refused until
+#770–#772 work any recipe out. The close-ups by type (`close-ups/`, #813) are any template's: a fixing (a bracket, a
+bolt through a plate, a screwed overlap) or a technique (measure and mark, driving a screw) drawn in 3D from the
+pieces it joins, laid flat for the app to draw, and which step shows a technique in full, the first to use it. Printed parts
 (`print/`, #702) are the holster, shim and bracket templates and a part recipe as written: each becomes a recipe
 (a base and its features), checked by the making rules (on the plate, holes on their faces, walls the nozzle prints),
 and made into a solid with manifold-3d (WebAssembly) and its lettering with opentype.js and the bundled Figtree font,

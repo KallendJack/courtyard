@@ -1,29 +1,12 @@
-import { z } from "zod";
+import { BuildToolId } from "@courtyard/contract";
 import type { ToolSize } from "./capacity.ts";
 
 // The tools and safety kit a step can need, which the owner's tools to hand are set against. Kit
-// is a tool like any other here, so a missing pair of glasses is listed as a missing saw is.
+// is a tool like any other here, so a missing pair of glasses is listed as a missing saw is. The
+// contract defines them, as a recipe names them too (#769).
 
-export const Tool = z.enum([
-  "tape-measure",
-  "pencil",
-  "square",
-  "hand-saw",
-  "circular-saw",
-  "mitre-saw",
-  "folding-workbench",
-  "long-end-support",
-  "clamps",
-  "drill-driver",
-  "drill-bits",
-  "countersink-bit",
-  "spanner",
-  "spirit-level",
-  "sandpaper",
-  "safety-glasses",
-  "ear-defenders",
-]);
-export type Tool = z.infer<typeof Tool>;
+export const Tool = BuildToolId;
+export type Tool = BuildToolId;
 
 /** Each tool as a step names it. */
 export const TOOL_NAMES: Readonly<Record<Tool, string>> = {

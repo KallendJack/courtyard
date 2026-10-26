@@ -88,7 +88,7 @@ it. Its [`README.md`](../packages/ui/README.md) lists them.
 |---|---|
 | `contract` | The shapes the apps send each other |
 | `ui` | The theme and the shared pieces both apps use (above) |
-| `fabrication` | Fabrication's engine: a Build's parts, cut plan, buy list and steps, worked out from its template and parameters (ADR 0036) |
+| `fabrication` | Fabrication's engine: a Build's parts, cut plan, buy list and steps, worked out from its recipe, or its template and parameters (ADRs 0036, 0039) |
 | `skills` | Courtyard's own skills |
 | `builds` | The machine's builds lock |
 | `house` | The house standard's configs and size check |

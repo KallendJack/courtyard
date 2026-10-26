@@ -529,8 +529,7 @@ export default function HandheldFrame(props: {
  * shows its sessions (#492). Holding the open one shows them too (on a tablet, once let go
  * where it was: held and dragged, it moves, #321). In its corner, how many of its sessions wait on
  * the owner, as the worker says (#345): violet for new replies, gold once one needs an approval or
- * a Continue after a restart (#186).
- * Asked again on every move to another page.
+ * a Continue after a restart (#186), asked on every move. A touch, hover or focus preloads it (#808).
  */
 function Tile(props: {
   workspace: WorkspaceSummary;
@@ -560,6 +559,7 @@ function Tile(props: {
       to="/workspaces/$workspaceId"
       params={{ workspaceId: workspace.id }}
       aria-label={workspace.name}
+      preload="intent"
       {...props.arrange}
       onContextMenu={held}
       // On the cover screen, with no rail to list them, a tap on the open one shows its sessions (#492).

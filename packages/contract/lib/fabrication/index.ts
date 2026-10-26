@@ -9,6 +9,15 @@ export {
   BuildOpened,
 } from "./app.ts";
 export {
+  BuildRecipe,
+  RECIPE_MOST,
+  RecipeGroup,
+  RecipeId,
+  RecipeJoint,
+  RecipePiece,
+  RecipeStock,
+} from "./build-recipe.ts";
+export {
   BUILD_NAME_MAX_CHARACTERS,
   BuildChange,
   BuildChanged,
@@ -35,6 +44,16 @@ export {
   DerivedBuild,
   MadePart,
 } from "./derived.ts";
+export {
+  BuildFixing,
+  BuildOptionPrice,
+  BuildOptionPrices,
+  BuildPrice,
+  BuildSheet,
+  BuildStockOptionId,
+  BuildTimber,
+  BuildToolId,
+} from "./materials.ts";
 export { BuildProgress, buildStarted, stepReached, tickedIn } from "./progress.ts";
 export {
   Face,

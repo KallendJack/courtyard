@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Build, BuildSetting } from "../build.ts";
+import { deriveBench } from "../recipe/starters.ts";
 import { goldenBench } from "./fixtures/golden.ts";
-import { deriveBench } from "./index.ts";
 import { pickBenchStock } from "./stock-slots.ts";
 
 // The framed bench, through the one function a caller has: parameters in, a Build out. The

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { goldenBench } from "../bench/fixtures/golden.ts";
-import { deriveBench } from "../bench/index.ts";
 import type { Box, Build, BuildSetting } from "../build.ts";
 import { FIXING_TYPES } from "../close-up.ts";
+import { deriveBench } from "../recipe/starters.ts";
 import { bracketCloseUp, bracketModel } from "./bracket.ts";
 import { drivingCloseUp, drivingModel } from "./driving.ts";
 import { markCloseUp, markModel } from "./measure.ts";
