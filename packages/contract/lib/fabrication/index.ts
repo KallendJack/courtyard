@@ -33,6 +33,7 @@ export {
   BuildView,
 } from "./builds.ts";
 export {
+  BuildBagItem,
   BuildBox,
   BuildBuyLine,
   BuildCutPlan,
@@ -54,7 +55,14 @@ export {
   BuildTimber,
   BuildToolId,
 } from "./materials.ts";
-export { BuildProgress, buildStarted, stepReached, tickedIn } from "./progress.ts";
+export {
+  BuildProgress,
+  buildStarted,
+  onPartsPage,
+  PARTS_PAGE,
+  stepReached,
+  tickedIn,
+} from "./progress.ts";
 export {
   Face,
   PART_FEATURES,

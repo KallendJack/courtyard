@@ -272,14 +272,17 @@ spots by eye (#789). The castor step shows its holes drilled through the plate a
 nut turns (#783). **Close-ups by type** (#813) are drawn by code for any Build from the pieces they join and their
 sizes, their labels 2-3 word pills: a **fixing** type (an angle bracket in a corner, a bolt through a plate, a
 screwed overlap) on every step that makes one, and a **technique** (measure and mark a length, driving a screw) in
-full the first time the steps use it, a "How?" tap after. Each step is the **simplest way first** (#789): it
+full the first time the steps use it, a "How?" tap after; a pilot hole, a countersink and squaring a frame are
+**first-time skills** shown that way (#778). Before step 1, the **parts page** (#778) lays the Build out like a flat
+pack's inventory: every piece drawn with its letter, count and sizes, the **fixings bag** by count, and **Label each
+piece** to tick them off. Each step's **uses** are exactly the pieces and fixings it takes, to lay out first. Each step is the **simplest way first** (#789): it
 opens with how to **batch** it ("One joint at a time"), has at most four lines, measures only what decides how it
 turns out and says "by eye" for the rest, drills a pilot hole only where the wood would split, and keeps extras as
 **tips** behind a tap. A step that can be done more than one **way** (a hand saw, a circular saw, a
 mitre saw) uses the best to hand, and says so in a line when that's changed. A saw's **cutting capacity** (how wide
 and deep it cuts at 90°, the size line on the owner's tool) decides which cuts it takes: one too big for it goes to a
 saw that takes it, the step saying why in one line (#780).
-Its **progress**, the step reached and the lines ticked, is kept on the Build for every device and session, each
+Its **progress**, the step reached, the lines ticked and the parts labelled, is kept on the Build for every device and session, each
 step by its ID ("fit-castors") rather than its number, so ticks stay put when a step before comes or goes; a step
 started keeps the way it was started, so its ticks stay on the lines they were ticked on.
 _Avoid_: instructions (that's what a model is given), tasks, project steps (those are a project's)

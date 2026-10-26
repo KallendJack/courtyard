@@ -95,10 +95,52 @@ describe("on the bench (#813)", () => {
 
     expect(techniques(build, "end-frames")).toContain("driving-screw full");
     expect(driving("end-frames")?.closeUp.pills?.map((pill) => pill.says)).toContain("Clutch ring");
-    expect(techniques(build, "long-rails")).toEqual(["driving-screw how?"]);
+    expect(techniques(build, "long-rails")).toContain("driving-screw how?");
     expect(driving("long-rails")?.closeUp.pills?.map((pill) => pill.says)).not.toContain(
       "Clutch ring",
     );
+  });
+
+  it("shows each first-time skill in full once, on the first step that needs it, then names it (#778)", () => {
+    const build = built(goldenBench);
+    const skills = ["pilot-hole", "countersink", "square-frame"];
+    const of = (id: string) =>
+      techniques(build, id).filter((each) => skills.includes(each.split(" ")[0] ?? ""));
+
+    expect(of("end-frames")).toEqual(["square-frame full", "pilot-hole full"]);
+    expect(of("long-rails")).toEqual(["square-frame how?", "pilot-hole how?"]);
+    expect(of("stand-on-bases")).toEqual(["pilot-hole how?"]);
+    expect(of("fit-supports")).toEqual(["pilot-hole how?"]);
+    expect(of("fit-top")).toEqual(["countersink full"]);
+    for (const each of benches()) {
+      for (const skill of skills) {
+        const full = each.steps.flatMap((step) =>
+          step.techniques.filter(
+            (technique) => technique.closeUp.type === skill && technique.first,
+          ),
+        );
+        expect(full, skill).toHaveLength(1);
+      }
+    }
+  });
+
+  it("draws a pilot hole with the step's own bit, a countersink with the screw head flush, and a frame's two diagonals (#778)", () => {
+    const build = built(goldenBench);
+    const closeUp = (id: string, type: string) =>
+      stepOf(build, id).techniques.find((each) => each.closeUp.type === type)?.closeUp;
+    const says = (id: string, type: string) => closeUp(id, type)?.pills?.map((pill) => pill.says);
+
+    expect(says("end-frames", "pilot-hole")).toEqual(
+      expect.arrayContaining(["3 mm bit", "Tape at depth"]),
+    );
+    expect(closeUp("end-frames", "pilot-hole")?.notes.join(" ")).toMatch(/80 mm screw/);
+    expect(says("fit-top", "countersink")).toEqual(
+      expect.arrayContaining(["Countersink bit", "Head flush"]),
+    );
+    expect(says("end-frames", "square-frame")).toEqual(
+      expect.arrayContaining(["Diagonal 1", "Diagonal 2"]),
+    );
+    expect(closeUp("end-frames", "square-frame")?.notes.join(" ")).toMatch(/within 2 mm/);
   });
 
   it("draws the end frames' and long rails' joints as a screwed overlap, the rail on the leg", () => {

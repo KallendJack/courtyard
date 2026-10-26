@@ -23,6 +23,7 @@ import {
 } from "./chat/hold-to-ask.tsx";
 import { CutPlan } from "./cut-plan.tsx";
 import { FINDINGS_ID, Findings } from "./findings.tsx";
+import { PartsPage } from "./parts/parts-page.tsx";
 import { PrintPanel, PrintTab, useMaking } from "./print/print-panel.tsx";
 import { useProgress } from "./progress.ts";
 import { StepDots, StepFoot } from "./step-moves.tsx";
@@ -116,14 +117,13 @@ export function BuildPage(props: { build: BuildOpened }) {
   const closeAnswer = useCallback(() => setAsked(undefined), []);
   // The Build may change from Courtyard too: it's read again the shared way.
   useFresh({ ask: () => router.invalidate() });
-  const talk = useBuildChat({
-    workspaceId: place.workspace.id,
-    slug: build.slug,
-    onChanged: reread,
-  });
-  const making = useMaking({ workspaceId: place.workspace.id, slug: build.slug, derived });
+  const where = { workspaceId: place.workspace.id, slug: build.slug };
+  const talk = useBuildChat({ ...where, onChanged: reread });
+  const making = useMaking({ ...where, derived });
   const progress = useProgress(build, reread);
   const { step } = progress;
+  /** The step shown in the 3D view: none on the parts page (#778). */
+  const onStep = progress.onParts ? undefined : step;
   // A part's card covers the picture, so a new step closes it (#754).
   const [cardStep, setCardStep] = useState(step?.id);
   if (cardStep !== step?.id) {
@@ -134,7 +134,7 @@ export function BuildPage(props: { build: BuildOpened }) {
 
   // A stock's options, open in the side panel in place of its tab (#704).
   const stock = useStockOptions({
-    where: { workspaceId: place.workspace.id, slug: build.slug },
+    where,
     derived,
     reread: () => router.invalidate(),
   });
@@ -203,7 +203,9 @@ export function BuildPage(props: { build: BuildOpened }) {
     }
   };
   const sidePanel = (tab: Tab) =>
-    tab === "Steps" && step !== undefined && !stock.showing ? (
+    tab === "Steps" && progress.onParts && !stock.showing ? (
+      <PartsPage derived={derived} progress={progress} narrow inPanel />
+    ) : tab === "Steps" && step !== undefined && !stock.showing ? (
       <>
         <Scroller className="flex min-h-0 flex-1 flex-col">
           <StepPanel derived={derived} step={step} progress={progress} sendPhoto={sendPhoto} />
@@ -297,7 +299,7 @@ export function BuildPage(props: { build: BuildOpened }) {
                 derived={derived}
                 lit={lit}
                 pick={pick}
-                atStep={side === "Steps" && step !== undefined ? { step } : undefined}
+                atStep={side === "Steps" && onStep !== undefined ? { step: onStep } : undefined}
                 closeUp
                 withKey
               />
@@ -331,7 +333,7 @@ export function BuildPage(props: { build: BuildOpened }) {
           {build.name}
         </h1>
         {atBench && step !== undefined ? (
-          <StepDots derived={derived} step={step} />
+          <StepDots derived={derived} at={progress.onParts ? 0 : step.number} />
         ) : (
           <p className="truncate font-mono text-meta text-muted-foreground">
             {print === null ? sizeLine(derived.size) : printSizeLine(derived.size)}
@@ -349,7 +351,9 @@ export function BuildPage(props: { build: BuildOpened }) {
           />
         )}
       </header>
-      {atBench && step !== undefined ? (
+      {atBench && progress.onParts ? (
+        <PartsPage derived={derived} progress={progress} narrow={cover} />
+      ) : atBench && step !== undefined ? (
         <AtTheBench
           name={name}
           derived={derived}

@@ -32,13 +32,16 @@ their set, and the countersink bit, with Have it and Add to list.
 | `buy-list.tsx` | What to buy, from where, how many and for how much, with the total; a timber or sheet with options opens them; a bolt's "Why 65 mm?" opens what it passes through, and its line says when the owner's own are short (#763) |
 | `stock-options.tsx` | A stock's options (#704; "Fabrication · Choose materials · Tablet (#704)"): the recommended first, each costed, Pick, and Undo of the pick just made; `useStockOptions`, which stock's are open |
 | `tools-list.tsx` | The tools needed against what's to hand, said once (#763; "Fabrication · Tools and warnings · Fold"): "N to sort" first, each with what to do (Have it, added to the tools the Build counts as theirs in Your tools, with Undo; or Add to list, onto the buy list, with Undo, a bit the set lacks too), drill bits by size with "How do I tell a bit's size?", then what's to hand, a stand-in named ("Your step stool will do") |
-| `step-panel.tsx` | The steps as an instruction manual (#699): one step, what's changed with Your tools, its walk-through, its checklist, its tools, the check before moving on |
+| `step-panel.tsx` | The steps as an instruction manual (#699): one step, what it uses, what's changed with Your tools, its walk-through, its checklist, its tools, the check before moving on |
+| `parts/parts-page.tsx` | The parts page (#778; "Fabrication · Parts page, any build · Fold 933×645 (#778)"): before the steps, every part as a tile (its letter, name, count, sizes and the piece in 3D), the fixings bag by count, Label each piece with "N of M labelled", and Start step 1 |
+| `parts/pictures.tsx` | The parts page's pictures: each piece in 3D at one scale for the whole Build, ply drawn as ply, and each fixing in the bag as its shape (a screw, a bracket, a bolt set of bolt, washer and nut, a castor) |
+| `parts/uses-strip.tsx` | A step's uses strip, under its title: its pieces by letter and count and its fixings, to lay out first; "Used" and ticked once the step's done |
 | `step/how.tsx` | A step's walk-through, its check before moving on, and the photo picker for it |
 | `step/step-buttons.tsx` | At the bench (#793), the step's four buttons under its lines: Show me how, Is this right?, I don't have… and Can't do this now, what each opens, and a parked step's line with Do it now |
 | `step-moves.tsx` | Moving between steps: Back and Done, a swipe, and the dots that show how far |
 | `close-up.tsx` | A step's close-up, drawn to scale: its sizes, where each fixing goes, and its words over it at the type's own sizes, never under 12 px; a close-up by type (#813) as the engine draws it in 3D, its faces, pencil marks and screws' ways in, with its labels as pills, a badge for each move and a leader to what it's about; and a step's techniques, in full the first time, a "How?" tap after |
 | `picture/close-up-shapes.tsx` | Tools as their shape in a close-up (an open spanner, an adjustable, pliers, a socket on a hex) and a castor as one (#783) |
-| `progress.ts` | The step reached, the lines ticked, the tools chosen to buy and the steps parked, kept for every device |
+| `progress.ts` | The step reached (the parts page, or a step), the lines ticked, the parts labelled, the tools chosen to buy and the steps parked, kept for every device |
 | `print/print-panel.tsx` | A printed part's own (#702; "Fabrication · Text to print · Tablet (#702)"): the part on the plate, and the Print tab with its sizes and sources, its file, Open in Bambu Studio (its 3MF) and Send to printer, waiting for one |
 | `print/print-view.tsx` | The printed part's scene, `three`, on the printer's plate, loaded lazily as the bench's is |
 | `findings.tsx` | What the making rules found that needs the owner, in gold, but a bench's tools, which its Tools tab says; for a printed part, each size assumed too |
@@ -71,6 +74,13 @@ back on it a gold line says why with Do it now (Done takes it off too). **Plan**
 Hold to ask and Chat, and its cut plan, buy list and tools as tabs under what the making rules found. The chat is a
 sheet from the right, open on its latest. Folded, it's At the bench alone, stacked: the step in 3D above, the step
 below, and the chat a sheet over it.
+
+**The parts page** (#778): a Build with pieces to cut (not a printed part) opens on it until building starts, before step 1, like a flat pack's inventory: each
+part's tile drawn at one scale, so the longest looks longest, and the fixings bag. Label each piece shows how in full
+until the first part is labelled ("pencil the letter on an end that won't show"), then a How? tap; tapping a tile
+labels every piece of it, ticked and counted ("12 of 21 labelled"), and tapping again takes it back. Start step 1
+goes on; Back from step 1 comes back to it. Each step then shows its **uses** under its title ("B × 2, C × 2, 5 × 80
+screws (16)"), ticked off when it's Done.
 
 **Steps** (#699; Paper, 2 · Agreed, "Fabrication · Build steps v2, teaching · Tablet (#699)", "· Build steps, cutting
 by your tools · Tablet (#699)" and "· Build steps · Cover (#699)"): the step reached, and in 3D its picture (#754;

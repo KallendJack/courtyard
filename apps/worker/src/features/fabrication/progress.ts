@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { BuildProgress, BuildSlug } from "@courtyard/contract";
+import { type BuildProgress, type BuildSlug, PARTS_PAGE } from "@courtyard/contract";
 import { writeTextFileIn } from "../../lib/files.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
 import { type PlanningFilesTarget, pathInFolder, planningFolder } from "../planning-files/index.ts";
@@ -33,7 +33,11 @@ export const keepProgress = async (
       if (!read.ok) return read;
       name = read.value.file.name;
       const { step } = progress;
-      if (step !== null && !read.value.derived.steps.some(({ id }) => id === step)) {
+      if (
+        step !== null &&
+        step !== PARTS_PAGE &&
+        !read.value.derived.steps.some(({ id }) => id === step)
+      ) {
         return err({ kind: "no-such-step", name, step });
       }
       const folder = await planningFolder(target);
@@ -44,13 +48,15 @@ export const keepProgress = async (
         progress,
         before: read.value.progress.ways,
       });
-      // The tools chosen to buy (#763) and the steps parked (#793) are the owner's: kept as sent.
+      // The tools chosen to buy (#763), the steps parked (#793) and the parts labelled (#778) are
+      // the owner's: kept as sent.
       const kept: BuildProgress = {
         step,
         ticked: progress.ticked,
         ways,
         buying: progress.buying,
         parked: progress.parked,
+        labelled: progress.labelled,
       };
       const text = `${JSON.stringify(kept, null, 2)}\n`;
       if (!(await writeTextFileIn(join(folder.value, progressPath(slug)), text))) {

@@ -7,9 +7,10 @@ import { Disclosure } from "@/components/disclosure";
 import { Techniques } from "./close-up.tsx";
 import { LengthBar } from "./cut-plan.tsx";
 import { Findings } from "./findings.tsx";
+import { UsesStrip } from "./parts/uses-strip.tsx";
 import { type Detail, type Progress, useDetail } from "./progress.ts";
 import { BeforeMovingOn, WalkThrough } from "./step/how.tsx";
-import { chipOf, listed, stepFindings, wayChanges } from "./words.ts";
+import { chipOf, stepFindings, wayChanges } from "./words.ts";
 
 // A Build's steps as an instruction manual (#699; Paper, 2 · Agreed, "Fabrication · Build steps
 // v2, teaching · Tablet (#699)" and "· Build steps, cutting by your tools · Tablet (#699)"): one
@@ -301,6 +302,11 @@ export function StepPanel(props: {
           {step.batch}
         </p>
       </div>
+      <UsesStrip
+        step={step}
+        done={tickedIn(progress.progress, step.id).length >= step.actions.length}
+        big={big}
+      />
       {changes.map((change) => (
         <p key={change} className="text-interface text-primary-text">
           {change}
@@ -335,15 +341,6 @@ export function StepPanel(props: {
       )}
       <Tips tips={step.tips} big={big} />
       <ToolChips step={step} big={big} />
-      {step.fixings.length > 0 && (
-        <p className={classes("text-muted-foreground", big ? "text-answer" : "text-interface")}>
-          Fixings:{" "}
-          <span className="text-foreground">
-            {/* "5 × 80 screws (16)": a count before a size would read as one more size. */}
-            {listed(step.fixings.map((fixing) => `${fixing.name} (${fixing.count})`))}
-          </span>
-        </p>
-      )}
       <Findings findings={stepFindings(derived, step)} label="To check in this step" />
       {props.children}
       {!atBench && <Techniques step={step} parts={derived.parts} />}

@@ -76,6 +76,7 @@ export const NOT_STARTED: BuildProgress = {
   ways: [],
   buying: [],
   parked: [],
+  labelled: [],
 };
 
 /**

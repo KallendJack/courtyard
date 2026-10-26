@@ -13,6 +13,7 @@ import type { Role } from "../catalog.ts";
 import { cutPlanOf, type Spares } from "../cut-plan.ts";
 import { assumedSizes } from "../findings.ts";
 import { pickStock, type Slot, standsInFor, stockOptions, wrongStock } from "../options.ts";
+import { bagOf } from "../parts-page.ts";
 import type { Sheet, StockOptionId, Timber } from "../stock.ts";
 import { fixingsOf } from "./fixings.ts";
 import { layoutOf, type Placed, said, stockIn, words } from "./layout.ts";
@@ -226,6 +227,7 @@ const recipeBuild = (
       fitted,
       cutPlan: planned.cutPlan,
       buyList,
+      bag: bagOf(buyList),
       steps: [],
       glossary: [],
       findings: [

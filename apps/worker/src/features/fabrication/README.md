@@ -26,9 +26,10 @@ rest is worked out again.
 - `GET /api/fabrication/workspaces/:id/builds/:slug`: one Build with everything derived, where it is (its workspace
   and the project whose step makes it, #698), and how far the owner has got with its steps (#699). Answers
   `BuildOpened`.
-- `PUT /api/fabrication/workspaces/:id/builds/:slug/progress`: `BuildProgress`, the step reached and the lines
-  ticked (#699), the tools chosen to buy from the Tools tab (#763), and the steps parked with why, from Can't do
-  this now at the bench (#793); a step the Build doesn't have is refused (400). Answers it as kept.
+- `PUT /api/fabrication/workspaces/:id/builds/:slug/progress`: `BuildProgress`, the step reached (or the parts
+  page, `PARTS_PAGE`, #778) and the lines ticked (#699), the parts labelled (#778), the tools chosen to buy from the
+  Tools tab (#763), and the steps parked with why, from Can't do this now at the bench (#793); a step the Build
+  doesn't have is refused (400). Answers it as kept.
 - `GET /api/fabrication/workspaces/:id/builds/:slug/chat`: its chat (#698), from its project's latest session, or
   else the latest that saved it: what was said and each change saved, and whether an answer is coming. Answers
   `BuildChat`.
@@ -78,7 +79,7 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   save is one change through `context-folder/`, its note listing each parameter changed ("height: 900 mm → 850
   mm"); Undo (`undoBuildChange`) puts the file back whole, unless it's changed since.
 - **Progress** (`progress.ts`, #699): `builds/progress/<slug>.json`, the step reached and the lines ticked, read with
-  the Build, the tools chosen to buy (#763), and the tool each step started was done with (#777), which the worker works out as lines are ticked
+  the Build, the tools chosen to buy (#763), the parts labelled on the parts page (#778), and the tool each step started was done with (#777), which the worker works out as lines are ticked
   (never from what's sent), so a started step stays as it was started and its ticks stay on their lines; a file kept
   before then gets the ways the Build's own tools gave. It sits beside the Build's file, so ticking a line never
   stands in the way of undoing a change to the Build. Each write is a `build-progress` change: backed up, never

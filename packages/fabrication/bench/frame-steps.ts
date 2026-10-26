@@ -8,6 +8,7 @@ import {
   bracketing,
   drilling,
   type Pilots,
+  pilotHole,
   SCREWS_PER_BRACKET,
   screwing,
   wordsWith,
@@ -94,6 +95,8 @@ export const frameDrafts = (options: {
       closeUps: [railOnLeg(s, s.wide, s.thick), endFrameCloseUp(s)],
       techniques: [
         { type: "measure-mark", piece: { wide: s.wide, thick: s.thick, name: "A" }, at: shelfUp },
+        { type: "square-frame", long: s.leg, across: s.endRail, wide: s.wide, thick: s.thick },
+        ...pilotHole(pilots.endFrames, driving.piece, driving.screw),
         driving,
       ],
       // The first step that screws a rail to a leg shows where its screws can go.
@@ -136,7 +139,11 @@ export const frameDrafts = (options: {
       ],
       // The rail on the leg's wide face, the frame standing.
       closeUps: [railOnLeg(s, s.wide, s.wide), longSideCloseUp(s)],
-      techniques: [driving],
+      techniques: [
+        { type: "square-frame", long: s.frameLength, across: s.leg, wide: s.wide, thick: s.thick },
+        ...pilotHole(pilots.longRails, driving.piece, driving.screw),
+        driving,
+      ],
       check: {
         says: "Measure corner to corner across the top, both ways: the same within 2 mm.",
         photo: "The frame standing, from a front corner.",
@@ -181,6 +188,11 @@ export const frameDrafts = (options: {
         }),
       ],
       techniques: [
+        ...pilotHole(
+          pilots.brackets,
+          { wide: s.wideWidth, thick: s.wideThick, name: "base" },
+          bracketScrewsOf(p),
+        ),
         {
           type: "driving-screw",
           piece: { wide: s.wideWidth, thick: s.wideThick, name: "base" },
