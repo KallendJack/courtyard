@@ -85,12 +85,15 @@ describe("the golden bench through the general engine", () => {
     expect(recipe.findings.filter((finding) => !checks.includes(finding.kind))).toEqual(
       bench.findings.filter((finding) => finding.kind !== "tools-missing"),
     );
-    // Its 4 × 40 sheet screws go 22 mm into the rails, short of 6 diameters.
-    expect(recipe.findings.filter((finding) => checks.includes(finding.kind))).toEqual(
-      ["shelf to long rails", "braces to end frames", "top to long rails"].map((joint) =>
+    // Its load isn't said, so its shelf is checked under the heaviest, and sags 1 mm over the
+    // 460 mm between its rails; its 4 × 40 sheet screws go 22 mm into the rails, short of 6
+    // diameters.
+    expect(recipe.findings.filter((finding) => checks.includes(finding.kind))).toEqual([
+      expect.objectContaining({ kind: "sags", name: "Shelf", span: 460, sag: 1, allowed: 0.8 }),
+      ...["shelf to long rails", "braces to end frames", "top to long rails"].map((joint) =>
         expect.objectContaining({ kind: "screw-length", joint, fixes: ["Use 4 × 45 screws"] }),
       ),
-    );
+    ]);
   });
 
   it("offers the template's options for each stock, each costed the same", () => {

@@ -244,7 +244,7 @@ _Avoid_: template, preset, example (and not Get to know, or a workspace's first 
 
 **Load class**:
 How much a Build carries, as code works it out from the load said in plain words (#771), such as "paint tins" or "a 3D
-printer", set conservatively from a sourced table. Its checks for sag and tipping use it.
+printer", set conservatively from a sourced table. Its check for sag uses it.
 _Avoid_: weight rating, capacity (that's a saw's), load (that's the owner's words)
 
 **Part recipe**:

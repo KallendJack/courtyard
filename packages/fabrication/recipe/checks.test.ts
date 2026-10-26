@@ -1,7 +1,7 @@
 import { BuildRecipe } from "@courtyard/contract";
 import { describe, expect, it } from "vitest";
 import type { Build, Finding } from "../build.ts";
-import { rack, shelfBox } from "./fixtures/invented.ts";
+import { rack, sawStand, shelfBox } from "./fixtures/invented.ts";
 import { workOutRecipe } from "./work-out.ts";
 
 // The checks any recipe gets (#771): sag from a shelf's span, its sheet and the load said in plain
@@ -52,17 +52,39 @@ describe("sag", () => {
       thickness: 12,
       load: { class: "very heavy", said: "paint tins", matched: "paint" },
     });
-    // 1200 / 600 is the 2 mm a shelf may sag; 12 mm ply under the tins takes 335 mm.
-    expect(shelf).toMatchObject({ allowed: 2, most: 335 });
+    // 1200 / 600 is the 2 mm a shelf may sag; 12 mm ply, across its face grain, takes 204 mm
+    // under the tins, and 25 mm with a centre support only just short of 1200.
+    expect(shelf).toMatchObject({ allowed: 2, most: 204 });
     expect(shelf?.sag).toBeGreaterThan(2);
-    expect(shelf?.fixes).toEqual(["Add a centre support and use 25 mm"]);
+    expect(shelf?.fixes).toEqual([
+      "Add a centre support and use 25 mm, its supports at most 1190 mm apart",
+    ]);
+  });
+
+  it("gives the plainest fixes that pass: a centre support, or a thicker sheet", () => {
+    const sagging = (recipe: unknown) =>
+      found(worked(recipe), "sags").find((finding) => finding.name === "Lower shelf");
+    // 18 mm ply, 728 mm between the cleats: tools want a centre support.
+    expect(sagging({ ...shelfBox, load: "tools" })?.fixes).toEqual(["Add a centre support"]);
+    // Under camping kit, either: 25 mm takes 728 mm alone.
+    expect(sagging({ ...shelfBox, load: "camping kit" })?.fixes).toEqual([
+      "Use 25 mm",
+      "Add a centre support",
+    ]);
+    // 12 mm ply, 1200 mm under camping kit: a centre support and 25 mm.
+    expect(sagging(wideBox("camping kit"))?.fixes).toEqual(["Add a centre support and use 25 mm"]);
   });
 
   it("reads the load in plain words as its class", () => {
     const classOf = (load: string) =>
       found(worked(wideBox(load)), "sags").find((finding) => finding.name === "Lower shelf")?.load;
     expect(classOf("4 storage boxes of tools")).toMatchObject({ class: "heavy", matched: "tool" });
-    expect(classOf("a 3D printer")).toMatchObject({ class: "medium", matched: "printer" });
+    expect(classOf("a 3D printer")).toMatchObject({ class: "heavy", matched: "printer" });
+    expect(classOf("camping kit")).toMatchObject({ class: "medium", matched: "kit" });
+    expect(classOf("boxes of screws and a 3D printer")).toMatchObject({
+      class: "very heavy",
+      matched: "screw",
+    });
   });
 
   it("checks a shelf said nothing about as the heaviest", () => {
@@ -92,6 +114,15 @@ describe("tipping", () => {
         advice: "Or fix it to the wall with a bracket at the top.",
       },
     ]);
+  });
+
+  it("measures a build on castors from where its castors turn, not their plates' edges", () => {
+    // Its castors' plates reach 480 mm front to back, their middles 420: 1800 tall wants 450.
+    const tall = { ...sawStand, size: { ...sawStand.size, height: measured(1800) } };
+    expect(found(worked(tall), "tips")).toEqual([
+      expect.objectContaining({ height: 1800, feet: 420, way: "front to back" }),
+    ]);
+    expect(found(worked(sawStand), "tips")).toEqual([]);
   });
 
   it("passes the rack as it is", () => {
@@ -142,7 +173,7 @@ describe("screw length", () => {
       {
         kind: "screw-length",
         screws: "4 × 40 screws",
-        joint: "the cupboard's panels",
+        joint: "the cupboard's cleats",
         problem: "too long",
         through: 18,
         into: 22,

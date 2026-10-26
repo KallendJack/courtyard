@@ -4,25 +4,21 @@ import type { Sheet } from "./stock.ts";
 // load class, each from a source and set conservatively (the heaviest class any word says, and the
 // heaviest when no word is known); and how stiff each sheet is, so a shelf's sag is worked out.
 
-export type LoadClassName = "light" | "medium" | "heavy" | "very heavy";
+export type LoadClassName = "medium" | "heavy" | "very heavy";
 
 /** A load class: how much a square metre of shelf carries, and where that's from. */
 type LoadClassRow = { readonly kgPerM2: number; readonly reference: string };
 
 export const LOAD_CLASSES: Readonly<Record<LoadClassName, LoadClassRow>> = {
-  light: {
-    kgPerM2: 50,
-    reference: "Half the lightest full bookshelf below (woodbin.com, the Sagulator's note 4)",
-  },
   medium: {
     kgPerM2: 100,
     reference:
-      "A full bookshelf's least, 9 kg a running foot on a 300 mm shelf (woodbin.com, the Sagulator's note 4)",
+      "A full bookshelf's least, 9 kg a running foot on a 300 mm shelf (woodbin.com, the Sagulator); EN 16121:2023's general shelf test, 1.0 kg/dm²",
   },
   heavy: {
     kgPerM2: 200,
     reference:
-      "A full bookshelf's most, 18 kg a running foot on a 300 mm shelf (woodbin.com, the Sagulator's note 4)",
+      "A full bookshelf's most, 18 kg a running foot on a 300 mm shelf (woodbin.com, the Sagulator); EN 16121:2013's severe shelf test, 2.0 kg/dm²",
   },
   "very heavy": {
     kgPerM2: 300,
@@ -31,7 +27,11 @@ export const LOAD_CLASSES: Readonly<Record<LoadClassName, LoadClassRow>> = {
   },
 };
 
-/** The words that say each class, the heaviest first; a word is read only whole, singular or plural. */
+/**
+ * The words that say each class, the heaviest first; a word is read only whole, singular or plural.
+ * Anything dense (metal, liquid, soil, fixings by the box, food in tins or jars) is very heavy; a
+ * 3D printer with its spools on a shelf is heavy, more than its own footprint's worth of books.
+ */
 const WORDS: readonly (readonly [LoadClassName, readonly string[]])[] = [
   [
     "very heavy",
@@ -51,6 +51,7 @@ const WORDS: readonly (readonly [LoadClassName, readonly string[]])[] = [
       "bottle",
       "drink",
       "jar",
+      "food",
       "liquid",
       "oil",
       "battery",
@@ -63,6 +64,13 @@ const WORDS: readonly (readonly [LoadClassName, readonly string[]])[] = [
       "dumbbell",
       "compost",
       "soil",
+      "plant",
+      "pot",
+      "screw",
+      "bolt",
+      "nail",
+      "fixing",
+      "hardware",
     ],
   ],
   [
@@ -73,29 +81,21 @@ const WORDS: readonly (readonly [LoadClassName, readonly string[]])[] = [
       "file",
       "paper",
       "part",
-      "screw",
-      "bolt",
-      "nail",
-      "fixing",
-      "hardware",
-      "food",
       "timber",
       "wood",
       "offcut",
       "log",
-      "plant",
-      "pot",
       "record",
       "vinyl",
+      "printer",
+      "filament",
+      "spool",
+      "electronics",
     ],
   ],
   [
     "medium",
     [
-      "printer",
-      "filament",
-      "spool",
-      "electronics",
       "kit",
       "shoe",
       "boot",
@@ -104,11 +104,6 @@ const WORDS: readonly (readonly [LoadClassName, readonly string[]])[] = [
       "tent",
       "sport",
       "helmet",
-    ],
-  ],
-  [
-    "light",
-    [
       "clothes",
       "clothing",
       "linen",
@@ -141,7 +136,7 @@ const said = (word: string) => new RegExp(`\\b${word}(?:s|es)?\\b`, "i");
 
 /**
  * The load said in plain words as its class: the heaviest class any of its words says, else the
- * heaviest there is. "4 storage boxes of tools" is heavy, "a 3D printer" medium.
+ * heaviest there is. "4 storage boxes of tools" is heavy, "camping kit" medium.
  */
 export const loadClassOf = (words: string | undefined): LoadClass => {
   const text = words ?? "";
@@ -158,38 +153,67 @@ export const loadClassOf = (words: string | undefined): LoadClass => {
 type Stiffness = { readonly modulus: number; readonly reference: string };
 
 /**
- * Each sheet material's stiffness, conservatively: a piece may be cut along the sheet or across
- * it, so a layered sheet's is the mean of its two ways.
+ * Each sheet material's stiffness from each thickness up, mm, conservatively: a piece may be cut
+ * along the sheet or across it, and a shelf may span either way of the piece, so a layered sheet's
+ * is its weaker way, across the face grain; a thickness between two takes the thinner's, and one
+ * on an MDF band's edge the thicker band's (the less stiff). Below 9 mm, plywood's is its 9 mm's,
+ * the thinnest the declaration gives.
  */
-const STIFFNESS: readonly (readonly [RegExp, Stiffness])[] = [
+const STIFFNESS: readonly (readonly [RegExp, string, readonly (readonly [number, number])[]])[] = [
   [
     /ply/i,
-    {
-      modulus: 6000,
-      reference:
-        "Spruce plywood 18 mm: 8615 along the face grain, 3385 across, their mean (Metsä Wood's declaration of performance)",
-    },
+    "Spruce plywood, sanded, across the face grain (Metsä Wood's declaration of performance MW/PW/421-001)",
+    [
+      [0, 422],
+      [12, 1363],
+      [15, 2763],
+      [18, 3385],
+      [21, 3723],
+      [24, 3795],
+      [27, 4248],
+      [30, 4442],
+    ],
   ],
-  [
-    /osb/i,
-    {
-      modulus: 2450,
-      reference: "OSB/3: 3500 along, 1400 across, their mean (Egger's OSB 3 data sheet)",
-    },
-  ],
+  [/osb/i, "OSB/3, its minor axis (Egger's OSB 3 data sheet, EN 300)", [[0, 1400]]],
   [
     /mdf/i,
-    { modulus: 2200, reference: "MDF 12–19 mm (EN 622-5, as Swiss Krono's table gives it)" },
+    "MDF, its thickness's least (EN 622-5, as Swiss Krono's table gives it)",
+    [
+      [0, 2700],
+      [9, 2500],
+      [12, 2200],
+      [19, 2100],
+      [30, 1900],
+    ],
   ],
 ];
 
-/** A sheet's stiffness: by its option, else its name, else the least of those known (MDF's). */
-export const stiffnessOf = (sheet: Pick<Sheet, "name" | "option">): Stiffness => {
-  const named = `${sheet.option ?? ""} ${sheet.name}`;
-  const known = STIFFNESS.find(([word]) => word.test(named));
-  if (known) return known[1];
-  const least = STIFFNESS.reduce((weakest, row) =>
-    row[1].modulus < weakest[1].modulus ? row : weakest,
+/** A material's stiffness at a thickness: its band's, the thinnest band's below every band. */
+const atThickness = (bands: readonly (readonly [number, number])[], thickness: number) =>
+  bands.reduce(
+    (found, [from, modulus]) => (thickness >= from ? modulus : found),
+    bands[0]?.[1] ?? 0,
   );
-  return least[1];
+
+/**
+ * A sheet's stiffness at a thickness: by its option, else its name, else the least of those known
+ * at that thickness.
+ */
+export const stiffnessOf = (
+  sheet: Pick<Sheet, "name" | "option">,
+  thickness: number,
+): Stiffness => {
+  const named = `${sheet.option ?? ""} ${sheet.name}`;
+  const rows = STIFFNESS.map(([word, reference, bands]) => ({
+    word,
+    modulus: atThickness(bands, thickness),
+    reference,
+  }));
+  const known = rows.find((row) => row.word.test(named));
+  if (known) return { modulus: known.modulus, reference: known.reference };
+  const least = rows.reduce((weakest, row) => (row.modulus < weakest.modulus ? row : weakest));
+  return {
+    modulus: least.modulus,
+    reference: `The least known at ${thickness} mm: ${least.reference}`,
+  };
 };

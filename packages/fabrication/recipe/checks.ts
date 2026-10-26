@@ -1,7 +1,8 @@
 import type { BuildRecipe } from "@courtyard/contract";
 import type { Box, Finding, Part } from "../build.ts";
 import { type LoadClass, loadClassOf, stiffnessOf } from "../loads.ts";
-import { type Axis, contactOf, extent, span, tenth, thinnest } from "./geometry.ts";
+import { BOX_EDGE } from "./fixings.ts";
+import { type Axis, alongOf, contactOf, extent, span, tenth, thinnest } from "./geometry.ts";
 import { type Layout, said, stockIn, words } from "./layout.ts";
 
 // The checks any recipe gets (#771), each a finding with a plain fix. Sag: each sheet resting on
@@ -79,21 +80,29 @@ const sags = (recipe: BuildRecipe, layout: Layout, parts: readonly Part[]): Find
       .map(({ at }) => at);
     const bridged = spanOf(sheet, under);
     if (bridged === undefined) return [];
-    const { modulus } = stiffnessOf(of(piece.stock, "sheet"));
+    const sheetStock = of(piece.stock, "sheet");
+    const modulusAt = (thick: number) => stiffnessOf(sheetStock, thick).modulus;
     const thickness = piece.thickness;
+    const modulus = modulusAt(thickness);
     const allowed = bridged / SAG_RATIO;
     const sag = sagOf(bridged, thickness, modulus, load);
     if (sag <= allowed) return [];
     const holds = (spanned: number, thick: number) =>
-      sagOf(spanned, thick, modulus, load) <= spanned / SAG_RATIO;
+      sagOf(spanned, thick, modulusAt(thick), load) <= spanned / SAG_RATIO;
     const thicker = THICKNESSES.filter((mm) => mm > thickness);
     const alone = thicker.find((mm) => holds(bridged, mm));
     const centre = holds(bridged / 2, thickness);
     const both = thicker.find((mm) => holds(bridged / 2, mm));
+    // Past what a centre support and the thickest sheet take, the supports closer together.
+    const thickest = thicker.at(-1) ?? thickness;
+    const closer = Math.floor((2 * mostSpan(thickest, modulusAt(thickest), load)) / 10) * 10;
     const fixes = [
       ...(alone ? [`Use ${alone} mm`] : []),
       ...(centre ? ["Add a centre support"] : []),
       ...(!alone && !centre && both ? [`Add a centre support and use ${both} mm`] : []),
+      ...(!alone && !centre && !both
+        ? [`Add a centre support and use ${thickest} mm, its supports at most ${closer} mm apart`]
+        : []),
     ];
     return [
       {
@@ -106,18 +115,35 @@ const sags = (recipe: BuildRecipe, layout: Layout, parts: readonly Part[]): Find
         allowed: tenth(allowed),
         most: mostSpan(thickness, modulus, load),
         load,
-        fixes: fixes.length > 0 ? fixes : ["Add supports under it, closer together"],
+        fixes,
       },
     ];
   });
 };
 
+/**
+ * What it stands on, each way: its pieces on the floor, or its castors by their middles, where a
+ * swivel castor turns; its wheel trails round that point, so the plate's outer edge isn't where it
+ * stands.
+ */
+const feetOf = (layout: Layout) => {
+  const castors = layout.fitted.flatMap((piece) => piece.boxes);
+  const placed = layout.placed.flatMap((piece) => piece.boxes);
+  const floor = Math.min(...[...castors, ...placed].map((at) => at.z));
+  const onFloor = (at: Box) => Math.abs(at.z - floor) < 0.05;
+  return (axis: Axis) => [
+    ...placed.filter(onFloor).map((at) => span(at, axis)),
+    ...castors.filter(onFloor).map((at) => {
+      const middle = (span(at, axis).from + span(at, axis).to) / 2;
+      return { from: middle, to: middle };
+    }),
+  ];
+};
+
 const tips = (layout: Layout, height: number): Finding[] => {
-  const boxes = [...layout.placed, ...layout.fitted].flatMap((piece) => piece.boxes);
-  const floor = Math.min(...boxes.map((at) => at.z));
-  const feet = boxes.filter((at) => Math.abs(at.z - floor) < 0.05);
+  const feet = feetOf(layout);
   const reach = (axis: Axis) =>
-    Math.max(...feet.map((at) => span(at, axis).to)) - Math.min(...feet.map((at) => at[axis]));
+    Math.max(...feet(axis).map((at) => at.to)) - Math.min(...feet(axis).map((at) => at.from));
   const endToEnd = reach("x");
   const frontToBack = reach("y");
   const narrow = Math.min(endToEnd, frontToBack);
@@ -229,12 +255,40 @@ const screwLengths = (recipe: BuildRecipe, layout: Layout): Finding[] => {
     }),
     ...recipe.groups.flatMap((group) => {
       if (group.kind !== "box") return [];
-      const boxes = boxesOf(group.id);
-      return checked(
-        group.fixing,
-        `the ${said(words(group.id))}'s panels`,
-        boxes.flatMap((one, index) => boxes.slice(index + 1).map((other) => [one, other] as const)),
+      // Its cleats are screwed face to face, its panels into each other's edges: each its own
+      // finding, so screws too long for one and too short for the other aren't one joint.
+      const cleats = new Set(
+        recipe.groups.flatMap((shelf) =>
+          shelf.kind === "shelf" && shelf.on === group.id && shelf.rests === "cleats"
+            ? [`${words(shelf.id)} cleats`]
+            : [],
+        ),
       );
+      const held = layout.placed
+        .filter((piece) => piece.from === group.id)
+        .flatMap((piece) => piece.boxes.map((at) => ({ at, cleat: cleats.has(piece.name) })));
+      // Only where its fixings are counted: a cleat's end on the back isn't screwed.
+      const pairs = held.flatMap((one, index) =>
+        held.slice(index + 1).flatMap((other) => {
+          const contact = contactOf(one.at, other.at);
+          return contact !== null && contact.face[alongOf(contact)] >= BOX_EDGE
+            ? [{ pair: [one.at, other.at] as const, other, one }]
+            : [];
+        }),
+      );
+      const box = said(words(group.id));
+      return [
+        ...checked(
+          group.fixing,
+          `the ${box}'s panels`,
+          pairs.filter(({ one, other }) => !one.cleat && !other.cleat).map(({ pair }) => pair),
+        ),
+        ...checked(
+          group.fixing,
+          `the ${box}'s cleats`,
+          pairs.filter(({ one, other }) => one.cleat || other.cleat).map(({ pair }) => pair),
+        ),
+      ];
     }),
   ];
 };

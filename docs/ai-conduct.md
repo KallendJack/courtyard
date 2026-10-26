@@ -2030,9 +2030,9 @@ Less wood for screws.`). The stock in use is costed as it is, at its own length 
 its own first line, picked; an option is judged for every slot its stock fills, so one made for only one of them says
 "Not made for the frame". It ends "Give these numbers as they are; to change one, change a parameter." A stock wrong for
 its parts is a finding ("18 mm MDF is wrong for Top, Shelf, Braces: It swells in a damp garage."). So is each check
-a recipe gets (#771), with its plain fixes: a sheet that sags under its load ("Lower shelf (A) sags: 12 mm over 1200 mm
-under paint tins (very heavy) sags 92 mm, more than the 2 mm allowed; it takes 335 mm at most. Fix: Add a centre
-support and use 25 mm."), a build that can tip, a frame nothing braces, and screws too short to grip or long enough to
+a recipe gets (#771), with its plain fixes: a sheet that sags under its load ("Lower shelf (C) sags: 18 mm over 728 mm
+under tools (heavy) sags 4.4 mm, more than the 1.2 mm allowed; it takes 475 mm at most. Fix: Add a centre
+support."), a build that can tip, a frame nothing braces, and screws too short to grip or long enough to
 come out the far side. Given a project and
 step, the step is given the Build through the project tool, its own change and note, and the reply ends with how that
 went ("Its project step: Changed [P1] Split the garage."). Given only a label (with a project and step, or not), or a

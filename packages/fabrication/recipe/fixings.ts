@@ -27,7 +27,7 @@ const SCREWS_A_JOINT = 2;
 /** Brackets in a corner a castor pushes: one lets a bench pushed about work the joint loose. */
 const BRACKETS_ROLLING = 2;
 /** A box's edge shorter than this (a cleat's end on the back) isn't screwed, mm. */
-const BOX_EDGE = 100;
+export const BOX_EDGE = 100;
 
 /** "Castor bases" as one of them: "castor base". */
 const one = (name: string) => said(name).replace(/(?<!s)s$/, "");

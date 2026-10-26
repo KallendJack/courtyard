@@ -266,7 +266,7 @@ export const BuildFinding = z.discriminatedUnion("kind", [
     allowed: z.number(),
     most: z.number(),
     load: z.object({
-      class: z.enum(["light", "medium", "heavy", "very heavy"]),
+      class: z.enum(["medium", "heavy", "very heavy"]),
       kgPerM2: z.number(),
       reference: z.string(),
       said: z.string().nullable(),
