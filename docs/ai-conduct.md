@@ -886,9 +886,11 @@ used, and only while no turn runs there, else it tries again later), which the c
 owner's:
 
 > The pull request #<number> that builds issue #<issue>, "<title>", has merged. If its description lists boards
-> ("Boards: … → Live"), move them in Paper as the Paper rules say: from Agreed to Live, and the Live boards they
-> replace to Archive. If the repository keeps a plan issue or notes beside its build order, bring them up to date with
-> gh. Then say in a line or two what merged and what the order does next.
+> ("Boards: …"), check the built screen against each board, as the Paper rules say. A board it matches (apart from
+> differences the owner OK'd on the pull request) moves from Agreed to Archive, as built, and the built screen's
+> screenshot goes on Live as "Built · <Device> · <Screen>", moving the one it replaces to Archive. A board it doesn't
+> match stays in Agreed, and you write the gap on its issue. If the repository keeps a plan issue or notes beside its
+> build order, bring them up to date with gh. Then say in a line or two what merged and what the order does next.
 
 The Lead takes a turn after every merge, so its turns are given only its latest ten exchanges (#518), each an owner
 or worker message and the answer to it, as a quick question keeps its last ten. Once older ones are left out, the
@@ -913,26 +915,38 @@ Courtyard tells a model about them comes after the saving rules (Every turn, ite
 > if they're missing or fail because Paper can't be reached, tell the owner Paper isn't open on the worker machine,
 > don't try to open it, and carry on with the rest of the work.
 >
-> The Paper file has four pages, in this order: "1 · Live" holds exactly one board per screen per device, as built
-> today, plus the style guide and shared components; "2 · Agreed" holds boards the owner OK'd that aren't built yet;
-> "3 · Drafts" holds every idea and iteration; "4 · Archive" holds replaced boards, which are never deleted. Paper
-> lists pages in the order they were made, so make any missing page in that order, and if the pages are out of
-> order, swap the boards between the misplaced pages and rename them so the list reads 1, 2, 3, 4. The page is a
-> board's status, so name each board "<Device> · <Screen>", such as "Tablet · Home", and on Agreed add its ticket:
-> "Tablet · Home (#12)". On Live and Agreed each screen area is one row, labelled by a "Section · <area>" board on its
-> left, with Desktop, Tablet and Cover left to right; rows run foundations first (Style guide & brand, then
-> Components), then the screens in the order you meet them. Drafts sit in a grid by topic, and Archive in labelled
-> groups (Replaced designs, Old photos, boards open tickets still point to).
+> The Paper file has four pages, in this order: "1 · Live" holds screenshots of the built app only, one per screen
+> per device, never a copy of a design, plus the style guide and shared components; "2 · Agreed" holds boards the
+> owner OK'd that aren't built as drawn yet; "3 · Drafts" holds every idea and iteration; "4 · Archive" holds boards
+> that were built or replaced, which are never deleted. Paper lists pages in the order they were made, so make any
+> missing page in that order, and if the pages are out of order, swap the boards between the misplaced pages and
+> rename them so the list reads 1, 2, 3, 4. The page is a board's status, so name each board "<Device> · <Screen>",
+> such as "Tablet · Home"; on Agreed add its ticket, "Tablet · Home (#12)", and on Live name each screenshot "Built ·
+> <Device> · <Screen>", such as "Built · Tablet · Home". On Live and Agreed each screen area is one row, labelled by a
+> "Section · <area>" board on its left, with Desktop, Tablet and Cover left to right; rows run foundations first
+> (Style guide & brand, then Components), then the screens in the order you meet them. Drafts sit in a grid by topic,
+> and Archive in labelled groups (Replaced designs, Built as drawn, Old photos, boards open tickets still point to).
 >
-> Draw each new idea or change on Drafts, never a screenshot of the app as a design. When the owner OKs a draft,
-> move it to Agreed with its ticket in its name, and move any Agreed board it replaces to Archive. A pull request
-> that changes what the owner sees lists its boards in its description, such as "Boards: Tablet · Home → Live,
-> replaces Tablet · Home", and when it merges, whoever merges it moves those boards from Agreed to Live, moves the
-> Live boards they replace to Archive, and adds any new shared piece to the style guide or components.
+> Draw each new idea or change on Drafts, never a screenshot of the app as a design. Every label, on a board and in
+> the app, says what's happening, never what isn't ("in the green", not "no tape"). When the owner OKs a draft, move
+> it to Agreed with its ticket in its name, and move any Agreed board it replaces to Archive. What the owner OKs on a
+> board is what they see, so these rules hold for every screen, in every app the repository builds. An issue built
+> from a board covers the whole board, or lists exactly which parts it leaves out and the issue that covers each;
+> until it does, it isn't ready-for-agent. A pull request that changes what the owner sees puts Playwright
+> screenshots of the built screen beside each board it builds, at 933 × 645 and 476 × 695, and 1440 × 900 where a
+> desktop board exists, and lists every difference from the board. It doesn't merge with a difference it doesn't
+> list, a listed difference needs the owner's OK, and "close enough, with a follow-up" isn't a merge. Its
+> description lists its boards, such as "Boards: Tablet · Home (#12) → Archive, Built · Tablet · Home → Live". When
+> it merges, whoever merges it checks the built screen against each board. A board it matches (apart from
+> differences the owner OK'd) moves from Agreed to Archive, as built, and the built screen's screenshot goes on Live,
+> moving the one it replaces to Archive. A board it doesn't match stays in Agreed, and the gap is written on its
+> issue. Any new shared piece goes in the style guide or components.
 
 The four pages (#340, replacing #233's two) give every project's file the same shape: the page says whether a board
-is built, agreed, an idea or gone, so names carry no status and nothing tangles. Boards move only at the owner's OK
-and at merge, so Live never drifts from what's built and is never a screenshot that stops being retaken.
+is built, agreed, an idea or gone, so names carry no status and nothing tangles. Since 2026-10-26 Live holds only
+screenshots of the built app, and a board leaves Agreed only when the built screen matches it, so Live never shows a
+design the app doesn't look like (the bench's step buttons, #793, were built without its board's picture style, and
+the board went to Live as if built). The rules cover every screen, in Courtyard and Fabrication alike.
 
 The worker decides each call before it happens. A call naming another Paper file, or none when the tool takes one, is
 refused:

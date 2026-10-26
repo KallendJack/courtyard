@@ -130,7 +130,10 @@ when a change needs a board): `docs/agents/process.md`.
   message for what needs them (`docs/agents/process.md`).
 - **Claim before building.** With no claim in the issue's comments or open PRs, comment
   "Building this: <session or helper> (<branch>), <why>"; stopping without a PR, comment "Stopped: <why>".
-- **Boards in a PR** read "Boards: Tablet · Home → Live, replaces …".
+- **What's signed off on a board is what's built,** on every screen in both apps: an issue covers its whole board
+  or names who covers the rest; a PR shows built screenshots beside each board and lists every difference; Live
+  holds only screenshots of the built app (`docs/agents/process.md`, Paper). Boards in a PR read "Boards: Tablet ·
+  Home (#12) → Archive, Built · Tablet · Home → Live".
 - **Say what's new.** A PR that changes what the owner sees gives one line in its description, `What's new: <what,
   in a few words> · <where to try it>`, the where a workspace's name or Settings, or left out for Home: "What's new:
   Draw the garage · Garage". After the Update that brings it, Home says it once (#604).
