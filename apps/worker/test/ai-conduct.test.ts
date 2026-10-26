@@ -214,7 +214,7 @@ describe("what every turn tells a model", () => {
     );
   });
 
-  it("tells a model in a code workspace with Paper the four pages, how boards are named and laid out, and how they move at OK and at merge (#340)", async () => {
+  it("tells a model in a code workspace with Paper the four pages, how boards are named and laid out, that what's OK'd on a board is what's built, and how they move at OK and at merge (#340)", async () => {
     await withPaper();
 
     const { framing } = await firstTurn({ ...CODES, usesTools: true });
