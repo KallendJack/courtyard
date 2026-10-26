@@ -79,7 +79,12 @@ export const linesOf = (
     groups.set(key, group);
   }
   const lineOf = (property: string, need: Needed | undefined): SizeLine => {
-    const records = groups.get(sameName(property))?.records ?? [];
+    // Oldest first; those recorded at once (in one turn) by value, so they keep their places.
+    const records = [...(groups.get(sameName(property))?.records ?? [])].sort(
+      (a, b) =>
+        a.recorded.localeCompare(b.recorded) ||
+        JSON.stringify(a.value).localeCompare(JSON.stringify(b.value)),
+    );
     const [only] = records;
     const corrected =
       records.length === 1 && only !== undefined

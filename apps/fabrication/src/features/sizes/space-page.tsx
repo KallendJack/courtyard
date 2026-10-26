@@ -61,10 +61,15 @@ export function SpacePage(props: { space: SpaceSizes }) {
   const cover = useLayout() === "cover";
   const where = { workspaceId: space.workspace.id, slug: space.space.thing.slug };
   const now = Date.now();
-  // The old sizes open by themselves the first time, until they're confirmed.
-  const [open, setOpen] = useState<Open | undefined>(
-    space.oldSizes.length > 0 ? { kind: "old" } : undefined,
-  );
+  const [chosen, setOpen] = useState<Open>();
+  // The old sizes open by themselves while there are any, until they're confirmed or closed.
+  const [oldClosed, setOldClosed] = useState(false);
+  const open: Open | undefined =
+    chosen ?? (space.oldSizes.length > 0 && !oldClosed ? { kind: "old" } : undefined);
+  const close = () => {
+    if (open?.kind === "old") setOldClosed(true);
+    setOpen(undefined);
+  };
   const [skipped, setSkipped] = useState<readonly string[]>([]);
   const [justSaved, setJustSaved] = useState<{ change: ChangeId; words: string }>();
   useFresh({ ask: () => router.invalidate() });
@@ -281,7 +286,7 @@ export function SpacePage(props: { space: SpaceSizes }) {
       <Sheet
         title={sheetTitle}
         open={open !== undefined}
-        onClose={() => setOpen(undefined)}
+        onClose={close}
         from={cover ? "bottom" : "right"}
       >
         {open?.kind === "old" ? (

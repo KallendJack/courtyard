@@ -123,8 +123,9 @@ export function SizeForm(props: {
             These answers disagree: keep the right one, or measure it again below.
           </legend>
           {records.map((record) => (
-            <div
+            <fieldset
               key={record.id}
+              aria-label={recordValue(record)}
               className="flex items-center justify-between gap-3 rounded-row bg-muted px-3 py-2"
             >
               <span className="flex flex-col">
@@ -151,7 +152,7 @@ export function SizeForm(props: {
               >
                 Keep this
               </Button>
-            </div>
+            </fieldset>
           ))}
         </fieldset>
       )}
