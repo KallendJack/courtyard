@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SizeSource, SourcedSize } from "../sourced/size.ts";
+import { BuildCloseUp } from "./close-up.ts";
 import { BuildStockOptions } from "./stock.ts";
 
 // What `packages/fabrication` derives for a Build, as Fabrication shows it (#698): the engine's
@@ -120,64 +121,6 @@ export const BuildStepTool = z.object({
 });
 export type BuildStepTool = z.infer<typeof BuildStepTool>;
 
-const Point = z.object({ x: z.number(), y: z.number() });
-
-/**
- * What a close-up draws as its shape rather than a block (#783): a nut or a bolt's head (a hex,
- * `across` its flats), a tool on one, its jaw at `x`, `y` and its handle `length` out at
- * `turn` degrees (0 to the right, clockwise), a clockwise arrow round one, or a castor upside
- * down from the side: its plate `w` long from `x`, `y` (its top left), its swivel and its wheel
- * (`wheel` across) standing up from it.
- */
-const CloseUpShape = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("hex"), x: z.number(), y: z.number(), across: z.number() }),
-  z.object({
-    kind: z.enum(["open-spanner", "adjustable", "pliers", "socket"]),
-    x: z.number(),
-    y: z.number(),
-    jaw: z.number(),
-    length: z.number(),
-    turn: z.number(),
-  }),
-  z.object({ kind: z.literal("clockwise"), x: z.number(), y: z.number(), r: z.number() }),
-  z.object({
-    kind: z.literal("castor"),
-    x: z.number(),
-    y: z.number(),
-    w: z.number(),
-    plate: z.number(),
-    wheel: z.number(),
-  }),
-]);
-
-/**
- * A step's close-up (#699): a flat view of what it makes, in mm from its top left (`y` down), its
- * key sizes as dimension lines and a dot where each fixing goes; tools drawn as their shape and
- * words on the drawing where it has them (#783).
- */
-const BuildCloseUp = z.object({
-  title: z.string(),
-  width: z.number(),
-  height: z.number(),
-  pieces: list(
-    z.object({ label: z.string(), x: z.number(), y: z.number(), w: z.number(), h: z.number() }),
-  ),
-  dimensions: list(z.object({ from: Point, to: Point, mm: z.number() })),
-  fixings: list(Point),
-  notes: list(z.string()),
-  shapes: list(CloseUpShape).optional(),
-  labels: list(
-    z.object({
-      x: z.number(),
-      y: z.number(),
-      says: z.string(),
-      heading: z.boolean().optional(),
-      /** What the drawing is about, picked out: the washer under the nut. */
-      key: z.boolean().optional(),
-    }),
-  ).optional(),
-});
-
 /** A length of timber as it's marked: its cuts from the square end, the saw's cut, the offcut. */
 const BuildMarkedLength = z.object({
   stock: z.string(),
@@ -272,6 +215,11 @@ export const BuildStep = z.object({
   tips: list(z.string()),
   /** Its close-ups: most steps have one, a fixing two (tightening it, and taken apart, #783). */
   closeUps: list(BuildCloseUp),
+  /**
+   * The techniques it uses, each as its close-up (#813): in full the first time the Build's steps
+   * use it (`first`), a "how?" tap after.
+   */
+  techniques: list(z.object({ closeUp: BuildCloseUp, first: z.boolean() })),
   /** What "show me how" walks through first, each move with its close-up where one shows it. */
   walkThrough: list(
     z.object({ title: z.string(), says: z.string(), closeUp: BuildCloseUp.nullable() }),

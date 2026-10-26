@@ -19,7 +19,9 @@ import {
   bitSetsFrom,
   NO_SPANNERS,
   type SpannerKit,
+  type SquareKind,
   spannerKitFrom,
+  squareKindFrom,
   standInFor,
   Tool,
   toolsFrom,
@@ -66,6 +68,7 @@ export const workOutBench = (
     kept: setting.kept ?? [],
     started: setting.started ?? [],
     capacities: capacitiesFrom(setting.sizes ?? []),
+    square: squareKindFrom(setting.tools ?? []),
     stock: setting.stock ?? [],
   });
   const build = benchOf(parameters);
@@ -108,6 +111,8 @@ type Setting = {
   /** The steps with a line ticked, by ID: a step started keeps its lines (#783). */
   readonly started: readonly string[];
   readonly capacities: Capacities;
+  /** The kind of square the owner has, for the close-ups (#813). */
+  readonly square: SquareKind | undefined;
   /** Your stock (#760), which comes off the buy list and which the steps say they use. */
   readonly stock: readonly Held[];
 };
@@ -117,7 +122,19 @@ type Setting = {
  * tools to hand and the ways kept.
  */
 const benchWith =
-  ({ toHand, standIns, have, bitSets, buying, kit, kept, started, capacities, stock }: Setting) =>
+  ({
+    toHand,
+    standIns,
+    have,
+    bitSets,
+    buying,
+    kit,
+    kept,
+    started,
+    capacities,
+    square,
+    stock,
+  }: Setting) =>
   (parameters: BenchParameters): Result<Omit<Build, "options">, string[]> => {
     const shape = shapeOf(parameters);
     const problems = shapeProblems(shape);
@@ -165,6 +182,7 @@ const benchWith =
         kept,
         started,
         capacities,
+        square,
       }),
     );
 

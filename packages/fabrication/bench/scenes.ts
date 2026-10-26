@@ -1,4 +1,5 @@
-import type { Scene, SceneMark } from "../scene.ts";
+import { bracketArm, bracketBoxes, bracketWidth } from "../close-ups/bracket.ts";
+import type { Scene, SceneMark, ScenePiece } from "../scene.ts";
 import { castorScene } from "./castor-pictures.ts";
 import { cutScene, markScene } from "./cut-scenes.ts";
 import {
@@ -90,42 +91,7 @@ const assemblyMarks = (setting: SceneSetting, id: string): SceneMark[] => {
         },
       ];
     }
-    case "stand-on-bases": {
-      // At the near leg's foot, as the steps say: one bracket on its face towards the bench's
-      // middle, one on its face towards the other leg.
-      const x = s.left + s.wide;
-      const y = s.front + 2 * s.thick;
-      const z = s.foot + 20;
-      return [
-        {
-          kind: "arrow",
-          from: at(x + 300, y - s.thick / 2, z + 200),
-          to: at(x, y - s.thick / 2, z),
-          says: "bracket on the face to the middle",
-        },
-        {
-          kind: "arrow",
-          from: at(x - s.wide / 2, y + 250, z + 450),
-          to: at(x - s.wide / 2, y, z),
-          says: "bracket on the face to the other leg",
-        },
-      ];
-    }
-    case "fit-supports": {
-      // A bracket in the corner at each end of each support; drawn at its front end.
-      const bracketAt = (label: string, says: string): SceneMark[] => {
-        const end = setting.parts.find((each) => each.label === label)?.boxes[0];
-        if (end === undefined) return [];
-        const corner = at(end.x + end.w, end.y, end.z + end.h / 2);
-        return [
-          {
-            kind: "arrow",
-            from: at(corner.x + 250, corner.y - 150, corner.z + 250),
-            to: corner,
-            says,
-          },
-        ];
-      };
+    case "fit-supports":
       return [
         {
           kind: "size",
@@ -133,10 +99,7 @@ const assemblyMarks = (setting: SceneSetting, id: string): SceneMark[] => {
           to: at(s.left + s.frameLength / 2, s.front - OUT, s.legTop),
           mm: s.frameLength / 2,
         },
-        ...bracketAt("F", "a bracket at each end"),
-        ...bracketAt("D", "and at each end of D"),
       ];
-    }
     case "fit-top":
       return [
         { kind: "size", from: at(0, 0, s.height), to: at(s.left, 0, s.height), mm: s.overhang },
@@ -144,6 +107,73 @@ const assemblyMarks = (setting: SceneSetting, id: string): SceneMark[] => {
     default:
       return [];
   }
+};
+
+/**
+ * The brackets a step fits, drawn as the L-shapes they are, lit (#813): two at each leg's foot
+ * as the frame stands on its bases, one on its face towards the bench's middle and one on its
+ * face towards the other leg; and one in the corner at each end of each support, where it meets
+ * its rail.
+ */
+const bracketsOf = (setting: SceneSetting, id: string): ScenePiece[] => {
+  const s = setting.shape;
+  const name = setting.parameters.fixings.brackets.name;
+  const arm = bracketArm(name);
+  const boxesOf = (label: string) =>
+    setting.parts.find((part) => part.label === label)?.boxes ?? [];
+  const middle = s.length / 2;
+  const back = (s.front + s.back) / 2;
+  const boxes =
+    id === "stand-on-bases"
+      ? boxesOf("A").flatMap((leg) => {
+          const towards = leg.x < middle ? 1 : -1;
+          const across = leg.y < back ? 1 : -1;
+          return [
+            ...bracketBoxes({
+              at: { x: towards > 0 ? leg.x + leg.w : leg.x, y: leg.y + leg.d / 2, z: leg.z },
+              ways: [
+                { axis: "z", sign: 1 },
+                { axis: "x", sign: towards },
+              ],
+              along: "y",
+              arm,
+              width: bracketWidth(arm, leg.d),
+            }),
+            ...bracketBoxes({
+              at: { x: leg.x + leg.w / 2, y: across > 0 ? leg.y + leg.d : leg.y, z: leg.z },
+              ways: [
+                { axis: "z", sign: 1 },
+                { axis: "y", sign: across },
+              ],
+              along: "x",
+              arm,
+              width: bracketWidth(arm, leg.w),
+            }),
+          ];
+        })
+      : id === "fit-supports"
+        ? ["F", "D"].flatMap((label) =>
+            boxesOf(label).flatMap((support) =>
+              ([1, -1] as const).flatMap((end) =>
+                bracketBoxes({
+                  at: {
+                    x: support.x + support.w,
+                    y: end > 0 ? support.y : support.y + support.d,
+                    z: support.z + support.h / 2,
+                  },
+                  ways: [
+                    { axis: "y", sign: end },
+                    { axis: "x", sign: 1 },
+                  ],
+                  along: "z",
+                  arm,
+                  width: bracketWidth(arm, support.h),
+                }),
+              ),
+            ),
+          )
+        : [];
+  return boxes.length === 0 ? [] : [{ kind: "fitted", name, label: null, tone: "lit", boxes }];
 };
 
 /** Where an assembly step opens from: low for the bases, from the back for the braces, above for the top. */
@@ -184,7 +214,10 @@ export const stepScene = (
       return {
         title: "The bench so far",
         view: ASSEMBLY_VIEWS[step.id] ?? { turn: -35, tilt: 25 },
-        pieces: soFar(setting, { shown: new Set(step.shown), lit: new Set(step.lit) }),
+        pieces: [
+          ...soFar(setting, { shown: new Set(step.shown), lit: new Set(step.lit) }),
+          ...bracketsOf(setting, step.id),
+        ],
         marks: assemblyMarks(setting, step.id),
       };
   }

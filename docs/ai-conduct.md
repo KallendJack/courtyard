@@ -406,6 +406,22 @@ damp timber moves as it dries, so leave it a few days. Once the owner has let it
 saying it again is only a repeat. `planning-safety-step-not-a-repeat` now also wants the warning at the drilling step
 said briefly, in 100 words or fewer. The rule's wording is unchanged.
 
+### Making goes to Fabrication
+
+Decided with #759 (ADR 0040), after the Garage chat did a 30-message shopping job by hand on 2026-10-24 and left the
+owner's last request ("what's left") unanswered. Told to models once a Build's chat is the Build's own (#817): until
+then the rules above and in Builds stand, and the prompts module and its tests are unchanged. Its lines, to follow the
+planning answers above:
+
+> Making belongs to Fabrication: a Build's cut plan, buy list, steps, the owner's stock and a shop trip are worked out
+> and kept there, in the Build's own chat. When the owner wants one, such as a shopping list, a cut list or what's left
+> to buy, never write it here: say in a line to open it in Fabrication, naming the Build, and help with what isn't
+> making, such as where it goes, the walls, services and loads, or the plan around it.
+
+A Build's chat is told Fabrication's conduct instead of this line. Its eval scenario comes with #817 and runs on both
+providers: asked in a planning workspace for a shopping list for a Build, the answer points to Fabrication and writes
+no list.
+
 ## Courtyard's file tools
 
 Built with #71, for a provider that reads files only through Courtyard (Codex, whose shell is off; ADR 0015). Its

@@ -425,7 +425,9 @@ are the contract's `SourcedSize`, its stock and tools (`materials.ts`), part rec
 (sizes and counts within `RECIPE_MOST`, every ID once, every reference to the right kind). The framed bench
 (`bench/`) is its first starter: the template's parameters are loaded as the bench's recipe, and a recipe that is a
 framed bench is worked out by the bench's own code, to exactly its numbers; any other recipe is refused until
-#770–#772 work any recipe out. Printed parts
+#770–#772 work any recipe out. The close-ups by type (`close-ups/`, #813) are any template's: a fixing (a bracket, a
+bolt through a plate, a screwed overlap) or a technique (measure and mark, driving a screw) drawn in 3D from the
+pieces it joins, laid flat for the app to draw, and which step shows a technique in full, the first to use it. Printed parts
 (`print/`, #702) are the holster, shim and bracket templates and a part recipe as written: each becomes a recipe
 (a base and its features), checked by the making rules (on the plate, holes on their faces, walls the nozzle prints),
 and made into a solid with manifold-3d (WebAssembly) and its lettering with opentype.js and the bundled Figtree font,
@@ -471,6 +473,11 @@ goes to Courtyard's login. It holds no state and does no model work, and calls o
   box's mic and Hold to ask listen through `packages/ui/frame/speech.ts`.
 - **Both ways between the apps:** a project step with a Build has Open in Fabrication (`projects/project-view.tsx`),
   and the Build's page goes back to its project on its workspace's page.
+- **Where it's going** ([ADR 0040](adr/0040-fabrication-owns-making-and-stands-on-its-own-courtyard-links-in.md)):
+  Fabrication owns making and stands on its own, and Courtyard links in. A Build's chat becomes the Build's own, not a
+  project's session (#817); its spaces, projects and Builds move to its own store at the owner's level, behind its
+  own sign-in, with Courtyard's steps keeping a link (#818); it gets its own Home (#765), Your stock (#760) and At the
+  shop (#757). Until each lands, the bullets above hold.
 
 ### The house configs: `packages/house`
 

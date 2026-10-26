@@ -6,7 +6,7 @@ import type { Scene } from "./scene.ts";
 import type { Held, StepFixing } from "./stock.ts";
 import type { Tool } from "./tools.ts";
 
-export type { CloseUp, CloseUpShape } from "./close-up.ts";
+export type { CloseUp, CloseUpShape, CloseUpType, FixingType } from "./close-up.ts";
 
 // What any template derives from its parameters (ADR 0036): everything a Build shows. Code works
 // every number out; a model only reads them.
@@ -256,12 +256,15 @@ export type Step = {
   readonly wayChanged: { readonly was: string; readonly now: string } | null;
   readonly tools: readonly StepTool[];
   readonly safety: readonly StepTool[];
+  /** Its fixings, each with its close-up's type (#813) and where the owner keeps it (#760). */
   readonly fixings: readonly StepFixing[];
   readonly batch: string; // How to batch it: "One joint at a time" (#789).
   readonly actions: readonly Action[];
   readonly tips: readonly string[]; // Extras, behind a Tips tap, never in the lines (#789).
   /** Its close-ups: most steps have one, a fixing two (tightening it, and taken apart, #783). */
   readonly closeUps: readonly CloseUp[];
+  /** Its techniques' close-ups (#813): in full the first time (`first`), a "how?" tap after. */
+  readonly techniques: readonly { readonly closeUp: CloseUp; readonly first: boolean }[];
   /** What "show me how" walks through first, the first time it comes up; none otherwise. */
   readonly walkThrough: readonly WalkStep[];
   /** The step's picture (#754); null where another view shows it, as a printed part's plate. */

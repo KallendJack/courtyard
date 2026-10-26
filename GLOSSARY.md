@@ -276,8 +276,11 @@ A Build's instruction manual in Fabrication (#699), worked out by code from its 
 **picture** (#754): the job in 3D as it's done (the length in the Workmate, an end frame on the floor, the frame so
 far), with marks drawn from the Build's numbers. A move a beginner may never have made gets a **walk-through** in
 "show me how" the first time it comes up (#777): marking as tape, tick, square and line, or marking a joint's screw
-spots by eye (#789), each with its close-up where one shows it. The castor step shows its holes drilled through
-the plate and its bolt's head held while the nut turns (#783). Each step is the **simplest way first** (#789): it
+spots by eye (#789). The castor step shows its holes drilled through the plate and its bolt's head held while the
+nut turns (#783). **Close-ups by type** (#813) are drawn by code for any Build from the pieces they join and their
+sizes, their labels 2-3 word pills: a **fixing** type (an angle bracket in a corner, a bolt through a plate, a
+screwed overlap) on every step that makes one, and a **technique** (measure and mark a length, driving a screw) in
+full the first time the steps use it, a "How?" tap after. Each step is the **simplest way first** (#789): it
 opens with how to **batch** it ("One joint at a time"), has at most four lines, measures only what decides how it
 turns out and says "by eye" for the rest, drills a pilot hole only where the wood would split, and keeps extras as
 **tips** behind a tap. A step that can be done more than one **way** (a hand saw, a circular saw, a
@@ -315,7 +318,8 @@ _Avoid_: fact (that's a context file line), dimension, measurement (as a record'
 
 **Space**:
 A Thing of kind space, such as the garage or a van's interior (ADR 0037): its sizes, its openings and what's kept in
-it, which the room in Fabrication is drawn from.
+it, which the room in Fabrication is drawn from. Spaces are Fabrication's, kept outside any workspace once its own
+store lands (ADR 0040, #818).
 _Avoid_: room (one kind of space), area, zone (that's a part of a space to keep clear)
 
 **Tool**:
@@ -330,9 +334,20 @@ first Build and from any Build's Tools. A workspace's Thing that looks like a to
 where from ("F-clamps · from Garage"), and moves to the owner's tools with Save, keeping its name; Save has Undo.
 _Avoid_: toolbox, tool list, inventory
 
+**Your stock**:
+The materials and fixings the owner has, kept in Fabrication at the owner's level beside Your tools (ADR 0040, #760),
+so a Build's buy list shows only what's left to buy.
+_Avoid_: inventory, materials list, leftovers
+
+**At the shop**:
+Fabrication's shop trip for a Build (ADR 0040, #757): what's left to buy, the swaps when something isn't on the shelf,
+and the cutting card for the shop's saw.
+_Avoid_: shopping mode, shopping list (that's the buy list)
+
 **Fabrication**:
-The app the owner opens a Build in (`apps/fabrication`, ADR 0036): the chat about it, its 3D view and its build list.
-The engine behind it is `packages/fabrication`.
+The app for making (`apps/fabrication`, ADRs 0036, 0040): its spaces, projects and Builds, each Build's chat, 3D view
+and build list, Your tools, Your stock and At the shop. It stands on its own, with its own Home, data and sign-in;
+Courtyard links in with **Open in Fabrication** and keeps no copy. The engine behind it is `packages/fabrication`.
 _Avoid_: Fabricator, maker mode, workshop
 
 **At the bench**:
