@@ -10,6 +10,7 @@ import {
   type ProviderUsage,
   type PullRequest,
   type PullRequestWaiting,
+  pullRequestEnded,
   type SessionEvent,
   type SessionWaiting,
   type TurnNow,
@@ -70,7 +71,8 @@ export const answeredAfter = (was: Answered, event: SessionEvent): Answered => {
 
 /**
  * What a session waits on the owner for: the approval its turn waits on; else its last turn, cut
- * off by a restart under a day ago (#186), until Continue or a new message, seen or not; else a
+ * off by a restart under a day ago (#186), until Continue or a new message, seen or not, unless
+ * its pull request has merged or closed since (#755); else a
  * Lead's builder that's stuck (#590), until it carries on; else its
  * latest answer, while the owner hasn't seen it (`seen`, the event number its page last showed up
  * to, on any device), it's under a day old, no turn runs or waits for a slot, and it has no pull
@@ -91,7 +93,8 @@ export const sessionWaiting = (session: {
   const { answer } = session;
   const recent = answer !== undefined && session.clock - Date.parse(answer.at) < NEW_REPLY_MS;
   const free = session.now.kind === "your-turn" && !session.queued;
-  if (free && recent && session.cutOff) return "cut-off";
+  // A turn cut off after its pull request merged or closed has nothing to continue (#755).
+  if (free && recent && session.cutOff && !pullRequestEnded(session.pullRequest)) return "cut-off";
   if (session.stuck) return "stuck";
   const newReply =
     free &&
