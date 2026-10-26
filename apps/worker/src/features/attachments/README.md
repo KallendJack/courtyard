@@ -19,3 +19,5 @@ None of its own: they arrive with `sessions/`' messages and are read back from
   kind.
 - Pulls a PDF's text out with `unpdf`, and refuses one with none.
 - Keeps them in the session's folder, and gives each turn the session's last ten.
+- A photo sent from a Build's chat keeps the step the owner was on (`takenAt`, #786, stamped by `fabrication/`), so
+  `prompts/` can say one from an earlier step shows the Build as it was then.

@@ -8,7 +8,7 @@ import { type Check, describeWords, hasWords } from "./words.ts";
 // Documents (ADR 0020): the documents a turn saved or updated, judged on their text afterwards.
 
 export const describeDocument = (save: DocumentSave) =>
-  `${save.action === "save" ? "saved" : "updated"} ${documentPath(save.document.slug)}${save.summary === undefined ? "" : ` (${save.summary})`}`;
+  `${{ save: "saved", update: "updated", archive: "archived" }[save.action]} ${documentPath(save.document.slug)}${save.summary === undefined ? "" : ` (${save.summary})`}`;
 
 /**
  * A turn's document checks (ADR 0020): one for each document it should save or update, judged on

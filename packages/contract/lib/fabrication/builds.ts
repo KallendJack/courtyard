@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ChangeId } from "../change-id.ts";
+import { DocumentSlug } from "../documents.ts";
 import { DerivedBuild } from "./derived.ts";
 
 // Builds (ADR 0036, 0037, #697): a design worked out by code, which Fabrication owns and a planning
@@ -45,11 +46,16 @@ export const BuildName = z
 export const BuildParameters = z.record(z.string(), z.unknown());
 export type BuildParameters = z.infer<typeof BuildParameters>;
 
-/** A Build's file, `builds/<slug>.json`: its name, its template and the parameters chosen. */
+/**
+ * A Build's file, `builds/<slug>.json`: its name, its template and the parameters chosen, and the
+ * workspace's documents it supersedes (#786), by their file's name: an old shopping list or plan
+ * for the same thing, never read for its sizes again.
+ */
 export const BuildFile = z.strictObject({
   name: BuildName,
   template: BuildTemplate,
   parameters: BuildParameters,
+  supersedes: z.array(DocumentSlug).min(1).optional(),
 });
 export type BuildFile = z.infer<typeof BuildFile>;
 

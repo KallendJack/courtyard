@@ -19,6 +19,7 @@ import {
   FAKE_MODEL,
   followSession,
   postJson,
+  quotedInGuide,
   type Requester,
   removeTestFolder,
   SAVING_MODEL,
@@ -335,9 +336,72 @@ describe("the document tool", () => {
       "There's already a document called Packing list for Bilbao at docs/packing-list-for-bilbao.md. To change it, read it and send its path with the whole new text; otherwise give this one another name.",
       "There's already a document called Notes at docs/notes.md. To change it, read it and send its path with the whole new text; otherwise give this one another name.",
       "There's no document at docs/nothing-here.md: the documents are listed in your instructions.",
-      "That input doesn't fit this tool: it takes a document's whole text, and its path to update one.",
+      "That input doesn't fit this tool: it takes a document's whole text, and its path to update one; or its path and archive to archive one.",
     ]);
     expect(savedEvents(events)).toHaveLength(1);
+  });
+});
+
+describe("archiving a document (#786)", () => {
+  it("moves it into the archive, out of the list, as one change Undo puts back", async () => {
+    await withPackingList();
+    const { request, session, events, saver } = await sessionWith([
+      [documentTool({ path: "docs/packing-list-for-bilbao.md", archive: true })],
+    ]);
+
+    expect(saver.replies[0]).toEqual([
+      {
+        ok: true,
+        reply:
+          "Archived docs/packing-list-for-bilbao.md: it's out of the documents, in docs/archive/.",
+      },
+    ]);
+    expect(await listed(request)).toEqual([]);
+    expect(await readFile(join(docsDir(), "archive", "packing-list-for-bilbao.md"), "utf8")).toBe(
+      PACKING,
+    );
+    expect(savedEvents(events)).toMatchObject([
+      {
+        save: {
+          action: "archive",
+          document: { slug: "packing-list-for-bilbao", name: "Packing list for Bilbao" },
+        },
+      },
+    ]);
+    expect((await changesIn(contextDir))[0]?.title).toBe(
+      "Archive document: Packing list for Bilbao",
+    );
+    const [change] = await changesListed(request);
+    expect(change?.document).toEqual({
+      did: "archived",
+      name: "Packing list for Bilbao",
+      slug: null,
+    });
+
+    const [saved] = savedEvents(events);
+    expect((await undoDocument(request, session.id, saved?.seq ?? 0)).status).toBe(204);
+    expect((await listed(request)).map(({ slug }) => slug)).toEqual(["packing-list-for-bilbao"]);
+    expect(await readFile(join(docsDir(), "packing-list-for-bilbao.md"), "utf8")).toBe(PACKING);
+    await expect(
+      readFile(join(docsDir(), "archive", "packing-list-for-bilbao.md"), "utf8"),
+    ).rejects.toThrow();
+  });
+
+  it("refuses one archived already", async () => {
+    await withPackingList();
+    await mkdir(join(docsDir(), "archive"), { recursive: true });
+    await writeFile(join(docsDir(), "archive", "packing-list-for-bilbao.md"), PACKING);
+    const { saver } = await sessionWith([
+      [documentTool({ path: "docs/packing-list-for-bilbao.md", archive: true })],
+    ]);
+
+    expect(saver.replies[0]?.[0]).toEqual({
+      ok: false,
+      reply: `${await quotedInGuide("The archive has a <slug> already", {
+        slug: "packing-list-for-bilbao",
+        path: "docs/packing-list-for-bilbao.md",
+      })}\n\nYou can put it right and try once more.`,
+    });
   });
 });
 

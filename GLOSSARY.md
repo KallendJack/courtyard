@@ -159,7 +159,9 @@ _Avoid_: reset, factory reset, wipe
 **Document**:
 A longer piece of writing kept in a workspace, such as a training plan or a packing list, as Markdown beside the
 context file. The owner saves one from an answer, or asks a model to save or update one; a model never saves one
-unasked. Every model is told which documents there are and reads one when it helps (ADR 0020).
+unasked. Every model is told which documents there are and reads one when it helps (ADR 0020). One a Build replaces,
+such as an old shopping list for the bench, is **superseded** by it: models never take sizes from it, and the owner
+archives it with one tap (#786).
 _Avoid_: note, page, file (on its own), artifact
 
 **Floor plan**:

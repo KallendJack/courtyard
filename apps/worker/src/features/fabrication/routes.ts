@@ -35,7 +35,7 @@ import { readProjects } from "../projects/index.ts";
 import type { Sessions } from "../sessions/index.ts";
 import { readMessageWithAttachments, sessionError } from "../sessions/routes.ts";
 import { getWorkspace } from "../workspaces/index.ts";
-import { chatOf, chatSessionOf } from "./chat.ts";
+import { chatOf, chatSessionOf, takenAt } from "./chat.ts";
 import {
   type BuildRefusal,
   readBuild,
@@ -94,6 +94,8 @@ const buildError = (c: Context, refusal: BuildRefusal) => {
       return apiError(c, { status: 400, error: "That changes nothing." });
     case "stale":
       return apiError(c, { status: 409, error: "That Build has changed since." });
+    case "no-document":
+      return apiError(c, { status: 400, error: `There's no document at ${refusal.path}.` });
   }
 };
 
@@ -298,9 +300,10 @@ export const fabricationRoutes = (
   routes.post(FABRICATION_CHAT, async (c) => {
     const found = await opened(c);
     if (!found.ok) return found.error;
-    const { place, slug } = found.value;
-    const sent = await readMessageWithAttachments(c, NewMessage);
-    if (!sent.ok) return sent.error;
+    const { build, place, slug } = found.value;
+    const read = await readMessageWithAttachments(c, NewMessage);
+    if (!read.ok) return read.error;
+    const sent = { ...read.value, attachments: takenAt(build, read.value.attachments) };
     const session = await chatSessionOf(sessions, {
       workspaceId: place.workspace.id,
       slug,
@@ -308,17 +311,17 @@ export const fabricationRoutes = (
     });
     if (!session.ok) return sessionError(c, session.error);
     if (session.value !== undefined) {
-      const next = await sessions.send({ rawId: session.value.id, ...sent.value });
+      const next = await sessions.send({ rawId: session.value.id, ...sent });
       if (!next.ok) return sessionError(c, next.error);
       return c.json({ session: session.value.id } satisfies BuildChatSent, 202);
     }
     const started = await sessions.create({
       workspaceId: place.workspace.id,
       message: {
-        ...sent.value.message,
+        ...sent.message,
         ...(place.project === null ? {} : { project: place.project.slug }),
       },
-      attachments: sent.value.attachments,
+      attachments: sent.attachments,
     });
     if (!started.ok) return sessionError(c, started.error);
     return c.json({ session: started.value.id } satisfies BuildChatSent, 202);

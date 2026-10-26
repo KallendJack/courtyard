@@ -22,7 +22,7 @@ import { MOVE_REVIEW_WRITING, MoveReviewAnswer, moveReviewMessage } from "../../
 import { firstWithRoom, modelsOnOffer, type Provider } from "../../providers/index.ts";
 import { parseContextFile, plansLines, removeContextLine } from "../context-file/index.ts";
 import type { ContextFolder } from "../context-folder/index.ts";
-import { DOCS_FOLDER, documentPath, listDocuments, nameOf } from "../documents/index.ts";
+import { archivedPath, documentPath, listDocuments, nameOf } from "../documents/index.ts";
 import { planningChange, planningFolder, slugFor } from "../planning-files/index.ts";
 import { projectPath, projectText, readProjects, readProjectText } from "../projects/index.ts";
 import { editSteps } from "../projects/steps.ts";
@@ -53,9 +53,6 @@ const WRITING_TIMEOUT_MS = 5 * 60 * 1000;
 
 /** How long after a review couldn't be written it's asked for again. */
 const RETRY_AFTER_MS = 30 * 60 * 1000;
-
-/** The folder in `docs` an archived document goes to, out of the list and out of the way. */
-export const ARCHIVE_FOLDER = "archive";
 
 /** A workspace's review as kept: its moves while they wait on the owner, or done. */
 const KeptReview = z.discriminatedUnion("state", [
@@ -269,7 +266,7 @@ export const createMoveReviews = (target: MoveReviewsTarget) => {
 
         for (const slug of move.archive) {
           const text = await read(documentPath(slug));
-          const archived = `${DOCS_FOLDER}/${ARCHIVE_FOLDER}/${slug}.md`;
+          const archived = archivedPath(slug);
           if (text === undefined) {
             return err({ problem: `The document ${slug} isn't there any more.` });
           }

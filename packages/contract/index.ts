@@ -20,6 +20,7 @@ export {
   PDF_TYPE,
   PhotoAttachment,
   PhotoMediaType,
+  PhotoTakenAt,
 } from "./lib/attachment.ts";
 export {
   ATTACHMENTS,

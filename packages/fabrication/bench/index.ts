@@ -12,7 +12,7 @@ import { type Capacities, capacitiesFrom } from "../capacity.ts";
 import { cutPlanOf } from "../cut-plan.ts";
 import { assumedSizes, boltLength, toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
-import { stockOptions, wrongStock } from "../options.ts";
+import { oneSheetEach, stockOptions, wrongStock } from "../options.ts";
 import type { Price } from "../stock.ts";
 import {
   bitSetsFrom,
@@ -46,7 +46,7 @@ export const deriveBench = (
       ),
     );
   }
-  const parameters = parsed.data;
+  const parameters = oneSheetEach(parsed.data, BENCH_SLOTS);
   const own = new Set(setting.tools === undefined ? parameters.tools : toolsFrom(setting.tools));
   // What the owner has besides Your tools stands in for a tool they haven't: a step stool (#763).
   const have = setting.have ?? [];

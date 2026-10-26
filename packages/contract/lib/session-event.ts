@@ -94,11 +94,11 @@ export const Save = z.discriminatedUnion("action", [
 export type Save = z.infer<typeof Save>;
 
 /**
- * What one document save did (ADR 0020): a new document saved, or one updated with its whole new
- * text, by its file's name and its name then.
+ * What one document save did (ADR 0020): a new document saved, one updated with its whole new
+ * text, or one archived (#786), out of the documents; by its file's name and its name then.
  */
 export const DocumentSave = z.object({
-  action: z.enum(["save", "update"]),
+  action: z.enum(["save", "update", "archive"]),
   document: z.object({ slug: DocumentSlug, name: z.string() }),
   /** For an update: what changed, in a few words, as the model said. */
   summary: z.string().optional(),

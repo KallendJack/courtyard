@@ -11,20 +11,17 @@ import {
   type BuildTemplate,
   type BuildView,
   type ChangeId,
+  type DocumentSlug,
 } from "@courtyard/contract";
 import type { Build, BuildSetting } from "@courtyard/fabrication";
 import { listFolder, readTextFile, writeTextFileIn } from "../../lib/files.ts";
 import { err, ok, type Result } from "../../lib/result.ts";
-import {
-  undoWholeFiles,
-  type WholeFile,
-  type WholeFilesUndoRefusal,
-} from "../context-folder/index.ts";
+import { undoWholeFiles, type WholeFilesUndoRefusal } from "../context-folder/index.ts";
+import { type SupersedesRefusal, supersedesNow } from "../documents/superseded.ts";
 import {
   type PlanningFilesTarget,
   type PlanningFolderRefusal,
   pathInFolder,
-  pathInWorkspace,
   planningChange,
   planningFolder,
   slugFor,
@@ -123,7 +120,8 @@ export type BuildRefusal =
   | { readonly kind: "unchanged"; readonly name: string }
   /** It has changed since the model was shown it. */
   | { readonly kind: "stale" }
-  | { readonly kind: "storage" };
+  /** A document it's to supersede isn't there (#786). */
+  | SupersedesRefusal;
 
 /** The Builds in a planning folder, worked out with the owner's tools and things (#763). */
 const readBuildsIn = async (
@@ -201,7 +199,7 @@ export const readBuild = async (
  * by its file's name, with a new name, its parameters changed by a merge patch, or one of its
  * stocks swapped for an option (#704).
  */
-export type BuildEdit =
+export type BuildEdit = (
   | {
       readonly slug?: undefined;
       readonly name?: string;
@@ -213,7 +211,11 @@ export type BuildEdit =
       readonly name?: string;
       readonly parameters?: BuildParameters;
       readonly pick?: BuildStockPick;
-    };
+    }
+) & {
+  /** The documents it supersedes now (#786), in place of those it did; empty for none. */
+  readonly supersedes?: readonly DocumentSlug[];
+};
 
 /** A saved Build, the change it was committed as (if git kept it), and it as read now. */
 export type BuildSaved = {
@@ -272,7 +274,18 @@ export const saveBuild = async (
       if (template === undefined || name === undefined || parameters === undefined) {
         return err({ kind: "incomplete" });
       }
-      const file = BuildFile.safeParse({ name, template, parameters });
+      const superseding = await supersedesNow(target, {
+        given: edit.supersedes,
+        before: current?.file.supersedes ?? [],
+      });
+      if (!superseding.ok) return superseding;
+      const { supersedes } = superseding.value;
+      const file = BuildFile.safeParse({
+        name,
+        template,
+        parameters,
+        ...(supersedes.length === 0 ? {} : { supersedes }),
+      });
       if (!file.success) {
         const [issue] = file.error.issues;
         return err({ kind: "invalid", problem: issue?.message ?? "" });
@@ -311,6 +324,7 @@ export const saveBuild = async (
                 ? []
                 : [`Renamed from ${current.file.name}`]),
               ...parameterChanges(current.file.parameters, file.data.parameters),
+              ...superseding.value.changes,
             ];
       return ok({
         save: {
@@ -362,35 +376,4 @@ export const undoChangeToBuild = async (
     return err({ kind: "not-found" });
   }
   return undoBuildChange(target, undo.id);
-};
-
-/** The Build a path in the workspace's folder names (`builds/<slug>.json`), if it names one. */
-const slugOfPath = (path: string): BuildSlug | undefined => {
-  const [, name] = /^builds\/([^/]+)\.json$/.exec(path) ?? [];
-  const slug = BuildSlug.safeParse(name);
-  return slug.success ? slug.data : undefined;
-};
-
-/** Whether a change's files are a Build's. */
-export const isBuildChange = (files: readonly Pick<WholeFile, "path">[]) =>
-  files.some(({ path }) => slugOfPath(pathInWorkspace(path)) !== undefined);
-
-/** What a change did to a Build, from the whole files it wrote or removed, for Recent changes. */
-export const buildChangeOf = (files: readonly WholeFile[]) => {
-  const file = files.find((one) => slugOfPath(pathInWorkspace(one.path)));
-  const slug = file && (slugOfPath(pathInWorkspace(file.path)) ?? null);
-  const nameIn = (text: string | null) => {
-    if (text === null) return undefined;
-    try {
-      return BuildFile.safeParse(JSON.parse(text)).data?.name;
-    } catch {
-      return undefined;
-    }
-  };
-  const name = nameIn(file?.after ?? null) ?? nameIn(file?.before ?? null) ?? slug ?? "a Build";
-  const did = file?.before === null ? "added" : file?.after === null ? "removed" : "changed";
-  return {
-    build: { did, name, slug: did === "removed" ? null : (slug ?? null) },
-    path: did === "removed" || file === undefined ? null : file.path,
-  } as const;
 };

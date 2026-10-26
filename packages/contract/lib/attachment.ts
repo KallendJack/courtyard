@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { BuildSlug } from "./fabrication/builds.ts";
+import { BuildStepId } from "./fabrication/derived.ts";
 
 // An attachment as the owner's message records it (#78). Session events need this, so it's kept
 // to what that needs: the limits and the checks are in `attachment-file.ts`.
@@ -26,11 +28,24 @@ const attachmentBase = {
  * An attachment as the owner's message records it, kept in the session's folder by its id: a
  * photo of one of the kinds a model takes, or a PDF.
  */
+/**
+ * The step of a Build the owner was on when they sent a photo from its chat (#786), so a later
+ * turn knows it shows the Build as it was then.
+ */
+export const PhotoTakenAt = z.object({
+  build: BuildSlug,
+  step: BuildStepId,
+  number: z.number().int().positive(),
+  title: z.string(),
+});
+export type PhotoTakenAt = z.infer<typeof PhotoTakenAt>;
+
 /** A photo kept in a session's folder: one the owner attached, or a tool connection's image. */
 export const PhotoAttachment = z.object({
   ...attachmentBase,
   kind: z.literal("photo"),
   mediaType: PhotoMediaType,
+  takenAt: PhotoTakenAt.optional(),
 });
 export type PhotoAttachment = z.infer<typeof PhotoAttachment>;
 

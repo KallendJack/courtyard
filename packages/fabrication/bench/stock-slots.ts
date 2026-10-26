@@ -1,5 +1,5 @@
 import { err, ok, type Result } from "../build.ts";
-import { pickStock, type Slot } from "../options.ts";
+import { oneSheetEach, pickStock, type Slot } from "../options.ts";
 import { BenchParameters } from "./parameters.ts";
 
 // The framed bench's slots (#704): the stock each job is cut from, which can be swapped for one of
@@ -64,8 +64,11 @@ export const pickBenchStock = (
 ): Result<Record<string, unknown>, string[]> => {
   const parsed = BenchParameters.safeParse(input);
   if (!parsed.success) return err(parsed.error.issues.map((issue) => issue.message));
+  // Picked from the stocks as the Build is worked out, with one sheet for each (#786); only what
+  // the pick itself changes is kept, so a pick never rewrites a sheet slot it didn't swap.
+  const parameters = oneSheetEach(parsed.data, BENCH_SLOTS);
   const picked = pickStock({
-    parameters: parsed.data,
+    parameters,
     slots: BENCH_SLOTS,
     prices: (parameters) => parameters.prices,
     setPrices: (parameters, prices) => ({ ...parameters, prices }),
@@ -74,7 +77,7 @@ export const pickBenchStock = (
   if (!picked.ok) return picked;
   const changed = Object.entries(picked.value).filter(
     ([key, value]) =>
-      JSON.stringify(value) !== JSON.stringify(parsed.data[key as keyof BenchParameters]),
+      JSON.stringify(value) !== JSON.stringify(parameters[key as keyof BenchParameters]),
   );
   return ok({ ...(input as Record<string, unknown>), ...Object.fromEntries(changed) });
 };
