@@ -89,6 +89,9 @@ test.describe("on the unfolded Fold", () => {
     await expect(measuring.getByRole("heading", { name: "Inside width" })).toBeVisible();
     await expect(measuring).toContainText("Measure wall to wall, at the back, on the floor.");
     await expect(line(page, "Garage", "Inside width")).toContainText("measuring next");
+    // The rough figure is only the hint: nothing becomes measured without the owner's number.
+    await expect(measuring.getByLabel("Size")).toHaveValue("");
+    await expect(measuring.getByRole("button", { name: "Save" })).toBeDisabled();
     await measuring.getByLabel("Size").fill("2741");
     await measuring.getByRole("button", { name: "Save" }).click();
 

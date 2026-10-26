@@ -67,7 +67,9 @@ export function SizeForm(props: {
   const was = newest?.value;
   const kind = was?.kind ?? "quantity";
   const [property, setProperty] = useState("");
-  const [amount, setAmount] = useState(was?.kind === "quantity" ? `${was.value}` : "");
+  // A rough figure is only the hint, so one tap of Save never makes a guess measured.
+  const measured = newest?.source.kind === "measured";
+  const [amount, setAmount] = useState(was?.kind === "quantity" && measured ? `${was.value}` : "");
   const [text, setText] = useState(was?.kind === "text" ? was.text : "");
   const [yes, setYes] = useState<"yes" | "no">(was?.kind === "yes-no" && !was.yes ? "no" : "yes");
   const [unit, setUnit] = useState<RecordUnit>(was?.kind === "quantity" ? was.unit : "mm");
@@ -177,7 +179,7 @@ export function SizeForm(props: {
               inputMode="decimal"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
-              placeholder="2741"
+              placeholder={was?.kind === "quantity" ? `${was.value}` : "2741"}
             />
           </label>
           <SegmentedChoice label="Unit" options={UNITS} value={unit} onChange={setUnit} />
