@@ -11,8 +11,6 @@ export function Disclosure(props: {
   icon: ReactNode;
   label: ReactNode;
   look: "row" | "tap";
-  /** The Fold unfolded at the bench, read at arm's length (#753): a row's words bigger. */
-  big?: boolean;
   children: ReactNode;
 }) {
   const row = props.look === "row";
@@ -20,12 +18,7 @@ export function Disclosure(props: {
     <details
       className={classes(
         "group flex flex-col",
-        row
-          ? classes(
-              "rounded-row bg-muted text-foreground",
-              props.big ? "text-answer" : "text-interface",
-            )
-          : "gap-2",
+        row ? "rounded-row bg-muted text-interface text-foreground" : "gap-2",
       )}
     >
       <summary

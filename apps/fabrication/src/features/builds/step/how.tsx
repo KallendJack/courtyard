@@ -1,7 +1,6 @@
 import type { BuildStep, DerivedBuild } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
-import { classes } from "@courtyard/ui/lib/classes.ts";
 import { Camera } from "lucide-react";
 import { type RefObject, useRef } from "react";
 import { CloseUp } from "../close-up.tsx";
@@ -10,11 +9,7 @@ import { CloseUp } from "../close-up.tsx";
  * What "show me how" walks through first (#777): each move in order, numbered, with its close-up
  * where one shows it (the tape's hook, the square's stock).
  */
-export function WalkThrough(props: {
-  step: BuildStep;
-  parts: DerivedBuild["parts"];
-  big: boolean;
-}) {
+export function WalkThrough(props: { step: BuildStep; parts: DerivedBuild["parts"] }) {
   if (props.step.walkThrough.length === 0) return null;
   return (
     <section aria-label="How it's done" className="flex flex-col gap-2">
@@ -24,7 +19,7 @@ export function WalkThrough(props: {
       <ol className="flex flex-col gap-3">
         {props.step.walkThrough.map((move, at) => (
           <li key={move.title} className="flex flex-col gap-2">
-            <p className={classes("text-foreground", props.big ? "text-bench" : "text-answer")}>
+            <p className="text-answer text-foreground">
               <span className="font-bold">
                 {at + 1}. {move.title}:
               </span>{" "}

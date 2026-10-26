@@ -1957,10 +1957,10 @@ helper" when it needs one); its tools as the step names them, from the owner's o
 bit's size and what it drills, "not to hand", or what of theirs will do), its way when it could be done more than one,
 its safety kit and its fixings with their counts; its picture's title and how each of its own parts lies there, from
 the picture's boxes (`A Legs lying on an edge, 95 up`, `flat on a face`, or `standing on end`), and the words marked on
-it; its lines in order, each ticked one marked `[ticked]`; each close-up's notes; where its screws go, by eye in each
-place its pieces overlap, a fingertip from its edges (or through one piece, spread out, each into the wood under
-it), never at a measured spot (`packages/fabrication`, How a step reads); and its check, how to know it's right before
-moving on, with the photo that shows it.
+it; its lines in order, each ticked one marked `[ticked]`; its tips, what Show me how adds; each close-up's notes;
+where its screws go, by eye in each place its pieces overlap, a fingertip from its edges (or through one piece, spread
+out, each into the wood under it), never at a measured spot (`packages/fabrication`, How a step reads); and its check,
+how to know it's right before moving on, with the photo that shows it.
 
 The eval's `bench-step-*` scenarios (`apps/worker/eval/at-the-bench.ts`) put the owner at the golden bench's end
 frames, two lines ticked, with their own tools saved (a speed square, two F-clamps), and check the answer follows the

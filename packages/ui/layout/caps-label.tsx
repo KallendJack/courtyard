@@ -7,6 +7,8 @@ const TONES = {
   /** What's live: "Building". */
   primary: "text-primary-text",
   muted: "text-muted-foreground",
+  /** What's done underneath, in a close-up at the bench (#826, the castors' board). */
+  destructive: "text-destructive",
 } as const;
 
 /**

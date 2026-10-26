@@ -253,9 +253,10 @@ export function HoldToAsk(props: {
         </p>
       )}
       <div className="flex items-center gap-2">
+        {/* Dark, its mic in a violet circle, as the boards have it (#826). */}
         <Button
-          variant="primary"
-          size="thumb"
+          variant="outline"
+          size="talk"
           held
           onPointerDown={hold}
           onPointerUp={letGo}
@@ -269,11 +270,13 @@ export function HoldToAsk(props: {
           onContextMenu={(event) => event.preventDefault()}
           onClick={tapped}
         >
-          <Mic aria-hidden className="size-5" />
+          <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <Mic aria-hidden className="size-4" />
+          </span>
           {waiting ? "Hold to add more" : heard === undefined ? "Hold to ask" : "Let go to ask"}
         </Button>
         {props.withChat === true && (
-          <Button variant="outline" size="thumb" onClick={props.openChat}>
+          <Button variant="outline" size="lg" onClick={props.openChat}>
             Chat
           </Button>
         )}

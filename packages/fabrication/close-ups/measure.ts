@@ -87,5 +87,6 @@ export const markCloseUp = (marking: Marking & { yours: boolean }): CloseUp => {
       `${marking.yours ? "Your" : "A"} tape, pencil and ${marking.square ? SQUARE_NAMES[marking.square] : "square"}.`,
       "Measure from the end you checked is square. The line goes right across, along the square.",
     ],
+    answers: { placed: "measure", mm: marking.at },
   });
 };
