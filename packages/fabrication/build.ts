@@ -3,7 +3,7 @@ import type { ToolSize } from "./capacity.ts";
 import type { CloseUp } from "./close-up.ts";
 import type { CheckedRecipe } from "./print/recipe.ts";
 import type { Scene } from "./scene.ts";
-import type { Held } from "./stock.ts";
+import type { Held, StepFixing } from "./stock.ts";
 import type { Tool } from "./tools.ts";
 
 export type { CloseUp, CloseUpShape } from "./close-up.ts";
@@ -256,13 +256,10 @@ export type Step = {
   readonly wayChanged: { readonly was: string; readonly now: string } | null;
   readonly tools: readonly StepTool[];
   readonly safety: readonly StepTool[];
-  /** Each with where the owner keeps theirs, when Your stock has it: "Diall case" (#760). */
-  readonly fixings: readonly {
-    readonly name: string;
-    readonly count: number;
-    readonly from?: string;
-  }[];
+  readonly fixings: readonly StepFixing[];
+  readonly batch: string; // How to batch it: "One joint at a time" (#789).
   readonly actions: readonly Action[];
+  readonly tips: readonly string[]; // Extras, behind a Tips tap, never in the lines (#789).
   /** Its close-ups: most steps have one, a fixing two (tightening it, and taken apart, #783). */
   readonly closeUps: readonly CloseUp[];
   /** What "show me how" walks through first, the first time it comes up; none otherwise. */

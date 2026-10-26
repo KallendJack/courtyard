@@ -263,9 +263,13 @@ export const BuildStep = z.object({
   safety: list(BuildStepTool),
   /** Each with where the owner keeps theirs, when Your stock has it: "Diall case" (#760). */
   fixings: list(z.object({ name: z.string(), count: z.number(), from: z.string().optional() })),
+  /** How to batch it, in a few words: "One joint at a time" (#789). */
+  batch: z.string(),
   actions: list(
     z.object({ howTo: z.string(), numbers: z.string(), length: BuildMarkedLength.optional() }),
   ),
+  /** Extras for anyone who wants them, behind a Tips tap (#789). */
+  tips: list(z.string()),
   /** Its close-ups: most steps have one, a fixing two (tightening it, and taken apart, #783). */
   closeUps: list(BuildCloseUp),
   /** What "show me how" walks through first, each move with its close-up where one shows it. */

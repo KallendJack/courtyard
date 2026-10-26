@@ -14,6 +14,9 @@ export const Words = z.string().trim().min(1).max(80);
  */
 export type Held = { readonly name: string; readonly count: number; readonly where?: string };
 
+/** A fixing a step uses, and where the owner keeps theirs when Your stock has it: "Diall case". */
+export type StepFixing = { readonly name: string; readonly count: number; readonly from?: string };
+
 /** A pack's price, in pence, and where it's from. */
 export const Price = z.object({
   pence: z.number().int().nonnegative(),

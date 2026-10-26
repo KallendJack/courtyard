@@ -36,6 +36,13 @@ export const printSizeLine = (size: DerivedBuild["size"]) =>
 export const listed = (items: readonly string[]) =>
   items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
 
+/**
+ * A step's fixing: "5 × 80 screws (16)", as a count before a size would read as one more size,
+ * and where Your stock keeps them (#760): "…, from your Diall case".
+ */
+export const fixingLine = (fixing: BuildStep["fixings"][number]) =>
+  `${fixing.name} (${fixing.count})${fixing.from === undefined ? "" : `, from your ${fixing.from}`}`;
+
 /** A finding as its card says it: a title, and what to do. */
 type Card = { readonly title: string; readonly detail: string };
 
@@ -216,3 +223,25 @@ export const bitSizes = (bits: readonly Bit[]) => listed(bits.map((bit) => `${bi
  */
 export const bitToCheck = (bit: Bit) =>
   bit.have === undefined ? `a ${bit.mm} mm bit: check your set` : `${bit.mm} mm bit?`;
+
+/**
+ * A step's tool as its chip says it (#763): drill bits by the size the step drills with, "a 7 mm
+ * bit: check your set" while the set's sizes aren't known; and what will do for a tool the owner
+ * hasn't, "Support for the long end: your step stool".
+ */
+export const chipOf = (tool: BuildStepTool): { says: string; ready: boolean } => {
+  const bits = tool.bits ?? [];
+  const unsure = bits.filter((bit) => bit.have !== true);
+  if (!tool.toHand) {
+    return {
+      says: bits.length === 0 ? `${tool.name}?` : listed(bits.map((bit) => `${bit.mm} mm bit?`)),
+      ready: false,
+    };
+  }
+  if (unsure.length > 0) return { says: listed(unsure.map(bitToCheck)), ready: false };
+  if (bits.length > 0) return { says: listed(bits.map((bit) => `${bit.mm} mm bit`)), ready: true };
+  if (tool.standIn !== undefined) {
+    return { says: `${tool.name}: your ${tool.standIn.toLowerCase()}`, ready: true };
+  }
+  return { says: tool.name, ready: true };
+};

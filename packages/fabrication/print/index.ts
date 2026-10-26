@@ -93,6 +93,8 @@ const stepsOf = (options: {
       tools: [],
       safety: [],
       fixings: [],
+      batch: common.count === 1 ? "In one go." : "All on one plate, in one go.",
+      tips: [],
       actions: [
         {
           howTo:
@@ -128,6 +130,8 @@ const stepsOf = (options: {
             tools: [],
             safety: [],
             fixings: [],
+            batch: "One at a time.",
+            tips: [],
             actions: [
               {
                 howTo: `Slide the ${shaped.holds} in before fixing anything. It should go in by hand without forcing, and not rattle.`,
@@ -159,6 +163,8 @@ const stepsOf = (options: {
             tools: toolsOf(["pencil", "drill-driver", "drill-bits"], toHand),
             safety: toolsOf(["safety-glasses"], toHand),
             fixings: [...screws].map(([name, count]) => ({ name, count: count * common.count })),
+            batch: "Mark every hole first, then drill and screw them one at a time.",
+            tips: [],
             actions: [
               {
                 howTo: "Hold it where it goes and mark through each hole with a pencil.",

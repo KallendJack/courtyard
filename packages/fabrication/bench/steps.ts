@@ -2,35 +2,22 @@ import type { CutPlan, Fitted, KeptWay, Part, Step } from "../build.ts";
 import type { Capacities } from "../capacity.ts";
 import { type SpannerKit, TOOL_NAMES, type Tool } from "../tools.ts";
 import { castorsDraft } from "./castor-steps.ts";
-import {
-  braceCloseUp,
-  endFrameCloseUp,
-  longSideCloseUp,
-  SHEET_SCREWS_PER_BRACE,
-  sheetCloseUp,
-} from "./close-ups.ts";
+import { braceCloseUp, SHEET_SCREWS_PER_BRACE, sheetCloseUp } from "./close-ups.ts";
 import { type Shape, whole } from "./frame.ts";
+import { bracketed, frameDrafts } from "./frame-steps.ts";
 import type { BenchParameters } from "./parameters.ts";
 import { act, CUT_STEP, type Draft, handedOn, preparingSteps, sawInUse } from "./preparing.ts";
 import { nameOf, type SceneSetting, sectionOf } from "./scene-pieces.ts";
 import { stepScene } from "./scenes.ts";
+import { benchPilots, bracketing, drilling, SPLIT_TIP, screwing, wordsWith } from "./screws.ts";
 import { stepToolsOf } from "./step-tools.ts";
-import { pilotWalk } from "./walk-throughs.ts";
 
 // The framed bench's steps, in the order it's built, each said twice: "show me how" for a
 // beginner and "just the numbers" for someone who knows how. Both come from here, with the
 // Build's own numbers, each size to the whole mm; a model writes neither. The parts and cut plan
 // don't depend on the tools; how a step is done does (a hand saw on a folding workbench, or a
-// circular saw).
-
-/** An angle bracket's screws: two through each of its arms. */
-const SCREWS_PER_BRACKET = 4;
-/**
- * The brackets holding each leg to its castor base: one on the face towards the bench's middle and
- * one on the face towards the other leg. A single bracket lets a bench pushed on castors work the
- * joint loose; screws up through the base can't go in, as the castor plates cover the legs' feet.
- */
-const BRACKETS_PER_LEG = 2;
+// circular saw). Each step is the simplest way that holds and looks right (#789): at most four
+// lines, measured only where it decides how it turns out, by eye elsewhere, extras as tips.
 
 /** The bench's steps, numbered, with each tool set against the tools to hand. */
 export const benchSteps = (options: {
@@ -68,15 +55,16 @@ export const benchSteps = (options: {
       : { was: TOOL_NAMES[planned], now: TOOL_NAMES[saw] };
   const handed = handedOn({ ...options, saw, sectionOf: (stock) => sectionOf(options, stock) });
   const setting: SceneSetting = { ...options, saw, handed };
-  const frameScrews = p.fixings.frameScrews.name;
   const sheetScrews = p.fixings.sheetScrews.name;
-  const brackets = p.fixings.brackets.name;
-  const bracketScrews = (p.fixings.bracketScrews ?? p.fixings.sheetScrews).name;
-  const pilot = "Drill a 3 mm pilot hole where each dot is, then drive the screws.";
-  const bracketing = act(
-    "Hold each bracket tight into its corner and mark through its holes. Drill a 3 mm pilot hole at each mark, then drive a screw into each hole.",
-    `3 mm pilots, ${SCREWS_PER_BRACKET} screws a bracket.`,
-  );
+  // Where a pilot hole goes first (#789).
+  const pilots = benchPilots(p, s);
+  /** Screws through a sheet into what it rests on, spaced by eye. */
+  const sheetScrewing = (pilot: boolean, into: string, count: number) =>
+    screwing(
+      pilot,
+      `Screw it down into ${into}: ${count} screws, spaced evenly by eye, two fingers in from the ends.`,
+      `${count} screws.`,
+    );
   const braces = (p.braces.ends ? 2 : 0) + (p.braces.rear ? 1 : 0);
   const shelfCloseUp = sheetCloseUp({
     title: "The shelf, from above",
@@ -97,14 +85,10 @@ export const benchSteps = (options: {
     note: `${whole(s.overhang)} over the frame on every side.`,
   });
   const fixing = (name: string, count: number) => ({ name, count });
-  /** Angle brackets, each with its screws. */
-  const bracketed = (count: number) => [
-    fixing(brackets, count),
-    fixing(bracketScrews, count * SCREWS_PER_BRACKET),
-  ];
-  const shelfUp = whole(s.shelfHeight);
   const middle = whole(s.frameLength / 2);
   const rearInset = whole((s.frameLength - s.endRail) / 2);
+  // Where the top's screws hit: the middle of the rails under it, from the top's edges.
+  const railsIn = whole(s.overhang + s.thick / 2);
 
   const drafts: Draft[] = [
     ...preparingSteps({
@@ -115,125 +99,26 @@ export const benchSteps = (options: {
       sectionOf: (stock) => sectionOf(setting, stock),
       nameOf: (label) => nameOf(setting, label),
     }),
-    {
-      id: "end-frames",
-      on: true,
-      title: "Make the two end frames",
-      minutes: 20,
-      parts: ["A", "C"],
-      tools: ["tape-measure", "pencil", "square", "clamps", "drill-driver", "drill-bits"],
-      safety: ["safety-glasses"],
-      fixings: [fixing(frameScrews, 16)],
-      actions: [
-        act(
-          `Lay two legs (A) flat, ${whole(s.endRail)} apart outside to outside.`,
-          `A × 2, ${whole(s.endRail)} outside.`,
-        ),
-        act("Put an end rail (C) across them, flush with the tops.", "C flush with the tops."),
-        act("Clamp it, then check the corner with your square.", "Clamp, square."),
-        act(pilot, "3 mm pilots, 2 screws a joint."),
-        act(
-          `Measure ${shelfUp} up from the floor end of each leg and square a pencil line across.`,
-          `Lines ${shelfUp} up.`,
-        ),
-        act(
-          "Fit the bottom rail the same way, its underside on the lines.",
-          "Bottom C on the lines.",
-        ),
-      ],
-      closeUp: endFrameCloseUp(s),
-      // The first step that drills a pilot hole shows how deep it goes.
-      walkThrough: pilotWalk(s, frameScrews),
-      check: {
-        says: "Measure corner to corner both ways. The same within 2 mm means it's square.",
-        photo: "Both end frames, flat, from above.",
-      },
-      words: ["flush", "square", "pilot hole"],
-    },
-    {
-      id: "long-rails",
-      on: true,
-      title: "Join the end frames with the long rails",
-      minutes: 30,
-      helper: true,
-      parts: ["B"],
-      tools: ["tape-measure", "clamps", "square", "drill-driver", "drill-bits"],
-      safety: ["safety-glasses"],
-      fixings: [fixing(frameScrews, 16)],
-      actions: [
-        act(
-          `With a helper, stand both end frames up, rails facing in, ${whole(s.frameLength)} apart outside to outside.`,
-          `Frames ${whole(s.frameLength)} outside, rails in.`,
-        ),
-        act(
-          "Clamp an upper long rail (B) across the front, flush with the frames' ends and the leg tops.",
-          "Upper B flush with ends and tops.",
-        ),
-        act(pilot, "3 mm pilots, 2 screws a joint."),
-        act(
-          `Then the lower rail, its underside level with the bottom end rails' undersides, ${shelfUp} up: measure it at both ends. The same on the back.`,
-          `Lower B ${shelfUp} up; back the same.`,
-        ),
-      ],
-      closeUp: longSideCloseUp(s),
-      check: {
-        says: "Measure corner to corner across the top, both ways: the same within 2 mm.",
-        photo: "The frame standing, from a front corner.",
-      },
-      words: ["flush", "pilot hole"],
-    },
     // The castors after the frames, so a spanner still to get doesn't hold up the day (#783).
-    ...(castors
-      ? [
-          castorsDraft({ ...options, castors, shape: s }),
-          {
-            id: "stand-on-bases",
-            on: true,
-            title: "Stand the frame on its bases",
-            minutes: 30,
-            helper: true,
-            parts: ["E"],
-            // The bases went on with their castors; this joins them to the frame.
-            adds: [],
-            tools: ["square", "clamps", "pencil", "drill-driver", "drill-bits"],
-            safety: ["safety-glasses"],
-            fixings: bracketed(4 * BRACKETS_PER_LEG),
-            actions: [
-              act("With a helper, lay the frame on its back.", "Frame on its back."),
-              act(
-                "Set a base (E) across the foot of each end frame, castors out, flush with the outside of the legs and the long rails.",
-                "E flush with the outside.",
-              ),
-              act(
-                "Check each leg is square to its base with your square, then clamp the base to both legs.",
-                "Square, clamp.",
-              ),
-              act(
-                "Fix each leg to its base with two angle brackets in the corner where they meet: one on the leg's face towards the bench's middle, one on its face towards the other leg.",
-                `${BRACKETS_PER_LEG} brackets a leg.`,
-              ),
-              bracketing,
-            ],
-            check: {
-              says: "Stood up, all four castors touch the floor and the frame doesn't rock.",
-              photo: "The frame on its castors.",
-            },
-            words: ["flush", "square", "pilot hole"],
-          } satisfies Draft,
-        ]
-      : []),
+    ...frameDrafts({
+      parameters: p,
+      shape: s,
+      pilots,
+      castors: castors ? castorsDraft({ ...options, castors, shape: s }) : null,
+    }),
     {
       id: "fit-supports",
       on: true,
       title: "Fit the supports",
       minutes: 20,
       parts: p.shelf.on ? ["F", "D"] : ["F"],
-      tools: ["tape-measure", "pencil", "drill-driver", "drill-bits"],
+      tools: ["tape-measure", "pencil", ...drilling(pilots.brackets)],
       safety: ["safety-glasses"],
-      fixings: bracketed(p.shelf.on ? 4 : 2),
+      fixings: bracketed(p, p.shelf.on ? 4 : 2),
+      batch: "One support at a time.",
       actions: [
         act(
-          `Mark the middle of each upper long rail, ${middle} from its end.`,
+          `Measure the middle of each upper long rail, ${middle} from its end, and mark it.`,
           `Middle: ${middle}.`,
         ),
         act(
@@ -243,13 +128,13 @@ export const benchSteps = (options: {
         ...(p.shelf.on
           ? [act("Same for the shelf support (D) between the lower rails.", "D the same, below.")]
           : []),
-        bracketing,
+        bracketing(pilots.brackets),
       ],
       check: {
         says: "Each support's top flush with its rails: run a hand across.",
         photo: "The supports in.",
       },
-      words: ["flush", "pilot hole"],
+      words: wordsWith(pilots.brackets, "flush"),
     },
     {
       id: "fit-shelf",
@@ -257,22 +142,24 @@ export const benchSteps = (options: {
       title: "Fit the shelf",
       minutes: 15,
       parts: ["H"],
-      tools: ["drill-driver", "drill-bits"],
+      tools: drilling(pilots.shelf),
       safety: ["safety-glasses"],
       fixings: [fixing(sheetScrews, shelfCloseUp.fixings.length)],
+      batch: "One rail at a time, then the support.",
       actions: [
         act(
           "Drop the shelf (H) in between the end frames, onto the lower rails. It has 2 mm to spare at each end.",
           "H onto the lower rails.",
         ),
-        act(
-          `${pilot} Screw into the rails and the shelf support.`,
-          `${shelfCloseUp.fixings.length} screws.`,
-        ),
+        sheetScrewing(pilots.shelf, "the rails and the shelf support", shelfCloseUp.fixings.length),
+      ],
+      tips: [
+        "Want it neater? Countersink the shelf's screws too, so nothing catches on their heads.",
+        ...(pilots.shelf ? [] : [SPLIT_TIP]),
       ],
       closeUp: shelfCloseUp,
       check: { says: "The shelf lies flat and doesn't rock.", photo: "The shelf in." },
-      words: ["pilot hole"],
+      words: wordsWith(pilots.shelf),
     },
     {
       id: "fit-braces",
@@ -280,11 +167,14 @@ export const benchSteps = (options: {
       title: "Fit the braces",
       minutes: 20,
       parts: ["J"],
-      tools: p.braces.rear
-        ? ["tape-measure", "clamps", "drill-driver", "drill-bits"]
-        : ["clamps", "drill-driver", "drill-bits"],
+      tools: [
+        ...(p.braces.rear ? (["tape-measure"] as const) : []),
+        "clamps",
+        ...drilling(pilots.braces),
+      ],
       safety: ["safety-glasses"],
       fixings: [fixing(sheetScrews, braces * SHEET_SCREWS_PER_BRACE)],
+      batch: "One brace at a time.",
       actions: [
         ...(p.braces.ends
           ? [
@@ -302,14 +192,19 @@ export const benchSteps = (options: {
               ),
             ]
           : []),
-        act(`${pilot} Two into each leg or rail, top and bottom.`, "4 screws a brace."),
+        screwing(
+          pilots.braces,
+          "Mark 2 crosses over the middle of each leg or rail, two fingers from the brace's top and bottom, by eye.",
+          `${SHEET_SCREWS_PER_BRACE} screws a brace.`,
+        ),
       ],
+      tips: pilots.braces ? [] : [SPLIT_TIP],
       closeUp: braceCloseUp(s),
       check: {
         says: "Push a top corner sideways: the frame doesn't sway.",
         photo: "The bench from a back corner.",
       },
-      words: ["flush", "pilot hole"],
+      words: wordsWith(pilots.braces, "flush"),
     },
     {
       id: "fit-top",
@@ -317,33 +212,35 @@ export const benchSteps = (options: {
       title: "Fit the top",
       minutes: 30,
       parts: ["G"],
-      tools: ["tape-measure", "clamps", "drill-driver", "drill-bits", "countersink-bit"],
+      tools: ["tape-measure", "clamps", ...drilling(pilots.top), "countersink-bit", "sandpaper"],
       safety: ["safety-glasses"],
       fixings: [fixing(sheetScrews, topCloseUp.fixings.length)],
+      batch: "One rail at a time: crosses, countersink, screws, then the next.",
       actions: [
         act(
-          `Lay the top (G) on with ${whole(s.overhang)} over the frame on every side, and clamp it so it can't move.`,
+          `Lay the top (G) on with ${whole(s.overhang)} over the frame on every side: measure it at each corner. Clamp it so it can't move.`,
           `G, ${whole(s.overhang)} over all round.`,
         ),
         act(
-          "Drill a 3 mm pilot hole where each dot is, down into the rails and the top support.",
-          "3 mm pilots at the dots.",
+          `Mark ${topCloseUp.fixings.length} crosses over the rails and the top support (below), spaced evenly by eye, two fingers in from the ends. The rails' middles are ${railsIn} in from the top's edges.`,
+          `${topCloseUp.fixings.length} crosses, ${railsIn} in.`,
         ),
         act(
-          "Countersink each hole with the countersink bit, a little at a time, until a screw's head sits flush with the top.",
-          "Countersink each hole.",
+          `${pilots.top ? "Drill a small 3 mm pilot hole at each cross, then countersink it" : "Countersink each cross"} a little with the countersink bit, and drive its screw until the head sits flush in the dip, so nothing catches on it.`,
+          pilots.top ? "3 mm pilots, countersink, screws flush." : "Countersink, screws flush.",
         ),
         act(
-          "Drive the screws, each head flush or just below the top, so nothing catches on it.",
-          `${topCloseUp.fixings.length} screws, heads flush.`,
+          "Sand the top's edges and corners, the ones your hands touch, until they're smooth.",
+          "Sand the edges.",
         ),
       ],
+      tips: pilots.top ? [] : [SPLIT_TIP],
       closeUp: topCloseUp,
       check: {
         says: "The overhang the same all round, within 2 mm, and every screw head flush.",
         photo: "The top, from above.",
       },
-      words: ["pilot hole", "countersink", "flush"],
+      words: wordsWith(pilots.top, "countersink", "flush"),
     },
     {
       id: "check-bench",
@@ -352,6 +249,7 @@ export const benchSteps = (options: {
       minutes: 10,
       parts: [],
       tools: ["spirit-level", "tape-measure"],
+      batch: "All at once.",
       actions: [
         act("Put the level on the top, along it and across it.", "Level both ways."),
         act(
@@ -384,7 +282,9 @@ export const benchSteps = (options: {
     tools: draft.tools.map(stepTool(draft)),
     safety: (draft.safety ?? []).map(stepTool(draft)),
     fixings: draft.fixings ?? [],
+    batch: draft.batch,
     actions: draft.actions,
+    tips: draft.tips ?? [],
     closeUps: draft.closeUps ?? (draft.closeUp === undefined ? [] : [draft.closeUp]),
     walkThrough: draft.walkThrough ?? [],
     scene: stepScene(setting, {

@@ -2,7 +2,7 @@ import type { Action, CloseUp, CutPlan, KeptWay, MarkedLength, WalkStep, Way } f
 import { type Capacities, capacityFor, type TooBig, tooBig } from "../capacity.ts";
 import type { Word } from "../glossary.ts";
 import { TOOL_NAMES, type Tool } from "../tools.ts";
-import { markingWalk, type Section } from "./walk-throughs.ts";
+import { markingWalk, type Section } from "./close-ups.ts";
 
 // The bench's first steps, before anything is joined: check the stock, mark it and cut it. They
 // read the cut plan, and the cutting step reads the tools to hand: a hand saw on a folding
@@ -34,7 +34,11 @@ export type Draft = {
   bits?: readonly { mm: number; for: string }[];
   safety?: readonly Tool[];
   fixings?: readonly { name: string; count: number }[];
+  /** How to batch it, in a few words (#789). */
+  batch: string;
+  /** At most four (#789): anything more is another step, or a tip. */
   actions: readonly Action[];
+  tips?: readonly string[];
   closeUp?: CloseUp;
   /** Its close-ups when it has more than one: a fixing tightened, and taken apart (#783). */
   closeUps?: readonly CloseUp[];
@@ -65,35 +69,33 @@ export const markedLengths = (cutPlan: CutPlan): MarkedLength[] =>
     return [...groups.values()];
   });
 
-/**
- * Where each piece's end is ticked, from the length's square end: each piece's length on from
- * the last, with the saw's cut between.
- */
-export const ticksOf = (length: MarkedLength) => {
-  let at = 0;
-  return length.cuts.map((cut, index) => {
-    at += (index === 0 ? 0 : length.kerf) + cut.length;
-    return { label: cut.label, length: cut.length, at };
-  });
-};
-
-/**
- * A shop's cut end is often out of square, and every mark is measured from it: the step a
- * beginner misses.
- */
+/** A shop's cut end is often out of square, and the first piece is measured from it. */
 const squareEnd = act(
   "First check the end is square: hold the square's stock tight against the edge and look along its blade. If there's a gap, square a line 10 mm in and saw off the end, then measure from there.",
   "End square? If not, trim it.",
 );
 
-/** One length's marks, in the order they're made: the tape, a tick, the square, the line. */
-const marking = (length: MarkedLength): Action => {
-  const ticks = ticksOf(length);
+/** A piece cut again and again from a length, said once: "C 460 four times". */
+const TIMES = ["", "", " twice", " three times", " four times", " five times", " six times"];
+
+/**
+ * One length's pieces, one at a time (#789): each measured from the fresh end the last cut left,
+ * so a saw cut never shifts a mark and there's no sum to follow. The cut plan still shows the
+ * whole length.
+ */
+const marking = (length: MarkedLength, at: number): Action => {
   const lengths = length.count === 1 ? "one length" : `${length.count} lengths`;
-  const each = ticks.map((tick) => `${tick.label} at ${tick.at}`).join(", ");
+  const runs: [string, number][] = [];
+  for (const { label, length: mm } of length.cuts) {
+    const last = runs.at(-1);
+    if (last?.[0] === `${label} ${mm}`) last[1] += 1;
+    else runs.push([`${label} ${mm}`, 1]);
+  }
+  const pieces = runs.map(([cut, n]) => `${cut}${TIMES[n] ?? ` ${n} times`}`).join(", then ");
+  // How a piece is marked is said on the first length only; Show me how walks through it.
   return {
-    howTo: `On ${lengths} of ${length.stock}, hook the tape over the end you checked and make a pencil tick at each piece's end: ${each}. Each counts the ${length.kerf} mm kerf the saw takes. Put the square on each tick, its stock against the edge, and draw the line across.`,
-    numbers: `${length.count} × ${length.stock}: ticks at ${ticks.map((tick) => tick.at).join(", ")}`,
+    howTo: `On ${lengths} of ${length.stock}: ${pieces}. ${at === 0 ? "Hook the tape over the end, tick the length, square a line across. Cut it, then measure the next piece from the fresh end." : "The same: each piece from the fresh end."}`,
+    numbers: `${length.count} × ${length.stock}: ${pieces}`,
     length,
   };
 };
@@ -123,11 +125,8 @@ const sawWays = (toHand: ReadonlySet<Tool>, using: Saw): Way[] =>
     toHand: toHand.has(saw),
   }));
 
-/** Each piece's letter on it as it comes off, whichever saw cut it. */
-const labelling = act(
-  "As each piece comes off, write its letter on it in pencil, and stand it with the others of its letter.",
-  "Letter on each piece.",
-);
+/** Each piece's letter on it as it comes off, whichever saw cut it: said with the cut. */
+const LABEL = "As it comes off, write its letter on it in pencil.";
 
 /**
  * A length held at one end sags at the other as the cut goes through, which pinches the saw and
@@ -139,6 +138,7 @@ const longEnd = (holding: string) =>
     "Long end supported, level.",
   );
 
+/** Each saw's three lines: held, the long end supported, the cut and its letter. */
 const CUTTING: Readonly<
   Record<Saw, Pick<Draft, "safety" | "actions"> & { tools: readonly Tool[] }>
 > = {
@@ -152,10 +152,9 @@ const CUTTING: Readonly<
       ),
       longEnd("the saw's bed"),
       act(
-        "With the saw still, bring the blade down to line its edge up on the waste side of the line. Hold the length to the fence, your hand well clear, cut, and let the blade stop before you lift it.",
-        "Mitre saw, waste side, blade stopped before lifting.",
+        `With the saw still, bring the blade down to line its edge up on the waste side of the line. Hold the length to the fence, your hand well clear, cut, and let the blade stop before you lift it. ${LABEL}`,
+        "Mitre saw, waste side, blade stopped before lifting. Letter on it.",
       ),
-      labelling,
     ],
   },
   "circular-saw": {
@@ -168,10 +167,9 @@ const CUTTING: Readonly<
       ),
       longEnd("what it's clamped to"),
       act(
-        "Set the blade about 5 mm deeper than the timber, line it up on the waste side of the line and cut in one steady push, letting the offcut fall clear.",
-        "Circular saw, blade 5 mm past the timber, waste side.",
+        `Set the blade about 5 mm deeper than the timber, line it up on the waste side of the line and cut in one steady push, letting the offcut fall clear. ${LABEL}`,
+        "Circular saw, blade 5 mm past the timber, waste side. Letter on it.",
       ),
-      labelling,
     ],
   },
   "hand-saw": {
@@ -191,10 +189,9 @@ const CUTTING: Readonly<
       ),
       longEnd("the jaws"),
       act(
-        "Saw on the waste side of the line. Near the end of the cut, hold the offcut so it doesn't snap off.",
-        "Hand saw, waste side.",
+        `Saw on the waste side of the line. Near the end of the cut, hold the offcut so it doesn't snap off. ${LABEL}`,
+        "Hand saw, waste side. Letter on it.",
       ),
-      labelling,
     ],
   },
 };
@@ -283,6 +280,12 @@ const handedLine = (
   );
 };
 
+/** Several actions said as one line. */
+const joined = (actions: readonly Action[]): Action => ({
+  howTo: actions.map((action) => action.howTo).join(" "),
+  numbers: actions.map((action) => action.numbers).join(" "),
+});
+
 /** The tools of the saw in use, then those of any saw it hands cuts on to, each once. */
 const sawTools = (saw: Saw, others: readonly Saw[]) => [
   ...new Set([saw, ...others].flatMap((each) => CUTTING[each].tools)),
@@ -351,6 +354,7 @@ export const preparingSteps = (options: {
         says: "Everything on the buy list is here.",
         photo: "Everything laid out on the floor.",
       },
+      batch: "All at once, laid out on the floor.",
     },
     {
       id: "mark-lengths",
@@ -360,13 +364,14 @@ export const preparingSteps = (options: {
       parts: timberLabels,
       adds: [],
       tools: ["tape-measure", "pencil", "square"],
+      batch: "One piece at a time, with the next step: mark it, cut it, then mark the next.",
       actions: [squareEnd, ...marked.map(marking)],
       walkThrough: first === undefined ? [] : markingWalk(first, options.sectionOf(first.stock)),
       check: {
-        says: "Every line square across the face, each length's pieces marked from one end.",
+        says: "Every line square across the face, each piece measured from a square end.",
         photo: "One marked length, close up.",
       },
-      words: ["kerf", "square"],
+      words: ["square"],
     },
     {
       id: "cut-timber",
@@ -378,11 +383,11 @@ export const preparingSteps = (options: {
       ways: sawWays(toHand, saw),
       tools: sawTools(saw, others),
       safety: sawSafety(saw, others),
-      // The cuts handed on go before the labelling, which every piece gets.
+      batch: "One piece at a time: cut each as soon as it's marked.",
+      // The cuts handed on to another saw, in one line, so the step stays at four.
       actions: [
-        ...cutting.actions.slice(0, -1),
-        ...handed.map((each) => handedLine(each, options)),
-        ...cutting.actions.slice(-1),
+        ...cutting.actions,
+        ...(handed.length === 0 ? [] : [joined(handed.map((each) => handedLine(each, options)))]),
       ],
       check: {
         says: "Each piece within 1 mm of its length, and its letter on it.",
