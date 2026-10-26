@@ -21,20 +21,6 @@ export const BuildBox = z.object({
 });
 export type BuildBox = z.infer<typeof BuildBox>;
 
-/** A part, once for all its pieces: its label, what it does, its cut size and its boxes. */
-export const BuildPart = z.object({
-  label: z.string(),
-  name: z.string(),
-  does: z.string(),
-  count: z.number().int(),
-  material: z.object({ kind: z.enum(["timber", "sheet", "printed"]), stock: z.string() }),
-  length: z.number(),
-  width: z.number(),
-  thickness: z.number(),
-  boxes: list(BuildBox),
-});
-export type BuildPart = z.infer<typeof BuildPart>;
-
 /** The cut plan: each timber's lengths with their cuts, each sheet's pieces where they sit. */
 export const BuildCutPlan = z.object({
   kerf: z.number(),
@@ -337,6 +323,24 @@ export const BuildPrint = z.object({
   sizes: list(z.object({ name: z.string(), says: z.string(), source: SizeSource.nullable() })),
 });
 export type BuildPrint = z.infer<typeof BuildPrint>;
+
+/**
+ * A part, once for all its pieces: its label, what it does, its cut size and its boxes; and a
+ * printed part's in a wooden build, its print, sized from the wood it fits (#773).
+ */
+export const BuildPart = z.object({
+  label: z.string(),
+  name: z.string(),
+  does: z.string(),
+  count: z.number().int(),
+  material: z.object({ kind: z.enum(["timber", "sheet", "printed"]), stock: z.string() }),
+  length: z.number(),
+  width: z.number(),
+  thickness: z.number(),
+  boxes: list(BuildBox),
+  print: BuildPrint.optional(),
+});
+export type BuildPart = z.infer<typeof BuildPart>;
 
 /** Everything a Build shows, worked out from its template and parameters. */
 export const DerivedBuild = z.object({

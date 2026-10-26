@@ -9,8 +9,8 @@ import { overMost } from "./recipe-refusals.ts";
 /**
  * How big a recipe gets: the build's own sizes and a stock's (mm), the kerf and an overhang, what
  * is fitted and bolted (a castor's height and plate and a bolt's length; a bolt's thread and pitch,
- * a washer and a nut, #770), how many lengths or sheets of a stock the owner has, and how many
- * stocks, pieces, groups and joints. Practical things
+ * a washer and a nut, #770), the printer's clearance and nozzle (#773), how many lengths or sheets
+ * of a stock the owner has, and how many stocks, pieces, groups and joints. Practical things
  * (shelves, racks, boxes, stands and benches) fit well inside them; a recipe over them is refused
  * with the reason.
  */
@@ -24,6 +24,8 @@ export const RECIPE_MOST = {
   pitch: 4,
   washer: 10,
   nut: 30,
+  clearance: 1,
+  nozzle: 1.2,
   have: 50,
   stock: 16,
   pieces: 24,
@@ -59,6 +61,17 @@ export const withinBounds = (recipe: RecipeFields, context: z.RefinementCtx) => 
       }
     }
   });
+  if (recipe.printer !== undefined) {
+    const { clearance, nozzle } = recipe.printer;
+    most(
+      ["printer", "clearance"],
+      clearance,
+      RECIPE_MOST.clearance,
+      "The printer's clearance",
+      true,
+    );
+    most(["printer", "nozzle"], nozzle, RECIPE_MOST.nozzle, "The printer's nozzle");
+  }
   recipe.pieces.forEach((piece, index) => {
     if (piece.kind === "panel") {
       most(
@@ -166,6 +179,19 @@ export const referencesHold = (recipe: RecipeFields, context: z.RefinementCtx) =
     }
     if (piece.kind === "printed") {
       refer(piece.on, at("on"), anyPiece, "a printed part goes on a piece or group");
+      if (piece.part === "holder") {
+        refer(piece.fits, at("fits"), timber, "a holder takes a timber's end");
+      } else {
+        refer(
+          piece.fits,
+          at("fits"),
+          { stock: ["timber", "sheet"] },
+          "a bracket fits a timber or sheet",
+        );
+      }
+      if (piece.screws !== undefined) {
+        refer(piece.screws, at("screws"), fixing, "a printed part's screws are a fixing");
+      }
     }
   });
   recipe.groups.forEach((group, index) => {

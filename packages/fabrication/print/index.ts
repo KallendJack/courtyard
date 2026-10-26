@@ -69,7 +69,7 @@ const screwsOf = (features: readonly PartFeature[]) => {
   return screws;
 };
 
-const toolsOf = (tools: readonly Tool[], toHand: ReadonlySet<Tool>) =>
+export const toolsOf = (tools: readonly Tool[], toHand: ReadonlySet<Tool>) =>
   tools.map((tool) => ({ tool, name: TOOL_NAMES[tool], toHand: toHand.has(tool) }));
 
 /** Print it, try what it holds in it, and fix it up when it has screws. */
@@ -195,7 +195,10 @@ const stepsOf = (options: {
 };
 
 /** Whether a part fits the plate, either way round on it. */
-const fitsPlate = (size: Build["size"], plate: { width: number; depth: number; height: number }) =>
+export const fitsPlate = (
+  size: Build["size"],
+  plate: { width: number; depth: number; height: number },
+) =>
   size.height <= plate.height &&
   ((size.length <= plate.width && size.depth <= plate.depth) ||
     (size.length <= plate.depth && size.depth <= plate.width));
