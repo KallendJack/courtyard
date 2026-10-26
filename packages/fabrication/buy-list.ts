@@ -150,14 +150,24 @@ const shortfall = (line: BuyLine, have: number): BuyLine => {
 /**
  * The list, with the priced lines' total; lines needing none are left off. What Your stock has
  * comes off (#760): a line it covers whole goes to `had`, one it covers in part is the shortfall.
- * A tool to buy never comes off: Your tools says when the owner has one.
+ * A tool to buy never comes off: Your tools says when the owner has one. What Your stock has is
+ * counted once: two lines of the same item share it, the first taking what it uses.
  */
 export const buyListOf = (lines: readonly BuyLine[], stock: readonly Held[] = []): BuyList => {
   const left: BuyLine[] = [];
   const had: BuyLine[] = [];
+  /** What Your stock has left of each item, by its key, as lines take from it. */
+  const remaining = new Map<string, number>();
   for (const line of lines) {
     if (line.needed <= 0) continue;
-    const have = line.kind === "tool" ? 0 : heldOf(line.item, stock).count;
+    if (line.kind === "tool") {
+      left.push(line);
+      continue;
+    }
+    const key = stockKey(line.item);
+    const held = remaining.get(key) ?? Math.max(0, heldOf(line.item, stock).count);
+    const have = Math.min(held, line.needed);
+    remaining.set(key, held - have);
     if (have >= line.needed) had.push(line);
     else left.push(have > 0 ? shortfall(line, have) : line);
   }

@@ -86,7 +86,7 @@ export const workOutBench = (
   });
 };
 
-/** The steps, each fixing Your stock has saying where it's kept: "from your Diall case" (#760). */
+/** The steps, each fixing Your stock has saying where it's kept: "from your red screw case" (#760). */
 const fixingsFrom =
   (stock: readonly Held[]) =>
   (steps: readonly Step[]): Step[] =>

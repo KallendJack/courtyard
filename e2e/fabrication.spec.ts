@@ -412,7 +412,10 @@ test.describe("on the unfolded Fold", () => {
     await page.getByRole("tab", { name: "Buy list" }).click();
     const buyList = page.getByRole("region", { name: "Buy list" });
     await expect(buyList.getByRole("heading", { name: "12 things left" })).toBeVisible();
-    await expect(buyList).toContainText("Spannerno price · step 6");
+    // A tool to buy, with no Have it: Your tools says when the owner has one.
+    const spannerLine = buyList.getByRole("listitem").filter({ hasText: "Spanner" });
+    await expect(spannerLine).toContainText("× 1");
+    await expect(spannerLine.getByRole("button", { name: /Have it/ })).toHaveCount(0);
 
     // Its Undo takes it off the list again.
     await page.getByRole("tab", { name: "Tools" }).click();

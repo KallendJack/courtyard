@@ -103,7 +103,7 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   tools, each with its `count` and `where` it's kept. Have it writes one, or tops up the count of the one that's the
   same stock ("4x40 screws" is "4 × 40 screws"), as one change Undo takes back whole. The engine takes what they have
   off each line by name: a line covered whole moves to the buy list's `had`, one covered in part buys the shortfall
-  in whole packs, and a step's fixing says where it's kept ("from your Diall case").
+  in whole packs, and a step's fixing says where it's kept ("from your red screw case").
 - **The owner's tools** (`tools.ts`, ADR 0037): Things of kind tool in the context folder's own `things/`, so every
   workspace and Build sees the same ones; `sessions/` lists them in every planning turn. A Save writes them all as one
   change: a tool given is written (its count, make and size; a size gives it a subject ID), one not given is removed,

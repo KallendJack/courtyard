@@ -14,6 +14,7 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import { ChevronLeft } from "lucide-react";
 import { useState } from "react";
 import { type Answer, pickStock, undoBuildChange } from "../../api/fabrication.ts";
+import { UndoNote } from "../../components/undo-note.tsx";
 import { pounds } from "./words.ts";
 
 /** The pick just made, while Undo can take it back. */
@@ -148,19 +149,9 @@ export function StockOptionsPanel(props: {
         </p>
       </div>
       {props.justPicked !== undefined && (
-        <p className="flex items-center justify-between gap-3 rounded-row bg-muted px-3 py-1.5 text-meta text-foreground">
-          <span>Picked {props.justPicked.title}</span>
-          <Button
-            variant="quiet"
-            size="xs"
-            busy={props.undoing}
-            busyLabel="Undoing…"
-            waiting={props.picking !== undefined}
-            onClick={props.undo}
-          >
-            Undo
-          </Button>
-        </p>
+        <UndoNote undo={props.undo} undoing={props.undoing} waiting={props.picking !== undefined}>
+          Picked {props.justPicked.title}
+        </UndoNote>
       )}
       <FormError message={props.error} />
       <ul className="flex flex-col gap-2">
