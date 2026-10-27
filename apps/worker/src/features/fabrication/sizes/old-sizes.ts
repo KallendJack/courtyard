@@ -13,7 +13,7 @@ export type OldSentence = {
 };
 
 /**
- * A number: with commas between its thousands ("2,735", "2,735.5"), or a decimal point or comma
+ * A number: with commas between its thousands ("2,650", "2,650.5"), or a decimal point or comma
  * ("2.45", "2,45").
  */
 const NUMBER = String.raw`(\d{1,3}(?:,\d{3})+(?:\.\d+)?(?!\d)|\d+(?:[.,]\d+)?)`;
@@ -70,7 +70,7 @@ const nameOf = (before: string, after: string) => {
   return `${name[0]?.toUpperCase()}${name.slice(1)}`;
 };
 
-/** A number as written: "2,735" is 2735, "2,45" is 2.45. */
+/** A number as written: "2,650" is 2650, "2,45" is 2.45. */
 const numberOf = (text: string) =>
   Number(
     /^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(text) ? text.replaceAll(",", "") : text.replace(",", "."),
@@ -89,7 +89,7 @@ const keyOf = (sentence: OldSentence, copy: number, at: number) =>
 /**
  * The sizes in sentences: each length with its unit, a pair of sides ("5.14 × 2.74 m") as its
  * width then its length. Each is named from the words around it and marked rough when it's said
- * so ("about 2735 mm").
+ * so ("about 2650 mm").
  */
 export const oldSizesIn = (sentences: readonly OldSentence[]): OldSize[] => {
   const copies = new Map<string, number>();

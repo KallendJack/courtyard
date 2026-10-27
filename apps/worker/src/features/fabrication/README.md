@@ -138,7 +138,7 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   needs are the workspace's first space's, a workspace being one area.
 - **Old sizes** (`sizes/old-sizes.ts`): each length with its unit in the space's size and history, the Facts and the
   projects' history, a pair of sides as width then length, named from the words beside it and marked rough when it's
-  said so ("about 2735 mm"), "2,735" read as 2735; those recorded already, and any no record can hold, left out.
+  said so ("about 2650 mm"), "2,650" read as 2650; those recorded already, and any no record can hold, left out.
   Confirming them records those picked and writes
   `sizes/confirmed/<subject>.json`, in the same change, so they aren't offered again until it's undone.
 - **The size tool** (`sizes/tool.ts`): one turn's `save_size`, by the labels the turn was shown (`Z1`, and `T1` for

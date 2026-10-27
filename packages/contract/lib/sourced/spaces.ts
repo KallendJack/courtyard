@@ -20,7 +20,7 @@ import { SizeRecordId } from "./size.ts";
 /**
  * One size of a Thing as the panel shows it: its property; its standing records, more than one only
  * when they disagree, none for a size the room needs that isn't recorded yet; what the record it
- * corrected said, when that differs ("was about 2735"); where to measure it, for a size the room
+ * corrected said, when that differs ("was about 2650"); where to measure it, for a size the room
  * needs; the Builds whose steps need it, by their files' names; and whether the guided re-measure
  * asks for it (it isn't measured, or its records disagree).
  */
@@ -45,7 +45,7 @@ export type ThingSizes = z.infer<typeof ThingSizes>;
  * A size found in a sentence written before sizes were records (a Facts line, a project's or the
  * Thing's history, its size): where it was found ("Facts", "Split the garage") and the day it was
  * written, if known; the size it reads as, named by the words around it; and whether it was said
- * roughly ("about 2735"). Its key names it to confirm.
+ * roughly ("about 2650"). Its key names it to confirm.
  */
 export const OldSize = z.object({
   key: z.string(),

@@ -30,7 +30,7 @@ beforeEach(async () => {
   await mkdir(join(garage(), "projects"), { recursive: true });
   await writeFile(
     join(garage(), "CONTEXT.md"),
-    "# Garage\n\n## Facts\n\n- The garage is about 2735 mm wide and 5137 mm long.\n- Ceiling height 2.45 m.\n",
+    "# Garage\n\n## Facts\n\n- The garage is about 2650 mm wide and 5050 mm long.\n- Ceiling height 2.45 m.\n",
   );
   await writeFile(
     join(garage(), "things", "garage.md"),
@@ -76,12 +76,12 @@ describe("old sizes in sentences", () => {
   it("finds each length, a pair of sides as width and length, and says which were rough", () => {
     expect(
       oldSizesIn([
-        { sentence: "About 2735 × 5137 mm inside.", from: "Facts", day: null },
+        { sentence: "About 2650 × 5050 mm inside.", from: "Facts", day: null },
         { sentence: "Ceiling height 2.45 m, door 2.1 m high.", from: "Facts", day: null },
       ]).map(({ property, value, rough }) => ({ property, value, rough })),
     ).toEqual([
-      { property: "Inside width", value: quantity(2735), rough: true },
-      { property: "Inside length", value: quantity(5137), rough: true },
+      { property: "Inside width", value: quantity(2650), rough: true },
+      { property: "Inside length", value: quantity(5050), rough: true },
       { property: "Floor to ceiling", value: quantity(2.45, "m"), rough: false },
       { property: "Floor to ceiling", value: quantity(2.1, "m"), rough: false },
     ]);
@@ -90,11 +90,11 @@ describe("old sizes in sentences", () => {
   it("reads a comma between thousands as one number, and leaves out what no record can hold", () => {
     expect(
       oldSizesIn([
-        { sentence: "It's 2,735 mm wide, and 2,4 m high.", from: "Facts", day: null },
+        { sentence: "It's 2,650 mm wide, and 2,4 m high.", from: "Facts", day: null },
         { sentence: "A typo: 20000000 mm long.", from: "Facts", day: null },
       ]).map(({ property, value }) => ({ property, value })),
     ).toEqual([
-      { property: "Inside width", value: quantity(2735) },
+      { property: "Inside width", value: quantity(2650) },
       { property: "Floor to ceiling", value: quantity(2.4, "m") },
     ]);
   });
@@ -165,7 +165,7 @@ describe("a space's sizes", () => {
       await postJson(request, `${SPACE}/sizes`, {
         thing: "garage",
         property: "Inside width",
-        value: quantity(2735),
+        value: quantity(2650),
         source: "reported",
       }),
     );
@@ -177,26 +177,26 @@ describe("a space's sizes", () => {
     const corrected = await changed(
       await postJson(request, `${SPACE}/sizes/${record?.id}`, {
         revision: 1,
-        value: quantity(2741),
+        value: quantity(2656),
         source: "measured",
       }),
     );
     const [now] = corrected.sizes.space.lines;
     expect(now?.records.map(({ value, source }) => ({ value, source: source.kind }))).toEqual([
-      { value: quantity(2741), source: "measured" },
+      { value: quantity(2656), source: "measured" },
     ]);
     expect(now?.records[0]?.source).toEqual({
       kind: "measured",
       said: { fabrication: expect.any(String) },
     });
-    expect(now?.was).toEqual({ value: quantity(2735), source: "reported" });
+    expect(now?.was).toEqual({ value: quantity(2650), source: "reported" });
     expect(now?.toMeasure).toBe(false);
     expect((await changesIn(contextDir))[0]?.title).toBe("Correct size: Garage, Inside width");
 
     const undone = await postJson(request, `${SPACE}/changes/${corrected.change}/undo`, {});
     expect(undone.status).toBe(200);
     const back = SpaceSizes.parse(await undone.json());
-    expect(back.space.lines[0]?.records.map(({ value }) => value)).toEqual([quantity(2735)]);
+    expect(back.space.lines[0]?.records.map(({ value }) => value)).toEqual([quantity(2650)]);
   });
 
   it("refuses a correction of a revision that's been corrected since", async () => {
@@ -205,14 +205,14 @@ describe("a space's sizes", () => {
       await postJson(request, `${SPACE}/sizes`, {
         thing: "garage",
         property: "Inside width",
-        value: quantity(2735),
+        value: quantity(2650),
         source: "reported",
       }),
     );
     const id = added.sizes.space.lines[0]?.records[0]?.id;
     await postJson(request, `${SPACE}/sizes/${id}`, {
       revision: 1,
-      value: quantity(2741),
+      value: quantity(2656),
       source: "measured",
     });
     const again = await postJson(request, `${SPACE}/sizes/${id}`, {
@@ -225,7 +225,7 @@ describe("a space's sizes", () => {
 
   it("shows two answers side by side, and settling them keeps one as one change", async () => {
     const request = await owner();
-    for (const value of [2735, 2741]) {
+    for (const value of [2650, 2656]) {
       await postJson(request, `${SPACE}/sizes`, {
         thing: "bench",
         property: "Length",
@@ -237,7 +237,7 @@ describe("a space's sizes", () => {
     const [bench] = space.parts;
     expect(bench?.thing.name).toBe("Bench");
     const [length] = bench?.lines ?? [];
-    expect(length?.records.map(({ value }) => value)).toEqual([quantity(2735), quantity(2741)]);
+    expect(length?.records.map(({ value }) => value)).toEqual([quantity(2650), quantity(2656)]);
     expect(length?.toMeasure).toBe(true);
 
     const [other, kept] = length?.records ?? [];
@@ -248,13 +248,13 @@ describe("a space's sizes", () => {
       }),
     );
     const [after] = settled.sizes.parts[0]?.lines ?? [];
-    expect(after?.records.map(({ value }) => value)).toEqual([quantity(2741)]);
+    expect(after?.records.map(({ value }) => value)).toEqual([quantity(2656)]);
     expect(after?.toMeasure).toBe(false);
   });
 
   it("refuses to keep an answer corrected since, or to settle another size with it", async () => {
     const request = await owner();
-    for (const value of [2735, 2741]) {
+    for (const value of [2650, 2656]) {
       await postJson(request, `${SPACE}/sizes`, {
         thing: "bench",
         property: "Length",
@@ -306,8 +306,8 @@ describe("a space's sizes", () => {
         day,
       })),
     ).toEqual([
-      { from: "Facts", property: "Inside width", value: quantity(2735), rough: true, day: null },
-      { from: "Facts", property: "Inside length", value: quantity(5137), rough: false, day: null },
+      { from: "Facts", property: "Inside width", value: quantity(2650), rough: true, day: null },
+      { from: "Facts", property: "Inside length", value: quantity(5050), rough: false, day: null },
       {
         from: "Facts",
         property: "Floor to ceiling",
@@ -371,7 +371,7 @@ describe("a space's sizes", () => {
     const [width] = oldSizes;
     await writeFile(
       join(garage(), "CONTEXT.md"),
-      "# Garage\n\n## Facts\n\n- The garage is about 2735 mm wide and 5137 mm long.\n- Ceiling height 2.45 m.\n- The window is 900 mm wide.\n",
+      "# Garage\n\n## Facts\n\n- The garage is about 2650 mm wide and 5050 mm long.\n- Ceiling height 2.45 m.\n- The window is 900 mm wide.\n",
     );
     const response = await postJson(request, `${SPACE}/old-sizes`, {
       listed: oldSizes.map(({ key }) => key),

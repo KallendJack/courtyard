@@ -24,7 +24,7 @@ const garageInFabrication = async (page: Page) => {
     [
       "thing add: name Garage | status have | kind space",
       "thing add: name Bench | status have",
-      "save fact: The garage is about 2735 mm wide and 5137 mm long.",
+      "save fact: The garage is about 2650 mm wide and 5050 mm long.",
       ...[1500, 1520].map((amount) =>
         recordSize({ thing: "bench", property: "Length", amount, unit: "mm", source: "reported" }),
       ),
@@ -32,7 +32,7 @@ const garageInFabrication = async (page: Page) => {
   );
   await expect(page.getByRole("list", { name: "Session" })).toContainText(/Your turn · finished/);
   await expect(page.getByRole("list", { name: "Sizes saved" })).toContainText("1520 mm");
-  await expect(page.getByRole("list", { name: "Saved to context" })).toContainText("2735 mm");
+  await expect(page.getByRole("list", { name: "Saved to context" })).toContainText("2650 mm");
   await page.getByRole("link", { name: `Back to ${name}` }).click();
   const [, id] = /\/workspaces\/([^/?#]+)/.exec(page.url()) ?? [];
   await page.goto(`/fabrication/workspaces/${id}/spaces/garage`);
@@ -49,9 +49,9 @@ const line = (page: Page, thing: string, property: string) =>
 /** Confirms the old sizes: the length ticked as measured, the width left as about. */
 const confirmOldSizes = async (page: Page) => {
   const list = page.getByRole("dialog", { name: "Old sizes to confirm" });
-  await expect(list).toContainText("“The garage is about 2735 mm wide and 5137 mm long.” · Facts");
+  await expect(list).toContainText("“The garage is about 2650 mm wide and 5050 mm long.” · Facts");
   await list
-    .getByRole("group", { name: "Inside length, 5137 mm" })
+    .getByRole("group", { name: "Inside length, 5050 mm" })
     .getByText("Measured", { exact: true })
     .click();
   await list.getByRole("button", { name: "Record 2 sizes" }).click();
@@ -66,8 +66,8 @@ test.describe("on the unfolded Fold", () => {
     await confirmOldSizes(page);
 
     await expect(line(page, "Garage", "Inside length")).toContainText("measured · just now");
-    await expect(line(page, "Garage", "Inside length")).toContainText("5137 mm");
-    await expect(line(page, "Garage", "Inside width")).toContainText("about 2735 mm");
+    await expect(line(page, "Garage", "Inside length")).toContainText("5050 mm");
+    await expect(line(page, "Garage", "Inside width")).toContainText("about 2650 mm");
     await expect(page.getByText("Recorded the old sizes")).toBeVisible();
     await expect(page.getByRole("button", { name: /old sizes?$/ })).toBeHidden();
 
@@ -92,18 +92,18 @@ test.describe("on the unfolded Fold", () => {
     // The rough figure is only the hint: nothing becomes measured without the owner's number.
     await expect(measuring.getByLabel("Size")).toHaveValue("");
     await expect(measuring.getByRole("button", { name: "Save" })).toBeDisabled();
-    await measuring.getByLabel("Size").fill("2741");
+    await measuring.getByLabel("Size").fill("2656");
     await measuring.getByRole("button", { name: "Save" }).click();
 
     const width = line(page, "Garage", "Inside width");
-    await expect(width).toContainText("2741 mm");
-    await expect(width).toContainText("was about 2735 mm");
+    await expect(width).toContainText("2656 mm");
+    await expect(width).toContainText("was about 2650 mm");
     await expect(width).toContainText("measured · just now");
     await expect(page.getByText("Corrected Inside width")).toBeVisible();
 
     await page.getByRole("button", { name: "Undo" }).click();
-    await expect(width).toContainText("about 2735 mm");
-    await expect(width).not.toContainText("2741");
+    await expect(width).toContainText("about 2650 mm");
+    await expect(width).not.toContainText("2656");
   });
 
   test("two answers show side by side, and keeping one settles them", async ({ page }) => {

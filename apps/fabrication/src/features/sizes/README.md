@@ -6,7 +6,7 @@ Fabrication owns the records; Courtyard keeps them in the workspace's `sizes` fo
 
 **Example:** the owner opens the garage. Its old sizes, found in Facts and the project's history, are listed once;
 they tick Measured for the length and record the rest as about. The guided re-measure then shows Inside width, "wall
-to wall, at the back, on the floor"; they type 2741, Save, and the line reads "measured · just now", "was about 2735",
+to wall, at the back, on the floor"; they type 2656, Save, and the line reads "measured · just now", "was about 2650",
 with Undo at the foot.
 
 - **Uses:** Fabrication's API through `api/fabrication.ts` (a space's sizes, + Size, a correction, one answer kept,

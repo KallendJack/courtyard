@@ -6,7 +6,7 @@ export const sourceWord = (kind: RecordSourceKind) =>
     kind
   ];
 
-/** A value as the owner reads it: `2741 mm`, `30°`, `block / dabs`, `yes`. */
+/** A value as the owner reads it: `2656 mm`, `30°`, `block / dabs`, `yes`. */
 export const valueWords = (value: SizeValue) =>
   value.kind === "quantity"
     ? value.unit === "deg"
@@ -18,7 +18,7 @@ export const valueWords = (value: SizeValue) =>
         ? "yes"
         : "no";
 
-/** A record's value, "about" in front when it was said roughly: `about 5137 mm`. */
+/** A record's value, "about" in front when it was said roughly: `about 5050 mm`. */
 export const recordValue = (record: Pick<SizeRecord, "value" | "source">) =>
   `${record.source.kind === "reported" ? "about " : ""}${valueWords(record.value)}`;
 
