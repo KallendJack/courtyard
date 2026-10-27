@@ -11,5 +11,11 @@
         "noParameterAssign": "error"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.md", "**/*.yaml", "**/*.yml"],
+      "formatter": { "enabled": false }
+    }
+  ]
 }
