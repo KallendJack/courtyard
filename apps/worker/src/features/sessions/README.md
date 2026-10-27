@@ -65,14 +65,18 @@ most 10 seconds, timed by the `wait` the worker is given; past that it answers w
   `pull-request` event (its number, state, latest commit and checks), which the session page's branch and PR strip
   shows.
 - **Checks failing** are tried again by the worker first (#740, ADR 0041; `failed-checks.ts`, kept in the data
-  folder's `failed-checks.json`), once per commit each. A branch behind its base is brought up to date as GitHub's
-  Update branch does: the base merged in, in the session's worktree (clean, at the PR's commit), and pushed, so its
-  checks run again; a conflict goes to the session as below. A failure in tests the PR doesn't touch (each failed
-  job names a test, by GitHub's annotations, in no file the PR changes) has its failed jobs re-run once. Anything
-  else, or the re-run failing too, starts a turn on the model the owner last used, once the session is free: its
-  message is the worker's (`checksFailed` on it, worded by `prompts/`, saying when the re-run failed too), and the
-  failed checks open its activity. Checks failing again on the same commit after someone else re-ran them start no
-  second fixing turn: the owner is asked through `notifications/` (#356).
+  folder's `failed-checks.json`, the latest 100 sessions' tries), once per commit each, until the session has been
+  asked about that commit. A Lead builder's own branch behind its base is brought up to date as GitHub's Update
+  branch does: the base merged in, in the session's worktree, and pushed, never forced, so its checks run again; only
+  while no turn or task runs there and it's clean, on its branch and at the PR's commit, and no turn starts until
+  it's done (one asked for meanwhile is queued). A conflict goes to the session as below; the commit an update pushed
+  isn't updated again; the owner's own sessions' branches, and branches a session didn't make, never are. A failure
+  in tests the PR doesn't touch (every failure GitHub's annotations name, in every failed job, is a test in no file
+  the PR changes) has its failed jobs re-run once. Anything else, anything the worker can't tell (a file it can't
+  read included), or the re-run failing too, starts a turn on the model the owner last used, once the session is
+  free: its message is the worker's (`checksFailed` on it, worded by `prompts/`, saying when the re-run failed too),
+  and the failed checks open its activity. Checks failing again on the same commit after someone else re-ran them
+  start no second fixing turn: the owner is asked through `notifications/` (#356).
 - **A conflict** with its base is brought up to date the same way first (#382): Bring up to date's message,
   `conflicted` on it, once per commit, so one the model can't resolve waits for the owner's Bring up to date.
 - **Merged or closed**, anywhere, ends the session: it takes no more messages, and once no turn runs its worktree and

@@ -210,8 +210,8 @@ export const createFakeGitHub = (
   }[] = [];
   /** Each time Courtyard re-ran a commit's failed jobs, in order (#355). */
   const reruns: { readonly repo: string; readonly commit: string }[] = [];
-  /** The failing test each check run's annotations name, by its id (#355). */
-  const failures = new Map<number, string>();
+  /** The failing tests each check run's annotations name, by its id (#355). */
+  const failures = new Map<number, readonly string[]>();
   /** How many times the repositories' issues were asked for, as a test checks they're kept. */
   let issuesAsked = 0;
   const issueIn = (repo: string, number: number) =>
@@ -593,8 +593,8 @@ export const createFakeGitHub = (
       reruns.push({ repo: find.repo, commit: find.commit });
       return ok(null);
     },
-    checkRunFailure: async (accessToken, { id }) =>
-      refusedToken(accessToken) ?? ok(failures.get(id) ?? null),
+    checkRunFailures: async (accessToken, { id }) =>
+      refusedToken(accessToken) ?? ok({ named: failures.get(id) ?? [], complete: true }),
     openMilestones: async (accessToken, { repo }) =>
       refusedToken(accessToken) ?? ok((milestones.get(repo) ?? []).map((each) => ({ ...each }))),
     describeMilestone: async (accessToken, { repo, number, description }) => {
@@ -732,9 +732,9 @@ export const createFakeGitHub = (
         })),
       );
     },
-    /** Check run `id`'s annotations name `test` as what failed (#355). */
-    setFailure: (id: number, test: string) => {
-      failures.set(id, test);
+    /** Check run `id`'s annotations name `tests` as what failed (#355). */
+    setFailure: (id: number, ...tests: readonly string[]) => {
+      failures.set(id, tests);
     },
     /** Each time Courtyard re-ran a commit's failed jobs, in order (#355). */
     reruns: () => [...reruns],

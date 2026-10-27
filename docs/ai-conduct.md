@@ -679,10 +679,10 @@ set.
 
 The session opens its pull request itself, with `gh`, written the way the repository's own instructions or PR skill
 say (#172). The worker follows the PR's checks. When one fails on a commit, the worker first tries again itself
-(#740): a branch behind its base is brought up to date (the base merged in and pushed, as GitHub's Update branch does),
-and a failure in tests the PR doesn't touch is re-run once. A conflict in that update goes to the session as Bring up
-to date's message (below). Otherwise, on a commit it hasn't asked about yet, it sends the session this message (on
-the model the owner last used), with the failed checks in the turn's activity:
+(#740): a Lead builder's branch behind its base is brought up to date (the base merged in and pushed, as GitHub's
+Update branch does), and a failure in tests the PR doesn't touch is re-run once. A conflict in that update goes to
+the session as Bring up to date's message (below). Otherwise, on a commit it hasn't asked about yet, it sends the
+session this message (on the model the owner last used), with the failed checks in the turn's activity:
 
 > The checks on your pull request #<number> failed: <checks>. Find out why (gh pr checks and gh run view --log-failed
 > show what failed), then fix it on your session branch and push the fix to the same pull request. If you can't fix
