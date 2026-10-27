@@ -37,6 +37,19 @@ same issue.
 A Courtyard session's `gh issue create` without a milestone, a category label and a triage label is refused (#324);
 `Later` is the milestone when unsure. Courtyard's own screens read the roadmap from the milestones.
 
+## Reviewing and merging
+
+Who merges a pull request (ADR 0041, built by #734's slices; until they land, Claude Code does this by hand):
+
+- **Every pull request gets a review** from a fresh reviewer session, the owner's own sessions' too. Its findings go
+  back to the builder, who fixes each or rejects it with a reason; each review and its answer is a fixing round.
+- **The Lead merges its builders' pull requests** once every check is green (ADR 0033) and the latest review passed,
+  with a merge commit, in build order. One with a conflict is brought up to date by its builder and reviewed again.
+- **The owner merges their own sessions' pull requests,** and gets a builder's after 3 fixing rounds that don't pass,
+  in Needs you with the open findings and both sides.
+- **Red main** takes the next free builder first. A check failing in a test the pull request didn't touch re-runs
+  once; a branch behind main that fails is brought up to date first.
+
 ## Paper
 
 Every project's Paper file has four pages (#340): `1 · Live` (screenshots of the built app, one per screen per device,
@@ -83,6 +96,6 @@ How any session or helper works with the owner (2026-10-20), so the project stay
   they want, what it looks like, what to cut) is put to them, each with a recommendation.
 - **Two lanes at most.** One spec in code and one in planning at a time; the rest of each milestone is blocked by the
   lane's last slice, so the Lead follows the lanes too.
-- **One message for what needs the owner,** batched (what to merge and in what order, what to try), not a stream.
+- **One message for what needs the owner,** batched (what they merge and in what order, what to try), not a stream.
 - **A finish line for each phase,** written on the pinned handoff issue, so the owner knows when to stop building and
   just use Courtyard.

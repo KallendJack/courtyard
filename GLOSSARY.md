@@ -475,6 +475,21 @@ Builders board and in Home's Needs you, saying why, its slot free, until the own
 starts it afresh. Only these eight words name where a builder stands, on every screen.
 _Avoid_: state, phase, health, stalled, hung, idle, resting, held back
 
+**Review**:
+What a fresh Claude session, the **reviewer**, makes of a pull request before it merges (ADR 0041): checked against
+its issue, the agreed board, the ADRs and the house rules, with a security pass when it touches approvals, sign-in,
+secrets, or code that deletes or pushes, and the issue's conduct tests where it changes what models are told. It
+works in a throwaway worktree, never pushes and never runs the browser tests, and takes one of the Lead's builder
+slots. It passes, or lists its **findings**. Every pull request gets one, the owner's own sessions' too.
+_Avoid_: code review (that's the house skill), audit, approval (that's ADR 0008's)
+
+**Fixing round**:
+One review and the builder's answer to its findings (ADR 0041): each fixed, or rejected with a reason the next review
+re-checks. A builder whose session has ended is replaced by a new session on its branch. After 3 rounds that don't
+pass, the pull request goes to the owner in Needs you, with the open findings and both sides. The Builders board says
+"fixing review · round 2", then "merged after 1 review".
+_Avoid_: iteration, review cycle, back-and-forth
+
 **Roadmap**:
 A code workspace's tab of the whole plan (#532): every open milestone in the roadmap's order, Later last, with its
 progress, the current one open; inside, its issues in its Build order, each in one plain state: **Building**,
