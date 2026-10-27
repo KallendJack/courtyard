@@ -2,7 +2,7 @@ import { err, type Result } from "../../lib/result.ts";
 import { type HistoryChange, undoWholeFiles } from "../context-folder/index.ts";
 import { undoDocumentChange } from "../documents/index.ts";
 import { undoBuildChange } from "../fabrication/index.ts";
-import { undoSizeChange } from "../fabrication/sizes.ts";
+import { undoSizeChange } from "../fabrication/sizes/index.ts";
 import { undoProjectChange } from "../projects/index.ts";
 import { undoThingChange } from "../things/index.ts";
 import type { ChangesTarget, ChangeUndoRefusal } from "./index.ts";

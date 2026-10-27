@@ -47,7 +47,7 @@ import {
 import type { createPrints } from "./print.ts";
 import { printRoutes } from "./print-routes.ts";
 import { keepProgress } from "./progress.ts";
-import { sizeRoutes } from "./size-routes.ts";
+import { sizeRoutes } from "./sizes/routes.ts";
 import { hearTools, saveTools, type ToolsRefusal, undoToolsSave, yourTools } from "./tools.ts";
 
 // Fabrication's API (ADR 0037, #697): what the Fabrication app calls, never Courtyard's own
@@ -169,7 +169,7 @@ export const fabricationRoutes = (
 ) => {
   const routes = new Hono();
   const { now, sessions, providers, printing, ...where } = target;
-  routes.route("/", sizeRoutes(where));
+  routes.route("/", sizeRoutes({ ...where, now }));
 
   // The owner's tools (#707): every Build's and every workspace's, with what to move.
   routes.get("/tools", async (c) => {

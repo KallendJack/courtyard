@@ -9,19 +9,11 @@ import {
   ThingSlug,
 } from "@courtyard/contract";
 import { z } from "zod";
-import { err, ok, type Result } from "../../lib/result.ts";
-import type { PlanningFilesTarget } from "../planning-files/index.ts";
-import { historyDate, labelledThings, type ReadThing } from "../things/index.ts";
-import {
-  conflictsOf,
-  type ReadSize,
-  readSizes,
-  type SizeEdit,
-  type SizeRefusal,
-  type SizeSaved,
-  saveSize,
-  standing,
-} from "./sizes.ts";
+import { err, ok, type Result } from "../../../lib/result.ts";
+import type { PlanningFilesTarget } from "../../planning-files/index.ts";
+import { historyDate, labelledThings, type ReadThing } from "../../things/index.ts";
+import { conflictsOf, type ReadSize, readSizes, type SizeRefusal, standing } from "./index.ts";
+import { type SizeEdit, type SizeSaved, saveSize } from "./save.ts";
 
 /** A standing record with the label a model knows it by (`Z1`), oldest first. */
 export type LabelledSize = { readonly label: string; readonly size: ReadSize };

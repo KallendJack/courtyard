@@ -60,6 +60,21 @@ rest is worked out again.
 - `GET /api/fabrication/workspaces/:id/sizes`: the workspace's size records (#708), oldest first, superseded ones
   too, each with the Thing it's of and the standing records it conflicts with, and each file that can't be read as
   one with what's wrong. Answers `Sizes`.
+- `GET /api/fabrication/workspaces/:id/spaces/:slug`: a space's sizes (#709), by its Thing's file's name: its lines
+  and those of the Things with sizes, the old sizes still to confirm, and each file that can't be read. Answers
+  `SpaceSizes`; 404 for a Thing that isn't a space.
+- `POST /api/fabrication/workspaces/:id/spaces/:slug/sizes`: + Size, `SizeAdd`, measured or about.
+- `POST /api/fabrication/workspaces/:id/spaces/:slug/sizes/:size`: a correction, `SizeCorrection` (409 when the
+  revision isn't the one standing).
+- `POST /api/fabrication/workspaces/:id/spaces/:slug/sizes/:size/keep`: two answers settled, `SizeKeep`, each other
+  record corrected to the one kept, as one change (409 when the one kept isn't standing at the revision read; 400
+  for a record that isn't another answer for the same size).
+- `POST /api/fabrication/workspaces/:id/spaces/:slug/old-sizes`: the old sizes confirmed, `OldSizesConfirm`; 409
+  when the list isn't as it was read (one gone, or one found since). Each of these answers `SpaceChanged`, the change Undo takes back.
+- `POST /api/fabrication/workspaces/:id/spaces/:slug/changes/:change/undo`: Undo of a sizes change. Answers the space
+  as it is again, a `SpaceSizes`.
+- `GET /api/fabrication/workspaces/:id/builds/:slug/sizes`: the lines the Build's steps need, as its space shows them.
+  Answers `BuildSizes`.
 
 A code workspace keeps none (409). A Build save is undone from its note (`POST /api/sessions/:id/builds/:save/undo`)
 or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:save/undo`).
@@ -108,12 +123,25 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   `COURTYARD_PRINT_MEMORY_LIMIT_MB` (512 unless set), freeing the place. What's made, its 3MF and STL too, is kept
   by the Build's file text, so the page asking again and a download after it make nothing twice; why a recipe
   couldn't be made is kept by the recipe, so asking again is answered at once, without the lock.
-- **Sizes** (`sizes.ts`, #708, ADR 0037): a record each, of a Thing by the subject ID it gets with its first size
+- **Sizes** (`sizes/index.ts`, #708, ADR 0037): a record each, of a Thing by the subject ID it gets with its first size
   (written in the same change). A correction is a new record, the next revision, and the one it corrects says so
   (`supersededBy`); a correction of a revision that isn't the one standing is refused. Two different values for the
-  same thing are both kept, each listing the other as a conflict. Undo (`undoSizeChange`) puts each file back whole,
-  unless it's changed since. A Build's sizes point at records only once they take over (#711).
-- **The size tool** (`size-tool.ts`): one turn's `save_size`, by the labels the turn was shown (`Z1`, and `T1` for
+  same thing are both kept, each listing the other as a conflict. Several are saved as one change with one Undo
+  (`saveSizes`, #709), nothing written when any is refused. Undo (`undoSizeChange`) puts each file back whole, unless
+  it's changed since; a subject ID the change gave that a later record uses counts as changed, so no record loses
+  its Thing. A Build's sizes point at records only once they take over (#711). Measured is tied to the
+  owner's message in a session, or to Fabrication itself, where they typed it or ticked it (#709).
+- **A space's sizes** (`sizes/space.ts`, #709): a space's standing records grouped into lines, one per size, one
+  record per value (the newest, unless that would hide a measured one behind one said), so two only when they disagree, with what a correction replaced. The sizes any space needs come
+  first, with where to measure each, then those its Builds' steps need (their needs not done, #710, by name), then
+  the rest. The guided re-measure asks for a needed size not measured and for any whose records disagree. A Build's
+  needs are the workspace's first space's, a workspace being one area.
+- **Old sizes** (`sizes/old-sizes.ts`): each length with its unit in the space's size and history, the Facts and the
+  projects' history, a pair of sides as width then length, named from the words beside it and marked rough when it's
+  said so ("about 2650 mm"), "2,650" read as 2650; those recorded already, and any no record can hold, left out.
+  Confirming them records those picked and writes
+  `sizes/confirmed/<subject>.json`, in the same change, so they aren't offered again until it's undone.
+- **The size tool** (`sizes/tool.ts`): one turn's `save_size`, by the labels the turn was shown (`Z1`, and `T1` for
   Things). The model says a size is measured; the worker ties it to the owner's newest message in the session that
   gives that value exactly (`givenIn`: a number with any length unit, or a bare one in the size's own unit that isn't
   a date, a price or a count; a text's words, or yes or no), and refuses it when none does or one gives it only
@@ -122,5 +150,5 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   `sessions/`. A photo sent once building has started keeps the step the owner is on (`takenAt`, #786), so a later
   turn is told it shows the Build as it was then. Every planning turn, the chat's too, is given the step the owner is
   on in full (`prompts/build-step.ts`, #784), and told to follow it.
-- **The API** (`routes.ts`, a printed part's in `print-routes.ts`, sizes in `size-routes.ts`): under
+- **The API** (`routes.ts`, a printed part's in `print-routes.ts`, sizes in `sizes/routes.ts`): under
   `/api/fabrication`, mounted by `worker.ts`, which also serves the Fabrication app's files under `/fabrication`.

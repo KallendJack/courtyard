@@ -1,4 +1,4 @@
-import { type BuildOpened, buildStarted } from "@courtyard/contract";
+import { type BuildOpened, type BuildSizes, buildStarted } from "@courtyard/contract";
 import { SegmentedChoice } from "@courtyard/ui/forms/segmented-choice.tsx";
 import { useLayout, useWide } from "@courtyard/ui/frame/handheld.ts";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
@@ -9,6 +9,8 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useRouter } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
+import { ToCheck } from "@/components/to-check";
+import { BuildSizesBlock } from "../sizes/build-sizes.tsx";
 import { AtTheBench, PANEL, Plan } from "./at-the-bench.tsx";
 import { BenchPanel } from "./bench-panel.tsx";
 import { BuyList } from "./buy-list.tsx";
@@ -91,7 +93,7 @@ function Tabs(props: { tabs: readonly Tab[]; showing: Tab; show: (tab: Tab) => v
  * · Tablet (#702)") shows itself on the printer's plate, and its Print tab before its buy list. A
  * part tapped anywhere is lit everywhere.
  */
-export function BuildPage(props: { build: BuildOpened }) {
+export function BuildPage(props: { build: BuildOpened; sizes: BuildSizes }) {
   const { build } = props;
   const { derived, place } = build;
   const { print } = derived;
@@ -214,6 +216,10 @@ export function BuildPage(props: { build: BuildOpened }) {
       <Scroller className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-col gap-4 pb-2">
           <Findings findings={derived.findings} print={print} />
+          {/* The sizes its steps need, where it's made from them (#709). */}
+          {!stock.showing && (tab === "Cut plan" || tab === "Print") && (
+            <BuildSizesBlock workspaceId={place.workspace.id} sizes={props.sizes} />
+          )}
           {stock.panel(tab) ?? sideContent(tab)}
         </div>
       </Scroller>
@@ -251,16 +257,7 @@ export function BuildPage(props: { build: BuildOpened }) {
   /** A printed part on the printer's plate, in place of the bench in 3D. */
   const printed = print === null ? undefined : <PrintPanel print={print} making={making} />;
 
-  const toCheckButton = checks > 0 && (
-    <button
-      type="button"
-      onClick={showFindings}
-      className="flex h-10 shrink-0 items-center gap-2 rounded-full border border-warning/50 bg-warning/10 px-4 text-interface font-bold text-warning"
-    >
-      <span aria-hidden className="size-1.5 rounded-full bg-warning shadow-glow-needs" />
-      {checks} to check
-    </button>
-  );
+  const toCheckButton = checks > 0 && <ToCheck count={checks} onClick={showFindings} />;
 
   if (wide) {
     return (

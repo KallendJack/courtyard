@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ToolsRouteImport } from './routes/tools'
 import { Route as WorkspacesIdBuildsSlugRouteImport } from './routes/workspaces.$id.builds.$slug'
+import { Route as WorkspacesIdSpacesSlugRouteImport } from './routes/workspaces.$id.spaces.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +29,57 @@ const WorkspacesIdBuildsSlugRoute = WorkspacesIdBuildsSlugRouteImport.update({
   path: '/workspaces/$id/builds/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WorkspacesIdSpacesSlugRoute = WorkspacesIdSpacesSlugRouteImport.update({
+  id: '/workspaces/$id/spaces/$slug',
+  path: '/workspaces/$id/spaces/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/tools': typeof ToolsRoute
   '/workspaces/$id/builds/$slug': typeof WorkspacesIdBuildsSlugRoute
+  '/workspaces/$id/spaces/$slug': typeof WorkspacesIdSpacesSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/tools': typeof ToolsRoute
   '/workspaces/$id/builds/$slug': typeof WorkspacesIdBuildsSlugRoute
+  '/workspaces/$id/spaces/$slug': typeof WorkspacesIdSpacesSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/tools': typeof ToolsRoute
   '/workspaces/$id/builds/$slug': typeof WorkspacesIdBuildsSlugRoute
+  '/workspaces/$id/spaces/$slug': typeof WorkspacesIdSpacesSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/tools' | '/workspaces/$id/builds/$slug'
+  fullPaths:
+    | '/'
+    | '/tools'
+    | '/workspaces/$id/builds/$slug'
+    | '/workspaces/$id/spaces/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/tools' | '/workspaces/$id/builds/$slug'
-  id: '__root__' | '/' | '/tools' | '/workspaces/$id/builds/$slug'
+  to:
+    | '/'
+    | '/tools'
+    | '/workspaces/$id/builds/$slug'
+    | '/workspaces/$id/spaces/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/tools'
+    | '/workspaces/$id/builds/$slug'
+    | '/workspaces/$id/spaces/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ToolsRoute: typeof ToolsRoute
   WorkspacesIdBuildsSlugRoute: typeof WorkspacesIdBuildsSlugRoute
+  WorkspacesIdSpacesSlugRoute: typeof WorkspacesIdSpacesSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,6 +105,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkspacesIdBuildsSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/workspaces/$id/spaces/$slug': {
+      id: '/workspaces/$id/spaces/$slug'
+      path: '/workspaces/$id/spaces/$slug'
+      fullPath: '/workspaces/$id/spaces/$slug'
+      preLoaderRoute: typeof WorkspacesIdSpacesSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,6 +119,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ToolsRoute: ToolsRoute,
   WorkspacesIdBuildsSlugRoute: WorkspacesIdBuildsSlugRoute,
+  WorkspacesIdSpacesSlugRoute: WorkspacesIdSpacesSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

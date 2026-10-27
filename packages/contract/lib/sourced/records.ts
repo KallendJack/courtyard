@@ -23,28 +23,41 @@ const oneLine = (what: string) =>
     .max(SIZE_TEXT_MAX_CHARACTERS, `Keep the ${what} to ${SIZE_TEXT_MAX_CHARACTERS} characters.`)
     .refine((text) => !/[\r\n]/.test(text), `Keep the ${what} to one line.`);
 
+/** A size's property, as it's named: "inside width". */
+export const sizeProperty = oneLine("property");
+
+/** A quantity and its unit, the same `{ value, unit }` a Build's size has (#696). */
+export const SizeQuantity = z.object({
+  kind: z.literal("quantity"),
+  value: z.number().nonnegative().max(1_000_000),
+  unit: RecordUnit,
+});
+export type SizeQuantity = z.infer<typeof SizeQuantity>;
+
 /**
- * What was recorded: a quantity and its unit, the same `{ value, unit }` a Build's size has
- * (#696); a few words ("stud partition"); or yes or no ("has a socket").
+ * What was recorded: a quantity and its unit; a few words ("stud partition"); or yes or no ("has a
+ * socket").
  */
 export const SizeValue = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("quantity"),
-    value: z.number().nonnegative().max(1_000_000),
-    unit: RecordUnit,
-  }),
+  SizeQuantity,
   z.object({ kind: z.literal("text"), text: oneLine("value") }),
   z.object({ kind: z.literal("yes-no"), yes: z.boolean() }),
 ]);
 export type SizeValue = z.infer<typeof SizeValue>;
 
-/** The owner's message a measurement was given in: its session and its event's number. */
-const SaidIn = z.object({ session: SessionId, seq: z.number().int().positive() });
+/**
+ * Where the owner gave a measurement: their message in a session (its event's number), or in
+ * Fabrication itself (#709), typed in or ticked in the list of old sizes, and when.
+ */
+const SaidIn = z.union([
+  z.object({ session: SessionId, seq: z.number().int().positive() }),
+  z.object({ fabrication: z.iso.datetime() }),
+]);
 
 /**
- * Where a record's value came from: measured by the owner, linked by the worker to the message
- * they gave it in, never by a model; from a maker's page (specified); said roughly, "about 140"
- * (reported); or worked out from a photo or a description (estimated).
+ * Where a record's value came from: measured by the owner, linked by the worker to where they gave
+ * it, never by a model; from a maker's page (specified); said roughly, "about 140" (reported); or
+ * worked out from a photo or a description (estimated).
  */
 export const RecordSource = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("measured"), said: SaidIn }),
@@ -69,7 +82,7 @@ export const ObservedDay = z.iso.date();
 export const SizeRecord = z.strictObject({
   id: SizeRecordId,
   subject: SubjectId,
-  property: oneLine("property"),
+  property: sizeProperty,
   value: SizeValue,
   source: RecordSource,
   observed: ObservedDay,

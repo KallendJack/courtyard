@@ -466,6 +466,14 @@ goes to Courtyard's login. It holds no state and does no model work, and calls o
   tiles to tick, saved at the owner's level through `/api/fabrication/tools` with Undo. A Build's route sends the owner
   there first until some are saved or it's skipped on this visit (kept in the tab's session storage, so nothing is kept
   on the device beyond it), and a Build's Tools panel links back to it.
+- [`features/sizes/`](../apps/fabrication/src/features/sizes/README.md): a space's sizes (#709), at
+  `/workspaces/:id/spaces/:slug`: the space's size records and its Things', each with its source as a word and its
+  day, answers that disagree side by side, tapped to correct or to keep one, with Undo. The guided re-measure goes
+  through the sizes any space needs and those its Builds' steps need (their needs, #710), where to measure each, and
+  records them as measured in Fabrication. The first time a space opens, the sizes found in sentences (Facts, the
+  projects' and the space's history) are offered once to confirm, nothing measured without a tick. A Build's Cut
+  plan and Print tabs show the lines its steps need, read with the Build. The worker's side is
+  `features/fabrication/sizes/` (`space.ts`, `old-sizes.ts`).
 - **The chat** is a session in Courtyard: the Build's project's latest, or else the latest that saved the Build;
   sending with none starts one that belongs to the project. The worker's `features/fabrication/chat.ts` reads its
   events into the chat's lines (what was said, each change saved, struck through once undone) and sends through
@@ -603,10 +611,12 @@ Where the rest fits:
   project tool. The Fabrication app (#698) reads and changes Builds through
   `/api/fabrication` only.
 - **Sizes** (#708, ADR 0037). The model calls the size tool by the labels its turn listed (`Z1` sizes, `T1` Things);
-  `fabrication/size-tool.ts` checks a measured size against the owner's messages, which `sessions/` reads from the
-  session's events, and ties the record to the one that gave it; `fabrication/sizes.ts` writes the record (and the
-  Thing's subject ID, with its first size) as one change through `context-folder/`. The session records a
-  `size-saved` event and the browser shows a note with Undo. Every planning turn lists the standing records.
+  `fabrication/sizes/tool.ts` checks a measured size against the owner's messages, which `sessions/` reads from the
+  session's events, and ties the record to the one that gave it; `fabrication/sizes/index.ts` writes the record (and
+  the Thing's subject ID, with its first size) as one change through `context-folder/`. The session records a
+  `size-saved` event and the browser shows a note with Undo. Every planning turn lists the standing records. In
+  Fabrication (#709), a space's page measures, corrects and confirms them through `/api/fabrication`, measured there
+  tied to Fabrication itself, each change with Undo.
 - **The status line** (#256). A code workspace's line is built from `sessions/`' list and `next-up/` when asked, with
   no model. A planning workspace has none (#600).
 - **Session notes** (#601, ADR 0032). `sessions/notes.ts` asks the errand model for a planning session's note
