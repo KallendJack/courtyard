@@ -70,6 +70,28 @@ const ISSUES: readonly FakeIssue[] = [
   { number: 24, title: "Nothing jumps in", milestone: "4 · Code workspaces" },
 ];
 
+/** The bug a red main files (#355), first in the order. */
+const MAIN_FIX: FakeIssue = {
+  number: 40,
+  title: "Main fails: the PR page refreshes",
+  milestone: "4 · Code workspaces",
+};
+
+/** Main's build fails on its latest commit, seen once what the worker kept of it is stale. */
+const mainGoesRed = async (github: FakeGitHub, clock: { now: number }) => {
+  github.setCommitChecks(await gitIn(repo, "rev-parse", "HEAD"), [
+    {
+      id: 1,
+      name: "Checks",
+      outcome: "failed",
+      url: "https://github.com/octo-owner/side-project/actions/runs/1/job/1",
+      startedAt: "2026-10-12T09:00:00Z",
+      completedAt: "2026-10-12T09:03:00Z",
+    },
+  ]);
+  clock.now += 2 * 60 * 1000;
+};
+
 /** A worker with a code workspace, Side project, on the fake GitHub with these issues, signed in. */
 const signedInWith = async (
   issues: readonly FakeIssue[],
@@ -512,6 +534,31 @@ describe("the Lead's rules (#591)", () => {
     expect(pausedNotices(push)).toEqual([paused]);
   });
 
+  it("gives main's fix the next free builder even while 4 pull requests wait for review (#740)", async () => {
+    const clock = { now: Date.now() };
+    const { github, request } = await signedInWith([...SIX, MAIN_FIX], {
+      milestones: { "4 · Code workspaces": "Build order: #22 → #23 → #24 → #25 → #26 → #40." },
+      now: () => clock.now,
+    });
+    await run(request);
+    await readyToMerge(github, request, 22);
+    await readyToMerge(github, request, 23);
+    await runJobs();
+    await readyToMerge(github, request, 24);
+    await readyToMerge(github, request, 25);
+    await runJobs();
+    expect((await leadOf(request)).holding).toEqual([{ kind: "reviews", waiting: 4 }]);
+
+    await mainGoesRed(github, clock);
+    await runJobs();
+
+    const lead = await leadOf(request);
+    expect(lead.building.map((each) => each.issue)).toEqual([40]);
+    expect(lead.holding).toEqual([{ kind: "reviews", waiting: 4 }, { kind: "main-red" }]);
+    expect(github.commentsOn(onGitHub, 26)).toEqual([]);
+    await settledAll(request);
+  });
+
   it("starts no builder while its model is at its usage limit, and one once it has reset", async () => {
     const clock = { now: Date.parse("2026-10-20T09:00:00Z") };
     const resetAt = "2026-10-20T10:00:00.000Z";
@@ -743,6 +790,43 @@ describe("watching its builders (#347)", () => {
     expect(
       (await notesIn(request)).filter((note) => note.startsWith("Which session waits merged")),
     ).toEqual([`Which session waits merged (#${number}).`]);
+  });
+
+  it("gives main's fix the next builder to come free, ahead of the order, stopping none that's working (#740)", async () => {
+    // Every turn keeps working until the test lets it end.
+    let finish: () => void = () => {};
+    const working = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const clock = { now: Date.now() };
+    const { github, request } = await signedInWith([...ISSUES, MAIN_FIX], {
+      milestones: { "4 · Code workspaces": "Build order: #22 → #23 → #24 → #40." },
+      providers: [createFakeProvider({ delayMs: 0, beforeReply: () => working })],
+      now: () => clock.now,
+    });
+    await run(request);
+    const first = await builderOf(request, 22);
+
+    await mainGoesRed(github, clock);
+    await runJobs();
+
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([22, 23]);
+    expect((await builderOf(request, 22)).busy).toBe(true);
+    expect((await builderOf(request, 23)).busy).toBe(true);
+    expect(github.commentsOn(onGitHub, 40)).toEqual([]);
+
+    // #22's pull request merges, which frees its place: main's fix takes it, not #24.
+    github.merge(
+      github.openPullRequest({ repo: onGitHub, branch: first.branch ?? "", head: "c0ffee1" }),
+    );
+    await runJobs();
+    await runJobs();
+
+    expect((await leadOf(request)).building.map((each) => each.issue)).toEqual([23, 40]);
+    expect((await builderOf(request, 23)).busy).toBe(true);
+    expect(github.commentsOn(onGitHub, 24)).toEqual([]);
+    finish();
+    await settledAll(request);
   });
 
   it("starts only main's fix while main is red", async () => {

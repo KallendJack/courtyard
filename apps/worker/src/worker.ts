@@ -407,6 +407,7 @@ export const createWorker = (options: {
     houseSkills,
     matt,
     code,
+    github,
     connectionsOf: connections.of,
     now,
     wait,
@@ -439,8 +440,7 @@ export const createWorker = (options: {
       turnEnded: (provider) => background(usage.read(provider)),
     },
   });
-  // Usage at a glance (#66): each provider's plan usage, read as it starts, every so often and
-  // after every turn.
+  // Usage at a glance (#66): each plan's usage, read at the start, now and then and after turns.
   const usage = createUsage({
     providers,
     dataDir,

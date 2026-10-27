@@ -871,6 +871,9 @@ things live only in the worker's memory and go when it restarts.
   workspace (#258), a plain clone whose `origin` is the repo on GitHub; the workspace's `repoPath`
   names it. It stays when the workspace is archived, and is used again if the repo is picked again.
 - `red-main.json`: what was done about each repository's red main (#355): the commit, its re-run and the issue filed.
+- `failed-checks.json`: what the worker tried itself on each code session's pull request whose checks failed, before
+  a fixing turn (#740, `sessions/`' `failed-checks.ts`): the commit, and whether it brought the branch up to date
+  with main or re-ran the failed jobs (by id) once.
 - `version-bumps.json`: what was done about each open Dependabot bump (#496): its commit, its re-run, what that
   showed, its "Bump fails" issue and whether Dependabot was asked to rebase.
 - `leads.json`: each code workspace's Lead (#347): its session, whether it runs, pauses or rests and why, how many

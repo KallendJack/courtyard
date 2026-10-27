@@ -678,19 +678,25 @@ Each edit and each command that runs shows as an activity. Coding isn't saving, 
 set.
 
 The session opens its pull request itself, with `gh`, written the way the repository's own instructions or PR skill
-say (#172). The worker follows the PR's checks, and when one fails on a commit it hasn't asked about yet, it sends the
-session this message (on the model the owner last used), with the failed checks in the turn's activity:
+say (#172). The worker follows the PR's checks. When one fails on a commit, the worker first tries again itself
+(#740): a branch behind its base is brought up to date (the base merged in and pushed, as GitHub's Update branch does),
+and a failure in tests the PR doesn't touch is re-run once. A conflict in that update goes to the session as Bring up
+to date's message (below). Otherwise, on a commit it hasn't asked about yet, it sends the session this message (on
+the model the owner last used), with the failed checks in the turn's activity:
 
 > The checks on your pull request #<number> failed: <checks>. Find out why (gh pr checks and gh run view --log-failed
-> show what failed). First, check whether a failing test is yours: if it also failed lately on the default branch (gh
-> run list --branch), has an open issue saying it's flaky (gh issue list --search), or tests nothing your changes
-> touch, it isn't. Then change no code: comment "Flaky, not this PR's: <test>" on the pull request with gh pr
-> comment, re-run its failed jobs once with gh run rerun <run> --failed, and say so. Otherwise, fix it on your
-> session branch and push the fix to the same pull request. If you can't fix it, say why, so the owner can decide
-> what to do.
+> show what failed), then fix it on your session branch and push the fix to the same pull request. If you can't fix
+> it, say why, so the owner can decide what to do.
 
-A re-run is once per commit: the worker starts one fixing turn per commit, so when the re-run fails too, no second
-fixing turn starts. The owner is asked instead, by a notification (#356):
+When the worker's re-run failed too, the failure is real, and the message says so:
+
+> The checks on your pull request #<number> failed again after Courtyard re-ran them once: <checks>. So the failure
+> is real, not a flaky test. Find out why (gh pr checks and gh run view --log-failed show what failed), then fix it on
+> your session branch and push the fix to the same pull request. If you can't fix it, say why, so the owner can
+> decide what to do.
+
+The worker starts one fixing turn per commit, so when the checks fail again on that commit after someone else re-ran
+them, no second fixing turn starts. The owner is asked instead, by a notification (#356):
 
 > Failed again after a re-run: <checks>. Flaky, or does it need fixing?
 
