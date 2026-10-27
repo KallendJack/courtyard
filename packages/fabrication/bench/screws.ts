@@ -2,7 +2,7 @@ import type { Action } from "../build.ts";
 import { bracketArm } from "../close-ups/bracket.ts";
 import type { Word } from "../glossary.ts";
 import type { Tool } from "../tools.ts";
-import { jointFromEnd, SCREW_INSET } from "./close-ups.ts";
+import { jointFromEnd, PILOT, SCREW_INSET } from "./close-ups.ts";
 import type { Shape } from "./frame.ts";
 import type { BenchParameters } from "./parameters.ts";
 import { act } from "./preparing.ts";
@@ -74,7 +74,7 @@ export type Pilots = ReturnType<typeof benchPilots>;
 /** A joint's screws: marked by eye where they must hit, a pilot hole first only where needed. */
 export const screwing = (pilot: boolean, marking: string, numbers: string): Action =>
   act(
-    `${marking} ${pilot ? "Drill a small 3 mm pilot hole at each mark, then drive the screw." : "Drive a screw straight in at each."}`,
+    `${marking} ${pilot ? "Drill a 3 mm pilot hole at each, then screw." : "Screw straight in at each."}`,
     pilot ? `${numbers} 3 mm pilots.` : numbers,
   );
 
@@ -82,12 +82,9 @@ export const screwing = (pilot: boolean, marking: string, numbers: string): Acti
 export const bracketing = (pilot: boolean) =>
   screwing(
     pilot,
-    "Hold each bracket tight into its corner and mark through its holes.",
+    "Bracket tight in its corner: mark its holes.",
     `${SCREWS_PER_BRACKET} screws a bracket.`,
   );
-
-/** The bit a pilot hole is drilled with, mm. */
-const PILOT_BIT = 3;
 
 /**
  * Drilling a pilot hole, as a first-time skill (#778), when the step drills one: into the piece
@@ -97,7 +94,11 @@ export const pilotHole = (
   pilot: boolean,
   piece: { wide: number; thick: number; name: string },
   screw: string,
-) => (pilot ? [{ type: "pilot-hole" as const, piece, screw, bit: PILOT_BIT }] : []);
+) => (pilot ? [{ type: "pilot-hole" as const, piece, screw, bit: PILOT }] : []);
+
+/** What a step's close-ups say of its screw spots (#826): drill first with the pilot bit, or just screw. */
+export const drillsFor = (pilot: boolean) =>
+  pilot ? { first: true, bit: PILOT } : { first: false };
 
 /** The drill, and its bits only when the step drills a pilot hole. */
 export const drilling = (pilot: boolean): Tool[] =>

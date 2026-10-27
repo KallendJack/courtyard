@@ -132,7 +132,8 @@ if (recipe) {
   owner's progress stays on its step when one before it comes or goes.
 - **Each step has a picture of the job as it's done** (#754): the length on the Workmate or in its jaws (clamped on the
   Workmate for a circular saw, or on a mitre saw's bed), an end frame flat on the floor, a castor base in the Workmate's jaws (or on two offcuts without one) with the drill in a plate's hole and its words as callouts off the model, or the frame as far as it's built.
-  It says where it opens from (15° to 60° above level), and its marks (sizes, the pencil line, where the saw runs,
+  It says where it opens from (15° to 60° above level) and what it frames, close, when that's less than all of it
+  (the end frame itself, not its clamps and square, #826; Where this goes says what it makes, "The two ends"), and its marks (sizes, the pencil line, where the saw runs,
   the diagonals to check, where the support goes, where the brackets go, the waste side) are the Build's own numbers.
   Tools are drawn only when they're to hand, and nothing the owner doesn't have is drawn as if they did.
 - **Marking starts by checking the end is square,** then one line per length, its pieces one at a time: each marked,

@@ -80,7 +80,8 @@ export function Shape(props: { shape: CloseUpShape }) {
   return (
     <g
       transform={`translate(${shape.x} ${shape.y}) rotate(${shape.turn})`}
-      className="fill-foreground/85"
+      // Turned from underneath in red, as the castors' board draws it (#826).
+      className={shape.under === true ? "fill-destructive" : "fill-foreground/85"}
     >
       {shape.kind === "pliers" ? (
         <>

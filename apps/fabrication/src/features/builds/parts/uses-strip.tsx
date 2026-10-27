@@ -7,9 +7,9 @@ import { Check } from "lucide-react";
  * What a step uses, under its title (#778; Paper, 3 · Drafts, "Draft · Fabrication · A step's
  * uses strip · Fold 933×645 (#778)"): the pieces by letter and count, then its fixings, so they're
  * laid out first; ticked off once the step's done. A fixing's count goes after it, "5 × 80 screws
- * (16)": before a size it would read as one more size.
+ * (16)": before a size it would read as one more size. At the bench (`bench`), read at arm's length.
  */
-export function UsesStrip(props: { step: BuildStep; done: boolean; big: boolean }) {
+export function UsesStrip(props: { step: BuildStep; done: boolean; bench?: boolean }) {
   const { parts, fixings } = props.step.uses;
   if (parts.length + fixings.length === 0) return null;
   const chips = [
@@ -29,7 +29,7 @@ export function UsesStrip(props: { step: BuildStep; done: boolean; big: boolean 
           key={chip}
           className={classes(
             "flex items-center gap-1.5 rounded-full px-3 py-1 font-mono font-semibold",
-            props.big ? "text-interface" : "text-meta",
+            props.bench === true ? "text-interface" : "text-meta",
             props.done ? "bg-success/15 text-success" : "bg-background text-foreground",
           )}
         >

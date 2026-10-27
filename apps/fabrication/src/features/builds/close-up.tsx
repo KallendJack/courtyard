@@ -2,9 +2,10 @@ import type { BuildPart, BuildStep } from "@courtyard/contract";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { CircleHelp } from "lucide-react";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { Disclosure } from "@/components/disclosure";
 import { Shape } from "./picture/close-up-shapes.tsx";
+import { useFitted } from "./picture/fitted.ts";
 import { mm } from "./words.ts";
 
 // A step's close-up (#699; Paper, "Fabrication · Build steps v2, teaching · Tablet (#699)"): what
@@ -57,29 +58,17 @@ const STROKE: Readonly<
   path: { className: "stroke-primary", width: 1.5, dash: "4 3" },
 };
 
-/** Where a drawing's mm land in its box once fitted: its scale, in px a mm, and its top left. */
-type Fitted = { scale: number; left: number; top: number };
+type Label = NonNullable<BuildCloseUp["labels"]>[number];
 
-/** How a drawing of `view` (its viewBox) sits in `host`, kept as the host is resized. */
-const useFitted = (
-  host: RefObject<HTMLDivElement | null>,
-  view: { w: number; h: number },
-): Fitted | undefined => {
-  const [fitted, setFitted] = useState<Fitted>();
-  useEffect(() => {
-    const box = host.current;
-    if (box === null) return;
-    const read = () => {
-      const { clientWidth: width, clientHeight: height } = box;
-      const scale = Math.min(width / view.w, height / view.h);
-      setFitted({ scale, left: (width - view.w * scale) / 2, top: (height - view.h * scale) / 2 });
-    };
-    read();
-    const watch = new ResizeObserver(read);
-    watch.observe(box);
-    return () => watch.disconnect();
-  }, [host, view.w, view.h]);
-  return fitted;
+/**
+ * A word on a drawing: what it's about picked out in moss, what's underneath in red, a quiet
+ * note, a piece's name in its wood (#826, their boards), or plain.
+ */
+const labelTone = (label: Label) => {
+  if (label.tone === "under") return "font-semibold text-destructive";
+  if (label.tone === "note") return "text-muted-foreground";
+  if (label.tone === "wood") return "font-semibold text-timber";
+  return label.key ? "font-semibold text-success" : "text-foreground";
 };
 
 /**
@@ -87,20 +76,29 @@ const useFitted = (
  * top and a 460 mm end frame read the same; lines stay a hair wide however it's scaled. Its words
  * (#783) are over it at the type's own sizes, never under 12 px, placed where they belong.
  */
-function Drawing(props: {
+export function Drawing(props: {
   closeUp: BuildCloseUp;
   parts: readonly BuildPart[];
   /** As tall as its width makes it, up to a limit, rather than filling its box. */
   ownHeight?: boolean;
+  /** The drawing alone, without its pills' column: a card at the bench (#826). */
+  bare?: boolean;
 }) {
-  const { closeUp, parts } = props;
+  const { closeUp: drawn, parts } = props;
+  // Bare, the drawing ends where its pills' column starts.
+  const closeUp =
+    props.bare === true
+      ? { ...drawn, width: drawn.pills?.[0]?.x ?? drawn.width, pills: [] }
+      : drawn;
   const text = Math.max(closeUp.width, closeUp.height) / 16;
   const gap = text * 0.9;
   // Room round it for the sizes' figures; a drawing with none needs only a little.
   const pad = text * (closeUp.dimensions.length > 0 ? 2.4 : 0.5);
   const view = { w: closeUp.width + 2 * pad, h: closeUp.height + 2 * pad };
   const host = useRef<HTMLDivElement>(null);
-  const fitted = useFitted(host, view);
+  // Bare, in a narrow card, it sits at the left so its words have the card's width.
+  const start = props.bare === true;
+  const fitted = useFitted(host, view, start);
   const fillOf = (label: string) => {
     const part = parts.find((each) => each.label === label);
     return part === undefined ? "fill-fitted" : FILL[part.material.kind];
@@ -111,7 +109,15 @@ function Drawing(props: {
       className={classes("relative w-full", props.ownHeight ? "max-h-60" : "h-full")}
       style={props.ownHeight ? { aspectRatio: view.w / view.h } : undefined}
     >
-      <Lines closeUp={closeUp} pad={pad} text={text} gap={gap} view={view} fillOf={fillOf} />
+      <Lines
+        closeUp={closeUp}
+        pad={pad}
+        text={text}
+        gap={gap}
+        view={view}
+        fillOf={fillOf}
+        start={start}
+      />
       {(closeUp.pills ?? []).map((pill) => (
         <span
           key={pill.says}
@@ -145,8 +151,7 @@ function Drawing(props: {
           className={classes(
             "pointer-events-none absolute -translate-y-1/2 whitespace-nowrap",
             fitted === undefined && "invisible",
-            !label.heading &&
-              (label.key ? "text-label font-semibold text-success" : "text-label text-foreground"),
+            !label.heading && classes("text-label", labelTone(label)),
           )}
           style={{
             left: (fitted?.left ?? 0) + (label.x + pad) * (fitted?.scale ?? 0),
@@ -154,7 +159,7 @@ function Drawing(props: {
           }}
         >
           {label.heading ? (
-            <CapsLabel tone="primary" inline>
+            <CapsLabel tone={label.tone === "under" ? "destructive" : "primary"} inline>
               {label.says}
             </CapsLabel>
           ) : (
@@ -174,6 +179,8 @@ function Lines(props: {
   gap: number;
   view: { w: number; h: number };
   fillOf: (label: string) => string;
+  /** At its box's left rather than in its middle. */
+  start: boolean;
 }) {
   const { closeUp, pad, text, gap, fillOf } = props;
   return (
@@ -181,6 +188,7 @@ function Lines(props: {
       role="img"
       aria-label={`${closeUp.title}, with ${closeUp.dimensions.map((line) => `${mm(line.mm)} mm`).join(", ")} marked and ${closeUp.fixings.length} fixings${(closeUp.pills ?? []).map((pill) => `, ${pill.says}`).join("")}`}
       viewBox={`${-pad} ${-pad} ${props.view.w} ${props.view.h}`}
+      preserveAspectRatio={props.start ? "xMinYMid meet" : undefined}
       className="absolute inset-0 h-full w-full"
     >
       {closeUp.pieces.map((piece) => (

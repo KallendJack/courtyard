@@ -80,33 +80,32 @@ export const baseCloseUp = (s: Shape, castors: Castors): CloseUp => {
   };
 };
 
-/** One end frame, laid flat as it's built: its legs, and the end rails across them. */
-export const endFrameCloseUp = (s: Shape): CloseUp => {
-  const lowerY = s.leg - s.shelfHeight - s.wide;
-  const legs = [0, s.endRail - s.thick];
+/**
+ * How a leg lies for the end frames, seen from its end (#826; Paper, 2 · Agreed, "Fabrication ·
+ * End frames in 3D, your kit · Fold (#785, #788)"): on its edge, tall and thin, like this; not
+ * flat, struck through.
+ */
+export const legEndOnCloseUp = (s: Shape): CloseUp => {
+  const gap = s.wide;
+  const flatX = s.thick + gap;
+  const flatY = s.wide - s.thick;
   return {
-    title: "One end frame",
-    width: s.endRail,
-    height: s.leg,
+    title: "Leg end on",
+    width: flatX + s.wide,
+    height: s.wide + 40,
+    // Both drawn as the leg (A), in its wood.
     pieces: [
-      ...legs.map((x) => ({ label: "A", x, y: 0, w: s.thick, h: s.leg })),
-      { label: "C", x: 0, y: 0, w: s.endRail, h: s.wide },
-      { label: "C", x: 0, y: lowerY, w: s.endRail, h: s.wide },
+      { label: "A", x: 0, y: 0, w: s.thick, h: s.wide },
+      { label: "A", x: flatX, y: flatY, w: s.wide, h: s.thick },
     ],
-    dimensions: [
-      line(0, 0, s.endRail, 0),
-      line(0, 0, 0, s.leg),
-      line(s.endRail, lowerY + s.wide, s.endRail, s.leg),
+    dimensions: [],
+    fixings: [],
+    notes: ["Each leg on its edge, tall and thin, so the rails lie across its narrow face."],
+    labels: [
+      { x: 0, y: s.wide + 25, says: "like this", key: true },
+      { x: flatX, y: s.wide + 25, says: "not flat" },
     ],
-    fixings: legs.flatMap((x) => [
-      ...jointScrews(x, s.thick, 0, s.wide),
-      ...jointScrews(x, s.thick, lowerY, s.wide),
-    ]),
-    notes: [
-      "Top rail flush with the leg tops.",
-      `Bottom rail ${whole(s.shelfHeight)} up from the floor end.`,
-      "2 screws a joint, on a diagonal, by eye.",
-    ],
+    strokes: [{ from: { x: flatX, y: s.wide }, to: { x: flatX + s.wide, y: flatY }, look: "edge" }],
   };
 };
 

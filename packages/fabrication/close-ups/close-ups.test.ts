@@ -285,11 +285,11 @@ describe("a screwed overlap", () => {
 
     expect(drawn.type).toBe("screwed-overlap");
     expect(drawn.title).toBe("Mark your screw spots");
-    expect(drawn.pills?.map((pill) => pill.says).sort()).toEqual([
-      "2 crosses",
-      "Only in green",
-      "leg",
-      "rail",
+    expect(drawn.pills?.map((pill) => pill.says).sort()).toEqual(["2 crosses", "Only in green"]);
+    // Each piece named on the drawing in its wood's colour, as the end frames' board has them.
+    expect(drawn.labels?.map((label) => [label.says, label.tone])).toEqual([
+      ["rail", "wood"],
+      ["leg", "wood"],
     ]);
     expect(drawn.fixings).toHaveLength(2);
     expect(drawn.notes.join(" ")).toMatch(/by eye/i);

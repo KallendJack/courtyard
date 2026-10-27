@@ -58,18 +58,21 @@ export const overlapCloseUp = (overlap: Overlap): CloseUp => {
     pills: [
       { says: "Only in green", to: { x: green.w / 2, y: green.d / 2, z: green.z }, badge: 1 },
       { says: "2 crosses", to: model.crosses[1] ?? model.crosses[0] ?? green, badge: 2 },
-      // Each piece named off the wood: the one on top past the green, the one under at its near end.
+    ],
+    // Each piece named on the drawing, as the board has them: the one on top past its far end,
+    // the one under at its near end's foot.
+    names: [
       {
         says: overlap.over.name,
-        to: { x: (green.w + model.over.w) / 2, y: green.d / 2, z: green.z },
+        at: {
+          x: model.over.x + model.over.w + 0.1 * model.over.d,
+          y: model.over.y,
+          z: model.over.z + model.over.h,
+        },
       },
       {
         says: overlap.under.name,
-        to: {
-          x: model.under.w / 2,
-          y: model.under.y + model.under.d - (model.under.d - green.d) / 4,
-          z: model.under.h,
-        },
+        at: { x: model.under.x, y: model.under.y + model.under.d, z: -0.2 * model.under.h },
       },
     ],
     notes: [
