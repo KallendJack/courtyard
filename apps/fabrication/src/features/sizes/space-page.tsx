@@ -16,6 +16,7 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useRouter } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { ToCheck } from "@/components/to-check";
 import {
   type Answer,
   addSize,
@@ -109,7 +110,13 @@ export function SpacePage(props: { space: SpaceSizes }) {
         return changed(await correctSize(where, id, correction), words);
       }
       case "keep":
-        return changed(await keepSize(where, saving.id, { others: [...saving.others] }), words);
+        return changed(
+          await keepSize(where, saving.id, {
+            revision: saving.revision,
+            others: [...saving.others],
+          }),
+          words,
+        );
     }
   };
   const confirm = async (picks: OldSizesConfirm) =>
@@ -132,31 +139,29 @@ export function SpacePage(props: { space: SpaceSizes }) {
   };
 
   const progress = (
-    <div className="flex items-center justify-between gap-3 rounded-row bg-muted px-4 py-3">
-      <span className="text-interface font-medium">
+    <div className="flex min-h-9.5 items-center justify-between gap-2 rounded-row bg-secondary pr-1.5 pl-3">
+      <span className="text-meta text-foreground">
         Re-measure · {done} of {toMeasure.length} done
       </span>
-      {next !== undefined && cover && (
+      {next !== undefined && (cover || waiting.length > 1) && (
         <Button
           variant="quietPrimary"
-          size="sm"
-          onClick={() => setOpen({ kind: "line", line: next, thing: space.space.thing.slug })}
+          size="words"
+          onClick={
+            cover
+              ? () => setOpen({ kind: "line", line: next, thing: space.space.thing.slug })
+              : skip
+          }
         >
           Next size
-          <ChevronRight aria-hidden className="size-4" />
-        </Button>
-      )}
-      {next !== undefined && !cover && waiting.length > 1 && (
-        <Button variant="quietPrimary" size="sm" onClick={skip}>
-          Next size
-          <ChevronRight aria-hidden className="size-4" />
+          <ChevronRight aria-hidden className="size-3.5" />
         </Button>
       )}
     </div>
   );
 
   const things = (
-    <div className="flex flex-col gap-5 pb-2">
+    <div className="flex flex-col gap-4 pb-2">
       <ThingSizesBlock
         sizes={space.space}
         next={next?.property}
@@ -209,58 +214,53 @@ export function SpacePage(props: { space: SpaceSizes }) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border px-3 py-2.5 md:px-5">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
         <a
           href={`/workspaces/${encodeURIComponent(space.workspace.id)}`}
-          aria-label={`Back to ${space.workspace.name}`}
-          className="flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+          className="flex min-w-0 shrink items-center gap-1.5 text-meta font-medium text-muted-foreground hover:text-foreground"
         >
-          <ChevronLeft aria-hidden className="size-5" />
+          <ChevronLeft aria-hidden className="size-3.5 shrink-0" />
+          <span className={classes("truncate", cover && "sr-only")}>
+            <span className="sr-only">Back to </span>
+            {space.workspace.name}
+          </span>
         </a>
-        <h1
-          className={classes(
-            "display-title shrink-0 truncate",
-            cover ? "text-sheet-title" : "text-title",
-          )}
-        >
-          {space.space.thing.name}
-        </h1>
+        {!cover && <span aria-hidden className="h-5 w-px shrink-0 bg-border" />}
+        <h1 className="display-title shrink-0 truncate text-xl">{space.space.thing.name}</h1>
         {!cover && toMeasure.length > 0 && (
-          <p className="truncate font-mono text-meta text-muted-foreground">
+          <p className="truncate font-mono text-label text-muted-foreground">
             re-measuring · {done} of {toMeasure.length} · space
           </p>
         )}
-        <span className="flex-1" />
+        <span className="grow" />
         {space.oldSizes.length > 0 && (
           <Button variant="needsOutline" size="sm" onClick={() => setOpen({ kind: "old" })}>
             {space.oldSizes.length} old {space.oldSizes.length === 1 ? "size" : "sizes"}
           </Button>
         )}
         {toCheck.length > 0 && (
-          <button
-            type="button"
+          <ToCheck
+            count={toCheck.length}
+            size="sm"
             onClick={() => {
               const [first] = toCheck;
               if (first !== undefined) setOpen({ kind: "line", ...first });
             }}
-            className="flex h-10 shrink-0 items-center gap-2 rounded-full border border-warning/50 bg-warning/10 px-4 text-interface font-bold text-warning"
-          >
-            <span aria-hidden className="size-1.5 rounded-full bg-warning shadow-glow-needs" />
-            {toCheck.length} to check
-          </button>
+          />
         )}
       </header>
       {cover ? (
         <Scroller className="flex min-h-0 flex-1 flex-col px-3 pt-3">{things}</Scroller>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] gap-4 p-4">
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] gap-2.5 p-2.5 xl:grid-cols-[minmax(0,1fr)_380px] xl:gap-4 xl:p-4">
           <section aria-label="Measuring" className={classes(PANEL, "gap-3")}>
             <CapsLabel tone="muted">Measuring</CapsLabel>
             <Scroller className="flex min-h-0 flex-1 flex-col">{measuring}</Scroller>
           </section>
           <section aria-label="Things" className={classes(PANEL, "gap-3")}>
             <CapsLabel tone="muted">Things</CapsLabel>
-            <Scroller className="flex min-h-0 flex-1 flex-col">{things}</Scroller>
+            {/* Room in its sides for the lit line's light. */}
+            <Scroller className="-mx-2 flex min-h-0 flex-1 flex-col px-2">{things}</Scroller>
           </section>
         </div>
       )}

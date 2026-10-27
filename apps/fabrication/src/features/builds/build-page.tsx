@@ -9,6 +9,7 @@ import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useRouter } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
+import { ToCheck } from "@/components/to-check";
 import { BuildSizesBlock } from "../sizes/build-sizes.tsx";
 import { AtTheBench, PANEL, Plan } from "./at-the-bench.tsx";
 import { BenchPanel } from "./bench-panel.tsx";
@@ -256,16 +257,7 @@ export function BuildPage(props: { build: BuildOpened; sizes: BuildSizes }) {
   /** A printed part on the printer's plate, in place of the bench in 3D. */
   const printed = print === null ? undefined : <PrintPanel print={print} making={making} />;
 
-  const toCheckButton = checks > 0 && (
-    <button
-      type="button"
-      onClick={showFindings}
-      className="flex h-10 shrink-0 items-center gap-2 rounded-full border border-warning/50 bg-warning/10 px-4 text-interface font-bold text-warning"
-    >
-      <span aria-hidden className="size-1.5 rounded-full bg-warning shadow-glow-needs" />
-      {checks} to check
-    </button>
-  );
+  const toCheckButton = checks > 0 && <ToCheck count={checks} onClick={showFindings} />;
 
   if (wide) {
     return (

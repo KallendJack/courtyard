@@ -10,7 +10,8 @@ to wall, at the back, on the floor"; they type 2741, Save, and the line reads "m
 with Undo at the foot.
 
 - **Uses:** Fabrication's API through `api/fabrication.ts` (a space's sizes, + Size, a correction, one answer kept,
-  the old sizes confirmed, and Undo), and `packages/ui` (buttons, chips, `SegmentedChoice`, `Sheet`, `Scroller`).
+  the old sizes confirmed, and Undo), `components/to-check.tsx` (the header's "N to check", a Build's
+  too), and `packages/ui` (buttons, chips, `SegmentedChoice`, `Sheet`, `Scroller`).
 - **Used by:** the route `routes/workspaces.$id.spaces.$slug.tsx`, and a Build's page, whose Cut plan and Print tabs
   show the sizes its steps need (`BuildSizesBlock`, read with the Build).
 

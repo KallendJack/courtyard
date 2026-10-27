@@ -28,31 +28,37 @@ function Line(props: {
 }) {
   const { line } = props;
   const state = lineState(line, { next: props.next, now: props.now });
-  const value = line.records.map(recordValue).join(" / ");
   const [record] = line.records;
   const content = (
     <>
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className={classes("text-interface", props.next ? "font-bold" : "font-medium")}>
+      <span className="flex min-w-0 grow basis-0 flex-col">
+        <span className={classes("text-meta text-foreground", props.next && "font-semibold")}>
           {line.property}
         </span>
-        <span className={classes("text-meta", TONES[state.tone])}>{state.words}</span>
+        <span className={classes("text-caption", TONES[state.tone])}>{state.words}</span>
       </span>
-      <span className="flex shrink-0 flex-col items-end gap-0.5 text-right">
-        {value !== "" && (
+      <span className="flex max-w-3/5 flex-col items-end text-right">
+        {line.records.length > 0 && (
           <span
             className={classes(
-              "font-mono text-interface",
+              // Each answer kept whole: two side by side, or one above the other when narrow.
+              "flex flex-wrap justify-end gap-x-1.5 *:whitespace-nowrap",
+              record?.value.kind === "quantity" ? "font-mono text-meta" : "text-label",
               record?.source.kind === "measured" && line.records.length === 1
-                ? "font-bold text-foreground"
+                ? "text-foreground"
                 : "text-muted-foreground",
             )}
           >
-            {value}
+            {line.records.map((one, index) => (
+              <span key={one.id}>
+                {index > 0 && " / "}
+                {recordValue(one)}
+              </span>
+            ))}
           </span>
         )}
         {line.was !== null && (
-          <span className="text-meta text-muted-foreground">
+          <span className="text-caption text-muted-foreground">
             was {line.was.source === "reported" ? "about " : `${sourceWord(line.was.source)} `}
             {valueWords(line.was.value)}
           </span>
@@ -61,8 +67,9 @@ function Line(props: {
     </>
   );
   const look = classes(
-    "flex w-full items-center justify-between gap-4 rounded-row px-3 py-2.5 text-left",
-    props.next && "bg-primary/12",
+    "flex min-h-11.5 items-center justify-between gap-2 rounded-md py-1 text-left",
+    // The line being measured is lit, its light reaching past its words as the board has it.
+    props.next ? "-mx-2 w-[calc(100%+1rem)] bg-primary/8 px-2" : "w-full",
   );
   return (
     <li className="border-b border-border last:border-b-0">
@@ -94,13 +101,15 @@ export function ThingSizesBlock(props: {
   const { thing, lines } = props.sizes;
   const Heading = props.level === 3 ? "h3" : "h2";
   return (
-    <section aria-label={`${thing.name} sizes`} className="flex flex-col gap-1">
-      <div className="flex items-center gap-2.5 px-1">
-        <Heading className="display-title truncate text-sheet-title">{thing.name}</Heading>
-        <Chip tone="quiet">{KINDS[thing.kind]}</Chip>
-        <span className="flex-1" />
+    <section aria-label={`${thing.name} sizes`} className="flex flex-col gap-1.5">
+      <div className="flex min-h-8 items-center gap-2">
+        <Heading className="display-section truncate text-base">{thing.name}</Heading>
+        <Chip tone="quiet" size="sm">
+          {KINDS[thing.kind]}
+        </Chip>
+        <span className="grow" />
         {props.add !== undefined && (
-          <Button variant="quietPrimary" size="xs" onClick={props.add}>
+          <Button variant="quietPrimary" size="words" onClick={props.add}>
             + Size
           </Button>
         )}
