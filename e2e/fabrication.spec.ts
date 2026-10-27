@@ -283,7 +283,7 @@ test.describe("on the unfolded Fold", () => {
     const size = `${narrowest.along} × ${narrowest.across}`;
     const narrow = cutPlan.getByRole("button", { name: `${narrowest.label}, ${size} mm` }).first();
     expect(narrowest.share).toBeLessThan(0.3);
-    expect((await narrow.innerText()).replace(/\s+/g, " ")).toContain(size);
+    await expect(narrow).toContainText(size, { useInnerText: true });
     for (const line of await narrow.locator("span span").all()) {
       const [piece, words] = [await boxOf(narrow), await boxOf(line)];
       expect(words.x).toBeGreaterThanOrEqual(piece.x - 0.5);
