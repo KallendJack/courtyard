@@ -112,7 +112,15 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   (written in the same change). A correction is a new record, the next revision, and the one it corrects says so
   (`supersededBy`); a correction of a revision that isn't the one standing is refused. Two different values for the
   same thing are both kept, each listing the other as a conflict. Undo (`undoSizeChange`) puts each file back whole,
-  unless it's changed since. A Build's sizes point at records only once they take over (#711).
+  unless it's changed since.
+- **A Build's sizes from records** (`parameters.ts`, #711): a size in a Build's parameters may be `{ "record":
+  "<id>" }` (or the record's file, `sizes/<id>.json`, as the model's list shows it), kept as that pointer alone. Each
+  time the Build is worked out, the pointer is read as the record standing (its correction, once there is one), in
+  mm, measured and specified as they are and reported or estimated as assumed, so the Build lists it to check. A
+  pointer to a record that isn't there, or isn't a length, refuses the save and lists the Build as unreadable. A stock
+  picked keeps the pointers it leaves as they were.
+- **A Build's tools** (`setting.ts`, #711): once the owner has saved Your tools, a Build's save leaves out its own
+  `tools`, so it holds none beside the owner's.
 - **The size tool** (`size-tool.ts`): one turn's `save_size`, by the labels the turn was shown (`Z1`, and `T1` for
   Things). The model says a size is measured; the worker ties it to the owner's newest message in the session that
   gives that value exactly (`givenIn`: a number with any length unit, or a bare one in the size's own unit that isn't

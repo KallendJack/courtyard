@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  BikePlace,
   type ChangeId,
   THING_DETAILS,
   THING_HISTORY_MAX_CHARACTERS,
@@ -16,7 +17,6 @@ import {
   ThingStatus,
   type ThingSummary,
 } from "@courtyard/contract";
-import sharp from "sharp";
 import { z } from "zod";
 import {
   exists,
@@ -43,6 +43,7 @@ import {
   slugFor,
 } from "../planning-files/index.ts";
 import { FILE_KEYS, readThingText, thingText } from "./file.ts";
+import { keptPhoto } from "./photo.ts";
 
 /**
  * A workspace's Things (ADR 0020): the owner's kit, a Markdown file each in its `things` folder,
@@ -226,43 +227,13 @@ export const thingPhoto = async (
   return ok(there.value ? photoOf(folder.value, slug) : undefined);
 };
 
-/** The longest side of a Thing's kept photo, and the most bytes it takes (ADR 0020). */
-const PHOTO = {
-  longSides: [1600, 1200, 800],
-  maxBytes: 300 * 1024,
-  qualities: [80, 70, 60, 50],
-} as const;
-
-/**
- * A photo as a Thing keeps it: turned the right way up, its details (GPS included) left out,
- * fitted inside 1600 px and saved as a JPEG of at most 300 KB, at a lower quality, or failing that
- * smaller, when it needs to be. `undefined` when the bytes aren't a photo that can be read.
- */
-export const keptPhoto = async (bytes: Uint8Array): Promise<Uint8Array | undefined> => {
-  try {
-    const upright = await sharp(bytes).rotate().toBuffer();
-    let smallest: Uint8Array | undefined;
-    for (const side of PHOTO.longSides) {
-      const fitted = await sharp(upright)
-        .resize(side, side, { fit: "inside", withoutEnlargement: true })
-        .toBuffer();
-      for (const quality of PHOTO.qualities) {
-        smallest = await sharp(fitted).jpeg({ quality, mozjpeg: true }).toBuffer();
-        if (smallest.length <= PHOTO.maxBytes) return smallest;
-      }
-    }
-    return smallest;
-  } catch {
-    return undefined;
-  }
-};
-
 /** A field a save sets, or clears with `null`. */
 type FieldChange = {
   readonly name?: string;
   readonly status?: ThingStatus;
   readonly kind?: ThingKind;
   readonly partOf?: ThingSlug | null;
+  readonly place?: BikePlace | null;
 } & { readonly [K in ThingDetailName | UpcomingField]?: string | null };
 
 /** The fields that hold a Thing's upcoming replacement (#602). */
@@ -649,6 +620,7 @@ const ThingRequest = z.looseObject({
   status: ThingStatus.optional(),
   kind: ThingKind.optional(),
   part_of: z.string().optional(),
+  place: BikePlace.or(z.literal("")).optional(),
   history: z.string().optional(),
   photo: z.number().int().optional(),
   upcoming: z.string().optional(),
@@ -752,6 +724,7 @@ export const createTurnThings = (
       status,
       kind,
       part_of,
+      place,
       history,
       photo,
       upcoming,
@@ -775,6 +748,7 @@ export const createTurnThings = (
       ...(name === undefined ? {} : { name }),
       ...(status === undefined ? {} : { status }),
       ...(kind === undefined ? {} : { kind }),
+      ...(place === undefined ? {} : { place: place === "" ? null : place }),
       ...details,
     };
     for (const [input, field] of UPCOMING_INPUTS) {

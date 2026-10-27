@@ -134,14 +134,6 @@ export {
   setupLines,
 } from "./lib/matt-setup.ts";
 export {
-  MOVE_STEPS_MAX,
-  MOVES_MAX,
-  Move,
-  MoveReview,
-  MovesMade,
-  MoveTicks,
-} from "./lib/move-review.ts";
-export {
   NotificationSubscription,
   NotificationsOff,
   NotificationsStatus,
@@ -158,11 +150,10 @@ export {
 export { OptionsBlock, optionsPart } from "./lib/options.ts";
 export { type Overflow, overflowFrom } from "./lib/overflow.ts";
 export {
-  BIKE_PLACES,
-  BikePlace,
   DrawnPart,
   drawSpaceMessage,
   HomeSubject,
+  PlanCheck,
   PlanningHome,
 } from "./lib/planning-home.ts";
 export { PREVIEW_SIZES, Preview, PreviewSize, StartPreview } from "./lib/preview.ts";
@@ -292,6 +283,8 @@ export {
   TaskOutput,
 } from "./lib/tasks.ts";
 export {
+  BIKE_PLACES,
+  BikePlace,
   SubjectId,
   THING_COUNT_MAX,
   THING_DETAILS,

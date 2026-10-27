@@ -19,7 +19,7 @@ None of its own: its models show on `sessions/`' `GET /api/providers`.
   has one, and its plan usage when it has plan limits (`readUsage`, and `TurnInput.heardUsage` as a turn runs, #66).
 - Behind it are three adapters: `claude.ts`, `codex.ts` and `fake.ts`. How each passes on what Courtyard's models
   read is in [The AI setup](../../../../docs/architecture.md#the-ai-setup). The fake's answers to one-off questions
-  (a title, a note, a move review, a quick question, heard tools) are scripted in `fake-answers.ts`.
+  (a title, a note, a quick question, heard tools) are scripted in `fake-answers.ts`.
 - **Coding** (#248, ADR 0029): Claude codes with Claude Code's own tools behind its hook; Codex, its shell off, with
   Courtyard's coding tools (the framing's `codeTools`), each asked of `CodeTurn` before the adapter does it in the
   worktree. Either way the worker decides every edit and command in one place.

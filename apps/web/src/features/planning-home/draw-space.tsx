@@ -8,13 +8,13 @@ import { startSession } from "../sessions/composer/messages.ts";
 
 type Space = Extract<HomeSubject, { kind: "space" }>;
 
-/** A fact as one sentence of the line: its full stop, if it has none. */
+/** A measurement as one sentence of the line: its full stop, if it has none. */
 const sentence = (fact: string) => (/[.!?]$/.test(fact) ? fact : `${fact}.`);
 
 /**
  * A space with no floor plan yet, leading its Home (#604; Paper, "Tablet · Garage Home: Draw the
- * garage, then projects (#604)"): where its plan will be, its size as saved; that there's no plan
- * yet; everything a plan is drawn from, as saved; and Draw the garage, named from the workspace,
+ * garage, then projects (#604)"): where its plan will be, its size as recorded; that there's no
+ * plan yet; every size record a plan is drawn from (#711); and Draw the garage, named from the space,
  * which starts a session holding those measurements, for a floor plan, and opens it. Once it's
  * drawn, the plan is Home's subject in its place.
  */

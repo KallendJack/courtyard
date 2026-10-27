@@ -1916,8 +1916,8 @@ describe("Builds (#697, ADR 0036)", () => {
     // Every template's JSON Schema is in it (#732), so it grows with each: past this, choose to.
     // 17,144 with each recipe feature's fields and the printed templates' shared parameters said once.
     expect(tool?.description.length).toBeLessThan(18_000);
-    // A Build's size points at a size record only once records take over (#711).
-    expect(tool?.description).not.toContain('"record"');
+    // Records take over (#711): a Build's size can point at a recorded size by its file.
+    expect(tool?.description).toContain('{"record": "sizes/<id>.json"}');
     expect(inputsOf(tool)).toBe(await quotedInGuide("- build: To change a Build"));
   });
 
