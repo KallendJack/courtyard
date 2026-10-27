@@ -165,20 +165,8 @@ export const sizeRoutes = (
     if (!id.success) return apiError(c, { status: 404, error: "No such size." });
     const body = await readBody(c, SizeKeep);
     if (!body.ok) return apiError(c, { status: 400, error: body.error });
-    const read = await readSizes(opened.named.workspace);
-    if (!read.ok) return spaceError(c, read.error);
-    const kept = read.value.sizes.find(({ record }) => record.id === id.data)?.record;
-    if (kept === undefined) return spaceError(c, { kind: "not-found", id: id.data });
-    return opened.save(
-      body.value.others.map((other) => ({
-        kind: "correct",
-        id: other.id,
-        revision: other.revision,
-        value: kept.value,
-        source: kept.source,
-        observed: kept.observed,
-      })),
-    );
+    const kept = { id: id.data, revision: body.value.revision };
+    return opened.save(body.value.others.map((other) => ({ kind: "settle", ...other, kept })));
   });
 
   // The old sizes confirmed, once: those picked recorded, the space marked confirmed.

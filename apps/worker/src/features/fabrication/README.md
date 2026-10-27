@@ -67,9 +67,10 @@ rest is worked out again.
 - `POST /api/fabrication/workspaces/:id/spaces/:slug/sizes/:size`: a correction, `SizeCorrection` (409 when the
   revision isn't the one standing).
 - `POST /api/fabrication/workspaces/:id/spaces/:slug/sizes/:size/keep`: two answers settled, `SizeKeep`, each other
-  record corrected to the one kept, as one change.
+  record corrected to the one kept, as one change (409 when the one kept isn't standing at the revision read; 400
+  for a record that isn't another answer for the same size).
 - `POST /api/fabrication/workspaces/:id/spaces/:slug/old-sizes`: the old sizes confirmed, `OldSizesConfirm`; 409
-  when the list isn't as it was read. Each of these answers `SpaceChanged`, the change Undo takes back.
+  when the list isn't as it was read (one gone, or one found since). Each of these answers `SpaceChanged`, the change Undo takes back.
 - `POST /api/fabrication/workspaces/:id/spaces/:slug/changes/:change/undo`: Undo of a sizes change. Answers the space
   as it is again, a `SpaceSizes`.
 - `GET /api/fabrication/workspaces/:id/builds/:slug/sizes`: the lines the Build's steps need, as its space shows them.
@@ -127,16 +128,18 @@ or Recent changes, and a size save the same way (`POST /api/sessions/:id/sizes/:
   (`supersededBy`); a correction of a revision that isn't the one standing is refused. Two different values for the
   same thing are both kept, each listing the other as a conflict. Several are saved as one change with one Undo
   (`saveSizes`, #709), nothing written when any is refused. Undo (`undoSizeChange`) puts each file back whole, unless
-  it's changed since. A Build's sizes point at records only once they take over (#711). Measured is tied to the
+  it's changed since; a subject ID the change gave that a later record uses counts as changed, so no record loses
+  its Thing. A Build's sizes point at records only once they take over (#711). Measured is tied to the
   owner's message in a session, or to Fabrication itself, where they typed it or ticked it (#709).
 - **A space's sizes** (`sizes/space.ts`, #709): a space's standing records grouped into lines, one per size, one
-  record per value, so two only when they disagree, with what a correction replaced. The sizes any space needs come
+  record per value (the newest, unless that would hide a measured one behind one said), so two only when they disagree, with what a correction replaced. The sizes any space needs come
   first, with where to measure each, then those its Builds' steps need (their needs not done, #710, by name), then
   the rest. The guided re-measure asks for a needed size not measured and for any whose records disagree. A Build's
   needs are the workspace's first space's, a workspace being one area.
 - **Old sizes** (`sizes/old-sizes.ts`): each length with its unit in the space's size and history, the Facts and the
   projects' history, a pair of sides as width then length, named from the words beside it and marked rough when it's
-  said so ("about 2735 mm"); those recorded already left out. Confirming them records those picked and writes
+  said so ("about 2735 mm"), "2,735" read as 2735; those recorded already, and any no record can hold, left out.
+  Confirming them records those picked and writes
   `sizes/confirmed/<subject>.json`, in the same change, so they aren't offered again until it's undone.
 - **The size tool** (`sizes/tool.ts`): one turn's `save_size`, by the labels the turn was shown (`Z1`, and `T1` for
   Things). The model says a size is measured; the worker ties it to the owner's newest message in the session that

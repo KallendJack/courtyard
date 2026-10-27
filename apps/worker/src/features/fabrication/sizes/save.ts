@@ -31,6 +31,7 @@ import {
   recordText,
   SIZES_FOLDER,
   type SizeRefusal,
+  sameName,
   sameValue,
   sizePath,
   standing,
@@ -43,16 +44,25 @@ import {
 
 /**
  * A size to record: a new one of a Thing (by its file's name), or a correction of a standing
- * record, by its ID and the revision read. Its value, source and the day it was observed.
+ * record, by its ID and the revision read, with its value, source and the day it was observed.
+ * Or one of two answers settled: a standing record corrected to another of the same size, kept,
+ * by the revision of it that was read.
  */
-export type SizeEdit = {
-  readonly value: SizeValue;
-  readonly source: RecordSource;
-  readonly observed: string;
-} & (
-  | { readonly kind: "add"; readonly thing: ThingSlug; readonly property: string }
-  | { readonly kind: "correct"; readonly id: SizeRecordId; readonly revision: number }
-);
+export type SizeEdit =
+  | ({
+      readonly value: SizeValue;
+      readonly source: RecordSource;
+      readonly observed: string;
+    } & (
+      | { readonly kind: "add"; readonly thing: ThingSlug; readonly property: string }
+      | { readonly kind: "correct"; readonly id: SizeRecordId; readonly revision: number }
+    ))
+  | {
+      readonly kind: "settle";
+      readonly id: SizeRecordId;
+      readonly revision: number;
+      readonly kept: { readonly id: SizeRecordId; readonly revision: number };
+    };
 
 /** A saved size: its note, the change it was committed as (if git kept it), and the record. */
 export type SizeSaved = {
@@ -96,6 +106,26 @@ const applyEdit = (
   working: Working,
   edit: SizeEdit,
 ): Result<Omit<SizeSaved, "change">, SizeRefusal> => {
+  if (edit.kind === "settle") {
+    // The one kept must still stand as read, and be an answer for the same size.
+    const kept = working.sizes.find(({ record }) => record.id === edit.kept.id);
+    if (kept === undefined) return err({ kind: "not-found", id: edit.kept.id });
+    if (!standing(kept) || kept.record.revision !== edit.kept.revision) {
+      return err({ kind: "stale", size: kept });
+    }
+    const other = working.sizes.find(({ record }) => record.id === edit.id)?.record;
+    if (
+      other !== undefined &&
+      (other.id === kept.record.id ||
+        other.subject !== kept.record.subject ||
+        sameName(other.property) !== sameName(kept.record.property))
+    ) {
+      return err({ kind: "invalid", problem: "Only another answer for the same size is settled." });
+    }
+    const { value, source, observed } = kept.record;
+    const { id, revision } = edit;
+    return applyEdit(working, { kind: "correct", id, revision, value, source, observed });
+  }
   const bySubject = thingsBySubject(working.things);
   let subject: SubjectId;
   let property: string;

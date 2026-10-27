@@ -97,20 +97,26 @@ export const SizeCorrection = z.object({
 });
 export type SizeCorrection = z.infer<typeof SizeCorrection>;
 
+/** A record by its ID and the revision read. */
+const RecordRead = z.object({ id: SizeRecordId, revision: z.number().int().positive() });
+
 /**
- * Two answers settled: the record kept, and each other one by the revision read, corrected to the
- * kept one's value and source.
+ * Two answers settled: the revision read of the record kept, and each other one by the revision
+ * read, corrected to the kept one's value and source.
  */
 export const SizeKeep = z.object({
-  others: z.array(z.object({ id: SizeRecordId, revision: z.number().int().positive() })).min(1),
+  revision: z.number().int().positive(),
+  others: z.array(RecordRead).min(1),
 });
 export type SizeKeep = z.infer<typeof SizeKeep>;
 
 /**
- * The old sizes confirmed, once: each kept by its key, named as the owner left it, ticked as
+ * The old sizes confirmed, once: the keys of every one listed, so a list that's changed since
+ * isn't marked confirmed; and each kept by its key, named as the owner left it, ticked as
  * measured or not (then it's about). One left out isn't recorded.
  */
 export const OldSizesConfirm = z.object({
+  listed: z.array(z.string()),
   picks: z.array(z.object({ key: z.string(), property: sizeProperty, measured: z.boolean() })),
 });
 export type OldSizesConfirm = z.infer<typeof OldSizesConfirm>;

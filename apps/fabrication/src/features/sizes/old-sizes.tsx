@@ -34,6 +34,7 @@ export function OldSizesList(props: {
   const kept = props.oldSizes.filter((old) => pickOf(old) !== "leave");
   const confirm = () =>
     void confirming.run({
+      listed: props.oldSizes.map(({ key }) => key),
       picks: kept.map((old) => ({
         key: old.key,
         property: old.property,

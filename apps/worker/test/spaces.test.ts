@@ -86,6 +86,24 @@ describe("old sizes in sentences", () => {
       { property: "Floor to ceiling", value: quantity(2.1, "m"), rough: false },
     ]);
   });
+
+  it("reads a comma between thousands as one number, and leaves out what no record can hold", () => {
+    expect(
+      oldSizesIn([
+        { sentence: "It's 2,735 mm wide, and 2,4 m high.", from: "Facts", day: null },
+        { sentence: "A typo: 20000000 mm long.", from: "Facts", day: null },
+      ]).map(({ property, value }) => ({ property, value })),
+    ).toEqual([
+      { property: "Inside width", value: quantity(2735) },
+      { property: "Floor to ceiling", value: quantity(2.4, "m") },
+    ]);
+  });
+
+  it("gives the same sentence written twice keys of its own", () => {
+    const twice = { sentence: "Ceiling 2.4 m.", from: "Facts", day: null };
+    const [one, two] = oldSizesIn([twice, twice]);
+    expect(one?.key).not.toBe(two?.key);
+  });
 });
 
 describe("a space's sizes", () => {
@@ -225,12 +243,55 @@ describe("a space's sizes", () => {
     const [other, kept] = length?.records ?? [];
     const settled = await changed(
       await postJson(request, `${SPACE}/sizes/${kept?.id}/keep`, {
+        revision: kept?.revision,
         others: [{ id: other?.id, revision: other?.revision }],
       }),
     );
     const [after] = settled.sizes.parts[0]?.lines ?? [];
     expect(after?.records.map(({ value }) => value)).toEqual([quantity(2741)]);
     expect(after?.toMeasure).toBe(false);
+  });
+
+  it("refuses to keep an answer corrected since, or to settle another size with it", async () => {
+    const request = await owner();
+    for (const value of [2735, 2741]) {
+      await postJson(request, `${SPACE}/sizes`, {
+        thing: "bench",
+        property: "Length",
+        value: quantity(value),
+        source: "measured",
+      });
+    }
+    const width = await changed(
+      await postJson(request, `${SPACE}/sizes`, {
+        thing: "garage",
+        property: "Inside width",
+        value: quantity(2600),
+        source: "reported",
+      }),
+    );
+    const [other, kept] = width.sizes.parts[0]?.lines[0]?.records ?? [];
+    const garageWidth = width.sizes.space.lines[0]?.records[0];
+
+    // Another size isn't one of its answers: nothing is written.
+    const elsewhere = await postJson(request, `${SPACE}/sizes/${kept?.id}/keep`, {
+      revision: kept?.revision,
+      others: [{ id: garageWidth?.id, revision: garageWidth?.revision }],
+    });
+    expect(elsewhere.status).toBe(400);
+    expect((await spaceOf(request)).space.lines[0]?.records[0]?.value).toEqual(quantity(2600));
+
+    // The one kept was corrected since it was read.
+    await postJson(request, `${SPACE}/sizes/${kept?.id}`, {
+      revision: 1,
+      value: quantity(2745),
+      source: "measured",
+    });
+    const stale = await postJson(request, `${SPACE}/sizes/${kept?.id}/keep`, {
+      revision: 1,
+      others: [{ id: other?.id, revision: other?.revision }],
+    });
+    expect(stale.status).toBe(409);
   });
 
   it("offers the old sizes once, and records only what's ticked as measured", async () => {
@@ -266,6 +327,7 @@ describe("a space's sizes", () => {
     const [width, length, , door] = oldSizes;
     const confirmed = await changed(
       await postJson(request, `${SPACE}/old-sizes`, {
+        listed: oldSizes.map(({ key }) => key),
         picks: [
           { key: width?.key, property: "Inside width", measured: false },
           { key: length?.key, property: "Inside length", measured: true },
@@ -295,9 +357,52 @@ describe("a space's sizes", () => {
 
   it("refuses a confirm of an old size that isn't listed any more", async () => {
     const request = await owner();
+    const { oldSizes } = await spaceOf(request);
     const response = await postJson(request, `${SPACE}/old-sizes`, {
+      listed: oldSizes.map(({ key }) => key),
       picks: [{ key: "gone", property: "Inside width", measured: true }],
     });
     expect(response.status).toBe(409);
+  });
+
+  it("refuses a confirm when an old size was found after the list was read", async () => {
+    const request = await owner();
+    const { oldSizes } = await spaceOf(request);
+    const [width] = oldSizes;
+    await writeFile(
+      join(garage(), "CONTEXT.md"),
+      "# Garage\n\n## Facts\n\n- The garage is about 2735 mm wide and 5137 mm long.\n- Ceiling height 2.45 m.\n- The window is 900 mm wide.\n",
+    );
+    const response = await postJson(request, `${SPACE}/old-sizes`, {
+      listed: oldSizes.map(({ key }) => key),
+      picks: [{ key: width?.key, property: "Inside width", measured: false }],
+    });
+    expect(response.status).toBe(409);
+    expect((await spaceOf(request)).oldSizes).toHaveLength(oldSizes.length + 1);
+  });
+
+  it("keeps a subject ID while a later size uses it: Undo of the first is refused", async () => {
+    const request = await owner();
+    const { oldSizes } = await spaceOf(request);
+    const confirmed = await changed(
+      await postJson(request, `${SPACE}/old-sizes`, {
+        listed: oldSizes.map(({ key }) => key),
+        picks: [],
+      }),
+    );
+    await changed(
+      await postJson(request, `${SPACE}/sizes`, {
+        thing: "garage",
+        property: "Door width",
+        value: quantity(900),
+        source: "measured",
+      }),
+    );
+    const undone = await postJson(request, `${SPACE}/changes/${confirmed.change}/undo`, {});
+    expect(undone.status).toBe(409);
+    const door = (await spaceOf(request)).space.lines.find(
+      ({ property }) => property === "Door width",
+    );
+    expect(door?.records.map(({ value }) => value)).toEqual([quantity(900)]);
   });
 });

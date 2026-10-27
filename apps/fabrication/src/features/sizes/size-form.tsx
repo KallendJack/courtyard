@@ -32,6 +32,7 @@ export type SizeSaving =
   | {
       readonly kind: "keep";
       readonly id: SizeRecordId;
+      readonly revision: number;
       readonly others: readonly { id: SizeRecordId; revision: number }[];
     };
 
@@ -146,6 +147,7 @@ export function SizeForm(props: {
                   void saving.run({
                     kind: "keep",
                     id: record.id,
+                    revision: record.revision,
                     others: records
                       .filter((other) => other.id !== record.id)
                       .map(({ id, revision }) => ({ id, revision })),
@@ -179,7 +181,7 @@ export function SizeForm(props: {
               inputMode="decimal"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
-              placeholder={was?.kind === "quantity" ? `${was.value}` : "2741"}
+              placeholder={was?.kind === "quantity" ? `${was.value}` : undefined}
             />
           </label>
           <SegmentedChoice label="Unit" options={UNITS} value={unit} onChange={setUnit} />

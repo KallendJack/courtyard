@@ -1,17 +1,18 @@
 import { join } from "node:path";
-import type {
-  BuildSlug,
-  OldSize,
-  OldSizesConfirm,
-  OwnerSizeSource,
-  RecordSource,
-  SizeLine,
-  SizeRecord,
-  SpaceSizes,
-  SubjectId,
-  ThingSizes,
-  ThingSlug,
-  WorkspaceId,
+import {
+  type BuildSlug,
+  ObservedDay,
+  type OldSize,
+  type OldSizesConfirm,
+  type OwnerSizeSource,
+  type RecordSource,
+  type SizeLine,
+  type SizeRecord,
+  type SpaceSizes,
+  type SubjectId,
+  type ThingSizes,
+  type ThingSlug,
+  type WorkspaceId,
 } from "@courtyard/contract";
 import { readTextFile } from "../../../lib/files.ts";
 import { err, ok, type Result } from "../../../lib/result.ts";
@@ -20,7 +21,14 @@ import { type PlanningFilesTarget, planningFolder } from "../../planning-files/i
 import { readProjects, readProjectText } from "../../projects/index.ts";
 import { historyDate, type ReadThing, readThingsIn } from "../../things/index.ts";
 import { CONTEXT_FILE } from "../../workspaces/index.ts";
-import { type ReadSize, readSizes, type SizeRefusal, standing } from "./index.ts";
+import {
+  type ReadSize,
+  readSizes,
+  type SizeRefusal,
+  sameName,
+  sameValue,
+  standing,
+} from "./index.ts";
 import { type OldSentence, oldSizesIn } from "./old-sizes.ts";
 import { confirmedPath, type SizeEdit, saveSizes } from "./save.ts";
 
@@ -36,24 +44,11 @@ const SPACE_NEEDS: readonly { property: string; where: string }[] = [
   { property: "Floor to ceiling", where: "floor to the lowest point overhead" },
 ];
 
-/** A size's name as lines match it: lower case, without "the", an apostrophe's s or punctuation. */
-const sameName = (name: string) =>
-  name
-    .toLowerCase()
-    .replace(/['’]s\b/g, "")
-    .replace(/[^a-z0-9 ]/g, " ")
-    .split(/\s+/)
-    .filter((word) => word !== "" && word !== "the")
-    .join(" ");
-
 /** A need's words as a size's name: "the back wall's height" as "Back wall's height". */
 const needName = (what: string) => {
   const name = what.trim().replace(/^the\s+/i, "");
   return `${name[0]?.toUpperCase() ?? ""}${name.slice(1)}`;
 };
-
-const sameValue = (a: SizeRecord["value"], b: SizeRecord["value"]) =>
-  JSON.stringify(a) === JSON.stringify(b);
 
 /** A size a space needs: its name, where to measure it, and the Builds whose steps need it. */
 export type Needed = { property: string; where: string | null; builds: BuildSlug[] };
@@ -74,8 +69,11 @@ export const linesOf = (
   for (const { record } of all.filter(standing)) {
     const key = sameName(record.property);
     const group = groups.get(key) ?? { property: record.property, records: [] };
-    // The newest record of each value stands for it.
-    group.records = [...group.records.filter((one) => !sameValue(one.value, record.value)), record];
+    // The newest record of each value stands for it, unless that hides one measured behind one said.
+    const same = group.records.find((one) => sameValue(one.value, record.value));
+    if (same?.source.kind !== "measured" || record.source.kind === "measured") {
+      group.records = [...group.records.filter((one) => one !== same), record];
+    }
     groups.set(key, group);
   }
   const lineOf = (property: string, need: Needed | undefined): SizeLine => {
@@ -302,9 +300,15 @@ export const confirmOldSizes = async (
 ) => {
   const read = await readSpaceIn(target, slug);
   if (!read.ok) return read;
+  // Confirmed only as listed: one found since (a Fact added in chat, say) is offered first.
+  const listed = new Set(confirm.listed);
+  const { oldSizes } = read.value;
+  if (oldSizes.length !== listed.size || oldSizes.some(({ key }) => !listed.has(key))) {
+    return err({ kind: "old-sizes-changed" } as const);
+  }
   const edits: SizeEdit[] = [];
   for (const pick of confirm.picks) {
-    const old = read.value.oldSizes.find(({ key }) => key === pick.key);
+    const old = oldSizes.find(({ key }) => key === pick.key);
     if (old === undefined) return err({ kind: "old-sizes-changed" } as const);
     // The same size said twice (in Facts and a history line, say) is recorded once.
     const twice = edits.some(
@@ -325,10 +329,10 @@ export const confirmOldSizes = async (
         },
         options.now,
       ),
-      ...(old.day === null || !/^\d{4}-\d{2}-\d{2}$/.test(old.day) ? {} : { observed: old.day }),
+      ...(old.day === null || !ObservedDay.safeParse(old.day).success ? {} : { observed: old.day }),
     });
   }
-  if (read.value.oldSizes.length === 0) return err({ kind: "old-sizes-changed" } as const);
+  if (oldSizes.length === 0) return err({ kind: "old-sizes-changed" } as const);
   return saveSizes(target, edits, {
     now: options.now,
     title: `Confirm old sizes: ${read.value.space.summary.name}`,

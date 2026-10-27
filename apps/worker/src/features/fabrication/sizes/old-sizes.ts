@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { OldSize, RecordUnit } from "@courtyard/contract";
+import { type OldSize, type RecordUnit, SizeQuantity } from "@courtyard/contract";
 
 // Old sizes (#709): sizes written in sentences before sizes were records (a Facts line, a
 // project's or the space's history, the space's size), found so the owner can confirm them once.
@@ -12,8 +12,12 @@ export type OldSentence = {
   readonly day: string | null;
 };
 
+/**
+ * A number: with commas between its thousands ("2,735", "2,735.5"), or a decimal point or comma
+ * ("2.45", "2,45").
+ */
+const NUMBER = String.raw`(\d{1,3}(?:,\d{3})+(?:\.\d+)?(?!\d)|\d+(?:[.,]\d+)?)`;
 /** A length with its unit, or none when the next one's says it ("5.14 × 2.74 m"). */
-const NUMBER = String.raw`(\d+(?:[.,]\d+)?)`;
 const UNIT = String.raw`(mm|cm|m)\b`;
 /** Two sides, "5.14 × 2.74 m", "240cm x 180cm", the first maybe without its unit. */
 const PAIR = new RegExp(String.raw`${NUMBER}\s*(?:${UNIT})?\s*[×xX]\s*${NUMBER}\s*${UNIT}`, "g");
@@ -66,12 +70,19 @@ const nameOf = (before: string, after: string) => {
   return `${name[0]?.toUpperCase()}${name.slice(1)}`;
 };
 
-const numberOf = (text: string) => Number(text.replace(",", "."));
+/** A number as written: "2,735" is 2735, "2,45" is 2.45. */
+const numberOf = (text: string) =>
+  Number(
+    /^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(text) ? text.replaceAll(",", "") : text.replace(",", "."),
+  );
 
-/** A size's key: the same sentence, where and size, the same key each time it's read. */
-const keyOf = (sentence: OldSentence, at: number) =>
+/**
+ * A size's key: the same sentence, where and size, the same key each time it's read; a sentence
+ * written twice in one place is counted, so each copy's sizes have keys of their own.
+ */
+const keyOf = (sentence: OldSentence, copy: number, at: number) =>
   createHash("sha256")
-    .update(`${sentence.from}\n${sentence.sentence}\n${at}`)
+    .update(`${sentence.from}\n${sentence.sentence}\n${copy}\n${at}`)
     .digest("hex")
     .slice(0, 16);
 
@@ -80,21 +91,26 @@ const keyOf = (sentence: OldSentence, at: number) =>
  * width then its length. Each is named from the words around it and marked rough when it's said
  * so ("about 2735 mm").
  */
-export const oldSizesIn = (sentences: readonly OldSentence[]): OldSize[] =>
-  sentences.flatMap((sentence) => {
+export const oldSizesIn = (sentences: readonly OldSentence[]): OldSize[] => {
+  const copies = new Map<string, number>();
+  return sentences.flatMap((sentence) => {
     const { sentence: text } = sentence;
+    const copy = copies.get(`${sentence.from}\n${text}`) ?? 0;
+    copies.set(`${sentence.from}\n${text}`, copy + 1);
     const found: (OldSize & { at: number })[] = [];
     const taken: [number, number][] = [];
     const add = (at: number, property: string, value: number, unit: RecordUnit, rough: boolean) => {
-      if (!(value > 0)) return;
+      // Only what a record can hold: more than nothing, and no typo's millions.
+      const size = SizeQuantity.safeParse({ kind: "quantity", value, unit });
+      if (!(value > 0) || !size.success) return;
       found.push({
         at,
-        key: keyOf(sentence, at),
+        key: keyOf(sentence, copy, at),
         sentence: text,
         from: sentence.from,
         day: sentence.day,
         property,
-        value: { kind: "quantity", value, unit },
+        value: size.data,
         rough,
       });
     };
@@ -117,3 +133,4 @@ export const oldSizesIn = (sentences: readonly OldSentence[]): OldSize[] =>
     }
     return found.sort((a, b) => a.at - b.at).map(({ at: _, ...size }) => size);
   });
+};

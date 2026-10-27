@@ -9,14 +9,19 @@ import {
 } from "@courtyard/contract";
 import { listFolder, readTextFile } from "../../../lib/files.ts";
 import { err, ok, type Result } from "../../../lib/result.ts";
-import { undoWholeFiles, type WholeFile } from "../../context-folder/index.ts";
+import {
+  undoWholeFiles,
+  type WholeFile,
+  type WholeFilesUndoRefusal,
+  wholeFilesOf,
+} from "../../context-folder/index.ts";
 import {
   type PlanningFilesTarget,
   type PlanningFolderRefusal,
   pathInWorkspace,
   planningFolder,
 } from "../../planning-files/index.ts";
-import type { ReadThing } from "../../things/index.ts";
+import { type ReadThing, readThingText } from "../../things/index.ts";
 
 /**
  * Size records (ADR 0037, #708), hosted in a planning workspace: a JSON file each in its `sizes`
@@ -62,6 +67,16 @@ export const valueText = (value: SizeValue) =>
         : "no";
 
 export const sameValue = (a: SizeValue, b: SizeValue) => JSON.stringify(a) === JSON.stringify(b);
+
+/** A size's name as lines match it: lower case, without "the", an apostrophe's s or punctuation. */
+export const sameName = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/['’]s\b/g, "")
+    .replace(/[^a-z0-9 ]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word !== "" && word !== "the")
+    .join(" ");
 
 /** A record as read, and its path in the workspace's folder. */
 export type ReadSize = { readonly record: SizeRecord; readonly path: string };
@@ -164,14 +179,43 @@ export const sizeRows = (sizes: readonly ReadSize[], things: readonly ReadThing[
   });
 };
 
+/** The subject IDs a change's files gave Things: a Thing's file without one before, with one after. */
+const subjectsGiven = (files: readonly WholeFile[]) =>
+  files.flatMap(({ path, before, after }) => {
+    if (!/^things\/[^/]+\.md$/.test(pathInWorkspace(path)) || after === null) return [];
+    const had = before === null ? undefined : readThingText(before);
+    const has = readThingText(after);
+    if (!has.ok || has.value.fields.subject === undefined) return [];
+    if (had?.ok === true && had.value.fields.subject !== undefined) return [];
+    const folder = path.slice(0, path.length - pathInWorkspace(path).length);
+    return [{ folder, subject: has.value.fields.subject }];
+  });
+
 /**
  * Undoes a change to sizes (recorded or corrected), as a change of its own: each file it wrote,
- * the Thing given its subject ID too, goes back as it was, unless it's changed since.
+ * the Thing given its subject ID too, goes back as it was, unless it's changed since. A subject ID
+ * it gave that a later record uses counts as changed since, so no record loses its Thing (#709).
  */
-export const undoSizeChange = (
+export const undoSizeChange = async (
   target: Pick<PlanningFilesTarget, "contextDir" | "contextFolder" | "sessionId">,
   id: ChangeId,
-) => undoWholeFiles(target, { id, kinds: ["size"] });
+): Promise<Result<null, WholeFilesUndoRefusal>> => {
+  const found = await target.contextFolder.changeOf(id);
+  if (found.ok && found.value !== undefined) {
+    const files = await wholeFilesOf(target.contextFolder, [found.value]);
+    if (!files.ok) return err({ kind: "storage" });
+    const ours = new Set(found.value.files);
+    for (const { folder, subject } of subjectsGiven(files.value[0] ?? [])) {
+      const read = await readSizesIn(join(target.contextDir, folder));
+      if (!read.ok) return err({ kind: "storage" });
+      const later = read.value.sizes.some(
+        ({ record, path }) => record.subject === subject && !ours.has(`${folder}${path}`),
+      );
+      if (later) return err({ kind: "changed-since" });
+    }
+  }
+  return undoWholeFiles(target, { id, kinds: ["size"] });
+};
 
 /** The record a path in the workspace's folder names (`sizes/<id>.json`), if it names one. */
 const idOfPath = (path: string) => {
