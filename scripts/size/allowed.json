@@ -24,7 +24,7 @@
     "apps/worker/src/features/next-up/index.ts": 433,
     "apps/worker/src/features/notifications/index.ts": 429,
     "apps/worker/src/features/saves/index.ts": 430,
-    "apps/worker/src/features/sessions/index.ts": 4182,
+    "apps/worker/src/features/sessions/index.ts": 4171,
     "apps/worker/src/features/sessions/routes.ts": 669,
     "apps/worker/src/features/things/index.ts": 864,
     "apps/worker/src/features/workspaces/index.ts": 862,
