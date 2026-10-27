@@ -39,6 +39,8 @@ for (const [fold, viewport] of [
       await workspaceWithBuild(page);
       await openInFabrication(page);
       await page.setViewportSize(viewport);
+      // Not started, it opens on the parts page (#778).
+      await page.getByRole("button", { name: "Start step 1" }).click();
       const steps = await stepsOf(page);
       const panel = page.getByRole("region", { name: "Steps" });
       const done = page.getByRole("button", { name: /^Done, / });

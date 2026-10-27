@@ -36,13 +36,14 @@ if (recipe) {
 | File | What it does |
 |---|---|
 | `index.ts` | What callers import |
-| `build.ts` | What a template derives: parts with a box each for the 3D view, the cut plan, the buy list, steps, findings, and a printed part's own; and what it's worked out with besides its parameters (`BuildSetting`: the owner's tools, the ways steps done were done) |
+| `build.ts` | What a template derives: parts with a box each for the 3D view, the cut plan, the buy list, the fixings bag, steps, findings, and a printed part's own (`print/build-print.ts`); and what it's worked out with besides its parameters (`BuildSetting`: the owner's tools, the ways steps done were done) |
+| `parts-page/` | The parts page's fixings bag (#778, `bagOf`): each fixing from the buy list by its kind and count, a bolt with the washers and nuts of its thread as one bolt set; and each step's uses (`withUses`): every piece of each part it puts on, its fixings and what's fitted to those parts, for any Build |
 | `scene.ts` | What a step's picture is made of: its pieces and the marks drawn over them, callouts among them (#783) |
 | `stock.ts` | What parts are cut from and fixed with: timber, sheets, fixings and their prices. A template takes each slot's stock as a parameter, so a slot can be swapped |
 | `catalog.ts` | The stock options (#704): each timber's and sheet's sizes, what it's like, and the jobs it suits, and what each is like for the slots it would fill, judged by the strictest |
 | `options.ts` | A template's slots offered those options, each costed by working the Build out again with it, the stock in use as it is; a pick swapped in, keeping the old one's price and size; the making rule that flags stock wrong for its slot; and whether stock the owner has will do for a stock (`standsInFor`, #770) |
 | `cut-plan.ts` | Packing: timber pieces into lengths and sheet pieces into sheets, the kerf between every two, each sheet's first cut along it or across it, whichever needs fewer sheets, on the owner's own lengths and sheets first (spares, #770); and the lengths cut the same way, together, as they're marked |
-| `close-ups/` | The close-ups by type (#813), for any Build, each drawn in 3D from the pieces it joins and their sizes (`drawing.ts` lays it flat, its pills in a column): an angle bracket in a corner (`bracket.ts`, and the brackets' plates for a 3D view), a bolt through a plate (`bolt-through.ts`, the castors' two), a screwed overlap (`overlap.ts`), measuring and marking a length with the owner's square (`measure.ts`), and driving a screw, its end zone and the drill's clutch (`driving.ts`); `techniques.ts` gives each step its techniques, in full the first time the steps use each |
+| `close-ups/` | The close-ups by type (#813), for any Build, each drawn in 3D from the pieces it joins and their sizes (`drawing.ts` lays it flat, its pills in a column): an angle bracket in a corner (`bracket.ts`, and the brackets' plates for a 3D view), a bolt through a plate (`bolt-through.ts`, the castors' two), a screwed overlap (`overlap.ts`), measuring and marking a length with the owner's square (`measure.ts`), and driving a screw, its end zone and the drill's clutch (`driving.ts`); the first-time skills (`skills.ts`, #778): a pilot hole with tape at the screw's depth, a countersink, and squaring a frame by its diagonals; `techniques.ts` gives each step its techniques, in full the first time the steps use each |
 | `buy-list.ts` | Whole lengths, sheets and packs, at the prices given; an unpriced line is counted, never guessed; and the tools the owner chose to buy, while they're missing, a set's missing bits by size (#763) |
 | `findings.ts` | The making rules code checks: a bolt's length to use, long enough for what it passes through plus two threads, and the owner's own that are short (`boltLength`), tools needed and not to hand, sizes assumed |
 | `loads.ts`, `finding.ts` | What a Build carries (#771): a load said in plain words read as a load class from a sourced table, the heaviest any word says and the heaviest when none is known (`loadClassOf`); each sheet's stiffness by its thickness, sourced, its weaker way for a layered sheet (`stiffnessOf`); and every finding a Build can have, the making rules' and the checks' |
@@ -122,6 +123,11 @@ if (recipe) {
   its lines as they were: nothing is handed on once it is.
 - **Each step says which parts it puts on the Build** (none for checking, marking and cutting), and something fitted
   (a castor) says the part it's fitted to, so the 3D view can build the Build up step by step (#699).
+- **Each step's uses add up to the Build** (#778): every piece of every part is used by exactly one step, the one
+  that puts it on, and every fixing on the buy list by the steps that fix with it, so laying out each step's uses in
+  turn empties the parts page and the bag. A package test fails a Build where they don't.
+- **A first-time skill is drawn once** (#778): the first step that drills a pilot hole, countersinks or squares a
+  frame shows it in full, from that step's own pieces and sizes; later steps name it with a "how?" tap.
 - **Each step has an ID** saying what it does ("fit-castors"), the same whichever steps the Build has, so the
   owner's progress stays on its step when one before it comes or goes.
 - **Each step has a picture of the job as it's done** (#754): the length on the Workmate or in its jaws (clamped on the
@@ -211,7 +217,8 @@ used first, a pick, and what can't be placed), `recipe/checks.test.ts` (a 1200 m
 tins sagging, with a centre support; the plainest fixes that pass; loads in plain words; a tall narrow rack tipping,
 and a tall stand on castors; a frame with no brace; screws too short to grip and long enough to come out the far side), `close-ups/close-ups.test.ts` (each close-up type following its
 pieces' sizes, a made-up 70 × 70 corner's bracket sized to it; the guard; and which bench steps show which, in full
-or as a tap), `bench/bench.test.ts` (the golden bench, the garage workbench's
+or as a tap; each first-time skill once), `parts-page/parts-page.test.ts` (each step's uses adding up to the bench's and
+the printed part's parts and bag exactly, and the bag's bolt sets), `bench/bench.test.ts` (the golden bench, the garage workbench's
 hand-checked numbers with invented names, in `bench/fixtures/golden.ts`), `bench/scenes.test.ts` (each step's picture
 for the golden bench, by the tools to hand, and the walk-throughs), `bench/your-tools.test.ts` (the steps following
 the owner's tools, a step started kept as it was started, tools found by the words in their names, a stand-in, bits by

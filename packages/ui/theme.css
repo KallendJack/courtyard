@@ -43,6 +43,7 @@
   --color-chart-peat: var(--chart-peat);
   --color-timber: var(--timber);
   --color-sheet: var(--sheet);
+  --color-ply: var(--ply);
   --color-fitted: var(--fitted);
   --color-printed: var(--printed);
   --color-yours: var(--yours);
@@ -212,6 +213,8 @@
   --sheet: #dcc99c;
   --fitted: #6b6b6b;
   --printed: #9fb2c6;
+  /* Plywood on Fabrication's parts page (#778): its own colour beside timber's, as its board has it. */
+  --ply: #b9805c;
   /* In a step's picture (#826, its boards): what holds the work grey, a hand tool orange. */
   --support: #3d3d3d;
   --tool: #e0803c;

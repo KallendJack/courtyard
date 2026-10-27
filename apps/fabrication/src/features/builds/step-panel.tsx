@@ -7,9 +7,10 @@ import { Disclosure } from "@/components/disclosure";
 import { Techniques } from "./close-up.tsx";
 import { LengthBar } from "./cut-plan.tsx";
 import { Findings } from "./findings.tsx";
+import { UsesStrip } from "./parts/uses-strip.tsx";
 import { type Detail, type Progress, useDetail } from "./progress.ts";
 import { BeforeMovingOn, WalkThrough } from "./step/how.tsx";
-import { chipOf, listed, stepFindings, wayChanges } from "./words.ts";
+import { chipOf, stepFindings, wayChanges } from "./words.ts";
 
 // A Build's steps as an instruction manual (#699; Paper, 2 · Agreed, "Fabrication · Build steps
 // v2, teaching · Tablet (#699)" and "· Build steps, cutting by your tools · Tablet (#699)"): one
@@ -266,19 +267,6 @@ export function Meaning(props: { meaning: { word: string; means: string }; close
   );
 }
 
-/** A step's fixings: "5 × 80 screws (16)", a count after its size so it doesn't read as one more. */
-export function Fixings(props: { step: BuildStep }) {
-  if (props.step.fixings.length === 0) return null;
-  return (
-    <p className="text-interface text-muted-foreground">
-      Fixings:{" "}
-      <span className="text-foreground">
-        {listed(props.step.fixings.map((fixing) => `${fixing.name} (${fixing.count})`))}
-      </span>
-    </p>
-  );
-}
-
 /** How the steps are done now Your tools have changed (#777), said whichever step is showing. */
 export function WayChanges(props: { derived: DerivedBuild }) {
   return wayChanges(props.derived).map((change) => (
@@ -290,9 +278,9 @@ export function WayChanges(props: { derived: DerivedBuild }) {
 
 /**
  * The step reached, as the instruction manual shows it beside the 3D view on a computer (#699):
- * which step and how long it takes, its title and how to batch it, its walk-through, its
- * checklist, a word's meaning when tapped, its tips behind a tap (#789), its tools, its fixings,
- * its techniques in full the first time or a "how?" tap (#813), the check before moving on with
+ * which step and how long it takes, its title and how to batch it, what it uses (#778), its
+ * walk-through, its checklist, a word's meaning when tapped, its tips behind a tap (#789), its
+ * tools, its techniques in full the first time or a "how?" tap (#813), the check before moving on with
  * its photo sent by `sendPhoto`, and how it's done and how much is said. At the bench it's
  * `BenchStep`, as its boards have it (#826).
  */
@@ -316,6 +304,10 @@ export function StepPanel(props: {
         <h2 className="display-title text-sheet-title text-foreground">{step.title}</h2>
         <p className="text-interface text-muted-foreground">{step.batch}</p>
       </div>
+      <UsesStrip
+        step={step}
+        done={tickedIn(progress.progress, step.id).length >= step.actions.length}
+      />
       <WayChanges derived={derived} />
       {detail === "how" && <WalkThrough step={step} parts={derived.parts} />}
       <Checklist
@@ -328,7 +320,6 @@ export function StepPanel(props: {
       {meaning !== undefined && <Meaning meaning={meaning} close={() => setWord(undefined)} />}
       <Tips tips={step.tips} />
       <ToolChips step={step} />
-      <Fixings step={step} />
       <Findings findings={stepFindings(derived, step)} label="To check in this step" />
       <Techniques step={step} parts={derived.parts} />
       <BeforeMovingOn step={step} sendPhoto={props.sendPhoto} />

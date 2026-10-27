@@ -55,6 +55,7 @@ describe("a Build's progress", () => {
       ways: [],
       buying: [],
       parked: [],
+      labelled: [],
     });
   });
 
@@ -73,7 +74,7 @@ describe("a Build's progress", () => {
     expect(kept.status).toBe(200);
     // The castor step started keeps the lines it was started on (#783).
     const ways = [{ step: "fit-castors", tool: "through-plate" }];
-    const all = { ...progress, ways, buying: [], parked: [] };
+    const all = { ...progress, ways, buying: [], parked: [], labelled: [] };
     expect(BuildProgress.parse(await kept.json())).toEqual(all);
     // Read from the Build again, as another device opening it would.
     expect((await opened(request)).progress).toEqual(all);
@@ -89,6 +90,17 @@ describe("a Build's progress", () => {
     expect(latest?.trailers).toContain("Courtyard-Change: build-progress");
     const recent = await request("/api/workspaces/garage/changes");
     expect(JSON.stringify(await recent.json())).not.toContain("Progress on Build");
+  });
+
+  it("keeps the parts page as where the owner is, and the parts labelled there (#778)", async () => {
+    const request = await owner();
+
+    const kept = await keep(request, { step: "parts", ticked: [], labelled: ["A", "B", "C"] });
+
+    expect(kept.status).toBe(200);
+    const { progress } = await opened(request);
+    expect(progress.step).toBe("parts");
+    expect(progress.labelled).toEqual(["A", "B", "C"]);
   });
 
   it("refuses a step the Build doesn't have", async () => {
@@ -115,7 +127,13 @@ describe("a Build's progress", () => {
     );
 
     const build = await opened(request);
-    expect(build.progress).toEqual({ ...progress, ways: [], buying: [], parked: [] });
+    expect(build.progress).toEqual({
+      ...progress,
+      ways: [],
+      buying: [],
+      parked: [],
+      labelled: [],
+    });
     expect(build.derived.steps.find((step) => step.id === "fit-supports")?.number).toBe(6);
   });
 
@@ -133,6 +151,7 @@ describe("a Build's progress", () => {
       ways: [],
       buying: [],
       parked: [],
+      labelled: [],
     });
     // And it's kept the new way from the next tick.
     const kept = await keep(request, {
@@ -151,6 +170,7 @@ describe("a Build's progress", () => {
       ticked: [cutDone],
       ways: [],
       buying: [],
+      labelled: [],
     });
     expect(BuildProgress.parse(await kept.json()).ways).toEqual([
       { step: "cut-timber", tool: "hand-saw" },

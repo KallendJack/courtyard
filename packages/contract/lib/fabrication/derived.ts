@@ -89,6 +89,28 @@ export const BuildBuyLine = z.object({
 export type BuildBuyLine = z.infer<typeof BuildBuyLine>;
 
 /**
+ * A fixing in the bag, as the parts page draws it (#778): its kind, name and count, and the
+ * buy-list lines it is (a bolt set is the bolts, and the washers and nuts of their thread).
+ */
+export const BuildBagItem = z.object({
+  kind: z.enum([
+    "screw",
+    "bracket",
+    "bolt-set",
+    "bolt",
+    "washer",
+    "nut",
+    "castor",
+    "fitted",
+    "other",
+  ]),
+  name: z.string(),
+  count: z.number(),
+  of: list(z.object({ name: z.string(), count: z.number() })),
+});
+export type BuildBagItem = z.infer<typeof BuildBagItem>;
+
+/**
  * A tool a step needs, and whether it's to hand: as something else the owner has that will do
  * (`standIn`, "Step stool", #763), and for drill bits, each bit it drills with and whether the
  * owner's set has it (left out while the set's sizes aren't known).
@@ -188,6 +210,11 @@ export const BuildStep = z.object({
   helper: z.boolean(),
   parts: list(z.string()),
   adds: list(z.string()),
+  /** What it takes, to lay out first (#778): every piece it puts on, and its fixings. */
+  uses: z.object({
+    parts: list(z.object({ label: z.string(), count: z.number().int() })),
+    fixings: list(z.object({ name: z.string(), count: z.number() })),
+  }),
   ways: list(
     z.object({ tool: z.string(), name: z.string(), using: z.boolean(), toHand: z.boolean() }),
   ),
@@ -331,6 +358,7 @@ export const DerivedBuild = z.object({
   fitted: list(z.object({ name: z.string(), on: z.string(), boxes: list(BuildBox) })),
   cutPlan: BuildCutPlan,
   buyList: z.object({ lines: list(BuildBuyLine), total: z.number(), unpriced: z.number() }),
+  bag: list(BuildBagItem),
   steps: list(BuildStep),
   /** The words the steps use that a beginner may not know, each with a line saying what it means. */
   glossary: list(z.object({ word: z.string(), means: z.string() })),

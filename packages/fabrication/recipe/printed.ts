@@ -16,9 +16,9 @@ import {
   type Part,
   type PrintLine,
   type Result,
-  type Step,
 } from "../build.ts";
 import { buyLine } from "../buy-list.ts";
+import type { StepDraft } from "../parts-page/index.ts";
 import { fitsPlate, toolsOf } from "../print/index.ts";
 import { checkRecipe, envelopeOf } from "../print/recipe.ts";
 import type { FixingLine } from "./fixings.ts";
@@ -308,11 +308,11 @@ const quiet = {
 export const printedSteps = (
   printed: readonly PrintedPart[],
   recipe: BuildRecipe,
-): Omit<Step, "number">[] => {
+): Omit<StepDraft, "number">[] => {
   const toHand = new Set(recipe.tools);
   const stockName = (id: string) => recipe.stock.find((item) => item.id === id)?.name ?? id;
   const prints = printed.map(
-    ({ part, piece }): Omit<Step, "number"> => ({
+    ({ part, piece }): Omit<StepDraft, "number"> => ({
       ...quiet,
       id: `print-${piece.id}`,
       title: `Print the ${said(part.name)}`,
@@ -342,7 +342,7 @@ export const printedSteps = (
     }),
   );
   const fits = printed.map(
-    ({ part, piece, screws }): Omit<Step, "number"> => ({
+    ({ part, piece, screws }): Omit<StepDraft, "number"> => ({
       ...quiet,
       id: `fit-${piece.id}`,
       title: `Fit the ${said(part.name)}`,

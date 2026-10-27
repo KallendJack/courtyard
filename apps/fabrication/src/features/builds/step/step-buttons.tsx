@@ -1,4 +1,4 @@
-import type { BuildStep, DerivedBuild } from "@courtyard/contract";
+import { type BuildStep, type DerivedBuild, tickedIn } from "@courtyard/contract";
 import { Button, IconButton } from "@courtyard/ui/buttons/button.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
@@ -7,8 +7,9 @@ import { type ReactNode, useRef, useState } from "react";
 import type { BenchAsk } from "../chat/hold-to-ask.tsx";
 import { CloseUp, Techniques } from "../close-up.tsx";
 import { Findings } from "../findings.tsx";
+import { UsesStrip } from "../parts/uses-strip.tsx";
 import type { Progress } from "../progress.ts";
-import { Fixings, Tips, WayChanges, Ways } from "../step-panel.tsx";
+import { Tips, WayChanges, Ways } from "../step-panel.tsx";
 import { checkQuestion, stepFindings } from "../words.ts";
 import { BeforeMovingOn, PhotoPicker, WalkThrough } from "./how.tsx";
 
@@ -96,9 +97,9 @@ const OPENED: Readonly<Record<Open, string>> = {
 
 /**
  * What a step's button opens (#793), over the step rather than down it (#826): Show me how's
- * walk-through, close-ups, techniques, tips, fixings and check, everything the board leaves off
- * the step; I don't have…'s list; or why it can't be done now. Its own title and ×, and it scrolls
- * itself when it's long.
+ * what the step uses first (#778), then its walk-through, close-ups, techniques, tips and check,
+ * everything the board leaves off the step; I don't have…'s list; or why it can't be done now.
+ * Its own title and ×, and it scrolls itself when it's long.
  */
 export function StepOpened(props: {
   open: Open;
@@ -116,6 +117,11 @@ export function StepOpened(props: {
   if (open === "how") {
     body = (
       <>
+        <UsesStrip
+          step={step}
+          done={tickedIn(progress.progress, step.id).length >= step.actions.length}
+          bench
+        />
         <WayChanges derived={derived} />
         <WalkThrough step={step} parts={derived.parts} />
         {step.closeUps.map((closeUp) => (
@@ -124,7 +130,6 @@ export function StepOpened(props: {
         <Techniques step={step} parts={derived.parts} />
         <Findings findings={stepFindings(derived, step)} label="To check in this step" />
         <Tips tips={step.tips} />
-        <Fixings step={step} />
         <BeforeMovingOn step={step} />
         <Ways ways={step.ways} />
       </>

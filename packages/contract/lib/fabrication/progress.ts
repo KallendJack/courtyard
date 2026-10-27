@@ -46,8 +46,20 @@ export const BuildProgress = z.object({
     .array(z.object({ step: BuildStepId, why: z.string().max(120) }))
     .max(MOST_STEPS)
     .default([]),
+  /** The parts labelled on the parts page (#778), by their letters: every piece of each. */
+  labelled: z.array(z.string().max(8)).max(MOST_STEPS).default([]),
 });
 export type BuildProgress = z.infer<typeof BuildProgress>;
+
+/**
+ * The parts page's place (#778): before the steps, where a Build with pieces to cut opens until
+ * building starts, kept as the step reached. No step has it as its ID.
+ */
+export const PARTS_PAGE = "parts";
+
+/** Whether the owner is on the parts page: there, or not started and nowhere yet. */
+export const onPartsPage = (steps: readonly { id: string }[], progress: BuildProgress): boolean =>
+  progress.step === PARTS_PAGE || (progress.step === null && !buildStarted(steps, progress));
 
 /** Whether a step is done: every one of its lines ticked. */
 const stepDone = (
@@ -74,4 +86,4 @@ export const stepReached = <S extends { id: string; actions: readonly unknown[] 
 /** Whether the owner has started building: a line ticked, or a step past the first reached. */
 export const buildStarted = (steps: readonly { id: string }[], progress: BuildProgress): boolean =>
   progress.ticked.some((each) => each.lines.length > 0) ||
-  (progress.step !== null && progress.step !== steps[0]?.id);
+  (progress.step !== null && progress.step !== PARTS_PAGE && progress.step !== steps[0]?.id);

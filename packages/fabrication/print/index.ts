@@ -1,9 +1,10 @@
 import { type BuildTemplate, type PartFeature, PartRecipeShown } from "@courtyard/contract";
 import type { z } from "zod";
-import { type Build, err, type Finding, ok, type Result, type Step } from "../build.ts";
+import { type Build, err, type Finding, ok, type Part, type Result } from "../build.ts";
 import { buyLine, buyListOf } from "../buy-list.ts";
 import { toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
+import { bagOf, type StepDraft, withUses } from "../parts-page/index.ts";
 import { TOOL_NAMES, type Tool } from "../tools.ts";
 import { checkRecipe, envelopeOf } from "./recipe.ts";
 import {
@@ -77,10 +78,10 @@ const stepsOf = (options: {
   common: Common;
   clearance: number;
   screws: ReadonlyMap<string, number>;
-}): Step[] => {
+}): StepDraft[] => {
   const { shaped, common, clearance, screws } = options;
   const toHand = new Set(common.tools);
-  const drafts: Omit<Step, "number">[] = [
+  const drafts: Omit<StepDraft, "number">[] = [
     {
       id: "print",
       title: common.count === 1 ? "Print it" : `Print ${common.count}`,
@@ -217,12 +218,22 @@ export const derivePrinted =
     const size = envelopeOf({ base: shaped.recipe.base, features });
     const fits = fitsPlate(size, printer.plate);
     const screws = screwsOf(features);
-    const steps = stepsOf({
-      shaped,
-      common: parameters,
-      clearance: printer.clearance.value,
-      screws,
-    });
+    const part: Part = {
+      label: "A",
+      name: shaped.part,
+      does: shaped.does,
+      count: parameters.count,
+      material: { kind: "printed", stock: parameters.filament },
+      length: size.length,
+      width: size.depth,
+      thickness: size.height,
+      boxes: [{ x: 0, y: 0, z: 0, w: size.length, d: size.depth, h: size.height }],
+    };
+    const steps = withUses(
+      stepsOf({ shaped, common: parameters, clearance: printer.clearance.value, screws }),
+      [part],
+      [],
+    );
 
     const findings: Finding[] = [...checked.findings];
     if (!fits) findings.push({ kind: "too-big-for-plate", size, plate: printer.plate });
@@ -254,22 +265,11 @@ export const derivePrinted =
     return ok({
       template,
       size,
-      parts: [
-        {
-          label: "A",
-          name: shaped.part,
-          does: shaped.does,
-          count: parameters.count,
-          material: { kind: "printed", stock: parameters.filament },
-          length: size.length,
-          width: size.depth,
-          thickness: size.height,
-          boxes: [{ x: 0, y: 0, z: 0, w: size.length, d: size.depth, h: size.height }],
-        },
-      ],
+      parts: [part],
       fitted: [],
       cutPlan: { kerf: 0, timber: [], sheets: [] },
       buyList,
+      bag: bagOf(buyList),
       steps,
       glossary: glossaryOf(steps.flatMap((step) => step.words)),
       findings,

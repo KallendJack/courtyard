@@ -6,7 +6,14 @@
  * technique, shown in full the first time the steps use it and a "how?" tap after.
  */
 export const FIXING_TYPES = ["bracket", "bolt-through", "screwed-overlap"] as const;
-export const TECHNIQUE_TYPES = ["measure-mark", "driving-screw"] as const;
+export const TECHNIQUE_TYPES = [
+  "measure-mark",
+  "driving-screw",
+  // The first-time skills (#778).
+  "pilot-hole",
+  "countersink",
+  "square-frame",
+] as const;
 export type FixingType = (typeof FIXING_TYPES)[number];
 export type TechniqueType = (typeof TECHNIQUE_TYPES)[number];
 export type CloseUpType = FixingType | TechniqueType;

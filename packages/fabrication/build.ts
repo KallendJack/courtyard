@@ -1,12 +1,15 @@
-import type { BuildTemplate, SizeSource, SourcedSize } from "@courtyard/contract";
+import type { BuildTemplate } from "@courtyard/contract";
 import type { ToolSize } from "./capacity.ts";
 import type { CloseUp, FixingType } from "./close-up.ts";
 import type { Finding } from "./finding.ts";
-import type { CheckedRecipe } from "./print/recipe.ts";
+import type { BagItem, Uses } from "./parts-page/index.ts";
+import type { BuildPrint } from "./print/build-print.ts";
 import type { Scene } from "./scene.ts";
 import type { Tool } from "./tools.ts";
 
 export type { CloseUp, CloseUpShape, CloseUpType, FixingType } from "./close-up.ts";
+export type { BagItem, Uses } from "./parts-page/index.ts";
+export type { BuildPrint, PrintLine, PrintSize } from "./print/build-print.ts";
 
 // What any template derives from its parameters (ADR 0036): everything a Build shows. Code works
 // every number out; a model only reads them.
@@ -238,6 +241,8 @@ export type Step = {
   readonly parts: readonly string[];
   /** The parts it puts on the Build; none for a step that prepares or checks. */
   readonly adds: readonly string[];
+  /** What it takes, to lay out first: the pieces it puts on and its fixings (#778). */
+  readonly uses: Uses;
   /** The ways it can be done, when there's more than one; none otherwise. */
   readonly ways: readonly Way[];
   /**
@@ -281,30 +286,6 @@ export type Step = {
 export type GlossaryWord = { readonly word: string; readonly means: string };
 
 export type { Finding };
-
-/** A printer's plate, or how far it reaches up, mm. */
-export type PrintSize = { readonly width: number; readonly depth: number; readonly height: number };
-
-/** A size the Print tab lists: its name, as it says it, and its source when it's an object's. */
-export type PrintLine = {
-  readonly name: string;
-  readonly says: string;
-  readonly source: SizeSource | null;
-};
-
-/**
- * A printed part's own (#702): the plate it's for and whether it fits, its clearance and nozzle,
- * the sizes to list, and the recipe it's made from, checked, which the worker makes into a solid.
- */
-export type BuildPrint = {
-  readonly plate: PrintSize;
-  readonly fits: boolean;
-  readonly clearance: SourcedSize;
-  readonly nozzle: SourcedSize;
-  readonly sizes: readonly PrintLine[];
-  /** `null` when it can't be made (a `cannot-make` finding says why). */
-  readonly recipe: CheckedRecipe | null;
-};
 
 /** What an option is like, as a chip says it: fine, or something to know. */
 export type Said = { readonly text: string; readonly tone: "fine" | "warn" };
@@ -353,6 +334,8 @@ export type Build = {
   readonly fitted: readonly Fitted[];
   readonly cutPlan: CutPlan;
   readonly buyList: BuyList;
+  /** The fixings bag, for the parts page (#778): each fixing by its kind and count. */
+  readonly bag: readonly BagItem[];
   readonly steps: readonly Step[];
   readonly glossary: readonly GlossaryWord[];
   readonly findings: readonly Finding[];

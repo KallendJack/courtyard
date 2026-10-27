@@ -1,8 +1,9 @@
-import type { CutPlan, Fitted, KeptWay, Part, Step } from "../build.ts";
+import type { CutPlan, Fitted, KeptWay, Part } from "../build.ts";
 import type { Capacities } from "../capacity.ts";
 import { bracketArm, bracketCloseUp } from "../close-ups/bracket.ts";
 import { overlapCloseUp } from "../close-ups/overlap.ts";
 import { techniquesOf } from "../close-ups/techniques.ts";
+import { type StepDraft, withUses } from "../parts-page/index.ts";
 import { type SpannerKit, type SquareKind, TOOL_NAMES, type Tool } from "../tools.ts";
 import { castorsDraft } from "./castor-steps.ts";
 import { braceCloseUp, SHEET_SCREWS_PER_BRACE, sheetCloseUp } from "./close-ups.ts";
@@ -17,6 +18,7 @@ import {
   bracketing,
   drilling,
   drillsFor,
+  pilotHole,
   SPLIT_RISK,
   SPLIT_TIP,
   screwing,
@@ -57,7 +59,7 @@ export const benchSteps = (options: {
   capacities: Capacities;
   /** The kind of square the owner has, which the close-ups draw (#813); none when not known. */
   square: SquareKind | undefined;
-}): Step[] => {
+}) => {
   const { parameters: p, shape: s, cutPlan, toHand, kept } = options;
   const castors = p.castors;
   const saw = sawInUse(toHand, kept);
@@ -107,11 +109,8 @@ export const benchSteps = (options: {
       under: { across: s.thick, thick: s.wide, name: under },
     });
   /** Screws driven into a rail or leg, as a piece of the frame timber. */
-  const driving = (screw: string) => ({
-    type: "driving-screw" as const,
-    piece: { wide: s.wide, thick: s.thick, name: "rail" },
-    screw,
-  });
+  const rail = { wide: s.wide, thick: s.thick, name: "rail" };
+  const driving = (screw: string) => ({ type: "driving-screw" as const, piece: rail, screw });
   const middle = whole(s.frameLength / 2);
   const rearInset = whole((s.frameLength - s.endRail) / 2);
   // Where the top's screws hit: the middle of the rails under it, from the top's edges.
@@ -165,6 +164,7 @@ export const benchSteps = (options: {
       ],
       techniques: [
         { type: "measure-mark", piece: { wide: s.wide, thick: s.thick, name: "B" }, at: middle },
+        ...pilotHole(pilots.brackets, rail, bracketScrewsOf(p)),
         driving(bracketScrewsOf(p)),
       ],
       check: {
@@ -197,7 +197,7 @@ export const benchSteps = (options: {
         ...(pilots.shelf ? [] : [SPLIT_TIP]),
       ],
       closeUps: [shelfCloseUp, sheetOn("shelf", s.shelfSheet, "rail")],
-      techniques: [driving(sheetScrews)],
+      techniques: [...pilotHole(pilots.shelf, rail, sheetScrews), driving(sheetScrews)],
       check: { says: "The shelf lies flat and doesn't rock.", photo: "The shelf in." },
       words: wordsWith(pilots.shelf),
     },
@@ -244,7 +244,7 @@ export const benchSteps = (options: {
         ...(pilots.braces ? [] : [SPLIT_TIP]),
       ],
       closeUps: [braceCloseUp(s), sheetOn("brace", s.braceSheet, "leg")],
-      techniques: [driving(sheetScrews)],
+      techniques: [...pilotHole(pilots.braces, rail, sheetScrews), driving(sheetScrews)],
       check: {
         says: "Push a top corner sideways: the frame doesn't sway.",
         photo: "The bench from a back corner.",
@@ -282,7 +282,11 @@ export const benchSteps = (options: {
         ...(pilots.top ? [] : [SPLIT_TIP]),
       ],
       closeUps: [topCloseUp, sheetOn("top", s.top, "rail")],
-      techniques: [driving(sheetScrews)],
+      techniques: [
+        ...pilotHole(pilots.top, rail, sheetScrews),
+        { type: "countersink", piece: { thick: s.top, name: "top" }, screw: sheetScrews },
+        driving(sheetScrews),
+      ],
       check: {
         says: "The overhang the same all round, within 2 mm, and every screw head flush.",
         photo: "The top, from above.",
@@ -318,40 +322,43 @@ export const benchSteps = (options: {
     drill: toHand.has("drill-driver"),
     zone: SPLIT_RISK,
   });
-  return on.map((draft, at) => ({
-    id: draft.id,
-    number: at + 1,
-    title: draft.title,
-    minutes: draft.minutes,
-    helper: draft.helper ?? false,
-    parts: draft.parts,
-    adds: draft.adds ?? draft.parts,
-    ways: draft.ways ?? [],
-    ...(draft.lines === undefined ? {} : { lines: draft.lines }),
-    wayChanged: draft.id === CUT_STEP ? sawChanged : null,
-    tools: draft.tools.map(stepTool(draft)),
-    safety: (draft.safety ?? []).map(stepTool(draft)),
-    fixings: draft.fixings ?? [],
-    batch: draft.batch,
-    actions: draft.actions,
-    tips: draft.tips ?? [],
-    // Every close-up with screw spots says they're placed by eye, and whether to drill first (#826).
-    closeUps: (draft.closeUps ?? (draft.closeUp === undefined ? [] : [draft.closeUp])).map(
-      (closeUp) =>
-        draft.drills === undefined || closeUp.fixings.length === 0
-          ? closeUp
-          : { ...closeUp, answers: { placed: "eye" as const, drill: draft.drills } },
-    ),
-    techniques: techniques[at] ?? [],
-    walkThrough: draft.walkThrough ?? [],
-    scene: stepScene(setting, {
+  const steps = on.map(
+    (draft, at): StepDraft => ({
       id: draft.id,
-      shown: on.slice(0, at + 1).flatMap((each) => each.adds ?? each.parts),
-      lit: draft.parts,
-      lines: draft.actions.length,
-      first: draft.drills?.first ?? false,
+      number: at + 1,
+      title: draft.title,
+      minutes: draft.minutes,
+      helper: draft.helper ?? false,
+      parts: draft.parts,
+      adds: draft.adds ?? draft.parts,
+      ways: draft.ways ?? [],
+      ...(draft.lines === undefined ? {} : { lines: draft.lines }),
+      wayChanged: draft.id === CUT_STEP ? sawChanged : null,
+      tools: draft.tools.map(stepTool(draft)),
+      safety: (draft.safety ?? []).map(stepTool(draft)),
+      fixings: draft.fixings ?? [],
+      batch: draft.batch,
+      actions: draft.actions,
+      tips: draft.tips ?? [],
+      // Every close-up with screw spots says they're placed by eye, and whether to drill first (#826).
+      closeUps: (draft.closeUps ?? (draft.closeUp === undefined ? [] : [draft.closeUp])).map(
+        (closeUp) =>
+          draft.drills === undefined || closeUp.fixings.length === 0
+            ? closeUp
+            : { ...closeUp, answers: { placed: "eye" as const, drill: draft.drills } },
+      ),
+      techniques: techniques[at] ?? [],
+      walkThrough: draft.walkThrough ?? [],
+      scene: stepScene(setting, {
+        id: draft.id,
+        shown: on.slice(0, at + 1).flatMap((each) => each.adds ?? each.parts),
+        lit: draft.parts,
+        lines: draft.actions.length,
+        first: draft.drills?.first ?? false,
+      }),
+      check: draft.check,
+      words: draft.words ?? [],
     }),
-    check: draft.check,
-    words: draft.words ?? [],
-  }));
+  );
+  return withUses(steps, options.parts, options.fitted);
 };

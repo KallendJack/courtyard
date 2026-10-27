@@ -1,4 +1,11 @@
-import { type BuildOpened, type BuildProgress, stepReached, tickedIn } from "@courtyard/contract";
+import {
+  type BuildOpened,
+  type BuildProgress,
+  onPartsPage,
+  PARTS_PAGE,
+  stepReached,
+  tickedIn,
+} from "@courtyard/contract";
 import { useCallback, useRef, useState } from "react";
 import { keepProgress } from "@/api/fabrication";
 
@@ -80,17 +87,33 @@ export const useProgress = (
     setProgress(next);
     void keep(next);
   };
-  const { steps } = build.derived;
+  const { steps, parts } = build.derived;
   const step = stepReached(steps, progress);
-  /** The step at a number, kept by its ID. */
-  const at = (number: number) => steps[Math.max(1, Math.min(number, steps.length)) - 1]?.id ?? null;
+  // A Build with pieces to cut has its parts page before the steps (#778); a printed part hasn't.
+  const withParts = parts.some((part) => part.material.kind !== "printed");
+  /** The step at a number, kept by its ID; 0 is the parts page, when the Build has one. */
+  const at = (number: number) =>
+    number < 1 && withParts
+      ? PARTS_PAGE
+      : (steps[Math.max(1, Math.min(number, steps.length)) - 1]?.id ?? null);
 
   return {
     progress,
     step,
     problem,
-    /** Moves to a step, by its number. */
+    withParts,
+    /** Whether the owner is on the parts page (#778): where a Build not started opens. */
+    onParts: withParts && onPartsPage(steps, progress),
+    /** Moves to a step, by its number: 0 for the parts page. */
     go: (number: number) => change({ ...progress, step: at(number) }),
+    /** A part labelled on the parts page, every piece of it, or unlabelled again (#778). */
+    label: (part: string) =>
+      change({
+        ...progress,
+        labelled: progress.labelled.includes(part)
+          ? progress.labelled.filter((each) => each !== part)
+          : [...progress.labelled, part],
+      }),
     /** Ticks a line of the step reached, or unticks it. */
     tick: (line: number) => {
       if (step === undefined) return;

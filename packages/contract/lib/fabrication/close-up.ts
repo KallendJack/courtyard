@@ -50,7 +50,17 @@ export const BuildCloseUp = z.object({
    * any Build.
    */
   type: z
-    .enum(["bracket", "bolt-through", "screwed-overlap", "measure-mark", "driving-screw"])
+    .enum([
+      "bracket",
+      "bolt-through",
+      "screwed-overlap",
+      "measure-mark",
+      "driving-screw",
+      // The first-time skills (#778).
+      "pilot-hole",
+      "countersink",
+      "square-frame",
+    ])
     .optional(),
   width: z.number(),
   height: z.number(),

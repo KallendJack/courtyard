@@ -86,6 +86,12 @@ const pickTheFrameTimber = async (page: Page) => {
 const toPlan = (page: Page) =>
   page.locator("label", { has: page.getByRole("radio", { name: "Plan" }) }).click();
 
+/** From the parts page, where a Build not started opens (#778), on to its first step. */
+const startBuilding = async (page: Page) => {
+  await page.getByRole("button", { name: "Start step 1" }).click();
+  await expect(page.getByRole("region", { name: "Steps" })).toBeVisible();
+};
+
 /** The 3D panel's letter for a part. */
 const letter = (page: Page, name: string) =>
   page.getByRole("region", { name: "In 3D" }).getByRole("button", { name, exact: true });
@@ -192,14 +198,18 @@ test.describe("on the unfolded Fold", () => {
     const views = page.getByRole("group", { name: "Way of working" });
     await expect(views.getByRole("radio", { name: "At the bench" })).toBeChecked();
     const dots = page.getByRole("progressbar", { name: "Steps" });
-    await expect(dots).toHaveAttribute("aria-valuetext", "Step 1 of 12");
+    // Not started, it opens on the parts page, before step 1 (#778).
+    await expect(dots).toHaveAttribute("aria-valuetext", "Your parts, before step 1");
     await expect(dots.getByRole("button")).toHaveCount(0);
+    await startBuilding(page);
+    await expect(dots).toHaveAttribute("aria-valuetext", "Step 1 of 12");
 
     const steps = page.getByRole("region", { name: "Steps" });
     await expect(steps).toContainText("Step 1 of 12 · about 10 min");
     await expect(steps.getByRole("heading", { name: "Check what's arrived" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Back" })).toBeDisabled();
-    for (const each of ["Done, next step", "Hold to ask"]) {
+    // Back from step 1 goes to the parts page (#778).
+    await expect(page.getByRole("button", { name: "Back" })).toBeEnabled();
+    for (const each of ["Back", "Done, next step", "Hold to ask"]) {
       await expect(page.getByRole("button", { name: each })).toBeInViewport();
     }
     // The step's lines at the board's size (#826).
@@ -454,6 +464,7 @@ test.describe("on the unfolded Fold", () => {
   }) => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
+    await startBuilding(page);
     const steps = page.getByRole("region", { name: "Steps" });
     const done = page.getByRole("button", { name: "Done, next step" });
     for (let step = 1; step < 4; step += 1) await done.click();
@@ -477,7 +488,9 @@ test.describe("on the unfolded Fold", () => {
     await expect(closeUps.first()).toContainText("Close-up · Mark your screw spots");
     await expect(closeUps.nth(1)).toContainText("Close-up · Leg end on");
     await expect(closeUps.last()).toContainText("Close-up · Driving a screw");
-    await expect(steps).toContainText("Fixings: 5 × 80 screws (16)");
+    // What it uses first, to lay out before starting (#778).
+    const uses = steps.getByRole("region", { name: "Uses" });
+    await expect(uses).toHaveText(/^UsesA × 4C × 45 × 80 screws \(16\)$/i);
     await expect(steps.getByRole("region", { name: "Before you move on" })).toContainText(
       "Measure corner to corner both ways.",
     );
@@ -520,13 +533,13 @@ test.describe("on the unfolded Fold", () => {
     await expect(picture).toContainText("1 bolt in");
     await expect(checklist.getByRole("checkbox")).toHaveCount(4);
     await expect(steps.getByRole("region", { name: "How it's done" })).toHaveCount(0);
-    // The drill and its bit one chip, gold while the bit's to check; the fixings behind Show me how.
+    // The drill and its bit one chip, gold while the bit's to check; what it uses behind Show me how.
     const tools = steps.getByRole("list", { name: "Tools for this step" });
     await expect(tools).toContainText("7 mm bit: check your set");
     await expect(tools).toContainText("10 mm spanner × 2?");
     await steps.getByRole("button", { name: "Show me how" }).click();
-    await expect(steps).toContainText(
-      "Fixings: M6 × 60 bolts (16), M6 washers (16) and M6 lock nuts (16)",
+    await expect(uses).toContainText(
+      "M6 × 60 bolts (16)M6 washers (16)M6 lock nuts (16)Wheelwright TD60 castors (4)",
     );
     await expect(steps).not.toContainText("M6 × 50");
     await expect(closeUps.nth(-2)).toContainText("Close-up · Tighten");
@@ -541,6 +554,7 @@ test.describe("on the unfolded Fold", () => {
     await standInSpeechRecognition(page);
     await workspaceWithBuild(page);
     await openInFabrication(page);
+    await startBuilding(page);
     await chatSettled(page);
 
     const ask = page.getByRole("button", { name: "Hold to ask" });
@@ -577,6 +591,7 @@ test.describe("on the unfolded Fold", () => {
     await standInSpeechRecognition(page);
     await workspaceWithBuild(page);
     await openInFabrication(page);
+    await startBuilding(page);
     await chatSettled(page);
 
     const ask = page.getByRole("button", { name: "Hold to ask" });
@@ -603,6 +618,7 @@ test.describe("on the unfolded Fold", () => {
     await standInSpeechRecognition(page);
     await workspaceWithBuild(page);
     await openInFabrication(page);
+    await startBuilding(page);
     await chatSettled(page);
 
     const steps = page.getByRole("region", { name: "Steps" });
@@ -768,6 +784,7 @@ test.describe("on the unfolded Fold", () => {
     await standInSpeechRecognition(page);
     await workspaceWithBuild(page);
     await openInFabrication(page);
+    await startBuilding(page);
     await chatSettled(page);
 
     const ask = page.getByRole("button", { name: "Hold to ask" });
@@ -812,6 +829,7 @@ test.describe("on the unfolded Fold", () => {
     await standInSpeechRecognition(page);
     await workspaceWithBuild(page);
     await openInFabrication(page);
+    await startBuilding(page);
     await chatSettled(page);
 
     const ask = page.getByRole("button", { name: "Hold to ask" });
@@ -836,6 +854,7 @@ test.describe("on the unfolded Fold", () => {
     await standInSpeechRecognition(page);
     await workspaceWithBuild(page);
     await openInFabrication(page);
+    await startBuilding(page);
     await chatSettled(page);
 
     const ask = page.getByRole("button", { name: "Hold to ask" });
@@ -872,6 +891,101 @@ test.describe("on the unfolded Fold", () => {
   });
 });
 
+// The parts page (#778; Paper, 2 · Agreed, "Fabrication · Parts page, any build · Fold 933×645
+// (#778)"): before the steps, every piece by letter with the fixings bag, Label each piece, and
+// each step's strip of what it uses. Unfolded and folded.
+for (const [fold, viewport] of [
+  ["unfolded", UNFOLDED],
+  ["folded", FOLDED],
+] as const) {
+  test.describe(`the parts page, ${fold}`, () => {
+    test.use({ viewport: UNFOLDED, hasTouch: true, isMobile: true });
+
+    test("every piece and the fixings bag before the steps, Label each piece kept, and each step's uses ticked off when done", async ({
+      page,
+    }) => {
+      await workspaceWithBuild(page);
+      await openInFabrication(page);
+      await page.setViewportSize(viewport);
+
+      const parts = page.getByRole("region", { name: "Your parts" });
+      await expect(parts.getByRole("heading", { name: "Your parts · 21 pieces" })).toBeVisible();
+      const tiles = parts.getByRole("listitem");
+      await expect(tiles).toHaveCount(9);
+      await expect(tiles.first()).toContainText("Legs× 4");
+      await expect(tiles.first()).toContainText("750 · 45 × 95");
+      await expect(parts.getByRole("button", { name: "G, Top × 1" })).toContainText(
+        "1500 × 600 · ply",
+      );
+      // The longest piece is drawn longest: the top's 1500 against a leg's 750.
+      const drawn = async (name: string) =>
+        (await boxOf(parts.getByRole("button", { name }).locator("svg [data-piece]"))).width;
+      expect(await drawn("G, Top × 1")).toBeGreaterThan(await drawn("A, Legs × 4"));
+
+      const bag = page.getByRole("region", { name: "Fixings bag" });
+      await expect(bag.getByRole("listitem")).toHaveText([
+        "5 × 80 screws32",
+        "M6 × 60 bolt sets16",
+        "40 mm angle brackets12",
+        "4 × 30 screws48",
+        "4 × 40 screws43",
+        "Wheelwright TD60 castors4",
+      ]);
+
+      // Label each piece: what to do, kept as pieces are labelled, and a How? chip for more.
+      const what = "Pencil its letter on an end that won't show. Tap a piece when it's done.";
+      const more = /^A pencil, not a pen: it sands off\./;
+      await expect(page.getByText(what)).toBeVisible();
+      await expect(page.getByText(more)).toBeHidden();
+      for (const name of ["A, Legs × 4", "B, Long rails × 4", "C, End rails × 4"]) {
+        await parts.getByRole("button", { name }).click();
+      }
+      await expect(parts.getByRole("status")).toHaveText("12 of 21 labelled");
+      await expect(parts.getByRole("button", { name: "A, Legs × 4" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await expect(page.getByText(what)).toBeVisible();
+      await page.getByText("How? Shown the first time", { exact: true }).click();
+      await expect(page.getByText(more)).toBeVisible();
+
+      // Kept: opened again, the same pieces are labelled.
+      const buildApi = new URL(page.url()).pathname.replace(/^\/fabrication/, "/api/fabrication");
+      await expect
+        .poll(async () => {
+          const { progress } = BuildOpened.parse(await (await page.request.get(buildApi)).json());
+          return progress.labelled;
+        })
+        .toEqual(["A", "B", "C"]);
+      await page.reload();
+      await expect(page.getByRole("region", { name: "Your parts" }).getByRole("status")).toHaveText(
+        "12 of 21 labelled",
+      );
+
+      // Start step 1; Back from it is the parts page again.
+      await expect(page.getByRole("button", { name: "Start step 1" })).toBeInViewport();
+      await startBuilding(page);
+      await page.getByRole("button", { name: "Back" }).click();
+      await expect(page.getByRole("region", { name: "Your parts" })).toBeVisible();
+      await startBuilding(page);
+
+      // A step's uses, first in Show me how at the bench (off its board, #826), ticked off once
+      // it's done.
+      await toStepFromFirst(page, 4);
+      const steps = page.getByRole("region", { name: "Steps" });
+      const showMe = steps.getByRole("button", { name: "Show me how" });
+      const uses = steps.getByRole("region", { name: "Uses" });
+      await showMe.click();
+      await expect(uses).toHaveText(/^UsesA × 4C × 45 × 80 screws \(16\)$/i);
+      await page.getByRole("button", { name: "Done, next step" }).click();
+      await page.getByRole("button", { name: "Back" }).click();
+      await expect(steps.getByRole("heading", { name: "Make the two end frames" })).toBeVisible();
+      await showMe.click();
+      await expect(uses).toHaveText(/^UsedA × 4C × 45 × 80 screws \(16\)$/i);
+    });
+  });
+}
+
 // Each step's picture (#754; Paper, 2 · Agreed, "Fabrication · At the bench · Fold 933×645"): the
 // job as it's done, with the Build's numbers drawn on it.
 
@@ -886,6 +1000,12 @@ const camera = async (page: Page) => {
 
 /** On to step `number` from the first, at the bench: Done, next step, until it's there. */
 const toStep = async (page: Page, number: number) => {
+  await startBuilding(page);
+  await toStepFromFirst(page, number);
+};
+
+/** On to step `number` from the first, already there: Done, next step, until it's there. */
+const toStepFromFirst = async (page: Page, number: number) => {
   const dots = page.getByRole("progressbar", { name: "Steps" });
   for (let at = 1; at < number; at += 1) {
     await page.getByRole("button", { name: "Done, next step" }).click();
@@ -1191,6 +1311,7 @@ for (const [screen, viewport] of [
       await standInSpeechRecognition(page);
       await workspaceWithBuild(page);
       await openInFabrication(page);
+      await startBuilding(page);
       await page.setViewportSize(viewport);
       await chatSettled(page);
 
@@ -1243,6 +1364,7 @@ test.describe("folded", () => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
     // Folded, with the Build open.
+    await startBuilding(page);
     await page.setViewportSize(FOLDED);
 
     await expect(page.getByRole("group", { name: "Way of working" })).toHaveCount(0);
@@ -1261,7 +1383,7 @@ test.describe("folded", () => {
     await expect(letter(page, "G, Top")).toHaveCount(0);
     const showMe = steps.getByRole("button", { name: "Show me how" });
     await showMe.click();
-    await expect(steps).toContainText("Fixings: 4 × 40 screws");
+    await expect(steps.getByRole("region", { name: "Uses" })).toContainText("4 × 40 screws");
     await showMe.click();
 
     await page.getByRole("button", { name: "Back" }).click();
@@ -1320,6 +1442,7 @@ test.describe("on a desktop", () => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
     await page.getByRole("tab", { name: "Steps" }).click();
+    await startBuilding(page);
     await page.getByRole("button", { name: "Done, next step" }).click();
     const bars = page
       .getByRole("region", { name: "Steps" })
@@ -1333,6 +1456,7 @@ test.describe("on a desktop", () => {
     await workspaceWithBuild(page);
     await openInFabrication(page);
     await page.getByRole("tab", { name: "Steps" }).click();
+    await startBuilding(page);
     const done = page.getByRole("button", { name: "Done, next step" });
     for (let step = 1; step < 4; step += 1) await done.click();
     const steps = page.getByRole("region", { name: "Steps" });

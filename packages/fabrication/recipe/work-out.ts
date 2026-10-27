@@ -14,6 +14,7 @@ import { cutPlanOf, type Spares } from "../cut-plan.ts";
 import { assumedSizes, toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
 import { pickStock, type Slot, standsInFor, stockOptions, wrongStock } from "../options.ts";
+import { bagOf, withUses } from "../parts-page/index.ts";
 import type { Sheet, StockOptionId, Timber } from "../stock.ts";
 import { checksOf } from "./checks.ts";
 import { fixingsOf } from "./fixings.ts";
@@ -215,10 +216,11 @@ const recipeBuild = (
     }),
     ...printedBuys(printed.value),
   ]);
-  const steps = printedSteps(printed.value, recipe).map((step, index) => ({
-    ...step,
-    number: index + 1,
-  }));
+  const steps = withUses(
+    printedSteps(printed.value, recipe).map((step, index) => ({ ...step, number: index + 1 })),
+    parts,
+    fitted,
+  );
 
   const assumed = assumedIn(recipe);
   const missing = toolsMissing(steps);
@@ -240,6 +242,7 @@ const recipeBuild = (
       fitted,
       cutPlan: planned.cutPlan,
       buyList,
+      bag: bagOf(buyList),
       steps,
       glossary: glossaryOf(steps.flatMap((step) => step.words)),
       findings: [

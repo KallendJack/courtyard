@@ -86,6 +86,16 @@ export const bracketing = (pilot: boolean) =>
     `${SCREWS_PER_BRACKET} screws a bracket.`,
   );
 
+/**
+ * Drilling a pilot hole, as a first-time skill (#778), when the step drills one: into the piece
+ * the screw goes through first.
+ */
+export const pilotHole = (
+  pilot: boolean,
+  piece: { wide: number; thick: number; name: string },
+  screw: string,
+) => (pilot ? [{ type: "pilot-hole" as const, piece, screw, bit: PILOT }] : []);
+
 /** What a step's close-ups say of its screw spots (#826): drill first with the pilot bit, or just screw. */
 export const drillsFor = (pilot: boolean) =>
   pilot ? { first: true, bit: PILOT } : { first: false };
