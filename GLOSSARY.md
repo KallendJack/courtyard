@@ -383,7 +383,7 @@ thing, or a space's floor plan (#257), its size checked against the space's size
 has one, **Draw the garage** (#604): a space Thing whose floor length and floor width are recorded, and its card
 shows its size and its records, with a button named from the space that starts a session with them, for a floor
 plan. The **drawn bike** is Courtyard's own drawing of a mountain bike, never a model's, each of the Thing's parts
-on its **place**, saved on the part (#711), never guessed from its name, each a label opening its card, one with an upcoming replacement
+on its **place**, saved on the part (#711), or by its name for one saved before places were, each a label opening its card, one with an upcoming replacement
 saying so ("Pedals · DMR V8 next"), and those it has no place for listed under it. The Thing's photo is on its card.
 _Avoid_: view, Breakdown view, hero, dashboard
 

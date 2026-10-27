@@ -1938,6 +1938,28 @@ describe("Builds (#697, ADR 0036)", () => {
     );
   });
 
+  it("says when a size's record is gone, so it's the size last read, assumed (#711)", async () => {
+    await mkdir(builds(), { recursive: true });
+    // Its height points at a record that's since gone (its save undone, say).
+    const pointer = {
+      record: "5a1d2c3b-4e5f-4a6b-8c7d-000000000009",
+      ...goldenBench.height,
+    };
+    await writeFile(
+      join(builds(), "workbench.json"),
+      JSON.stringify({
+        name: "Workbench",
+        template: "framed-bench",
+        parameters: { ...goldenBench, height: pointer },
+      }),
+    );
+    const saver = await savingTurns([[]]);
+
+    expect(saver.framings[0]?.instructions).toContain(
+      "<builds>\n[B1] Workbench, framed-bench, 1500 × 600 × 900 mm, the size record for height gone, so the size last read from it, assumed (builds/workbench.json)\n</builds>",
+    );
+  });
+
   it("gives the step the owner is on in full, so the chat follows it rather than making one up (#784)", async () => {
     await mkdir(join(builds(), "progress"), { recursive: true });
     await writeFile(

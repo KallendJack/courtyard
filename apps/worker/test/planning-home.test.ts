@@ -1,12 +1,19 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PlanningHome } from "@courtyard/contract";
+import { PlanningHome, RecentChanges } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asOwner, type Requester, removeTestFolder, testWorker } from "./testing.ts";
+import {
+  asOwner,
+  gitIn,
+  postJson,
+  type Requester,
+  removeTestFolder,
+  testWorker,
+} from "./testing.ts";
 
 // A planning workspace's Home (#603): its main subject, a Thing drawn as its kind of thing with
-// its parts placed by name, or a room's floor plan; then its projects (projects.test.ts).
+// its parts on their places, or a room's floor plan; then its projects (projects.test.ts).
 
 let root: string;
 let contextDir: string;
@@ -83,16 +90,18 @@ describe("a planning workspace's Home (#603)", () => {
     });
   });
 
-  it("places parts by their place alone, never by the words in their names, one part to a place", async () => {
+  it("places parts by their saved place first, one part to a place, whatever their names say", async () => {
     await thing("whyte", "name: Whyte T-140", "status: have");
     const whyte = (slug: string, name: string, ...more: readonly string[]) =>
       thing(slug, `name: ${name}`, "status: have", "part of: whyte", ...more);
-    await whyte("dropper", "OneUp dropper post", "place: seatpost");
+    // Named for the saddle, but saved on the seatpost.
+    await whyte("dropper", "Saddle dropper", "place: seatpost");
     await whyte("cassette", "Cassette", "place: drivetrain");
     await whyte("chain", "KMC chain", "place: drivetrain");
-    // Named as a place, but given none: it isn't placed by its name.
-    await whyte("grips", "Grips");
     await whyte("tyres", "Tyres", "place: front-tyre");
+    // Saved before places were: its name finds it a place, but never one a part has saved.
+    await whyte("grips", "Grips");
+    await whyte("front-tyre", "Front tyre");
     const request = await asOwner(testWorker({ root }));
 
     const subject = (await home(request)).subject;
@@ -100,12 +109,45 @@ describe("a planning workspace's Home (#603)", () => {
     expect(subject).toMatchObject({
       kind: "drawing",
       placed: [
-        { place: "seatpost", name: "OneUp dropper post" },
+        { place: "seatpost", name: "Saddle dropper" },
+        { place: "grips", name: "Grips" },
         // Cassette comes before the chain by name, so it has the drivetrain's place.
         { place: "drivetrain", name: "Cassette" },
         { place: "front-tyre", name: "Tyres" },
       ],
-      unplaced: [{ name: "Grips" }, { name: "KMC chain" }],
+      unplaced: [{ name: "Front tyre" }, { name: "KMC chain" }],
+    });
+  });
+
+  it("keeps drawing a bike whose parts were saved before places were, each by the words in its name (#711)", async () => {
+    await thing("whyte", "name: Whyte T-140", "status: have");
+    const whyte = (slug: string, name: string) =>
+      thing(slug, `name: ${name}`, "status: have", "part of: whyte");
+    await whyte("dropper", "OneUp dropper post");
+    await whyte("chain", "KMC chain");
+    await whyte("cassette", "Cassette");
+    await whyte("brake-pads", "Front brake pads");
+    await whyte("lock-on-grips", "Lock-on grips");
+    await whyte("tyres", "Tyres");
+    await whyte("back-wheel", "Back tyre");
+    await whyte("clipless-pedals", "Clipless pedals");
+    await whyte("pedals", "Pedals");
+    const request = await asOwner(testWorker({ root }));
+
+    expect((await home(request)).subject).toMatchObject({
+      kind: "drawing",
+      placed: [
+        { place: "seatpost", name: "OneUp dropper post" },
+        { place: "grips", name: "Lock-on grips" },
+        { place: "brakes", name: "Front brake pads" },
+        // Cassette comes before the chain by name, so it takes the drivetrain's place.
+        { place: "drivetrain", name: "Cassette" },
+        // The one named just for the place has it first.
+        { place: "pedals", name: "Pedals" },
+        { place: "front-tyre", name: "Tyres" },
+        { place: "rear-tyre", name: "Back tyre" },
+      ],
+      unplaced: [{ name: "Clipless pedals" }, { name: "KMC chain" }],
     });
   });
 
@@ -147,7 +189,7 @@ describe("a planning workspace's Home (#603)", () => {
     await thing("plates", "name: Plates", "status: have", "part of: rack");
     await thing("road-bike", "name: Road bike", "status: have");
     await thing("rb-saddle", "name: Saddle", "status: have", "part of: road-bike", "place: saddle");
-    await thing("rb-pedals", "name: Pedals", "status: have", "part of: road-bike");
+    await thing("rb-bell", "name: Bell", "status: have", "part of: road-bike");
     const request = await asOwner(testWorker({ root }));
 
     expect((await home(request)).subject).toBeNull();
@@ -187,5 +229,72 @@ describe("a planning workspace's Home (#603)", () => {
     const response = await request("/api/workspaces/site/home");
 
     expect(response.status).toBe(409);
+  });
+});
+
+describe("what the move review left, once it went (#711)", () => {
+  const bike = () => join(contextDir, "mountain-biking");
+  const GUIDE = "# Day one guide\n\nPump the tyres.\n";
+  /** A review as the worker kept it in its data folder, made up. */
+  const REVIEW = JSON.stringify({ state: "done", moves: [{ title: "Day one guide → archive" }] });
+  const reviewFile = () => join(root, "data", "move-reviews", "mountain-biking.json");
+
+  /**
+   * The workspace as a move left it: its guide archived, as one change, in a repository of the
+   * test's own (the context folder in the test's temporary folder), and the review in the data
+   * folder.
+   */
+  const moved = async () => {
+    await gitIn(root, "init", "--quiet", contextDir);
+    await mkdir(join(bike(), "docs", "archive"), { recursive: true });
+    await writeFile(join(bike(), "docs", "day-one-guide.md"), GUIDE);
+    await gitIn(contextDir, "add", "--all");
+    await gitIn(contextDir, "commit", "--quiet", "-m", "Mine");
+    await rename(
+      join(bike(), "docs", "day-one-guide.md"),
+      join(bike(), "docs", "archive", "day-one-guide.md"),
+    );
+    await gitIn(contextDir, "add", "--all");
+    await gitIn(
+      contextDir,
+      "commit",
+      "--quiet",
+      "-m",
+      "Move: Day one guide → archive",
+      "-m",
+      [
+        "Courtyard-Change: move",
+        "Courtyard-Place: workspace/mountain-biking",
+        "Courtyard-File: mountain-biking/docs/day-one-guide.md",
+        "Courtyard-File: mountain-biking/docs/archive/day-one-guide.md",
+      ].join("\n"),
+    );
+    await mkdir(join(root, "data", "move-reviews"), { recursive: true });
+    await writeFile(reviewFile(), REVIEW);
+  };
+
+  it("leaves Home as it is, and its review in the data folder untouched", async () => {
+    await moved();
+    const request = await asOwner(testWorker({ root }));
+
+    expect(await home(request)).toEqual({ subject: null, projects: [] });
+    expect(await readFile(reviewFile(), "utf8")).toBe(REVIEW);
+  });
+
+  it("keeps each move in Recent changes, with Undo", async () => {
+    await moved();
+    const request = await asOwner(testWorker({ root }));
+
+    const listed = RecentChanges.parse(
+      await (await request("/api/workspaces/mountain-biking/changes")).json(),
+    ).changes;
+    expect(listed[0]).toMatchObject({
+      kind: "move",
+      move: { title: "Day one guide → archive" },
+      undo: "available",
+    });
+    const undone = await postJson(request, `/api/changes/${listed[0]?.id}/undo`, {});
+    expect(undone.status).toBe(204);
+    expect(await readFile(join(bike(), "docs", "day-one-guide.md"), "utf8")).toBe(GUIDE);
   });
 });

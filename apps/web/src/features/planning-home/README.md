@@ -37,7 +37,8 @@ its card opens.
   room that would be drawn at least half as big again turned a quarter is turned on Home only, its length across
   the block and its front on the left (#669; Paper, "Tablet · Garage Home: a long room turned to fit"); "Turned to
   fit · tap for full size" opens it the right way up in a card. Answers and documents keep it upright. Its size is
-  shown only when the worker has checked it against the space's measured floor (#711, the plan's `measured`).
+  shown only when the plan's `measured` says so, which the worker sets from the space's floor as recorded once it
+  is (#711); a plan with no floor recorded keeps the `measured` it was drawn with.
 - **A house's floors** (#670; Paper, "Tablet · House Home: the house floor by floor (#292)" and its Cover board):
   drawn by the same module (`Floors`, loaded only when Home has them), side by side to one scale with each floor's
   name above it and each room's size, nothing written outside their walls and no overall size; on the cover screen

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BuildChanged, BuildView, PlanningHome, type SizeRecord } from "@courtyard/contract";
@@ -114,11 +114,62 @@ describe("a Build's sizes", () => {
     const changed = BuildChanged.parse(await response.json());
     // To the whole mm, as the owner is told it: the castors' plates sit a little under.
     expect(Math.round(changed.build.derived.size.height)).toBe(850);
-    // The file holds only the pointer, never a copy of the value.
-    expect(await buildFile()).toMatchObject({ parameters: { height: { record: HEIGHT } } });
-    expect((await buildFile()) as { parameters: { height: object } }).toMatchObject({
-      parameters: { height: expect.not.objectContaining({ value: expect.anything() }) },
+    // The file holds the pointer, with the size last read beside it for when the record's gone.
+    expect(await buildFile()).toMatchObject({
+      parameters: {
+        height: { record: HEIGHT, value: 850, unit: "mm", source: { kind: "measured" } },
+      },
     });
+  });
+
+  it("never break when a record goes: the size last read stands in, assumed, and says so", async () => {
+    await writeRecords(
+      record({
+        id: HEIGHT as SizeRecord["id"],
+        property: "bench height",
+        value: { kind: "quantity", value: 85, unit: "cm" },
+        source: MEASURED,
+      }),
+    );
+    const request = await asOwner(testWorker({ root }));
+    await patch(request, { height: { record: HEIGHT } });
+    // The record's save undone, say: its file is gone.
+    await rm(join(garage(), "sizes", `${HEIGHT}.json`));
+
+    const view = BuildView.parse(
+      await (await request("/api/fabrication/workspaces/garage/builds/workbench")).json(),
+    );
+    expect(Math.round(view.derived.size.height)).toBe(850);
+    expect(view.derived.findings).toContainEqual(
+      expect.objectContaining({ kind: "assumed", sizes: expect.arrayContaining(["height"]) }),
+    );
+    const listed = await (await request("/api/fabrication/workspaces/garage/builds")).json();
+    expect(listed).toMatchObject({ builds: [{ slug: "workbench" }], problems: [] });
+
+    // Changing something else still saves, the pointer and its size kept.
+    const changed = await sendJson(
+      request,
+      "/api/fabrication/workspaces/garage/builds/workbench/parameters",
+      "PATCH",
+      { parameters: { castors: null } },
+    );
+    expect(changed.status).toBe(200);
+    expect(await buildFile()).toMatchObject({
+      parameters: { height: { record: HEIGHT, value: 850, source: { kind: "assumed" } } },
+    });
+  });
+
+  it("read as they were when saved as numbers, before records took over", async () => {
+    const request = await asOwner(testWorker({ root }));
+
+    const view = BuildView.parse(
+      await (await request("/api/fabrication/workspaces/garage/builds/workbench")).json(),
+    );
+    expect(view.parameters).toEqual(goldenBench);
+    expect(Math.round(view.derived.size.height)).toBe(goldenBench.height.value);
+    const changed = await patch(request, { castors: null });
+    expect(changed.status).toBe(200);
+    expect(await buildFile()).toMatchObject({ parameters: { height: goldenBench.height } });
   });
 
   it("follow a record's correction, and an estimate counts as assumed", async () => {
@@ -221,7 +272,7 @@ describe("a space on Home (#604)", () => {
     expect((await garageHome(request)).subject).toEqual({
       kind: "space",
       name: "garage",
-      size: "5140 mm × 2740 mm",
+      size: "5.14 m × 2.74 m",
       measurements: [
         "Floor length 5140 mm, measured",
         "Floor width 2740 mm, measured",
@@ -290,7 +341,7 @@ describe("a floor plan's size, against the space's records", () => {
     expect((await garageHome(request)).subject).toMatchObject({
       kind: "plan",
       plan: { width: 300, depth: 540, measured: false },
-      check: { kind: "differs", recorded: "5140 mm × 2740 mm" },
+      check: { kind: "differs", recorded: "5.14 m × 2.74 m" },
     });
   });
 

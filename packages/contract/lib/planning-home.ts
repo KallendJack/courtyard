@@ -79,7 +79,7 @@ export const HomeSubject = z.discriminatedUnion("kind", [
     kind: z.literal("space"),
     /** What it's called, from the space's name: "garage", as in "Draw the garage". */
     name: z.string(),
-    /** Its floor's length and width as recorded: "5140 mm × 2740 mm". */
+    /** Its floor's length and width as recorded, in metres: "5.14 m × 2.74 m". */
     size: z.string(),
     /** Each of its size records standing, with its source, which a plan is drawn from. */
     measurements: z.array(z.string()),

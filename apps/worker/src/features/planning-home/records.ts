@@ -60,8 +60,12 @@ export const recordedSpaces = (
     ];
   });
 
+/** A side in metres, as Home says a room's size, whatever unit it was recorded in: "5.14". */
+const metres = (side: SizeRecord) => String(Number(((lengthCm(side) ?? 0) / 100).toFixed(3)));
+
+/** A floor's size as Home says it: "5.14 m × 2.74 m", length first. */
 const floorSize = ({ length, width }: NonNullable<RecordedSpace["floor"]>) =>
-  `${valueText(length.value)} × ${valueText(width.value)}`;
+  `${metres(length)} m × ${metres(width)} m`;
 
 /**
  * The space to draw (#604): the first space whose floor's length and width are recorded, named

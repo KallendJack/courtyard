@@ -4,7 +4,7 @@ import {
   type BuildTemplate,
   SizeRecordId,
   type SizeSource,
-  type SourcedSize,
+  SourcedSize,
 } from "@courtyard/contract";
 import {
   type Build,
@@ -69,7 +69,7 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
  * Parameters with a JSON merge patch applied (RFC 7386): an object merges into the one there,
  * `null` takes a value out, and anything else (a number, a list) replaces what's there.
  */
-export const merged = (target: unknown, patch: unknown): unknown => {
+const merged = (target: unknown, patch: unknown): unknown => {
   if (!isObject(patch)) return patch;
   const result: Record<string, unknown> = isObject(target) ? { ...target } : {};
   for (const [key, value] of Object.entries(patch)) {
@@ -146,8 +146,9 @@ export const parameterChanges = (before: unknown, after: unknown): string[] => {
 
 // A Build's sizes that point at size records (ADR 0037, #711): `{ "record": "<id>" }` in its
 // parameters, in place of a value of its own, so a Build is worked out from the size the owner
-// recorded, and from its correction once there is one. The file holds only the pointer; the value
-// is read from the record each time the Build is.
+// recorded, and from its correction once there is one. The value is read from the record each
+// time the Build is; the file keeps the size last read beside the pointer, which the Build falls
+// back to, as assumed, once the record's gone (its save undone, say), so it never stops reading.
 
 /** A pointer as a model or the owner may give it: the record's ID, or its file, `sizes/<id>.json`. */
 const pointerId = (value: unknown) => {
@@ -158,19 +159,44 @@ const pointerId = (value: unknown) => {
     .replace(/\.json$/, "");
 };
 
+/** The size last read from a pointer's record, kept beside it, when it has one. */
+const lastRead = (pointer: Record<string, unknown>): SourcedSize | undefined => {
+  const size = SourcedSize.safeParse(pointer);
+  return size.success ? size.data : undefined;
+};
+
 /**
- * Parameters with every pointer as it's kept, `{ "record": "<id>" }` and nothing else: a merge
- * patch that gives one over a size leaves none of the size's own value beside it.
+ * Parameters with every pointer as it's kept, `{ "record": "<id>" }`, and the size last read
+ * beside it only where `before` (the Build as saved) pointed at the same record: a merge patch
+ * that points a size somewhere new leaves none of its old value beside it.
  */
-export const pointed = (parameters: unknown): unknown => {
+const pointed = (parameters: unknown, before?: unknown): unknown => {
   const id = pointerId(parameters);
-  if (id !== undefined) return { record: id };
-  if (Array.isArray(parameters)) return parameters.map(pointed);
+  if (id !== undefined) {
+    const kept =
+      pointerId(before) === id && isObject(parameters) ? lastRead(parameters) : undefined;
+    return { record: id, ...kept };
+  }
+  if (Array.isArray(parameters)) {
+    return parameters.map((one, index) =>
+      pointed(one, Array.isArray(before) ? before[index] : undefined),
+    );
+  }
   if (!isObject(parameters)) return parameters;
   return Object.fromEntries(
-    Object.entries(parameters).map(([key, value]) => [key, pointed(value)]),
+    Object.entries(parameters).map(([key, value]) => [
+      key,
+      pointed(value, isObject(before) ? before[key] : undefined),
+    ]),
   );
 };
+
+/**
+ * A Build's parameters as a save gives them: a new one's whole, or a change merged into those
+ * saved (`before`), each pointer as it's kept.
+ */
+export const patchedWith = (before: unknown, patch: unknown) =>
+  pointed(before === undefined ? patch : merged(before, patch ?? {}), before);
 
 /** Millimetres in each length a record may be in. */
 const MM: Readonly<Record<string, number>> = { mm: 1, cm: 10, m: 1000 };
@@ -196,46 +222,71 @@ const standingFor = (sizes: readonly ReadSize[], id: string) => {
   return size;
 };
 
+/** A record's standing size in mm with its source, as the engine takes a size, or why not. */
+const recordSize = (sizes: readonly ReadSize[], id: string): Result<SourcedSize, string> => {
+  const known = SizeRecordId.safeParse(id).success ? standingFor(sizes, id) : undefined;
+  if (known === undefined) return err(`there's no size record ${id}.`);
+  const { value: recorded, property } = known.record;
+  const mm = recorded.kind === "quantity" ? MM[recorded.unit] : undefined;
+  if (recorded.kind !== "quantity" || mm === undefined) return err(`${property} isn't a length.`);
+  return ok({
+    value: Math.round(recorded.value * mm * 1000) / 1000,
+    unit: "mm",
+    source: sourceOf(known),
+  });
+};
+
 /**
- * Parameters with every pointer swapped for its record's value, in mm with its source, as the
- * engine takes a size; or each pointer that can't be, by where in the parameters it is.
+ * Parameters with their pointers read: `resolved` with each swapped for its record's size, as the
+ * engine takes it; `kept` with each pointer and that size beside it, as the file keeps it; and
+ * `gone`, where in them a pointer's record is gone, so its size is the one last read, as assumed.
+ */
+type ReadParameters = {
+  readonly resolved: unknown;
+  readonly kept: unknown;
+  readonly gone: readonly string[];
+};
+
+/**
+ * Parameters with every pointer read from its record; one whose record is gone, or isn't a
+ * length, from the size last read beside it, as assumed; or each pointer that can't be either (a
+ * new one to a record that isn't there), by where in the parameters it is.
  */
 const recordSizes = (
   parameters: unknown,
   sizes: readonly ReadSize[],
-): Result<unknown, string[]> => {
+): Result<ReadParameters, string[]> => {
   const problems: string[] = [];
-  const walk = (value: unknown, path: string): unknown => {
+  const gone: string[] = [];
+  const walk = (value: unknown, path: string): readonly [unknown, unknown] => {
     const id = pointerId(value);
-    if (id !== undefined) {
-      const known = SizeRecordId.safeParse(id).success ? standingFor(sizes, id) : undefined;
-      if (known === undefined) {
-        problems.push(`${path}: there's no size record ${id}.`);
-        return value;
+    if (id !== undefined && isObject(value)) {
+      const read = recordSize(sizes, id);
+      const last = lastRead(value);
+      if (read.ok) return [read.value, { record: id, ...read.value }];
+      if (last === undefined) {
+        problems.push(`${path}: ${read.error}`);
+        return [value, value];
       }
-      const { value: recorded, property } = known.record;
-      const mm = recorded.kind === "quantity" ? MM[recorded.unit] : undefined;
-      if (recorded.kind !== "quantity" || mm === undefined) {
-        problems.push(`${path}: ${property} isn't a length.`);
-        return value;
-      }
-      return {
-        value: Math.round(recorded.value * mm * 1000) / 1000,
-        unit: "mm",
-        source: sourceOf(known),
-      } satisfies SourcedSize;
+      gone.push(path);
+      const assumed = { ...last, source: { kind: "assumed" } } satisfies SourcedSize;
+      return [assumed, { record: id, ...assumed }];
     }
-    if (Array.isArray(value)) return value.map((one, index) => walk(one, `${path}.${index}`));
-    if (!isObject(value)) return value;
-    return Object.fromEntries(
-      Object.entries(value).map(([key, one]) => [
-        key,
-        walk(one, path === "" ? key : `${path}.${key}`),
-      ]),
+    if (Array.isArray(value)) {
+      const both = value.map((one, index) => walk(one, `${path}.${index}`));
+      return [both.map(([resolved]) => resolved), both.map(([, kept]) => kept)];
+    }
+    if (!isObject(value)) return [value, value];
+    const both = Object.entries(value).map(
+      ([key, one]) => [key, walk(one, path === "" ? key : `${path}.${key}`)] as const,
     );
+    return [
+      Object.fromEntries(both.map(([key, [resolved]]) => [key, resolved])),
+      Object.fromEntries(both.map(([key, [, kept]]) => [key, kept])),
+    ];
   };
-  const resolved = walk(parameters, "");
-  return problems.length === 0 ? ok(resolved) : err(problems);
+  const [resolved, kept] = walk(parameters, "");
+  return problems.length === 0 ? ok({ resolved, kept, gone }) : err(problems);
 };
 
 /**
@@ -259,17 +310,25 @@ const keepPointers = (original: unknown, read: unknown, changed: unknown): unkno
 };
 
 /**
- * A Build worked out from its parameters, its sizes that point at records read from them, or each
- * problem, where in its parameters.
+ * A Build worked out from its parameters, its sizes that point at records read from them: what
+ * the engine works out, its parameters as the file keeps them (each pointer with the size just
+ * read beside it), and where a pointer's record is gone; or each problem, where in its parameters.
  */
 export const workedOut = (
   template: BuildTemplate,
   parameters: BuildParameters,
   setting: BuildSetting | undefined,
   sizes: readonly ReadSize[],
-) => {
+): Result<
+  { readonly build: Build; readonly kept: BuildParameters; readonly gone: readonly string[] },
+  string[]
+> => {
   const read = recordSizes(parameters, sizes);
-  return read.ok ? derive(template, read.value as BuildParameters, setting) : read;
+  if (!read.ok) return read;
+  const build = derive(template, read.value.resolved as BuildParameters, setting);
+  if (!build.ok) return build;
+  const { kept, gone } = read.value;
+  return ok({ build: build.value, kept: kept as BuildParameters, gone });
 };
 
 /**
@@ -285,8 +344,9 @@ export const pickKeeping = (
 ): Result<unknown, { readonly kind: "parameters" | "invalid"; readonly problems: string[] }> => {
   const read = recordSizes(parameters, sizes);
   if (!read.ok) return err({ kind: "parameters", problems: read.error });
-  const picked = pickStockIn(template, read.value, pick);
+  const { resolved } = read.value;
+  const picked = pickStockIn(template, resolved, pick);
   return picked.ok
-    ? ok(keepPointers(parameters, read.value, picked.value))
+    ? ok(keepPointers(parameters, resolved, picked.value))
     : err({ kind: "invalid", problems: picked.error });
 };

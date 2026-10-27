@@ -10,7 +10,8 @@ import { checkedPlan, recordedSpaces, spaceToDraw } from "./records.ts";
 
 /**
  * A planning workspace's main subject (#603): a Thing drawn as its kind of thing, its parts on the
- * places saved on them (#711); else its newest floor plan. Decided here, once, for every screen.
+ * places saved on them (#711), or by name while they have none; else its newest floor plan.
+ * Decided here, once, for every screen.
  */
 
 /** A Thing is drawn as a mountain bike once this many of its parts have a place on it. */
@@ -23,18 +24,54 @@ const drawnPart = (part: ThingSummary): DrawnPart => ({
 });
 
 /**
+ * The words in a part's name that put it on each place of the drawing, in the order they're tried
+ * (a rear tyre before any tyre, so "Tyres" takes the front one): only for a part saved before
+ * places were (#711), so a bike drawn then stays drawn until the model gives its parts places.
+ */
+const BIKE_WORDS: readonly (readonly [BikePlace, RegExp])[] = [
+  ["seatpost", /\bseat ?post\b|\bdropper\b/i],
+  ["saddle", /\bsaddle\b/i],
+  ["grips", /\bgrips?\b/i],
+  ["fork", /\bfork\b/i],
+  ["brakes", /\bbrakes?\b|\brotors?\b/i],
+  ["drivetrain", /\bdrivetrain\b|\bchain(?:ring)?\b|\bcassette\b|\bderailleur\b|\bcranks?\b/i],
+  ["pedals", /\bpedals?\b/i],
+  ["rear-tyre", /\b(?:rear|back) (?:tyre|tire)s?\b/i],
+  ["front-tyre", /\b(?:tyre|tire)s?\b/i],
+];
+
+/** A place's own word, as a part named just for it is named ("Pedals", "Front tyre"). */
+const placeWord = (name: string) =>
+  name
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, " ")
+    .replace(/s$/, "");
+
+/**
  * A Thing's fitted parts on the mountain bike's drawing (#603): a wanted one isn't on the bike, so
- * it's neither drawn nor listed. In list order, each on the place saved on it (#711); those with
- * none, or whose place another has taken, under it.
+ * it's neither drawn nor listed. In list order, each on the place saved on it (#711); then each
+ * part with none saved, from before places were, on a free place by its name: one named just for
+ * a place ("Pedals") first, then by the words in its name. Those left, under it.
  */
 const onTheBike = (top: ThingSummary, parts: readonly ThingSummary[]) => {
   const fitted = parts.filter(({ status }) => status !== "want");
   const taken = new Map<BikePlace, ThingSummary>();
-  const unplaced: ThingSummary[] = [];
   for (const part of fitted) {
-    if (part.place === undefined || taken.has(part.place)) unplaced.push(part);
-    else taken.set(part.place, part);
+    if (part.place !== undefined && !taken.has(part.place)) taken.set(part.place, part);
   }
+  const unsaved = fitted.filter(({ place }) => place === undefined);
+  for (const part of unsaved) {
+    const own = BIKE_PLACES.find((place) => placeWord(place) === placeWord(part.name));
+    if (own !== undefined && !taken.has(own)) taken.set(own, part);
+  }
+  for (const part of unsaved) {
+    if ([...taken.values()].includes(part)) continue;
+    const place = BIKE_WORDS.find(([at, words]) => !taken.has(at) && words.test(part.name))?.[0];
+    if (place !== undefined) taken.set(place, part);
+  }
+  const placed = new Set(taken.values());
+  const unplaced = fitted.filter((part) => !placed.has(part));
   return {
     kind: "drawing",
     drawing: "mountain-bike",

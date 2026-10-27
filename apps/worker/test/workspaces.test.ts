@@ -143,7 +143,7 @@ describe("opening a workspace", () => {
       intro: "Single garage, shared with the bikes.",
       facts: ["The garage isn't cleared out yet.", "Budget is £1,200."],
       ideas: ["Rubber flooring."],
-      // Plans went with projects (#603): a Plans section is kept as written, for the move review.
+      // Plans went with projects (#603): a Plans section is kept as written.
       other: "## Plans\n\n- Squat rack on the left wall.",
       characters: expect.any(Number),
     });

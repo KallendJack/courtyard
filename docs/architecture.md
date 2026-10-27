@@ -828,8 +828,9 @@ things live only in the worker's memory and go when it restarts.
   matter, then its steps, decisions and a dated history, each file named by the project's name when it was started.
   A step that makes a Build ends `[build: <slug>]`.
 - `<workspace>/builds/<slug>.json`: a planning workspace's Builds (#697, ADRs 0036, 0037): name, template and
-  parameters only, every size with its source or pointing at a size record (`{"record": "<id>"}`, #711), and the
-  documents it supersedes (`supersedes`, by file name, #786);
+  parameters only, every size with its source or pointing at a size record (`{"record": "<id>"}`, with the size
+  last read beside it, which stands in, assumed, once the record's gone, #711), and the documents it supersedes
+  (`supersedes`, by file name, #786);
   the parts, cut plan, buy list, steps and findings are worked out on read, never stored. Each file is named by the Build's name when it was started.
   `<workspace>/builds/progress/<slug>.json` is how far the owner has got with its steps (#699): the step reached and
   the lines ticked, each step by its ID (a file kept by step number reads as not started), beside the Build so

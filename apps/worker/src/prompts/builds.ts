@@ -122,11 +122,20 @@ const sizeLine = ({ size, print }: Build) => {
 };
 
 /**
+ * A Build's sizes whose record is gone (#711), so each is the size last read from it, as assumed:
+ * said, so the model asks for the size again rather than trusting it.
+ */
+const goneLine = ({ gone }: LabelledBuild["build"]) =>
+  gone.length === 0
+    ? ""
+    : `, the size record for ${gone.join(", ")} gone, so the size last read from it, assumed`;
+
+/**
  * A Build as a model reads it in the list: its label, name, template, size, the step reached once
- * the owner has started building, and its file.
+ * the owner has started building, any size whose record is gone, and its file.
  */
 const buildLine = ({ label, build }: LabelledBuild) =>
-  `[${label}] ${build.file.name.replace(/\s+/g, " ").trim()}, ${build.file.template}, ${sizeLine(build.derived)}${reached(build)} (${build.summary.path})`;
+  `[${label}] ${build.file.name.replace(/\s+/g, " ").trim()}, ${build.file.template}, ${sizeLine(build.derived)}${reached(build)}${goneLine(build)} (${build.summary.path})`;
 
 /** A planning workspace's Builds, one labelled line each between their markers. */
 export const buildsPart = (builds: ReadBuilds) => {

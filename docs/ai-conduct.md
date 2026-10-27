@@ -341,10 +341,11 @@ every zone's size is written under its name, or listed beside the plan when the 
 `plan-room-table-size` scenario checks a single room from a room table is drawn with its overall size.
 
 **Draw the garage** (#604; Paper, "Tablet · Garage Home: Draw the garage, then projects (#604)") leads the Home of a
-planning workspace whose facts give a floor's two sides ("5.14 × 2.74 m") until it has a plan, named from the
-workspace. Its card shows every fact that holds a measurement, and its button starts a session with the first message
-"Draw the garage as a floor plan, to scale, from what's saved:" and those facts, one to a line. Nothing about it is
-told to the model beyond that message and the rule above.
+planning workspace with a space Thing whose `floor length` and `floor width` are recorded (#711, Sizes below) until
+it has a plan, named from the space. Its card shows each of the space's size records with its source, the floor
+first ("Floor length 5140 mm, measured"), and its button starts a session with the first message "Draw the garage
+as a floor plan, to scale, from what's saved:" and those lines, one to a line. Nothing about it is told to the model
+beyond that message and the rule above; a fact in a sentence no longer makes a space.
 
 ## Planning answers
 
@@ -1930,6 +1931,8 @@ label, name, template, finished size to the whole mm as the owner is told it, th
 isn't a Build as written (`- builds/shelves.json can't be read as a Build: <problem>`). Once the owner has started
 following a Build's steps in Fabrication (#699), its line says the step they've reached before its file (`…, 900 mm,
 on step 5 of 12: Make the two end frames (builds/workbench.json)`), so a new session carries on where they left off.
+A size that points at a size record that's gone (#711) says so before its file (`…, 900 mm, the size record for
+height gone, so the size last read from it, assumed (builds/workbench.json)`), so the model asks for it again.
 The step is kept by its ID, so it stays the same step when one before it comes or goes:
 
 > The workspace's Builds are below: what the owner is making, one per line with its label in front ([B1] is the
@@ -2191,10 +2194,13 @@ as a note with Undo. Code workspaces have none, and their sessions no size tool.
 
 **Records take over (#711).** A Build's size can point at a record, `{"record": "<id>"}` in its parameters in place
 of a value of its own: the Build is worked out from the record standing (its correction, once there is one), in mm,
-measured and specified as they are and reported or estimated as assumed, and a pointer to a record that isn't there,
-or isn't a length, is refused. A space's floor is its `floor length` and `floor width`, from which Home draws the
+measured and specified as they are and reported or estimated as assumed, and a new pointer to a record that isn't
+there, or isn't a length, is refused. The file keeps the size last read beside each pointer, which stands in, as
+assumed, once the record's gone (its save undone, say), so the Build never stops reading; its line in the list of
+Builds says so (Builds, above). A space's floor is its `floor length` and `floor width`, from which Home draws the
 space to draw, and against which a floor plan's size is checked (drawn as measured only when the records measure it
-so; flagged when it differs). Nothing is read from a sentence any more.
+so; flagged when it differs). Nothing is read from a sentence any more, but for a bike's part saved before places
+were, which Home still places by its name until the model gives it a place.
 
 What a model is told (Every turn, item 8), on every turn in a planning workspace, after the Builds: the standing
 records, one per line between `<sizes>` markers (`[Z1] [T1] Garage: floor length 4260 mm, measured, 2026-10-24,

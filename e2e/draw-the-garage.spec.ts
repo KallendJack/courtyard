@@ -64,7 +64,7 @@ test.describe("on the unfolded Fold", () => {
     // Where the plan will be, with its size, and everything it's drawn from, as recorded.
     const card = drawCard(page, space);
     await expect(card).toBeVisible();
-    await expect(card).toContainText("5140 mm × 2740 mm");
+    await expect(card).toContainText("5.14 m × 2.74 m");
     await expect(card).toContainText(
       "Courtyard draws it to scale from what's saved: Floor length 5140 mm, reported. Floor width 2740 mm, reported. Height 2450 mm, reported.",
     );
