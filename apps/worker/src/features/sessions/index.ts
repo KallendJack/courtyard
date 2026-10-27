@@ -210,7 +210,7 @@ import {
 import { type AddedInbox, createAddedInbox } from "./added.ts";
 import { type AfterFailing, createFailedChecks } from "./failed-checks.ts";
 import { fileSavingTools, ownerMessagesIn } from "./file-tools.ts";
-import { createClearingRetries, failedAgain, samePullRequest } from "./following.ts";
+import { askedToFix, createClearingRetries, failedAgain, samePullRequest } from "./following.ts";
 import { createSessionNotes } from "./notes.ts";
 import { createQuietWorktrees } from "./quiet-worktrees.ts";
 import { savingTool } from "./saving-tools.ts";
@@ -724,7 +724,22 @@ export const createSessions = (options: {
    */
   const pullRequests = new Map<SessionId, PullRequest | null>();
   /** What the worker tries itself when a pull request's checks fail (#740). */
-  const failedChecks = options.github && createFailedChecks({ ...options, github: options.github });
+  const failedChecks =
+    options.github &&
+    createFailedChecks({
+      ...options,
+      github: options.github,
+      // No turn starts while the worker updates a branch: one asked for meanwhile is queued.
+      whileIdle: async (id, step) => {
+        const session = runningSession(id);
+        if (session.turn.kind !== "idle" || tasks.running(id).length > 0) return undefined;
+        session.turn = { kind: "ending" };
+        return step().finally(() => {
+          session.turn = { kind: "idle" };
+          void sendNextQueued(id);
+        });
+      },
+    });
   /** Set while a fresh start sets every session aside: no turn starts meanwhile. */
   let settingAside = false;
   /**
@@ -2780,10 +2795,18 @@ export const createSessions = (options: {
       const fixing = { id, workspaceId, repoPath, branch, events: events.value, pullRequest };
       // A conflict first: its checks may not run again until it's brought up to date (#382).
       if (pullRequest.conflicts === true) return askToFix({ ...fixing, after: "conflict" });
-      if (pullRequest.checks.kind !== "failed") return;
-      // The worker updates a branch behind its base, or re-runs untouched tests once, first (#740).
-      const tried = failedChecks === undefined ? "fix" : await failedChecks.tryAgain(fixing);
-      if (tried !== "wait") await askToFix({ ...fixing, after: tried });
+      const { head } = pullRequest;
+      if (pullRequest.checks.kind !== "failed" || askedToFix(events.value, "checksFailed", head)) {
+        return;
+      }
+      // First the worker updates a Lead builder's own branch behind its base (never one it didn't
+      // make, nor the owner's), or re-runs untouched tests once (#740).
+      const mayUpdate =
+        file.value.byLead === true &&
+        file.value.keepsBranch !== true &&
+        !askedToFix(events.value, "conflicted", head);
+      const tried = await failedChecks?.tryAgain({ ...fixing, mayUpdate });
+      if (tried !== "wait") await askToFix({ ...fixing, after: tried ?? "fix" });
     });
     following = look.catch((error: unknown) =>
       console.error(`Session ${id}: its pull request couldn't be followed`, error),
@@ -2808,11 +2831,7 @@ export const createSessions = (options: {
     const { pullRequest, after } = fix;
     const { number, head } = pullRequest;
     const conflict = after === "conflict";
-    const asked = fix.events.some(
-      (event) =>
-        event.type === "owner-message" &&
-        (conflict ? event.conflicted : event.checksFailed)?.head === head,
-    );
+    const asked = askedToFix(fix.events, conflict ? "conflicted" : "checksFailed", head);
     const last = fix.events.findLast((event) => event.type === "owner-message");
     if (asked || last?.type !== "owner-message") return;
     const [first, ...more] = pullRequest.checks.kind === "failed" ? pullRequest.checks.failed : [];

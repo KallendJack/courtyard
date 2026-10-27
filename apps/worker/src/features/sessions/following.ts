@@ -35,11 +35,19 @@ export const failedAgain = (seen: {
     now.checks.kind === "failed" &&
     was?.head === now.head &&
     was.checks.kind !== "failed" &&
-    seen.events.some(
-      (event) => event.type === "owner-message" && event.checksFailed?.head === now.head,
-    )
+    askedToFix(seen.events, "checksFailed", now.head)
   );
 };
+
+/**
+ * Whether the session was already asked to fix commit `head`: its failed checks (#172), or its
+ * conflict with its base (#382). Each is asked once per commit.
+ */
+export const askedToFix = (
+  events: readonly SessionEvent[],
+  about: "checksFailed" | "conflicted",
+  head: string,
+) => events.some((event) => event.type === "owner-message" && event[about]?.head === head);
 
 /** The first wait before trying again to clear a worktree that wouldn't go, and the longest. */
 const RETRY_FIRST_MS = 60_000;

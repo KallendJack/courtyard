@@ -133,13 +133,13 @@ export type GitHubApi = {
     find: { readonly repo: string; readonly commit: string },
   ) => Promise<Result<null, string>>;
   /**
-   * The failing test a check run names in its annotations (#355), such as a browser test's
-   * title; `null` when it names none.
+   * The failing tests a check run names in its annotations (#355), such as a browser test's
+   * title, in order; and whether that's all of them (#740).
    */
-  readonly checkRunFailure: (
+  readonly checkRunFailures: (
     accessToken: string,
     find: { readonly repo: string; readonly id: number },
-  ) => Promise<Result<string | null, string>>;
+  ) => Promise<Result<{ readonly named: readonly string[]; readonly complete: boolean }, string>>;
   /** `repo`'s open milestones (#355). */
   readonly openMilestones: (
     accessToken: string,
@@ -1327,7 +1327,7 @@ export const createGitHubApi = (options: { clientId: string; fetch?: typeof fetc
       }
     },
 
-    checkRunFailure: async (accessToken, find) => {
+    checkRunFailures: async (accessToken, find) => {
       const repo = RepoName.safeParse(find.repo);
       if (!repo.success) return err("That isn't a repository on GitHub.");
       try {
@@ -1336,11 +1336,11 @@ export const createGitHubApi = (options: { clientId: string; fetch?: typeof fetc
           `/repos/${repo.data}/check-runs/${find.id}/annotations?per_page=${PAGE}`,
           Annotations,
         );
-        // GitHub's own "Process completed with exit code 1." has no title: a reporter's names the test.
-        const named = annotations.find(
-          (each) => each.annotation_level === "failure" && (each.title ?? "").trim() !== "",
-        );
-        return ok(named?.title?.split("\n")[0]?.trim() ?? null);
+        // A reporter's titles name the tests (GitHub's own exit code has none); it keeps 10 a step.
+        const named = annotations
+          .filter((each) => each.annotation_level === "failure")
+          .flatMap((each) => each.title?.split("\n")[0]?.trim() || []);
+        return ok({ named, complete: named.length < 10 && annotations.length < PAGE });
       } catch {
         return err("GitHub couldn't be asked what failed.");
       }

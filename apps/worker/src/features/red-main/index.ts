@@ -55,7 +55,7 @@ export const createRedMain = (options: {
     GitHub,
     | "commitJobs"
     | "rerunFailedJobs"
-    | "checkRunFailure"
+    | "checkRunFailures"
     | "openMilestones"
     | "describeMilestone"
     | "createIssue"
@@ -73,8 +73,8 @@ export const createRedMain = (options: {
 
   /** Files the failure on main, first in the current milestone's build order. */
   const fileIssue = async (repo: string, failed: FoundCheckRun, done: Done) => {
-    const named = await github.checkRunFailure({ repo, id: failed.id });
-    const test = named.ok && named.value !== null ? named.value : failed.name;
+    const named = await github.checkRunFailures({ repo, id: failed.id });
+    const test = (named.ok ? named.value.named[0] : undefined) ?? failed.name;
     const filed = await fileInBuildOrder(github, {
       repo,
       title: `Main fails: ${test}`,

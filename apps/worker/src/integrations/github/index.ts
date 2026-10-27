@@ -691,9 +691,9 @@ export const createGitHub = (options: {
     rerunFailedJobs: (find: { repo: string; commit: string }) =>
       asked((github, token) => github.rerunFailedJobs(token, find)),
 
-    /** The failing test check run `id` names, or `null` when it names none (#355). */
-    checkRunFailure: (find: { repo: string; id: number }) =>
-      asked((github, token) => github.checkRunFailure(token, find)),
+    /** The failing tests check run `id` names, and whether that's all of them (#355, #740). */
+    checkRunFailures: (find: { repo: string; id: number }) =>
+      asked((github, token) => github.checkRunFailures(token, find)),
 
     /** `repo`'s open milestones (#355). */
     openMilestones: (find: { repo: string }) =>

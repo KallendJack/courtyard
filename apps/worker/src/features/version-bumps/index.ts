@@ -100,7 +100,7 @@ export const createVersionBumps = (options: {
     | "openPullRequests"
     | "commitJobs"
     | "rerunFailedJobs"
-    | "checkRunFailure"
+    | "checkRunFailures"
     | "openIssues"
     | "commentOnIssue"
     | "openMilestones"
@@ -125,8 +125,8 @@ export const createVersionBumps = (options: {
 
   /** The test a failed job names, else the job's own name. */
   const testOf = async (repo: string, job: { id: number; name: string }) => {
-    const named = await github.checkRunFailure({ repo, id: job.id });
-    return named.ok && named.value !== null ? named.value : job.name;
+    const named = await github.checkRunFailures({ repo, id: job.id });
+    return (named.ok ? named.value.named[0] : undefined) ?? job.name;
   };
 
   /** The open bug titled `title` in `repo`, if there is one; `undefined` too if it can't be told. */

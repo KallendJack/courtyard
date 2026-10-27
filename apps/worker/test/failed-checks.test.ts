@@ -41,8 +41,12 @@ const runJobs = async () => {
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "courtyard-"));
   ({ repo, origin, github: onGitHub } = await codeRepo(root));
-  await codeWorkspace(root, "side-project", repo);
-  github = createFakeGitHub();
+  await codeWorkspace(root, "side-project", repo, { name: "Side project" });
+  // One issue for the Lead to build, when a test runs it.
+  github = createFakeGitHub({
+    issues: { [onGitHub]: [{ number: 22, title: "Which session waits", milestone: "4 · Code" }] },
+    milestones: { [onGitHub]: { "4 · Code": "NOW. Build order: #22." } },
+  });
   jobs = [];
   request = await asOwner(
     testWorker({
@@ -82,20 +86,49 @@ const failedJob = (name: string): FoundCheckRun => {
   };
 };
 
-/**
- * A code session whose branch has one commit, pushed, changing `file`, with its pull request open
- * and changing that file: its id, worktree, branch and pull request.
- */
-const sessionWithPullRequest = async (file = "notes.md", text = "A note\n") => {
+const sessionsOf = async () =>
+  CodeSessionList.parse(await (await request("/api/workspaces/side-project/sessions")).json())
+    .sessions;
+
+/** The owner's own code session, once its first turn has ended: its id. */
+const ownSession = async () => {
   const response = await postJson(request, "/api/workspaces/side-project/sessions", {
     text: "Implement #79",
     model: FAKE_MODEL,
   });
   const { id } = (await response.json()) as { id: string };
   await followSession(request, { sessionId: id, until: "turn-completed" });
+  return id;
+};
+
+/** The Lead's builder for #22, once no turn runs: its id. */
+const leadBuilder = async () => {
+  await postJson(request, "/api/workspaces/side-project/lead/run", { model: FAKE_MODEL });
+  await expect
+    .poll(async () => (await sessionsOf()).filter((each) => each.byLead === true).length)
+    .toBe(1);
+  await expect
+    .poll(async () => (await sessionsOf()).filter((each) => each.busy), { timeout: 15_000 })
+    .toHaveLength(0);
+  return (await sessionsOf()).find((each) => each.byLead === true)?.id ?? "";
+};
+
+/**
+ * A code session (the owner's own, or `of` the Lead's builder) whose branch has one commit,
+ * pushed, changing `file`, with its pull request open and changing that file: its id, worktree,
+ * branch and pull request.
+ */
+const sessionWithPullRequest = async (
+  file = "notes.md",
+  text = "A note\n",
+  of: () => Promise<string> = ownSession,
+) => {
+  const id = await of();
+  const branch = (await sessionsOf()).find((each) => each.id === id)?.branch ?? "";
   const listed = await gitIn(repo, "worktree", "list", "--porcelain");
-  const found = /worktree (\S+)\nHEAD \w+\nbranch refs\/heads\/(courtyard\/\S+)/.exec(listed);
-  const [, worktree = "", branch = ""] = found ?? [];
+  const worktree =
+    new RegExp(`worktree (\\S+)\\nHEAD \\w+\\nbranch refs/heads/${branch}\\n`).exec(listed)?.[1] ??
+    "";
   await mkdir(dirname(join(worktree, file)), { recursive: true });
   await writeFile(join(worktree, file), text);
   await gitIn(worktree, "add", ".");
@@ -229,9 +262,13 @@ describe("a failed check that isn't an untouched test (#740)", () => {
   });
 });
 
-describe("a failed check on a branch behind main (#740)", () => {
+describe("a failed check on a Lead builder's branch behind main (#740)", () => {
   it("brings the branch up to date first, main merged in and pushed, before any re-run", async () => {
-    const { id, worktree, branch, head, number } = await sessionWithPullRequest();
+    const { id, worktree, branch, head, number } = await sessionWithPullRequest(
+      undefined,
+      undefined,
+      leadBuilder,
+    );
     const onMain = await mainMovesOn();
     const job = failedJob("E2E 1/5");
     github.setFailure(job.id, FAILURE);
@@ -254,6 +291,7 @@ describe("a failed check on a branch behind main (#740)", () => {
     const { id, worktree, branch, head, number } = await sessionWithPullRequest(
       "README.md",
       "# The session's project\n",
+      leadBuilder,
     );
     await mainMovesOn("README.md", "# Main's project\n");
     failsOn(number, head, [failedJob("E2E 1/5")]);
@@ -273,6 +311,93 @@ describe("a failed check on a branch behind main (#740)", () => {
       conflicted: { pullRequest: number, head },
     });
     expect(github.reruns()).toEqual([]);
+    await settled(id);
+  });
+});
+
+describe("what the worker never updates, nor re-runs blind (#740)", () => {
+  it("leaves the owner's own session's branch behind main as it is, re-running instead", async () => {
+    const { branch, head, number } = await sessionWithPullRequest();
+    await mainMovesOn();
+    const job = failedJob("E2E 1/5");
+    github.setFailure(job.id, FAILURE);
+    failsOn(number, head, [job]);
+
+    await runJobs();
+
+    expect(await gitIn(origin, "rev-parse", `refs/heads/${branch}`)).toBe(head);
+    expect(github.reruns()).toEqual([{ repo: onGitHub, commit: head }]);
+  });
+
+  it("leaves a builder's branch with work not yet committed as it is", async () => {
+    const { worktree, branch, head, number } = await sessionWithPullRequest(
+      undefined,
+      undefined,
+      leadBuilder,
+    );
+    await mainMovesOn();
+    await writeFile(join(worktree, "half-done.md"), "Not yet committed\n");
+    const job = failedJob("E2E 1/5");
+    github.setFailure(job.id, FAILURE);
+    failsOn(number, head, [job]);
+
+    await runJobs();
+
+    expect(await gitIn(origin, "rev-parse", `refs/heads/${branch}`)).toBe(head);
+    expect(await gitIn(worktree, "rev-parse", "HEAD")).toBe(head);
+    expect(await gitIn(worktree, "status", "--porcelain")).toBe("?? half-done.md");
+  });
+
+  it("doesn't bring the commit its update pushed up to date again", async () => {
+    const { branch, head, number } = await sessionWithPullRequest(
+      undefined,
+      undefined,
+      leadBuilder,
+    );
+    await mainMovesOn();
+    failsOn(number, head, [failedJob("E2E 1/5")]);
+    await runJobs();
+    const updated = await gitIn(origin, "rev-parse", `refs/heads/${branch}`);
+    expect(updated).not.toBe(head);
+
+    // The merge commit fails in an untouched test while main moves on again.
+    await mainMovesOn("later.md", "Later on main\n");
+    const job = failedJob("E2E 1/5");
+    github.setFailure(job.id, FAILURE);
+    failsOn(number, updated, [job]);
+    await runJobs();
+
+    expect(await gitIn(origin, "rev-parse", `refs/heads/${branch}`)).toBe(updated);
+    expect(github.reruns()).toEqual([{ repo: onGitHub, commit: updated }]);
+  });
+
+  it("goes to the session when any test a failed job names is in a file the pull request changes", async () => {
+    const touched = "e2e/notes.spec.ts";
+    const { id, head, number } = await sessionWithPullRequest(touched, "test('a', () => {});\n");
+    const job = failedJob("E2E 1/5");
+    // The first test it names is untouched; the second is the pull request's.
+    github.setFailure(job.id, FAILURE, `[chromium] › ${touched}:3:1 › Notes › keeps one`);
+    failsOn(number, head, [job]);
+
+    await runJobs();
+
+    expect(github.reruns()).toEqual([]);
+    expect(await fixingTurns(id)).toHaveLength(1);
+    await settled(id);
+  });
+
+  it("goes to the session when what was tried can't be read, re-running nothing", async () => {
+    await mkdir(join(root, "data"), { recursive: true });
+    await writeFile(join(root, "data", "failed-checks.json"), "{ not json");
+    const { id, head, number } = await sessionWithPullRequest();
+    const job = failedJob("E2E 1/5");
+    github.setFailure(job.id, FAILURE);
+    failsOn(number, head, [job]);
+
+    await runJobs();
+
+    expect(github.reruns()).toEqual([]);
+    expect(await fixingTurns(id)).toHaveLength(1);
     await settled(id);
   });
 });
