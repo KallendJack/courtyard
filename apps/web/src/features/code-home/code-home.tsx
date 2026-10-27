@@ -25,6 +25,7 @@ import type { FromWorker } from "../../api/worker.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { KEPT_LEAD, useLead } from "../builders/api.ts";
 import { BuildersBoard, needsTheOwner } from "../builders/builders-board.tsx";
+import { Designs } from "../designs/designs.tsx";
 import { UsageLines } from "../limits/usage-lines.tsx";
 import { loadMattSetup } from "../matt-setup/api.ts";
 import PullRequests, { useOpenPullRequests } from "../pull-requests/pull-requests.tsx";
@@ -62,11 +63,11 @@ function GitHubNotice() {
 }
 
 /** The tabs a code workspace's page has, by their hash; Home has none (#301). */
-const TABS = { roadmap: "Roadmap", sessions: "Sessions", prs: "PRs" } as const;
+const TABS = { roadmap: "Roadmap", sessions: "Sessions", prs: "PRs", designs: "Designs" } as const;
 type Tab = keyof typeof TABS | "";
 
 const tabIn = (hash: string): Tab =>
-  hash === "roadmap" || hash === "sessions" || hash === "prs" ? hash : "";
+  hash === "roadmap" || hash === "sessions" || hash === "prs" || hash === "designs" ? hash : "";
 
 /** Each workspace's connections, setup check and Next up as last known, for the tab's lifetime. */
 const KEPT_CONNECTIONS = createKept<WorkspaceConnections>();
@@ -80,8 +81,9 @@ const known = <T,>(loaded: FromWorker<T>) => (loaded.kind === "loaded" ? loaded.
 
 /**
  * A code workspace's page under its name (#301; Paper, "Code workspace Home", desktop, tablet and
- * cover screen): its connections line (#308), its tabs (Home · Roadmap · Sessions · PRs; the
- * Roadmap, #532, its milestones and their issues), and on Home, in a fixed order, the Builders
+ * cover screen): its connections line (#308), its tabs (Home · Roadmap · Sessions · PRs · Designs;
+ * the Roadmap, #532, its milestones and their issues; Designs, #522, its Paper file's boards), and
+ * on Home, in a fixed order, the Builders
  * board (#592), Needs you, Next up, Main, then the message box at the foot. From a tablet
  * up it's exactly the screen tall and never scrolls (#335): the blocks share the height left, each
  * keeping its place, empty or not (#283), and scroll inside their cards. Its one line, What it's
@@ -195,6 +197,8 @@ export default function CodeHome(props: {
     hasPulls
       ? { hash: "prs", label: TABS.prs, count: open === undefined ? "unknown" : pulls.length }
       : { hash: "prs", label: TABS.prs, count: 0, held: true },
+    // Its Paper file's boards (#522), or how to connect one.
+    { hash: "designs", label: TABS.designs },
   ];
   const chosen = tabs.some((each) => each.hash === tab && each.held !== true) ? tab : "";
 
@@ -300,6 +304,18 @@ export default function CodeHome(props: {
           <Scroller from="tablet" className="mt-4 md:min-h-0 md:flex-1">
             <PullRequests workspaceId={workspace.id} sessions={list.sessions} open={open} />
           </Scroller>
+        ) : chosen === "designs" ? (
+          <Designs
+            workspaceId={workspace.id}
+            paperFileId={
+              connections === undefined
+                ? undefined
+                : connections.paper.kind === "connected"
+                  ? connections.paper.fileId
+                  : null
+            }
+            onConnect={() => setConnecting(true)}
+          />
         ) : (
           // On Home the blocks share the height above Main, each keeping its place; one with more
           // rows than fit scrolls inside its card (#335, #283).

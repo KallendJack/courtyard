@@ -9,7 +9,7 @@ A code workspace's main, for its Home's Main row (#301).
 
 ## API
 
-- `GET /api/workspaces/:id/main` (in `worker.ts`).
+- `GET /api/workspaces/:id/main` (`routes.ts`).
 
 ## How it works
 

@@ -23,6 +23,15 @@ export const elapsedWords = (ms: number) => {
     : `${Math.floor(minutes / 60)}:${two(minutes % 60)}:${two(seconds % 60)}`;
 };
 
+/** How long ago something happened, while it's today: "just now", "4 min ago", "2 h ago". */
+export const agoWords = (iso: string, now = new Date()) => {
+  const minutes = Math.floor((now.getTime() - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} h ago`;
+  return describeWhen(iso, now);
+};
+
 /** When something happened, the way people say it: "Today, 18:42", "Yesterday" or "2 Oct". */
 export const describeWhen = (iso: string, now = new Date()) => {
   const date = new Date(iso);

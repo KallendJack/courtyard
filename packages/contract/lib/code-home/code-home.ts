@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { LiveVersion, MainBuild } from "./live.ts";
-import { Effort, ModelRef, SessionId } from "./session.ts";
+import { LiveVersion, MainBuild } from "../live.ts";
+import { Effort, ModelRef, SessionId } from "../session.ts";
 
 // A code workspace's Home (#301) and its connections (#308): what its page asks for besides its
 // sessions and pull requests. Only that page parses these, so they stay off the first load.

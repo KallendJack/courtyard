@@ -24,7 +24,6 @@ import {
   type WorkspaceDetail,
   WorkspaceId,
   type WorkspaceList,
-  type WorkspaceMain,
   WorkspaceOrder,
   type WorkspaceSummary,
   workspaceNameFrom,
@@ -47,6 +46,7 @@ import {
   WORKSPACES_ARRANGED,
   workspaceChange,
 } from "./features/context-folder/index.ts";
+import { designRoutes } from "./features/designs/routes.ts";
 import { documentRoutes } from "./features/documents/routes.ts";
 import { FABRICATION_CHAT, fabricationRoutes } from "./features/fabrication/routes.ts";
 import { createFreshStart } from "./features/fresh-start/index.ts";
@@ -101,6 +101,7 @@ import { THING_PHOTO_ROUTES, thingRoutes } from "./features/things/routes.ts";
 import { createVersionBumps } from "./features/version-bumps/index.ts";
 import { waitingRoutes } from "./features/waiting/routes.ts";
 import { createWorkspaceMain } from "./features/workspace-main/index.ts";
+import { workspaceMainRoutes } from "./features/workspace-main/routes.ts";
 import {
   archiveWorkspace,
   arrangeWorkspaces,
@@ -269,7 +270,8 @@ export const createWorker = (options: {
   background?: Background;
   /**
    * The owner's Paper files (#308), listed and made for connecting Paper from a code workspace's
-   * page. Tests pass a fake; otherwise Paper's own MCP server is asked.
+   * page, and a file's boards for its Designs tab (#522). Tests pass a fake; otherwise Paper's own
+   * MCP server is asked.
    */
   paperFiles?: PaperFiles;
   /** Takes a preview's screenshots (#183). Tests pass a fake; otherwise Chromium does. */
@@ -367,12 +369,13 @@ export const createWorker = (options: {
       live.forget();
     },
   });
+  const paperFiles = options.paperFiles ?? createPaperFiles();
   const connections = createConnections({
     contextDir,
     contextFolder,
     github,
     code,
-    paperFiles: options.paperFiles ?? createPaperFiles(),
+    paperFiles,
     paperCommand,
   });
   const mattSetup = createMattSetup({ dataDir, contextDir, matt, code, github, connections });
@@ -650,18 +653,8 @@ export const createWorker = (options: {
       createFriction({ contextDir, liveCopy, liveRepo: workspaceMain.liveRepo, code, sessions }),
     ),
   );
-  api.get("/workspaces/:id/main", async (c) => {
-    const main = await workspaceMain.of(c.req.param("id"));
-    if (main.ok) return c.json(main.value satisfies WorkspaceMain);
-    switch (main.error.kind) {
-      case "workspace":
-        return contextError(c, main.error.error);
-      case "not-code":
-        return apiError(c, { status: 409, error: "Only a code workspace has a main branch." });
-      case "unknown":
-        return apiError(c, { status: 404, error: "This workspace's main can't be read now." });
-    }
-  });
+  api.route("/", workspaceMainRoutes(workspaceMain));
+  api.route("/", designRoutes({ contextDir, dataDir, paperFiles, now, background }));
   api.route("/", notificationRoutes({ notifications, contextDir, contextFolder }));
   api.route("/", usageRoutes(usage));
   api.route(
