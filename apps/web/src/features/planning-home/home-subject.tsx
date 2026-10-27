@@ -28,7 +28,7 @@ const Floors = lazy(() =>
 
 /**
  * A planning workspace's main subject, leading its Home (#603; Paper, "Tablet · Mountain biking
- * Home: the bike, then projects (#603)"): the drawn bike, its parts placed on it by name, or a
+ * Home: the bike, then projects (#603)"): the drawn bike, its parts on their places (#711), or a
  * room's floor plan (#257), or a house's floors side by side (#670). One panel, keeping its size;
  * with no subject, one quiet line in it.
  * A space with no plan yet is Draw the garage's card instead (#604).
@@ -73,7 +73,7 @@ type Drawing = Extract<HomeSubject, { kind: "drawing" }>;
 
 /**
  * The drawn bike (#603): Courtyard's drawing of a mountain bike, each of the Thing's parts on its
- * place by name, a label each that opens its card, one with an upcoming replacement a quiet dot.
+ * place as saved (#711), a label each that opens its card, one with an upcoming replacement a quiet dot.
  * Parts it has no place for are listed under it, as labels too. From a tablet up the labels sit
  * round the bike, each with a line to its pin, the drawing as big as the panel lets it be; on the
  * cover screen the bike has its pins only, and every part is listed under it.

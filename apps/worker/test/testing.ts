@@ -10,6 +10,7 @@ import {
   ProviderId,
   SessionEvent,
   SessionSummary,
+  SizeRecord,
   SkillName,
 } from "@courtyard/contract";
 import { MattPin } from "@courtyard/skills";
@@ -955,6 +956,29 @@ export const changesIn = async (contextDir: string) => {
       const [title = "", body = ""] = entry.split("\x1f");
       return { title, trailers: body.split("\n").filter((line) => line.trim() !== "") };
     });
+};
+
+/**
+ * For tests: size records (#708) written into a planning workspace's folder as Fabrication keeps
+ * them, each of `subject`, reported on 24 October 2026 at revision 1 unless it says otherwise.
+ */
+export const writeSizeRecords = async (
+  folder: string,
+  subject: string,
+  ...records: readonly (Partial<SizeRecord> & Pick<SizeRecord, "id" | "property" | "value">)[]
+) => {
+  await mkdir(join(folder, "sizes"), { recursive: true });
+  for (const one of records) {
+    const record = SizeRecord.parse({
+      subject,
+      source: { kind: "reported" },
+      observed: "2026-10-24",
+      recorded: "2026-10-24T10:00:00.000Z",
+      revision: 1,
+      ...one,
+    });
+    await writeFile(join(folder, "sizes", `${record.id}.json`), JSON.stringify(record));
+  }
 };
 
 /**

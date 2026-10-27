@@ -53,6 +53,19 @@ export const ownerSetting = async (contextDir: string): Promise<OwnerSetting> =>
   };
 };
 
+/**
+ * A Build's parameters as it keeps them (#711): once the owner has saved Your tools its steps
+ * follow those, so it holds no tools of its own; until then, its own.
+ */
+export const withOwnersTools = <T extends Record<string, unknown>>(
+  parameters: T,
+  owner: OwnerSetting,
+): T => {
+  if (owner.tools === undefined || !("tools" in parameters)) return parameters;
+  const { tools: _own, ...rest } = parameters;
+  return rest as T;
+};
+
 /** The names of the Things the owner has in their planning workspaces; none when unreadable. */
 const thingsHad = async (contextDir: string): Promise<string[]> => {
   const workspaces = await listWorkspaces(contextDir);

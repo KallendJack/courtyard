@@ -69,8 +69,6 @@ import {
 } from "./features/matt-skills/index.ts";
 import { createModelDefaults } from "./features/model-defaults/index.ts";
 import { modelDefaultRoutes } from "./features/model-defaults/routes.ts";
-import { createMoveReviews } from "./features/move-review/index.ts";
-import { moveReviewRoutes } from "./features/move-review/routes.ts";
 import { createNextUp } from "./features/next-up/index.ts";
 import { nextUpRoutes } from "./features/next-up/routes.ts";
 import { createNotifications, type SendPush } from "./features/notifications/index.ts";
@@ -225,9 +223,6 @@ const READ_USAGE_EVERY_MS = 15 * 60 * 1000;
 
 /** How often planning sessions are looked at for one quiet long enough to leave its note (#601). */
 const WRITE_NOTES_EVERY_MS = 5 * 60 * 1000;
-
-/** How often the workspaces with no move review yet are asked again for one (#603). */
-const WRITE_REVIEWS_EVERY_MS = 30 * 60 * 1000;
 
 /** How often code sessions are looked at for one quiet for 3 days with no pull request (#605). */
 const CLEAR_QUIET_WORKTREES_EVERY_MS = 60 * 60 * 1000;
@@ -566,16 +561,6 @@ export const createWorker = (options: {
   repeat(WRITE_NOTES_EVERY_MS, sessions.writeQuietNotes);
   // Each code session quiet for 3 days with no pull request has its worktree cleared (#605).
   repeat(CLEAR_QUIET_WORKTREES_EVERY_MS, sessions.clearQuietWorktrees);
-  // Each planning workspace's move review, once (#603): as it starts, then now and then.
-  const reviews = createMoveReviews({
-    contextDir,
-    dataDir,
-    contextFolder,
-    providers,
-    now,
-    background,
-  });
-  repeat(WRITE_REVIEWS_EVERY_MS, reviews.writeDue);
 
   /** A workspace's page's detail: its context file, and what of the owner context it reads. */
   const workspaceDetail = async (id: string): Promise<Result<WorkspaceDetail, WorkspaceError>> => {
@@ -623,13 +608,12 @@ export const createWorker = (options: {
   api.route("/", changeRoutes({ contextDir, contextFolder, sessions }));
   api.route("/", documentRoutes({ contextDir, contextFolder }));
   api.route("/", thingRoutes({ contextDir, contextFolder, now }));
-  api.route("/", planningHomeRoutes({ contextDir, reviews }));
+  api.route("/", planningHomeRoutes({ contextDir }));
   api.route("/", projectRoutes({ contextDir, contextFolder, now }));
   api.route(
     "/fabrication",
     fabricationRoutes({ contextDir, contextFolder, now, sessions, providers, printing }),
   );
-  api.route("/", moveReviewRoutes(reviews));
   api.route("/", statusLineRoutes(statusLines));
   const freshStart = createFreshStart({ contextDir, dataDir, contextFolder, sessions, now });
   api.route("/", freshStartRoutes(freshStart));

@@ -98,7 +98,8 @@ export type SizeRefusal =
   | { readonly kind: "stale"; readonly size: ReadSize }
   | { readonly kind: "storage" };
 
-const readSizesIn = async (folder: string): Promise<Result<ReadSizes, SizeRefusal>> => {
+/** The records in a planning folder, oldest first, and the files that aren't records. */
+export const readSizesIn = async (folder: string): Promise<Result<ReadSizes, SizeRefusal>> => {
   const names = await listFolder(join(folder, SIZES_FOLDER));
   if (!names.ok) return err({ kind: "storage" });
   const sizes: ReadSize[] = [];

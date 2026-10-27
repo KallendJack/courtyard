@@ -30,7 +30,6 @@ import type { FromWorker } from "../../api/worker.ts";
 import type { OfflinePage } from "../../api/workspace-page.ts";
 import { describeProblem } from "../../components/layout/problems.tsx";
 import { DocumentsSection } from "../documents/documents-section.tsx";
-import { MoveReview } from "../move-review/move-review.tsx";
 import { projectInHash } from "../projects/api.ts";
 import { ProjectView } from "../projects/project-view.tsx";
 import { ProjectsBlock } from "../projects/projects-block.tsx";
@@ -81,8 +80,7 @@ export type PlanningLoaded = {
  * the bike, then projects (#603)"). Its header: the name with its ⋯, and pills for + New ·
  * History · Things · Docs, each tab once it has something, with its count, by the address's hash.
  * Home leads with the workspace's main subject (the drawn bike, or a room's floor plan), then its
- * projects, then the box that starts a new session; not a chat. Once, its move review is Home in
- * their place, until the owner has ticked it (#603). An empty workspace shows only its
+ * projects, then the box that starts a new session; not a chat. An empty workspace shows only its
  * name, one line and the box. Nothing on it is a warning or a nudge: a planning workspace stays
  * calm (AGENTS.md).
  */
@@ -332,9 +330,6 @@ export default function PlanningHome(props: {
               <span className="grow">What Courtyard knows</span>
               <ChevronRight aria-hidden className="size-4 text-placeholder" />
             </Link>
-          ) : homeNow?.review != null ? (
-            // Once, the move review is Home until it's done (#603).
-            <MoveReview workspaceId={workspace.id} review={homeNow.review} />
           ) : (
             homeNow !== undefined && (
               <>
