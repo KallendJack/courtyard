@@ -24,5 +24,6 @@ None of its own: connecting Paper is `connections/`' routes.
 - `files.ts` lists the owner's Paper files and makes one, for connecting Paper from a code workspace's page (#308),
   by asking Paper's own MCP server through the MCP SDK's client: a dependency passed in (the one real one; `fake.ts`
   holds files in memory for the tests and the browser tests). It also exports a file's boards, page by page, each with
-  its place and its screenshot (`boards.ts`, #522), for the Designs tab; the fake draws each board as a small picture
-  naming it. `client.ts` is the one MCP session both share.
+  its place and its screenshot (`boards.ts`, #522), for the Designs tab: past the 100 boards `get_basic_info` lists, the
+  page's tree names the rest, and a picture over 8 MB is left out; the fake answers as Paper's tools do and draws each
+  board as a small picture naming it. `client.ts` is the one MCP session both share.

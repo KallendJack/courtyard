@@ -33,6 +33,20 @@ const LOOKS = {
     chosen: "border-primary bg-primary/15 font-semibold text-foreground",
     other: "border-transparent font-medium text-muted-foreground hover:text-foreground",
   },
+  /**
+   * Pills apart, the chosen one ringed violet, each with its count after it: as the workspace's
+   * tabs, smaller (the Designs tab's Live / Agreed / Drafts and Desktop / Tablet / Cover, #522).
+   */
+  pills: {
+    set: "gap-1.5",
+    choice: "flex h-8 items-center gap-1.75 px-3.25 text-meta",
+    chosen: "border-stroke border-primary-text bg-primary/12 font-bold text-foreground",
+    other: "bg-secondary font-semibold text-foreground/85 hover:bg-muted",
+    count: {
+      chosen: "text-label font-semibold tabular-nums text-primary-text",
+      other: "text-label font-semibold tabular-nums text-placeholder",
+    },
+  },
   /** A thumb-sized switch, the chosen side filled violet (New workspace's Planning / Code, #258). */
   switch: {
     set: "gap-1 rounded-full border bg-surface p-1",
@@ -61,7 +75,7 @@ export function SegmentedChoice<T extends string>(props: {
   }[];
   value: T;
   onChange: (value: T) => void;
-  /** In a track (the default), apart, as chips, or a switch. */
+  /** In a track (the default), apart, as chips, pills, slim or a switch. */
   look?: keyof typeof LOOKS;
 }) {
   const name = useId();
@@ -90,9 +104,14 @@ export function SegmentedChoice<T extends string>(props: {
             />
             {option.icon}
             {option.label}
-            {option.count !== undefined && (
-              <span className="font-normal text-muted-foreground"> {option.count}</span>
-            )}
+            {option.count !== undefined &&
+              ("count" in look ? (
+                <span className={chosen ? look.count.chosen : look.count.other}>
+                  {option.count}
+                </span>
+              ) : (
+                <span className="font-normal text-muted-foreground"> {option.count}</span>
+              ))}
           </label>
         );
       })}

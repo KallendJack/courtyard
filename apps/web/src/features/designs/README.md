@@ -6,7 +6,8 @@ board full size"). The worker's side is [`designs/`](../../../../worker/src/feat
 **Example:** you tap Designs, then Agreed, and see "Code workspace" with "Tablet · Designs (#522)"; tapping it opens it
 full size, and Cover switches to the same screen's cover board.
 
-- **Uses:** `packages/ui` (`Scroller`, `useKept`, buttons), `lib/when.ts` (`agoWords`).
+- **Uses:** `packages/ui` (`Scroller`, `useKept`, buttons, `SegmentedChoice`'s pills for the pages and devices),
+  `lib/when.ts` (`agoWords`).
 - **Used by:** `features/code-home/` (the Designs tab).
 
 ## Screens

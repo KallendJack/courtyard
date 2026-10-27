@@ -73,9 +73,12 @@ const PAGES = [
 ];
 
 /** A worker on a clock the test moves, with Side project on the fake Paper's file. */
-const designsWorker = async (more: { paper?: boolean } = {}) => {
+const designsWorker = async (more: { paper?: boolean; listsAtMost?: number } = {}) => {
   const clock = { now: Date.parse("2026-10-27T09:00:00Z") };
-  const paper = createFakePaperFiles({ boards: { "file-1": PAGES } });
+  const paper = createFakePaperFiles({
+    boards: { "file-1": PAGES },
+    ...(more.listsAtMost === undefined ? {} : { listsAtMost: more.listsAtMost }),
+  });
   await codeWorkspace(root, "side-project", repo, {
     name: "Side project",
     ...(more.paper === false
@@ -154,6 +157,21 @@ describe("the Designs tab (#522)", () => {
     });
     const home = designs.pages[0]?.rows[1]?.boards[0];
     expect(home).toMatchObject({ device: "desktop", width: 1440, height: 900 });
+  });
+
+  it("finds every board on a page with more than Paper lists at once", async () => {
+    // Paper's get_basic_info lists 100 boards at most; the rest come from the page's tree.
+    const { request } = await designsWorker({ listsAtMost: 2 });
+
+    const designs = await exported(request);
+
+    expect(rowsOf(designs).live).toEqual({
+      count: 6,
+      rows: [
+        ["Style guide & brand", ["Style guide · Handheld", "Courtyard mark"]],
+        ["Home", ["Desktop", "Tablet", "Tablet · Home, many workspaces", "Cover"]],
+      ],
+    });
   });
 
   it("serves each board's picture, which never changes under its name", async () => {

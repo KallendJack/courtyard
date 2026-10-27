@@ -111,10 +111,10 @@ export const createDesigns = (options: {
       const placed: PlacedBoard[] = [];
       for (const { picture, ...board } of page?.boards ?? ([] satisfies PaperBoard[])) {
         const name = createHash("sha256").update(picture.bytes).digest("hex").slice(0, 32);
-        // A picture kept already, unchanged, isn't written again.
-        if (pictures[name] === undefined && was?.pictures[name] === undefined) {
-          await writeBytesIn(picturePath(id, name), picture.bytes);
-        }
+        // A picture kept already, unchanged, isn't written again; one that can't be written is
+        // left out, so no board points at a picture that isn't there.
+        const already = pictures[name] !== undefined || was?.pictures[name] !== undefined;
+        if (!already && !(await writeBytesIn(picturePath(id, name), picture.bytes))) continue;
         pictures[name] = picture.mediaType;
         placed.push({ ...board, picture: name });
       }

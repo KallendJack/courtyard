@@ -1,15 +1,20 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { shot } from "./github.ts";
+import { shot, signIn } from "./github.ts";
 import { pageScrollsSideways } from "./page-scroll.ts";
 
 // A code workspace's Designs tab (#522; Paper, "Tablet · Designs: Live boards, row by row" and
 // "Tablet · Designs: one board full size"), on start-worker.mjs's Side project, whose Paper file
-// the fake Paper has: Live and Agreed in sections, Drafts in a grid.
+// the fake Paper has: Live and Agreed in sections, Drafts in a grid. Signed in to the fake GitHub,
+// as the boards are drawn, so no sign-in notice takes the rows' place.
 
 const DESIGNS = "/workspaces/side-project#designs";
 
-/** The page picker's buttons. */
+/** The page picker. */
 const picker = (page: Page) => page.getByRole("group", { name: "Pages" });
+
+/** Taps one of a picker's choices, by its name. */
+const choose = (group: Locator, name: string | RegExp) =>
+  group.locator("label", { has: group.page().getByRole("radio", { name }) }).click();
 
 /** One page's boards, by the picker's name for it. */
 const boardsOf = (page: Page, name: "Live" | "Agreed" | "Drafts") =>
@@ -34,11 +39,8 @@ const shapeOf = async (picture: Locator) => {
 
 /** Live's rows, each named by its section, its boards Desktop, Tablet and Cover at their shapes. */
 const showsLive = async (page: Page) => {
-  await expect(picker(page).getByRole("button")).toHaveText(["Live8", "Agreed1", "Drafts3"]);
-  await expect(picker(page).getByRole("button", { name: /^Live/ })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(picker(page).locator("label")).toHaveText(["Live8", "Agreed1", "Drafts3"]);
+  await expect(picker(page).getByRole("radio", { name: /^Live/ })).toBeChecked();
   const live = boardsOf(page, "Live");
   await expect(rowNames(live)).toHaveText(["Style guide & brand", "Home", "Code workspace"]);
   const home = live.getByRole("region", { name: "Home" });
@@ -52,6 +54,13 @@ const showsLive = async (page: Page) => {
 };
 
 test.describe("the Designs tab (#522)", () => {
+  test.beforeEach(async ({ request }) => {
+    await signIn(request);
+  });
+  test.afterEach(async ({ request }) => {
+    await request.post("/api/github/sign-out", { data: {} });
+  });
+
   test.describe("on the unfolded Fold", () => {
     test.use({ viewport: { width: 933, height: 645 }, hasTouch: true, isMobile: true });
 
@@ -66,19 +75,18 @@ test.describe("the Designs tab (#522)", () => {
       await expect(page.getByRole("heading", { name: "Home", level: 2 })).toBeVisible();
       await expect(page.getByText("Live · 933 × 645")).toBeVisible();
       const devices = page.getByRole("group", { name: "Devices" });
-      await expect(devices.getByRole("button", { name: "Tablet" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
+      await expect(devices.getByRole("radio", { name: "Tablet" })).toBeChecked();
       await expect(page.getByRole("img", { name: "Built · Tablet · Home" })).toBeVisible();
       await expect(page.getByRole("link", { name: "Open in Paper ›" })).toHaveAttribute(
         "href",
         "https://app.paper.design/file/file-1",
       );
-      await expect(page.getByText(/^Pinch to zoom · From Paper · /)).toBeVisible();
+      await expect(
+        page.getByText(/^Pinch to zoom · from Paper (just now|\d+ min ago)$/),
+      ).toBeVisible();
       await shot(page, "tablet-designs-board");
 
-      await devices.getByRole("button", { name: "Cover" }).click();
+      await choose(devices, "Cover");
       await expect(page.getByText("Live · 476 × 695")).toBeVisible();
       await expect(page.getByRole("img", { name: "Built · Cover · Home" })).toBeVisible();
 
@@ -90,16 +98,12 @@ test.describe("the Designs tab (#522)", () => {
       page,
     }) => {
       await openDesigns(page);
-      await picker(page)
-        .getByRole("button", { name: /^Agreed/ })
-        .click();
+      await choose(picker(page), /^Agreed/);
       const agreed = boardsOf(page, "Agreed");
       await expect(rowNames(agreed)).toHaveText(["Code workspace"]);
       await expect(agreed).toContainText("Tablet · Designs (#522)");
 
-      await picker(page)
-        .getByRole("button", { name: /^Drafts/ })
-        .click();
+      await choose(picker(page), /^Drafts/);
       const drafts = boardsOf(page, "Drafts");
       await expect(rowNames(drafts)).toHaveText(["Audit", "Draft"]);
       await expect(drafts.getByRole("region", { name: "Audit" }).getByRole("button")).toHaveText([
@@ -141,6 +145,9 @@ test.describe("the Designs tab (#522)", () => {
     test("shows Live's rows beside the rail", async ({ page }) => {
       await openDesigns(page);
       await showsLive(page);
+      // The rails and the message box are in, so the screenshot is the whole screen.
+      await expect(page.getByRole("button", { name: "Talk", exact: true })).toBeVisible();
+      await expect(page.getByPlaceholder(/^Talk or type/)).toBeVisible();
       await shot(page, "desktop-designs");
     });
   });

@@ -1,5 +1,6 @@
 import type { DesignBoard, DesignDevice, DesignRow, WorkspaceId } from "@courtyard/contract";
 import { WebButton } from "@courtyard/ui/buttons/web-link.tsx";
+import { SegmentedChoice } from "@courtyard/ui/forms/segmented-choice.tsx";
 import { classes } from "@courtyard/ui/lib/classes.ts";
 import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef } from "react";
@@ -69,28 +70,16 @@ export function BoardView(props: {
           </div>
         </div>
         {devices.length > 0 && (
-          <fieldset aria-label="Devices" className="flex gap-1.5">
-            {devices.map((device) => {
-              const target = boardFor(row, device, board);
-              const chosen = board.device === device;
-              return (
-                <button
-                  key={device}
-                  type="button"
-                  aria-pressed={chosen}
-                  onClick={() => target !== undefined && props.onSwitch(target)}
-                  className={classes(
-                    "flex h-8 items-center rounded-full px-3.25 text-meta outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                    chosen
-                      ? "border-stroke border-primary-text bg-primary/12 font-bold text-foreground"
-                      : "bg-secondary font-semibold text-foreground/85 hover:bg-muted",
-                  )}
-                >
-                  {DEVICES[device]}
-                </button>
-              );
-            })}
-          </fieldset>
+          <SegmentedChoice<DesignDevice>
+            label="Devices"
+            look="pills"
+            value={board.device}
+            onChange={(device) => {
+              const target = device === "other" ? undefined : boardFor(row, device, board);
+              if (target !== undefined) props.onSwitch(target);
+            }}
+            options={devices.map((device) => ({ value: device, label: DEVICES[device] }))}
+          />
         )}
       </div>
       {/* Another board opens whole. */}

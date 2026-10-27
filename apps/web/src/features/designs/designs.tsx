@@ -1,15 +1,16 @@
-import type {
-  DesignBoard,
-  DesignPageKind,
-  DesignRow,
-  Designs as DesignsAnswer,
-  WorkspaceId,
+import {
+  DESIGN_PAGES,
+  type DesignBoard,
+  type DesignPageKind,
+  type DesignRow,
+  type Designs as DesignsAnswer,
+  type WorkspaceId,
 } from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { SegmentedChoice } from "@courtyard/ui/forms/segmented-choice.tsx";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
 import { createKept, PlaceholderRows, useKept } from "@courtyard/ui/layout/kept.tsx";
 import { Scroller } from "@courtyard/ui/layout/scroller.tsx";
-import { classes } from "@courtyard/ui/lib/classes.ts";
 import { useState } from "react";
 import { agoWords } from "@/lib/when";
 import { loadDesigns, pictureAddress } from "./api.ts";
@@ -33,8 +34,6 @@ const SCREEN_HEIGHT = 163;
 const SHEET_HEIGHT = 120;
 /** The widest a picture in a row may be: a desktop board's, at a screen row's height. */
 const WIDEST = 260;
-/** The narrowest a style guide or component sheet may be: a tall one shows a strip from its top. */
-const SHEET_NARROWEST = 200;
 
 /** Where the pictures come from, and how fresh they are, in a quiet line. */
 export const freshnessOf = (designs: DesignsAnswer) => {
@@ -47,6 +46,12 @@ export const freshnessOf = (designs: DesignsAnswer) => {
   if (!designs.reached) return `Last from Paper ${age} · Paper is closed on the worker machine`;
   return designs.exporting ? `From Paper · ${age} · updating` : `From Paper · ${age}`;
 };
+
+/** How old a board's picture is, under it full size: "from Paper 4 min ago". */
+const sinceOf = (designs: DesignsAnswer) =>
+  designs.exportedAt === null
+    ? freshnessOf(designs)
+    : `${designs.reached ? "from" : "last from"} Paper ${agoWords(designs.exportedAt)}`;
 
 /**
  * A code workspace's Designs tab (#522; Paper, "Tablet · Designs: Live boards, row by row"): its
@@ -96,7 +101,7 @@ export function Designs(props: {
         page={PAGE_NAMES[kind]}
         row={opened.row}
         board={opened.board}
-        freshness={freshnessOf(designs)}
+        freshness={sinceOf(designs)}
         onSwitch={(board) => setOpened({ row: opened.row, board })}
         onBack={() => setOpened(undefined)}
       />
@@ -105,37 +110,20 @@ export function Designs(props: {
   return (
     <div className="mt-4 flex flex-col gap-3.5 md:min-h-0 md:flex-1">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <fieldset aria-label="Pages" className="flex gap-1.5">
-          {(Object.keys(PAGE_NAMES) as DesignPageKind[]).map((each) => {
-            const chosen = each === kind;
+        <SegmentedChoice
+          label="Pages"
+          look="pills"
+          value={kind}
+          onChange={setKind}
+          options={DESIGN_PAGES.map((each) => {
             const count = designs?.pages.find((one) => one.kind === each)?.count;
-            return (
-              <button
-                key={each}
-                type="button"
-                aria-pressed={chosen}
-                onClick={() => setKind(each)}
-                className={classes(
-                  "flex h-8 items-center gap-1.75 rounded-full px-3.25 text-meta outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                  chosen
-                    ? "border-stroke border-primary-text bg-primary/12 font-bold text-foreground"
-                    : "bg-secondary font-semibold text-foreground/85 hover:bg-muted",
-                )}
-              >
-                {PAGE_NAMES[each]}
-                <span
-                  className={classes(
-                    "min-w-[2ch] text-label font-semibold tabular-nums",
-                    chosen ? "text-primary-text" : "text-placeholder",
-                    count === undefined && "invisible",
-                  )}
-                >
-                  {count ?? 0}
-                </span>
-              </button>
-            );
+            return {
+              value: each,
+              label: PAGE_NAMES[each],
+              ...(count === undefined ? {} : { count }),
+            };
           })}
-        </fieldset>
+        />
         <p className="text-label font-medium text-muted-foreground">
           {designs === undefined ? " " : freshnessOf(designs)}
         </p>
@@ -186,12 +174,12 @@ function Row(props: {
       </div>
       <Scroller axis="x" className="flex items-end gap-3 pb-1">
         {row.boards.map((board) => {
-          const width = Math.round(
-            Math.min(
-              WIDEST,
-              Math.max(sheets ? SHEET_NARROWEST : 0, (height * board.width) / board.height),
-            ),
-          );
+          // A sheet taller than it is wide (a style guide) shows a strip from its top, as wide as
+          // a desktop board.
+          const tall = sheets && board.height > board.width;
+          const width = tall
+            ? WIDEST
+            : Math.round(Math.min(WIDEST, (height * board.width) / board.height));
           return (
             <button
               key={board.id}
