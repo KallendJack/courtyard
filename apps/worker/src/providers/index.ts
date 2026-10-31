@@ -382,7 +382,7 @@ export type AddedMessages = {
  */
 export type OneOffInput = {
   /** What it's for, so the fake can script its answer. */
-  readonly purpose: "title" | "quick-question" | "session-note" | "move-review" | "heard-tools";
+  readonly purpose: "title" | "quick-question" | "session-note" | "heard-tools";
   readonly model: ModelId;
   /** One of the levels of effort the model takes; left out for the model's default. */
   readonly effort?: Effort;

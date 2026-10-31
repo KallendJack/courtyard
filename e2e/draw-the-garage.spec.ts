@@ -3,11 +3,11 @@ import { expect, type Page, test } from "@playwright/test";
 import { newWorkspace, startSaving } from "./saving.ts";
 
 // Draw the garage from Home (#604; Paper, "2 · Agreed", planning workspace row: "Tablet · Garage
-// Home: Draw the garage, then projects (#604)"): a planning workspace whose facts give a floor's
-// two sides leads its Home with the space to draw, its size where the plan will be and what a plan
-// is drawn from, as saved; Draw the garage, named from the workspace, starts a session holding
-// those measurements; once a plan is drawn, Home shows it instead. The worker's side is in
-// planning-home.test.ts.
+// Home: Draw the garage, then projects (#604)"): a planning workspace with a space whose floor's
+// length and width are recorded (#711) leads its Home with the space to draw, its size where the
+// plan will be and what a plan is drawn from, as recorded; Draw the garage, named from the space,
+// starts a session holding those measurements; once a plan is drawn, Home shows it instead. The
+// worker's side is in records.test.ts.
 
 /** Where the boards' screenshots go, when a run asks for them (COURTYARD_E2E_SHOTS). */
 const shot = async (page: Page, name: string) => {
@@ -25,16 +25,22 @@ const PLAN = {
   items: [{ name: "Desk", fromLeft: 40, fromBack: 0, width: 140, depth: 60 }],
 };
 
-/** The garage's facts as the owner saved them: two that measure it, one that doesn't. */
-const withFacts = async (page: Page, name: string, cover = false) => {
+/** The fake's line recording a size of the garage, as the owner said it roughly. */
+const recordSize = (property: string, amount: number) =>
+  `size: ${JSON.stringify({ thing: "garage", property, amount, unit: "mm", source: "reported" })}`;
+
+/** The garage as a space, its floor and height recorded, and a fact that measures nothing. */
+const withSizes = async (page: Page, name: string, cover = false) => {
   await newWorkspace(page, name);
   // On the cover screen the box opens with Type.
   if (cover) await page.getByRole("button", { name: "Type" }).tap();
   await startSaving(
     page,
     [
-      "save fact: The garage is 5.14 × 2.74 m inside.",
-      "save fact: It's 2.45 m high.",
+      "thing add: name Garage | status have | kind space",
+      recordSize("floor length", 5140),
+      recordSize("floor width", 2740),
+      recordSize("height", 2450),
       "save fact: The boiler is in the back corner.",
     ].join("\n"),
   );
@@ -52,15 +58,15 @@ test.describe("on the unfolded Fold", () => {
     page,
   }) => {
     const name = `Garage ${Date.now()}`;
-    const space = name.toLowerCase();
-    await withFacts(page, name);
+    const space = "garage";
+    await withSizes(page, name);
 
-    // Where the plan will be, with its size, and everything it's drawn from, as saved.
+    // Where the plan will be, with its size, and everything it's drawn from, as recorded.
     const card = drawCard(page, space);
     await expect(card).toBeVisible();
     await expect(card).toContainText("5.14 m × 2.74 m");
     await expect(card).toContainText(
-      "Courtyard draws it to scale from what's saved: The garage is 5.14 × 2.74 m inside. It's 2.45 m high.",
+      "Courtyard draws it to scale from what's saved: Floor length 5140 mm, reported. Floor width 2740 mm, reported. Height 2450 mm, reported.",
     );
     await expect(card).not.toContainText("boiler");
     await expect(page.getByLabel("Message", { exact: true })).toBeVisible();
@@ -72,8 +78,8 @@ test.describe("on the unfolded Fold", () => {
     await expect(session).toContainText(
       `Draw the ${space} as a floor plan, to scale, from what's saved:`,
     );
-    await expect(session).toContainText("The garage is 5.14 × 2.74 m inside.");
-    await expect(session).toContainText("It's 2.45 m high.");
+    await expect(session).toContainText("Floor length 5140 mm, reported");
+    await expect(session).toContainText("Height 2450 mm, reported");
     await expect(session).toContainText(/Your turn · finished/);
 
     // A plan drawn in an answer is the garage's subject from then on.
@@ -93,8 +99,8 @@ test.describe("on the cover screen", () => {
     page,
   }) => {
     const name = `Garage ${Date.now()}`;
-    const space = name.toLowerCase();
-    await withFacts(page, name, true);
+    const space = "garage";
+    await withSizes(page, name, true);
 
     const card = drawCard(page, space);
     await expect(card.getByRole("button", { name: `Draw the ${space}` })).toBeVisible();

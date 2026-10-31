@@ -12,6 +12,7 @@ export const FILE_KEYS = [
   ["count", "count"],
   ...THING_DETAILS.map((name) => [name, name] as const),
   ["part of", "partOf"],
+  ["place", "place"],
   ["photo", "photo"],
   ["subject", "subject"],
   ["tile", "tile"],

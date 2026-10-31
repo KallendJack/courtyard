@@ -109,10 +109,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
   decisions and history, a file each, kept by the model's project tool; a session started from one belongs to it.
 - [`fabrication/`](../apps/worker/src/features/fabrication/README.md): Fabrication's Builds, hosted by a planning
   workspace (#697, ADRs 0036, 0037), a file each, worked out by `packages/fabrication` on read, kept by the model's
-  Build tool; its size records with their sources (#708), kept by the model's size tool; and Fabrication's API
-  (`/api/fabrication`).
-- [`move-review/`](../apps/worker/src/features/move-review/README.md): once, a planning workspace's moves into
-  what it keeps now (#603), written by a model, kept in the data folder, each ticked move one change with Undo.
+  Build tool; its size records with their sources (#708), kept by the model's size tool, which a Build's sizes point
+  at (#711); and Fabrication's API (`/api/fabrication`).
 - [`status-line/`](../apps/worker/src/features/status-line/README.md): the status line under a code workspace's
   name, ✓ just done · ● now · ○ next (#256), built from its data; a planning workspace has none (#600).
 - [`documents/`](../apps/worker/src/features/documents/README.md): a planning workspace's documents.
@@ -120,8 +118,9 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
   saved as its document once the answer ends, the newest a space's main subject on Home (#257, #603).
 - [`planning-files/`](../apps/worker/src/features/planning-files/README.md): what documents, Things and projects share.
 - [`planning-home/`](../apps/worker/src/features/planning-home/README.md): a planning workspace's Home: its main
-  subject (a Thing drawn as a mountain bike, its parts placed by name, a house's floors, or a room's floor plan) and
-  its projects (#603, #670).
+  subject (a Thing drawn as a mountain bike, its parts on the places saved on them, a house's floors, a room's floor
+  plan checked against its space's size records, or the space to draw from them) and its projects (#603, #670,
+  #711).
 - [`changes/`](../apps/worker/src/features/changes/README.md): Recent changes and Undo.
 - [`attachments/`](../apps/worker/src/features/attachments/README.md): photos and PDFs sent with a message.
 
@@ -236,8 +235,6 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`projects/`](../apps/web/src/features/projects/README.md): Home's Projects, a project's page and Carry on
     (#603).
   - [`fabrication/`](../apps/web/src/features/fabrication/README.md): Undo from a Build save's note (#697).
-  - [`move-review/`](../apps/web/src/features/move-review/README.md): the move review on Home, its moves ticked
-    (#603).
   - [`status-line/`](../apps/web/src/features/status-line/README.md): the status line under a code workspace's
     name (#256).
   - [`documents/`](../apps/web/src/features/documents/README.md): the Documents section.
@@ -821,19 +818,22 @@ things live only in the worker's memory and go when it restarts.
   `<workspace>/workspace.json`: its name, mode and icon (and a code workspace's repo, its one line as
   `description`, allowlist changes and Paper connection, with the file's name once connected from its page).
 - `<workspace>/docs/<slug>.md`: a planning workspace's documents (ADR 0020), each named by its first `#` heading and
-  its file by that name. `<workspace>/docs/archive/<slug>.md` holds those archived, by the move review or the
-  document tool (#786), out of the list every turn reads.
+  its file by that name. `<workspace>/docs/archive/<slug>.md` holds those archived, by the document tool (#786) or
+  the move review before it went (#711), out of the list every turn reads.
 - `<workspace>/things/<slug>.md`: a planning workspace's Things (ADR 0020), fields in front matter (an upcoming
   replacement among them, its `upcoming …` lines, #602) and a dated history, each file named by the Thing's name when it was added; `<workspace>/things/photos/<slug>.jpg`: a Thing's
   photo, resized to fit 1600 px and 300 KB, in plain git. A Thing's `kind` (item when left out), `count` and
-  `subject` ID (ADR 0037) are front matter too, and a tool's `tile` when its name isn't the tile's (#707).
+  `subject` ID (ADR 0037) are front matter too, a tool's `tile` when its name isn't the tile's (#707), and a part's
+  `place` on its Thing's drawing (#711).
 - `things/<slug>.md` at the top: the owner's tools (#707, ADR 0037), Things of kind tool kept as a workspace's are
   (photos in `things/photos/`), so no workspace can be named `things`.
 - `<workspace>/projects/<slug>.md`: a planning workspace's projects (#603, ADR 0032): name, goal and status in front
   matter, then its steps, decisions and a dated history, each file named by the project's name when it was started.
   A step that makes a Build ends `[build: <slug>]`.
 - `<workspace>/builds/<slug>.json`: a planning workspace's Builds (#697, ADRs 0036, 0037): name, template and
-  parameters only, every size with its source, and the documents it supersedes (`supersedes`, by file name, #786);
+  parameters only, every size with its source or pointing at a size record (`{"record": "<id>"}`, with the size
+  last read beside it, which stands in, assumed, once the record's gone, #711), and the documents it supersedes
+  (`supersedes`, by file name, #786);
   the parts, cut plan, buy list, steps and findings are worked out on read, never stored. Each file is named by the Build's name when it was started.
   `<workspace>/builds/progress/<slug>.json` is how far the owner has got with its steps (#699): the step reached and
   the lines ticked, each step by its ID (a file kept by step number reads as not started), beside the Build so
@@ -841,7 +841,8 @@ things live only in the worker's memory and go when it restarts.
   the worker keeps as lines are ticked so a started step stays as it was started when the owner's tools change (a file
   kept before then gets the ways the Build's own tools gave). Each write is
   a `build-progress` change, kept and backed up but never listed in Recent changes. A Build's steps follow the owner's
-  tools (`things/` at the top) once they've saved any, and its own `tools` parameter until then.
+  tools (`things/` at the top) once they've saved any, and its own `tools` parameter until then; a Build saved after
+  that keeps none of its own (#711).
 - `<workspace>/sizes/<id>.json`: a planning workspace's size records (#708, ADR 0037): the Thing it's of by its
   subject ID, what it is of it, its value, its source (measured ones with the owner's message), the day observed,
   when recorded, its revision and what superseded it. A correction is a new record; the old one stays.

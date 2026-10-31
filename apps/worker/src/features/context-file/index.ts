@@ -19,7 +19,7 @@ const CONTINUATION = /^\s+\S/;
 
 /**
  * The section a heading begins. Plans is still found (#603): its lines are kept as written, with
- * no labels, so a model reads them but can't save there, and the move review can take them out.
+ * no labels, so a model reads them but can't save there.
  */
 const sectionNamed = (heading: string): SavedSection | undefined => {
   const word = /^(facts|plans|ideas)\b/i.exec(heading)?.[1]?.toLowerCase();
@@ -143,13 +143,6 @@ export const parseContextFile = (markdown: string): ContextFile => {
     characters: markdown.length,
   };
 };
-
-/**
- * The lines of a context file's Plans section, from before projects (#603), as written: what the
- * move review offers to move into projects.
- */
-export const plansLines = (markdown: string) =>
-  scan(markdown).sections.plans.lines.map((line) => line.text);
 
 /** Where one section's lines are written in a file: its heading's line, when it has one, and its lines. */
 type SectionAt = Scanned["sections"][SavedSection];

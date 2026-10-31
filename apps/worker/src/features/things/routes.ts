@@ -21,7 +21,6 @@ import type { PlanningFilesTarget } from "../planning-files/index.ts";
 import { fileIn, sharedFileError, THINGS, workspaceIn } from "../planning-files/routes.ts";
 import {
   getThing,
-  keptPhoto,
   readThings,
   saveThing,
   type ThingEdit,
@@ -29,6 +28,7 @@ import {
   type ThingUndoRefusal,
   thingPhoto,
 } from "./index.ts";
+import { keptPhoto } from "./photo.ts";
 
 /** A workspace's Things, a Thing, and its photo: the routes under `/api`. */
 const ROUTES = {

@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PlanningHome, type SessionEvent, SessionSummary } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createFakeProvider } from "../src/providers/index.ts";
 import {
   asOwner,
   changesIn,
@@ -157,8 +156,9 @@ describe("a floor plan in an answer (#257)", () => {
     ]);
 
     expect(saved(events)).toEqual([]);
-    // With no plan, the garage is still there to draw, from its size saved (#604).
-    expect((await home(request)).subject).toMatchObject({ kind: "space", size: "5.4 m × 3 m" });
+    // With no plan, nor a space with its floor recorded, there's nothing to draw: a size in a
+    // sentence is never read as one (#711).
+    expect((await home(request)).subject).toBeNull();
   });
 });
 
@@ -187,10 +187,7 @@ describe("a house's floors on Home (#670)", () => {
         `# ${plan.room} floor plan\n\n\`\`\`plan\n${JSON.stringify(plan, null, 2)}\n\`\`\`\n`,
       );
     }
-    // Home asks for the house's move review in the background: answered at once.
-    const request = await asOwner(
-      testWorker({ root, providers: [createFakeProvider({ delayMs: 0 })] }),
-    );
+    const request = await asOwner(testWorker({ root }));
     return PlanningHome.parse(await (await request("/api/workspaces/house/home")).json());
   };
 

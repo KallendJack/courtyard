@@ -26,8 +26,16 @@ import {
   planningFolder,
   slugFor,
 } from "../planning-files/index.ts";
-import { derive, merged, parameterChanges, pickStockIn } from "./parameters.ts";
-import { NOT_STARTED, type OwnerSetting, ownerSetting, progressIn, settingOf } from "./setting.ts";
+import { parameterChanges, patchedWith, pickKeeping, workedOut } from "./parameters.ts";
+import {
+  NOT_STARTED,
+  type OwnerSetting,
+  ownerSetting,
+  progressIn,
+  settingOf,
+  withOwnersTools,
+} from "./setting.ts";
+import { type ReadSize, readSizesIn } from "./sizes.ts";
 
 /**
  * Fabrication's Builds, hosted in a planning workspace (ADRs 0036, 0037; #697): a JSON file each in
@@ -49,12 +57,13 @@ const buildText = (file: BuildFile) => `${JSON.stringify(file, null, 2)}\n`;
 
 /**
  * A Build's file read and worked out, or what's wrong with it: with the owner's tools and the ways
- * its steps were done, when given (#777).
+ * its steps were done, when given (#777), and the workspace's size records its sizes point at.
  */
 export const readBuildText = (
   text: string,
   setting?: BuildSetting,
-): Result<{ file: BuildFile; derived: Build }, string> => {
+  sizes: readonly ReadSize[] = [],
+): Result<{ file: BuildFile; derived: Build; gone: readonly string[] }, string> => {
   let json: unknown;
   try {
     json = JSON.parse(text.replace(/^﻿/, ""));
@@ -66,9 +75,9 @@ export const readBuildText = (
     const [issue] = file.error.issues;
     return err(`It isn't a Build: ${issue?.path.join(".") || "its file"}: ${issue?.message ?? ""}`);
   }
-  const derived = derive(file.data.template, file.data.parameters, setting);
+  const derived = workedOut(file.data.template, file.data.parameters, setting, sizes);
   if (!derived.ok) return err(`Its parameters can't be worked out: ${derived.error.join("; ")}`);
-  return ok({ file: file.data, derived: derived.value });
+  return ok({ file: file.data, derived: derived.value.build, gone: derived.value.gone });
 };
 
 /**
@@ -87,6 +96,8 @@ export type ReadBuild = {
   readonly derived: Build;
   readonly text: string;
   readonly progress: BuildProgress;
+  /** Where a size points at a record that's gone (#711): the size last read, as assumed. */
+  readonly gone: readonly string[];
 };
 
 /** A workspace's Builds as read, and the files that aren't Builds as written. */
@@ -123,13 +134,19 @@ export type BuildRefusal =
   /** A document it's to supersede isn't there (#786). */
   | SupersedesRefusal;
 
-/** The Builds in a planning folder, worked out with the owner's tools and things (#763). */
+/**
+ * The Builds in a planning folder, worked out with the owner's tools and things (#763), and the
+ * size records their sizes were read from (#711).
+ */
 const readBuildsIn = async (
   folder: string,
   owner: OwnerSetting,
-): Promise<Result<ReadBuilds, BuildRefusal>> => {
+): Promise<Result<ReadBuilds & { readonly sizes: readonly ReadSize[] }, BuildRefusal>> => {
   const names = await listFolder(join(folder, BUILDS_FOLDER));
   if (!names.ok) return err({ kind: "storage" });
+  const records = await readSizesIn(folder);
+  if (!records.ok) return err({ kind: "storage" });
+  const { sizes } = records.value;
   const builds: ReadBuild[] = [];
   const problems: { path: string; problem: string }[] = [];
   for (const name of names.value.sort()) {
@@ -146,8 +163,8 @@ const readBuildsIn = async (
     if (build === undefined) continue;
     const kept = await readTextFile(join(folder, progressPath(slug.data)));
     if (!kept.ok) return err({ kind: "storage" });
-    const progress = progressIn(kept.value, (started) => readBuildText(build, { started }));
-    const read = readBuildText(build, settingOf(owner, progress));
+    const progress = progressIn(kept.value, (started) => readBuildText(build, { started }, sizes));
+    const read = readBuildText(build, settingOf(owner, progress), sizes);
     if (!read.ok) {
       problems.push({ path, problem: read.error });
       continue;
@@ -158,17 +175,18 @@ const readBuildsIn = async (
     } catch {
       return err({ kind: "storage" });
     }
-    const { file, derived } = read.value;
+    const { file, derived, gone } = read.value;
     builds.push({
       summary: { slug: slug.data, name: file.name, template: file.template, path, updatedAt },
       file,
       derived,
       text: build,
       progress,
+      gone,
     });
   }
   builds.sort((a, b) => a.file.name.localeCompare(b.file.name, "en-GB", { sensitivity: "base" }));
-  return ok({ builds, problems });
+  return ok({ builds, problems, sizes });
 };
 
 /** A planning workspace's Builds, by name, and the files that aren't Builds. */
@@ -243,7 +261,7 @@ export const saveBuild = async (
       const owner = await ownerSetting(target.contextDir);
       const read = await readBuildsIn(folder.value, owner);
       if (!read.ok) return read;
-      const { builds, problems } = read.value;
+      const { builds, problems, sizes } = read.value;
       const editing = edit.slug;
       const current =
         editing === undefined ? undefined : builds.find(({ summary }) => summary.slug === editing);
@@ -260,17 +278,18 @@ export const saveBuild = async (
       const template =
         current?.file.template ?? (edit.slug === undefined ? edit.template : undefined);
       const name = edit.name ?? current?.file.name;
-      const patched =
-        current === undefined
-          ? edit.parameters
-          : merged(current.file.parameters, edit.parameters ?? {});
+      const patched = patchedWith(current?.file.parameters, edit.parameters);
       const pick = edit.slug === undefined ? undefined : edit.pick;
       const picked =
         pick === undefined || template === undefined
           ? undefined
-          : pickStockIn(template, patched, pick);
-      if (picked?.ok === false) return err({ kind: "invalid", problem: picked.error.join(" ") });
-      const parameters = picked?.ok ? picked.value : patched;
+          : pickKeeping(template, patched, pick, sizes);
+      if (picked?.ok === false) {
+        const { kind, problems } = picked.error;
+        return err(kind === "invalid" ? { kind, problem: problems.join(" ") } : { kind, problems });
+      }
+      const chosen = (picked?.ok ? picked.value : patched) as BuildParameters | undefined;
+      const parameters = chosen === undefined ? undefined : withOwnersTools(chosen, owner);
       if (template === undefined || name === undefined || parameters === undefined) {
         return err({ kind: "incomplete" });
       }
@@ -280,22 +299,22 @@ export const saveBuild = async (
       });
       if (!superseding.ok) return superseding;
       const { supersedes } = superseding.value;
-      const file = BuildFile.safeParse({
+      const given = BuildFile.safeParse({
         name,
         template,
         parameters,
         ...(supersedes.length === 0 ? {} : { supersedes }),
       });
-      if (!file.success) {
-        const [issue] = file.error.issues;
+      if (!given.success) {
+        const [issue] = given.error.issues;
         return err({ kind: "invalid", problem: issue?.message ?? "" });
       }
       const progress = current?.progress ?? NOT_STARTED;
-      const derived = derive(template, file.data.parameters, settingOf(owner, progress));
+      const derived = workedOut(template, given.data.parameters, settingOf(owner, progress), sizes);
       if (!derived.ok) return err({ kind: "parameters", problems: derived.error });
+      const file: BuildFile = { ...given.data, parameters: derived.value.kept };
 
-      const slug =
-        current?.summary.slug ?? slugFor(file.data.name, { slug: BuildSlug, kind: "build" });
+      const slug = current?.summary.slug ?? slugFor(file.name, { slug: BuildSlug, kind: "build" });
       if (slug === undefined) {
         return err({ kind: "invalid", problem: "Its name needs a letter or a digit." });
       }
@@ -303,47 +322,46 @@ export const saveBuild = async (
         const there = builds.find(({ summary }) => summary.slug === slug);
         const unreadable = problems.some((one) => one.path === buildPath(slug));
         if (there !== undefined || unreadable) {
-          return err({ kind: "clash", name: there?.file.name ?? file.data.name, slug });
+          return err({ kind: "clash", name: there?.file.name ?? file.name, slug });
         }
       }
-      const text = buildText(file.data);
+      const text = buildText(file);
       // By what it holds, so a file only laid out by hand isn't rewritten for a change of nothing.
       if (current !== undefined && text === buildText(current.file)) {
-        return err({ kind: "unchanged", name: file.data.name });
+        return err({ kind: "unchanged", name: file.name });
       }
       if (!(await writeTextFileIn(fileOf(folder.value, slug), text))) {
         return err({ kind: "storage" });
       }
       path = buildPath(slug);
-      title = `${current === undefined ? "Start" : "Change"} Build: ${file.data.name}`;
+      title = `${current === undefined ? "Start" : "Change"} Build: ${file.name}`;
       const changes =
         current === undefined
           ? []
           : [
-              ...(current.file.name === file.data.name
-                ? []
-                : [`Renamed from ${current.file.name}`]),
-              ...parameterChanges(current.file.parameters, file.data.parameters),
+              ...(current.file.name === file.name ? [] : [`Renamed from ${current.file.name}`]),
+              ...parameterChanges(current.file.parameters, file.parameters),
               ...superseding.value.changes,
             ];
       return ok({
         save: {
           action: current === undefined ? "add" : "change",
-          build: { slug, name: file.data.name },
+          build: { slug, name: file.name },
           changes,
         },
         build: {
           summary: {
             slug,
-            name: file.data.name,
+            name: file.name,
             template,
             path,
             updatedAt: new Date(options.now).toISOString(),
           },
-          file: file.data,
-          derived: derived.value,
+          file,
+          derived: derived.value.build,
           text,
           progress,
+          gone: derived.value.gone,
         },
       });
     },

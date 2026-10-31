@@ -78,8 +78,8 @@ test("Home lists each project under the bike, with its next step and Carry on", 
   // The bike with its parts, drawn as Home's subject, then two projects.
   await saveAndGoHome(page, name, [
     "thing add: name Whyte T-140 | status have",
-    "thing add: name Pedals | status have | part of T1 | upcoming DMR V8",
-    "thing add: name Fork | status have | part of T1",
+    "thing add: name Pedals | status have | part of T1 | place pedals | upcoming DMR V8",
+    "thing add: name Fork | status have | part of T1 | place fork",
     startProject({
       name: "Ride red trails with confidence",
       add_steps: [{ who: "you", text: "The cornering drill on Saturday's ride" }],

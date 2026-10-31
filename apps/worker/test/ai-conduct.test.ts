@@ -1916,8 +1916,8 @@ describe("Builds (#697, ADR 0036)", () => {
     // Every template's JSON Schema is in it (#732), so it grows with each: past this, choose to.
     // 17,144 with each recipe feature's fields and the printed templates' shared parameters said once.
     expect(tool?.description.length).toBeLessThan(18_000);
-    // A Build's size points at a size record only once records take over (#711).
-    expect(tool?.description).not.toContain('"record"');
+    // Records take over (#711): a Build's size can point at a recorded size by its file.
+    expect(tool?.description).toContain('{"record": "sizes/<id>.json"}');
     expect(inputsOf(tool)).toBe(await quotedInGuide("- build: To change a Build"));
   });
 
@@ -1935,6 +1935,28 @@ describe("Builds (#697, ADR 0036)", () => {
 
     expect(saver.framings[0]?.instructions).toContain(
       "<builds>\n[B1] Workbench, framed-bench, 1500 × 600 × 900 mm, on step 4 of 12: Make the two end frames (builds/workbench.json)\n</builds>",
+    );
+  });
+
+  it("says when a size's record is gone, so it's the size last read, assumed (#711)", async () => {
+    await mkdir(builds(), { recursive: true });
+    // Its height points at a record that's since gone (its save undone, say).
+    const pointer = {
+      record: "5a1d2c3b-4e5f-4a6b-8c7d-000000000009",
+      ...goldenBench.height,
+    };
+    await writeFile(
+      join(builds(), "workbench.json"),
+      JSON.stringify({
+        name: "Workbench",
+        template: "framed-bench",
+        parameters: { ...goldenBench, height: pointer },
+      }),
+    );
+    const saver = await savingTurns([[]]);
+
+    expect(saver.framings[0]?.instructions).toContain(
+      "<builds>\n[B1] Workbench, framed-bench, 1500 × 600 × 900 mm, the size record for height gone, so the size last read from it, assumed (builds/workbench.json)\n</builds>",
     );
   });
 

@@ -36,14 +36,17 @@ its card opens.
   measured before it's painted (#662); on the cover screen it's as wide as the block, which grows with it. A long
   room that would be drawn at least half as big again turned a quarter is turned on Home only, its length across
   the block and its front on the left (#669; Paper, "Tablet · Garage Home: a long room turned to fit"); "Turned to
-  fit · tap for full size" opens it the right way up in a card. Answers and documents keep it upright.
+  fit · tap for full size" opens it the right way up in a card. Answers and documents keep it upright. Its size is
+  shown only when the plan's `measured` says so, which the worker sets from the space's floor as recorded once it
+  is (#711); a plan with no floor recorded keeps the `measured` it was drawn with.
 - **A house's floors** (#670; Paper, "Tablet · House Home: the house floor by floor (#292)" and its Cover board):
   drawn by the same module (`Floors`, loaded only when Home has them), side by side to one scale with each floor's
   name above it and each room's size, nothing written outside their walls and no overall size; on the cover screen
   one floor at a time, as wide as the block, with a Ground | First switch.
 - **Draw the garage** (`draw-space.tsx`, #604; Paper, "Tablet · Garage Home: Draw the garage, then projects
   (#604)"): a space with no plan yet, as tall as it needs: a dashed box with its size where the plan will be, "No plan
-  of the garage yet", the facts it's drawn from as saved, and Draw the garage, which starts a session with them
+  of the garage yet", the space's size records it's drawn from, each with its source (#711), and Draw the garage,
+  which starts a session with them
   (the contract's `drawSpaceMessage`) and opens it. Stacked on the cover screen.
 - **A project** (`#project/<slug>`, #603): its page in Home's place, under the header and pills
   (`features/projects/project-view.tsx`); the box under it starts a session that belongs to the project.

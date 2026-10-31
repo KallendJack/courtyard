@@ -652,6 +652,24 @@ describe("kinds and subject IDs (ADR 0037)", () => {
       "[T1] Garage, have, space (things/garage.md)",
     );
   });
+
+  it("lets the Things tool give a part its place on its drawing (#711), which the owner's Edit keeps", async () => {
+    const { saver, request } = await sessionWith([
+      [
+        thingTool({ name: "Whyte T-140", status: "have" }),
+        thingTool({ name: "Saddle", status: "have", part_of: "T1", place: "saddle" }),
+      ],
+      [],
+    ]);
+
+    expect(reasons(saver.replies[0])).toEqual(["Added [T1] Whyte T-140.", "Added [T2] Saddle."]);
+    expect(await thingFile("saddle")).toContain("part of: whyte-t-140\nplace: saddle\n");
+    expect(saver.framings[1]?.instructions).toContain(
+      "[T2] Saddle, have, part of [T1], place saddle (things/saddle.md)",
+    );
+    await changeThing(request, "saddle", { name: "Saddle", status: "have", partOf: "whyte-t-140" });
+    expect(await thingFile("saddle")).toContain("place: saddle\n");
+  });
 });
 
 describe("the Things tool", () => {
