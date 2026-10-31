@@ -130,6 +130,8 @@ what uses it, and its API, then how it works. This map keeps the big picture; th
 - [`tasks/`](../apps/worker/src/features/tasks/README.md): a code session's long commands, run on after its turn, its model told when one ends.
 - [`preview/`](../apps/worker/src/features/preview/README.md): a code session's running app on a port of the worker's own, behind the login, and its screenshots.
 - [`pull-requests/`](../apps/worker/src/features/pull-requests/README.md): a code workspace's pull requests, whoever opened them.
+- [`designs/`](../apps/worker/src/features/designs/README.md): a code workspace's Paper boards, exported through
+  Paper's MCP server and kept with their age, laid out row by row (#522).
 - [`lead/`](../apps/worker/src/features/lead/README.md): builders in the milestone's order, 2 at a time through the night
   within a review budget (#591), and Merge in order.
 - [`builders/`](../apps/worker/src/features/builders/README.md): each Lead builder's status, recorded as things
@@ -247,6 +249,7 @@ it keeps one (#106), which every page below then reads from; `_app.tsx` is the l
   - [`preview/`](../apps/web/src/features/preview/README.md): a code session's Preview button, and the app beside
     the chat.
   - [`pull-requests/`](../apps/web/src/features/pull-requests/README.md): the PRs list and a pull request's page.
+  - [`designs/`](../apps/web/src/features/designs/README.md): the Designs tab, and one board full size.
   - [`matt-setup/`](../apps/web/src/features/matt-setup/README.md): the setup card.
   - [`friction/`](../apps/web/src/features/friction/README.md): Something's off (#554): what it fills in at the
     tap, the screen taken in the browser (its code loaded only then), and filing it.

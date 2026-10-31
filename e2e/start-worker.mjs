@@ -367,14 +367,61 @@ await writeMattPlugin(mattPlugin, {
 });
 const { pin, fetch } = await mattSkillsIn(mattPlugin);
 
-// The owner's Paper files in memory (#308), so connecting Paper never starts Paper.
+// The owner's Paper files in memory (#308), so connecting Paper never starts Paper, and Side
+// project's file's pages of boards for its Designs tab (#522), laid out as the house's are: Live
+// and Agreed in sections, Drafts in a grid by topic.
 const { createFakePaperFiles } = await import("../apps/worker/src/integrations/paper/fake.ts");
+/** A board where it sits and how big it is: a tablet's, unless it says. */
+const board = (name, x, y, [width, height] = [933, 645]) => ({
+  id: name.replaceAll(/[^A-Za-z0-9]+/g, "-"),
+  name,
+  x,
+  y,
+  width,
+  height,
+});
 const paper = createFakePaperFiles({
   files: [
     { id: "file-courtyard", name: "Courtyard" },
     { id: "file-home", name: "Workbench" },
     { id: "file-kitchens", name: "Garrett Kitchens" },
   ],
+  boards: {
+    "file-1": [
+      {
+        name: "1 · Live",
+        boards: [
+          board("Section · Style guide & brand", -760, 0, [600, 80]),
+          board("Style guide · Handheld", 0, 0, [1440, 2400]),
+          board("Courtyard mark", 1560, 0, [720, 360]),
+          board("Section · Home", -760, 3000, [600, 80]),
+          board("Built · Desktop · Home", 0, 4600, [1440, 900]),
+          board("Built · Tablet · Home", 0, 3000),
+          board("Built · Cover · Home", 0, 3800, [476, 695]),
+          board("Section · Code workspace", -760, 6000, [600, 80]),
+          board("Built · Desktop · Code workspace", 0, 7600, [1440, 900]),
+          board("Built · Tablet · Code workspace", 0, 6000),
+          board("Built · Cover · Code workspace", 0, 6800, [476, 695]),
+        ],
+      },
+      {
+        name: "2 · Agreed",
+        boards: [
+          board("Section · Code workspace", -760, 0, [600, 80]),
+          board("Tablet · Designs (#522)", 0, 0),
+        ],
+      },
+      {
+        name: "3 · Drafts",
+        boards: [
+          board("Audit · Tablet · PRs", 0, 0),
+          board("Audit · Cover · PRs", 1000, 0, [476, 695]),
+          board("Draft · Tablet · Ended session", 0, 3000),
+        ],
+      },
+      { name: "4 · Archive", boards: [board("Tablet · An old Home", 0, 0)] },
+    ],
+  },
 });
 
 const github = createFakeGitHub({

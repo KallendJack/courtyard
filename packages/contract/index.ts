@@ -71,7 +71,16 @@ export {
   RoadmapState,
   WorkspaceConnections,
   WorkspaceMain,
-} from "./lib/code-home.ts";
+} from "./lib/code-home/code-home.ts";
+export {
+  DESIGN_PAGES,
+  DesignBoard,
+  DesignDevice,
+  DesignPage,
+  DesignPageKind,
+  DesignRow,
+  Designs,
+} from "./lib/code-home/designs.ts";
 export { CODE_SESSIONS_AT_ONCE, CodeSessionList } from "./lib/code-sessions.ts";
 export { wordsOf } from "./lib/command-words.ts";
 export {

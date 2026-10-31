@@ -150,9 +150,11 @@ the chain  a time            changed                   Undo
 ### 🛠️ Building code
 
 **Worker features:** `code` · `tasks` · `preview` · `pull-requests` · `lead` · `builders` · `next-up` · `red-main` ·
-`version-bumps` · `repos` · `matt-setup` · `matt-skills` · `workspace-main` · `skills` · `connections` · `friction`
+`version-bumps` · `repos` · `matt-setup` · `matt-skills` · `workspace-main` · `skills` · `connections` · `designs` ·
+`friction`
 
-**Web features:** `code-home` · `builders` · `tasks` · `preview` · `pull-requests` · `matt-setup` · `friction`
+**Web features:** `code-home` · `builders` · `tasks` · `preview` · `pull-requests` · `designs` · `matt-setup` ·
+`friction`
 
 You tap Build on an issue:
 
@@ -165,7 +167,8 @@ blocked     and worktree    waits on         checks
 
 - **`lead`** runs builders in the milestone's order; **`builders`** keeps each one's status as things happen
   (Building, Checking, Waiting on you, In CI and the rest), which the web app's **`builders`** shows on the Builders
-  board at the top of a code workspace's Home. **`connections`** is a code workspace's GitHub and Paper.
+  board at the top of a code workspace's Home. **`connections`** is a code workspace's GitHub and Paper;
+  **`designs`** shows its Paper file's boards, row by row, on its Designs tab.
 - **`version-bumps`** looks after Dependabot's PRs: a failed check re-run once, then an issue for the Lead, first in
   the order (or a flaky test's, last); still failing after the fix, it's yours.
 - **`tasks`** runs a session's long commands (a dev server, a slow test run) on after its turn, and tells the model

@@ -65,9 +65,9 @@ const showsHome = async (page: Page) => {
   await expect(graph).toBeHidden();
 
   // Tabs show once they have something: the Roadmap always (#532), no sessions yet, one pull
-  // request.
+  // request, and Designs always (#522).
   const tabs = page.getByRole("navigation", { name: "Workspace tabs" });
-  await expect(tabs.getByRole("link")).toHaveText(["Home", "Roadmap", "PRs1"]);
+  await expect(tabs.getByRole("link")).toHaveText(["Home", "Roadmap", "PRs1", "Designs"]);
   // A code workspace has no context file, Things or skills on its page (#301).
   await expect(page.getByRole("region", { name: "Context file" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Skills" })).toHaveCount(0);

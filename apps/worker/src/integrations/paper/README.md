@@ -7,7 +7,7 @@ Paper in code workspaces, the first tool connection
 and its screenshot shows under the answer.
 
 - **Uses:** `providers/` (`ToolConnection`), `prompts/` (wording a failed call), `workspaces/` (the Paper settings).
-- **Used by:** `sessions/`, `connections/` (`files.ts`), `worker.ts`.
+- **Used by:** `sessions/`, `connections/` (`files.ts`), `designs/` (`files.ts`' `boards`), `worker.ts`.
 
 ## API
 
@@ -23,4 +23,7 @@ None of its own: connecting Paper is `connections/`' routes.
   keep and show, and words a failed call through `prompts/`.
 - `files.ts` lists the owner's Paper files and makes one, for connecting Paper from a code workspace's page (#308),
   by asking Paper's own MCP server through the MCP SDK's client: a dependency passed in (the one real one; `fake.ts`
-  holds files in memory for the tests and the browser tests).
+  holds files in memory for the tests and the browser tests). It also exports a file's boards, page by page, each with
+  its place and its screenshot (`boards.ts`, #522), for the Designs tab: past the 100 boards `get_basic_info` lists, the
+  page's tree names the rest, and a picture over 8 MB is left out; the fake answers as Paper's tools do and draws each
+  board as a small picture naming it. `client.ts` is the one MCP session both share.
