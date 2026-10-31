@@ -81,7 +81,7 @@ describe("the golden bench through the general engine", () => {
   });
 
   it("gives the template's findings, but the tools its steps need (#772), then the checks' (#771)", () => {
-    const checks = ["sags", "tips", "racks", "screw-length"];
+    const checks = ["sags", "tips", "racks", "screw-length", "clashes"];
     expect(recipe.findings.filter((finding) => !checks.includes(finding.kind))).toEqual(
       bench.findings.filter((finding) => finding.kind !== "tools-missing"),
     );

@@ -288,6 +288,19 @@ export const BuildFinding = z.discriminatedUnion("kind", [
     room: z.number(),
     fixes: list(z.string()),
   }),
+  // The whole Build as one (#835): what takes another's space, and a step that can't reach.
+  z.object({
+    kind: z.literal("clashes"),
+    what: z.string(),
+    with: z.string(),
+    fixes: list(z.string()),
+  }),
+  z.object({
+    kind: z.literal("out-of-reach"),
+    step: z.string(),
+    by: z.string(),
+    fixes: list(z.string()),
+  }),
 ]);
 export type BuildFinding = z.infer<typeof BuildFinding>;
 

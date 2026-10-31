@@ -3,6 +3,8 @@ import { bracketArm, bracketBoxes, bracketWidth } from "../close-ups/bracket.ts"
 import type { At, Scene, SceneMark, ScenePiece } from "../scene.ts";
 import { castorScene } from "./castor-pictures.ts";
 import { cutScene, markScene } from "./cut-scenes.ts";
+import { castorNuts, legBrackets } from "./frame.ts";
+import { castorFixingNames } from "./parameters.ts";
 import {
   at,
   box,
@@ -175,45 +177,17 @@ const assemblyMarks = (setting: SceneSetting, id: string): SceneMark[] => {
 /**
  * The brackets a step fits, drawn as the L-shapes they are, lit (#813): two at each leg's foot
  * as the frame stands on its bases, one on its face towards the bench's middle and one on its
- * face towards the other leg; and one in the corner at each end of each support, where it meets
- * its rail.
+ * face towards the base's end, clear of the castor's nuts (#835); and one in the corner at each
+ * end of each support, where it meets its rail.
  */
 const bracketsOf = (setting: SceneSetting, id: string): ScenePiece[] => {
-  const s = setting.shape;
   const name = setting.parameters.fixings.brackets.name;
   const arm = bracketArm(name);
   const boxesOf = (label: string) =>
     setting.parts.find((part) => part.label === label)?.boxes ?? [];
-  const middle = s.length / 2;
-  const back = (s.front + s.back) / 2;
   const boxes =
     id === "stand-on-bases"
-      ? boxesOf("A").flatMap((leg) => {
-          const towards = leg.x < middle ? 1 : -1;
-          const across = leg.y < back ? 1 : -1;
-          return [
-            ...bracketBoxes({
-              at: { x: towards > 0 ? leg.x + leg.w : leg.x, y: leg.y + leg.d / 2, z: leg.z },
-              ways: [
-                { axis: "z", sign: 1 },
-                { axis: "x", sign: towards },
-              ],
-              along: "y",
-              arm,
-              width: bracketWidth(arm, leg.d),
-            }),
-            ...bracketBoxes({
-              at: { x: leg.x + leg.w / 2, y: across > 0 ? leg.y + leg.d : leg.y, z: leg.z },
-              ways: [
-                { axis: "z", sign: 1 },
-                { axis: "y", sign: across },
-              ],
-              along: "x",
-              arm,
-              width: bracketWidth(arm, leg.w),
-            }),
-          ];
-        })
+      ? legBrackets(setting.parameters, setting.shape)
       : id === "fit-supports"
         ? ["F", "D"].flatMap((label) =>
             boxesOf(label).flatMap((support) =>
@@ -237,6 +211,24 @@ const bracketsOf = (setting: SceneSetting, id: string): ScenePiece[] => {
           )
         : [];
   return boxes.length === 0 ? [] : [{ kind: "fitted", name, label: null, tone: "lit", boxes }];
+};
+
+/**
+ * What the castors' bolts leave on the bases' tops once they're on (#835): each nut and its
+ * bolt's end, drawn at their size, so a leg standing on them would show before anyone drills.
+ */
+const nutsOf = (setting: SceneSetting, shown: readonly string[]): ScenePiece[] => {
+  const castors = setting.parameters.castors;
+  if (!castors || !shown.includes("E")) return [];
+  return [
+    {
+      kind: "fitted",
+      name: `${castorFixingNames(castors, setting.boltLength).nuts} and bolt ends`,
+      label: null,
+      tone: "built",
+      boxes: castorNuts(setting.parameters, setting.shape, setting.fitted, setting.boltLength),
+    },
+  ];
 };
 
 /** Where an assembly step opens from: low for the bases, from the back for the braces, above for the top. */
@@ -291,6 +283,7 @@ const sceneOf = (
         view: ASSEMBLY_VIEWS[step.id] ?? { turn: -35, tilt: 25 },
         pieces: [
           ...soFar(setting, { shown: new Set(step.shown), lit: new Set(step.lit) }),
+          ...nutsOf(setting, step.shown),
           ...bracketsOf(setting, step.id),
         ],
         marks: assemblyMarks(setting, step.id),

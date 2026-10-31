@@ -227,6 +227,7 @@ describe("the castor step with Your tools (#783)", () => {
     const kit = [...theirs, "Adjustable spanner", "Pliers"];
 
     expect(chips(kit)).toEqual([
+      ["Tape measure", true],
       ["Drill, 7 mm bit", true],
       ["Adjustable spanner", true],
       ["Pliers or 10 mm spanner", true],
@@ -241,6 +242,7 @@ describe("the castor step with Your tools (#783)", () => {
 
   it("never count one adjustable as two spanners", () => {
     expect(chips([...theirs, "Adjustable spanner"])).toEqual([
+      ["Tape measure", true],
       ["Drill, 7 mm bit", true],
       ["Adjustable spanner", true],
       ["10 mm spanner or pliers", false],
@@ -257,6 +259,7 @@ describe("the castor step with Your tools (#783)", () => {
     const kit = [...theirs, "Spanner set"];
 
     expect(chips(kit)).toEqual([
+      ["Tape measure", true],
       ["Drill, 7 mm bit", true],
       ["10 mm spanner × 2", true],
     ]);
@@ -271,12 +274,14 @@ describe("the castor step with Your tools (#783)", () => {
     const kit = [...theirs, "Socket set", "Spanner"];
 
     expect(chips(kit)).toEqual([
+      ["Tape measure", true],
       ["Drill, 7 mm bit", true],
       ["10 mm socket", true],
       ["10 mm spanner", true],
     ]);
     expect(holders(kit)).toEqual(["open-spanner", "socket"]);
     expect(chips([...theirs, "Socket set"])).toEqual([
+      ["Tape measure", true],
       ["Drill, 7 mm bit", true],
       ["10 mm socket", true],
       ["10 mm spanner or pliers", false],

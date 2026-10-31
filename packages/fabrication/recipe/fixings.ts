@@ -160,6 +160,18 @@ export const fixingsOf = (options: {
     // and nut, and two threads past it.
     const [first] = contacts;
     if (first === undefined) return;
+    // A castor that can't sit clear of what stands on its base goes on coach screws from below,
+    // nothing through its top (#835): the bolts' thread, at the length that stays in the wood.
+    const screws = first.one.fitted?.screws ?? first.other.fitted?.screws;
+    if (screws !== undefined) {
+      add({
+        name: `${joint.bolt.diameter.value} × ${screws} coach screws`,
+        count: joint.each * contacts.length,
+        price: undefined,
+        for: purpose,
+      });
+      return;
+    }
     const thread = `M${joint.bolt.diameter.value}`;
     const through = (side: Held, contact: Contact) => {
       if (side.fitted) {

@@ -6,9 +6,9 @@ import {
   tightenCloseUp,
 } from "../close-ups/bolt-through.ts";
 import type { SpannerKit, Tool } from "../tools.ts";
-import { baseCloseUp, CASTOR_INSET } from "./close-ups.ts";
-import type { Shape } from "./frame.ts";
-import { type Castors, castorFixingNames, spannerFor } from "./parameters.ts";
+import { baseCloseUp } from "./close-ups.ts";
+import { castorInsetOf, type Shape, whole } from "./frame.ts";
+import { type BenchParameters, type Castors, castorFixingNames, spannerFor } from "./parameters.ts";
 import { act, type Draft, type DraftTool } from "./preparing.ts";
 
 // Fitting the castors to their bases, after the frames, so a spanner still to get doesn't hold up
@@ -101,6 +101,7 @@ export const castorTools = (kit: SpannerKit, size: number | undefined): CastorTo
 };
 
 export const castorsDraft = (options: {
+  parameters: BenchParameters;
   castors: Castors;
   shape: Shape;
   boltLength: number;
@@ -133,6 +134,8 @@ export const castorsDraft = (options: {
     rest === 1 ? " Then the last one." : rest > 1 ? ` Then the other ${NUMBER_WORDS[rest]}.` : "";
   const pliers = tools.head === "pliers";
   const washer = castors.washer.perBolt > 0;
+  // Clear of where the leg and its brackets stand, so its nuts don't come up under them (#835).
+  const inset = castorInsetOf(options.parameters, s);
   return {
     id: "fit-castors",
     on: true,
@@ -140,17 +143,18 @@ export const castorsDraft = (options: {
     minutes: 30,
     parts: ["E"],
     lines: CASTOR_LINES,
-    tools: [drill, ...tools.chips],
+    tools: ["tape-measure", drill, ...tools.chips],
     bits: [{ mm: bit, for: `the M${castors.bolt.diameter.value} bolts` }],
     safety: ["safety-glasses"],
     // Each bolt's hole drilled through first, at the bolt's bit.
     drills: { first: true, bit },
     fixings: castorFixings(castors, names),
-    batch: "One castor at a time, placed by eye: each hole drilled and bolted before the next.",
+    batch:
+      "One castor at a time, measured from the end: each hole drilled and bolted before the next.",
     actions: [
       act(
-        `${workmate ? "Base in the Workmate's jaws." : "Base upside down on two offcuts."} Castor on its end, centred, a fingernail in.`,
-        `E ${workmate ? "in the jaws" : "on offcuts"}; castor ${CASTOR_INSET} from the end, centred.`,
+        `${workmate ? "Base in the Workmate's jaws." : "Base upside down on two offcuts."} Castor centred, ${whole(inset)} from the end: clear of the leg.`,
+        `E ${workmate ? "in the jaws" : "on offcuts"}; castor ${whole(inset)} from the end, centred.`,
       ),
       act(
         `Drill one hole through the plate with the ${bit} mm bit. Bolt it loosely.`,

@@ -289,12 +289,35 @@ describe("where the brackets go (#777, drawn as L-shapes #813)", () => {
     expect(brackets?.tone).toBe("lit");
     // Two plates a bracket, two brackets a leg.
     expect(brackets?.boxes).toHaveLength(2 * 2 * legs.length);
-    // The first leg's: one up its face towards the middle, one up its face towards the back leg,
-    // each standing on the base at the leg's foot and 40 mm up it.
-    const [middleUp, , otherUp] = brackets?.boxes ?? [];
+    // The first leg's: one up its face towards the middle, one up its face towards the base's
+    // end, clear of the castor's nuts (#835), each standing on the base at the leg's foot and 40
+    // mm up it.
+    const [middleUp, , endUp] = brackets?.boxes ?? [];
     expect(middleUp).toMatchObject({ x: (leg?.x ?? 0) + (leg?.w ?? 0), z: leg?.z, h: 40 });
-    expect(otherUp).toMatchObject({ y: (leg?.y ?? 0) + (leg?.d ?? 0), z: leg?.z, h: 40 });
+    expect(endUp).toMatchObject({ y: (leg?.y ?? 0) - 2, d: 2, z: leg?.z, h: 40 });
     expect(marks(scene, "arrow")).toEqual([]);
+  });
+
+  it("draws the castors' nuts and bolt ends on the bases' tops, clear of the legs (#835)", () => {
+    const build = built(goldenBench);
+    const scene = sceneOf(build, "stand-on-bases");
+    const nuts = scene.pieces.find((piece) => piece.name === "M6 lock nuts and bolt ends");
+    const legs = build.parts.find((part) => part.label === "A")?.boxes ?? [];
+
+    // Four a castor, four castors: each 12 across, standing 11 up (the 60 mm bolt's end past the
+    // plate and base), on the base's top where the leg's foot is.
+    expect(nuts?.boxes).toHaveLength(16);
+    expect(nuts?.boxes[0]).toMatchObject({ z: legs[0]?.z, w: 12, d: 12, h: 11 });
+    for (const nut of nuts?.boxes ?? []) {
+      for (const leg of legs) {
+        const inside = nut.y < leg.y + leg.d && nut.y + nut.d > leg.y && nut.x < leg.x + leg.w;
+        expect(inside && nut.x + nut.w > leg.x).toBe(false);
+      }
+    }
+    // Before the castors go on, there are none to draw.
+    expect(sceneOf(build, "long-rails").pieces.map((piece) => piece.name)).not.toContain(
+      "M6 lock nuts and bolt ends",
+    );
   });
 
   it("draws one in the corner at each end of each support", () => {
@@ -374,12 +397,17 @@ describe("the castors' scene", () => {
       "tool Drill driver plain ×5",
     ]);
     // Its words are callouts, off the model with a leader, as the board has them: the owner's
-    // tools and where things go in their colour, the next thing to do in green; and the lines'
-    // badges (#826). Nothing else.
-    expect(scene.marks.every((mark) => mark.kind === "callout" || mark.kind === "badge")).toBe(
-      true,
-    );
+    // tools and where things go in their colour, the next thing to do in green; the lines'
+    // badges (#826); and where the leg stands on the base's other face, in the middle of its
+    // spot, with the castor's 95 from the end (#835).
+    expect(scene.marks.filter((mark) => mark.kind !== "callout" && mark.kind !== "badge")).toEqual([
+      { kind: "size", from: { x: 0, y: -20, z: 785 }, to: { x: 95, y: -20, z: 785 }, mm: 95 },
+    ]);
+    const plate = scene.pieces.find((piece) => piece.name === "Wheelwright TD60 castors")?.boxes[0];
+    expect(plate?.x).toBe(95);
+    expect(marks(scene, "callout")[0]?.at).toEqual({ x: 67.5, y: 72.5, z: 785 });
     expect(marks(scene, "callout").map(({ says, more, tone }) => [says, more, tone])).toEqual([
+      ["leg stands here", "on the other face: castor past it", "yours"],
       ["your drill, 7 mm bit", "straight down through the plate's hole", "yours"],
       ["1 bolt in", "then drill the next hole", "next"],
       ["your Workmate's jaws", "hold the base, castor end out", "yours"],
@@ -406,6 +434,7 @@ describe("the castors' scene", () => {
     expect(tools(scene)).toEqual(["Offcuts"]);
     expect(pieces(scene)).toContain("support Offcuts plain ×2");
     expect(marks(scene, "callout").map((callout) => callout.says)).toEqual([
+      "leg stands here",
       "drill 7 mm here",
       "1 bolt in",
       "two offcuts",
@@ -425,7 +454,9 @@ describe("an assembly step's scene", () => {
     const top = pieces(sceneOf(build, "fit-top"));
     expect(top).toContain("part G lit ×1");
     expect(top.filter((piece) => piece.includes(" lit "))).toEqual(["part G lit ×1"]);
-    expect(top).toHaveLength(build.parts.length + build.fitted.length);
+    // And what the castors' bolts left on the bases' tops (#835).
+    expect(top).toContain("fitted M6 lock nuts and bolt ends built ×16");
+    expect(top).toHaveLength(build.parts.length + build.fitted.length + 1);
   });
 
   it("checks the frame's diagonals once it's joined, and gives the support's place and the overhang", () => {

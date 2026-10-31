@@ -1,10 +1,13 @@
+import { baseForScrews, clashesOf, screwsFromBelow } from "../assembly/space.ts";
 import {
   type Build,
   type BuildSetting,
   err,
   type Finding,
+  type Fitted,
   type KeptWay,
   ok,
+  type Part,
   type Result,
 } from "../build.ts";
 import { buyLine, buyListOf, stockLines, toolsToBuy } from "../buy-list.ts";
@@ -25,7 +28,15 @@ import {
   Tool,
   toolsFrom,
 } from "../tools.ts";
-import { benchFitted, benchParts, shapeOf, shapeProblems } from "./frame.ts";
+import {
+  benchFitted,
+  benchParts,
+  benchTaken,
+  castorPlacesOf,
+  type Shape,
+  shapeOf,
+  shapeProblems,
+} from "./frame.ts";
 import { type BenchParameters, castorFixingNames } from "./parameters.ts";
 import { benchSteps } from "./steps.ts";
 import { BENCH_SLOTS } from "./stock-slots.ts";
@@ -84,6 +95,53 @@ export const workOutBench = (
   });
 };
 
+/** The deepest a bench is tried at, looking for the depth its castors sit clear of its legs. */
+const DEEPEST = 1500;
+
+/**
+ * The bench as one (#835): whatever takes another's space once it's all built. Its castors' nuts
+ * on a leg say the plain fixes: deep enough for the castors to sit clear, or coach screws from
+ * below where the bases are thick enough to hold them.
+ */
+const benchClashes = (
+  parameters: BenchParameters,
+  shape: Shape,
+  built: { parts: readonly Part[]; fitted: readonly Fitted[]; boltLength: number },
+): Finding[] => {
+  const castors = parameters.castors;
+  const taken = benchTaken(parameters, shape, built);
+  const nuts = taken.find((each) => each.name.endsWith("nuts and ends"))?.name;
+  const castorFixes = () => {
+    if (!castors) return [];
+    const deep = (depth: number) =>
+      castorPlacesOf(
+        parameters,
+        shapeOf({ ...parameters, depth: { ...parameters.depth, value: depth } }),
+      );
+    let depth = Math.ceil(parameters.depth.value / 10) * 10;
+    while (depth < DEEPEST && deep(depth) === undefined) depth += 10;
+    const diameter = castors.bolt.diameter.value;
+    const screws = screwsFromBelow({
+      diameter,
+      plate: castors.plate.thickness.value,
+      base: shape.wideThick,
+    });
+    return [
+      ...(depth < DEEPEST
+        ? [`Make the bench at least ${depth} deep, so the castors sit clear of the legs`]
+        : []),
+      screws === undefined
+        ? `Use castor bases ${baseForScrews(diameter)} thick or more, for coach screws from below`
+        : `Fix the castors with ${diameter} × ${screws} coach screws from below, nothing through the top`,
+    ];
+  };
+  return clashesOf(taken).map((clash) => ({
+    kind: "clashes",
+    ...clash,
+    fixes: clash.what === nuts ? castorFixes() : ["Change their sizes so each keeps its own space"],
+  }));
+};
+
 /** What the bench is worked out with besides its parameters, as `workOutBench` reads its setting. */
 type Setting = {
   readonly toHand: ReadonlySet<Tool>;
@@ -139,7 +197,7 @@ const benchWith =
     const use = bolts?.use ?? 0;
     const corrected = castors ? use !== castors.bolt.length.value : false;
     const fitted = benchFitted(parameters, shape);
-    const steps = benchSteps({
+    const { steps, outOfReach } = benchSteps({
       parameters,
       shape,
       cutPlan: planned.cutPlan,
@@ -217,6 +275,10 @@ const benchWith =
       ...planned.findings,
       ...wrongStock({ parameters, slots: BENCH_SLOTS, damp: parameters.damp, build: { parts } }),
     ];
+    findings.push(
+      ...benchClashes(parameters, shape, { parts, fitted, boltLength: use }),
+      ...outOfReach,
+    );
     const missing = toolsMissing(steps);
     if (missing) findings.push(missing);
     const assumed = assumedSizes(parameters);

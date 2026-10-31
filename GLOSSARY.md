@@ -237,6 +237,14 @@ an edge, an angle bracket, a bolt with its nut and washer, or a printed holder o
 and given its close-up by code.
 _Avoid_: connection, fixing (that's the screw or bolt a joint uses)
 
+**Clash**:
+Two things in a Build that would take the same space once it's all built (#835), found by checking the whole Build as
+one: every part and fixing at its real size, such as a castor bolt's nut and end on its base where a leg would stand.
+Code moves what it can (a castor along its base, clear of the leg), fixes it another way (coach screws from below), or
+says it with plain fixes. A step whose drill or spanner an earlier step's pieces would block is moved before that
+step, or said to be **out of reach**.
+_Avoid_: collision, conflict, overlap (that's a screwed joint's pieces meeting, which is meant)
+
 **Starter**:
 A tested recipe a Build starts from and changes (ADR 0039), such as the bench, a box or crate, a freestanding storage
 rack, or a stand for a printer or tools. Once its recipe gives exactly its numbers, a template is one.

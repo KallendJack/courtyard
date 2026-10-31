@@ -113,6 +113,16 @@ const findingWords = (finding: Exclude<BuildFinding, { kind: "assumed" }>): Card
         title: `The ${finding.screws} are ${finding.problem} for the ${finding.joint}`,
         detail: `${finding.problem === "too long" ? `They'd come out the far side of the ${mm(finding.room)} mm they go into.` : `They go ${mm(finding.into)} mm in, and grip from ${mm(finding.least)} mm.`} ${fixesSaid(finding.fixes)}`,
       };
+    case "clashes":
+      return {
+        title: `The ${finding.what.toLowerCase()} meet the ${finding.with.toLowerCase()}`,
+        detail: `Built as it is, they take the same space. ${fixesSaid(finding.fixes)}`,
+      };
+    case "out-of-reach":
+      return {
+        title: `${finding.step}: its work is covered`,
+        detail: `${finding.by} puts pieces where it drills or screws. ${fixesSaid(finding.fixes)}`,
+      };
   }
 };
 

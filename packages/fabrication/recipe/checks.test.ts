@@ -117,10 +117,11 @@ describe("tipping", () => {
   });
 
   it("measures a build on castors from where its castors turn, not their plates' edges", () => {
-    // Its castors' plates reach 480 mm front to back, their middles 420: 1800 tall wants 450.
+    // Its castors sit clear of the legs (#835): their plates reach 310 mm front to back, their
+    // middles 250. 1800 tall wants 450.
     const tall = { ...sawStand, size: { ...sawStand.size, height: measured(1800) } };
     expect(found(worked(tall), "tips")).toEqual([
-      expect.objectContaining({ height: 1800, feet: 420, way: "front to back" }),
+      expect.objectContaining({ height: 1800, feet: 250, way: "front to back" }),
     ]);
     expect(found(worked(sawStand), "tips")).toEqual([]);
   });
@@ -191,3 +192,56 @@ describe("screw length", () => {
     expect(frameScrews).toEqual([]);
   });
 });
+
+describe("the whole Build as one (#835)", () => {
+  /** The saw stand this deep, its bases cut from this stock. */
+  const stand = (depth: number, bases = "45-145-c16") => ({
+    ...sawStand,
+    size: { ...sawStand.size, depth: measured(depth) },
+    stock: [
+      ...sawStand.stock,
+      {
+        kind: "timber",
+        id: "22-145",
+        name: "22 × 145 planed",
+        thickness: specified(22),
+        width: specified(145),
+        length: specified(2400),
+      },
+    ],
+    pieces: sawStand.pieces.map((piece) =>
+      piece.id === "bases" ? { ...piece, stock: bases } : piece,
+    ),
+  });
+
+  it("moves each castor along its base until its nuts clear the leg and its brackets", () => {
+    const build = worked(sawStand);
+    // The legs stand 45 to 90 in from each base's end: the castors' plates go 95 in.
+    expect(build.fitted[0]?.boxes.map((plate) => plate.y)).toEqual([95, 345, 95, 345]);
+    expect(found(build, "clashes")).toEqual([]);
+  });
+
+  it("fixes the castors with coach screws from below when the base is too short to move them", () => {
+    // 250 deep: the legs leave 70 between them, too little for two plates clear of both.
+    const build = worked(stand(250));
+    expect(needs(build)).toMatchObject({ "6 × 40 coach screws": 16 });
+    expect(Object.keys(needs(build)).some((item) => item.includes("lock nuts"))).toBe(false);
+    expect(found(build, "clashes")).toEqual([]);
+  });
+
+  it("says the clash, and both fixes, when the base is too short and too thin for either", () => {
+    expect(found(worked(stand(250, "22-145")), "clashes")).toContainEqual({
+      kind: "clashes",
+      what: "M6 bolts' nuts and ends",
+      with: "Legs",
+      fixes: [
+        "Make it deeper, so the castors sit clear of what stands on the bases",
+        "Use bases 41 mm thick or more, for coach screws from below",
+      ],
+    });
+  });
+});
+
+/** How many of each thing the buy list buys. */
+const needs = (build: Build) =>
+  Object.fromEntries(build.buyList.lines.map((line) => [line.item, line.needed]));

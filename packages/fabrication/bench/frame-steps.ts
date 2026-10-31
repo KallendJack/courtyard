@@ -1,7 +1,11 @@
+import { DRILL_REACH, type Planned, SPANNER_REACH } from "../assembly/order.ts";
+import { armFits } from "../assembly/space.ts";
+import type { Box, Fitted, Part } from "../build.ts";
 import { bracketArm, bracketCloseUp } from "../close-ups/bracket.ts";
 import { overlapCloseUp } from "../close-ups/overlap.ts";
+import { contactOf } from "../recipe/geometry.ts";
 import { legEndOnCloseUp, longSideCloseUp, screwSpotsWalk } from "./close-ups.ts";
-import { type Shape, whole } from "./frame.ts";
+import { castorNuts, legBrackets, type Shape, whole } from "./frame.ts";
 import type { BenchParameters } from "./parameters.ts";
 import { act, type Draft } from "./preparing.ts";
 import {
@@ -20,8 +24,8 @@ import {
 
 /**
  * The brackets holding each leg to its castor base: one on the face towards the bench's middle and
- * one on the face towards the other leg. A single bracket lets a bench pushed on castors work the
- * joint loose; screws up through the base can't go in, as the castor plates cover the legs' feet.
+ * one on the face towards the base's end, clear of the castor's nuts past the leg (#835). A single
+ * bracket lets a bench pushed on castors work the joint loose.
  */
 const BRACKETS_PER_LEG = 2;
 
@@ -175,7 +179,7 @@ export const frameDrafts = (options: {
         ),
         act("Square each leg to its base, then clamp the base to both legs.", "Square, clamp."),
         act(
-          "Two angle brackets a leg: one facing the middle, one facing the other leg.",
+          `Two angle brackets a leg: one facing the middle, one facing ${armFits(s.thick, bracketArm(p.fixings.brackets.name)) ? "the base's end" : "the other leg"}.`,
           `${BRACKETS_PER_LEG} brackets a leg.`,
         ),
         bracketing(pilots.brackets),
@@ -203,4 +207,50 @@ export const frameDrafts = (options: {
       words: wordsWith(pilots.brackets, "flush", "square"),
     },
   ];
+};
+
+/**
+ * Each step as the order sees it (#835): the boxes it puts on the bench, the space its tools need
+ * (a spanner over each castor nut; the drill over each bracket's arm on a base) and the steps
+ * before it whose pieces its own touch, which it needs done first.
+ */
+export const plannedOf = (
+  options: {
+    parameters: BenchParameters;
+    shape: Shape;
+    parts: readonly Part[];
+    fitted: readonly Fitted[];
+    boltLength: number;
+  },
+  drafts: readonly Draft[],
+): Planned[] => {
+  const { parameters: p, shape: s } = options;
+  const boxesOf = (labels: readonly string[]) => [
+    ...options.parts.filter((part) => labels.includes(part.label)).flatMap((part) => part.boxes),
+    ...options.fitted.filter((each) => labels.includes(each.on)).flatMap((each) => each.boxes),
+  ];
+  const up = (b: Box, by: number): Box => ({ ...b, z: b.z + b.h, h: by });
+  const brackets = (id: string) => (id === "stand-on-bases" ? legBrackets(p, s) : []);
+  const reaches = (id: string) =>
+    id === "fit-castors"
+      ? castorNuts(p, s, options.fitted, options.boltLength).map((nut) => up(nut, SPANNER_REACH))
+      : brackets(id)
+          .filter((plate) => plate.h < plate.w && plate.h < plate.d)
+          .map((arm) => up(arm, DRILL_REACH));
+  return drafts.map((draft, at) => {
+    const own = boxesOf(draft.parts);
+    return {
+      id: draft.id,
+      adds: [...boxesOf(draft.adds ?? draft.parts), ...brackets(draft.id)],
+      reaches: reaches(draft.id),
+      needs: drafts
+        .slice(0, at)
+        .filter((earlier) =>
+          boxesOf(earlier.adds ?? earlier.parts).some((piece) =>
+            own.some((mine) => contactOf(piece, mine) !== null),
+          ),
+        )
+        .map((earlier) => earlier.id),
+    };
+  });
 };
