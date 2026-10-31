@@ -1,5 +1,7 @@
 import {
   type Activity,
+  BIKE_PLACES,
+  BikePlace,
   type Capabilities,
   CONTEXT_LINE_MAX_CHARACTERS,
   type DocumentSummary,
@@ -50,7 +52,6 @@ import {
 } from "../features/context-file/index.ts";
 import type { ReadBuilds } from "../features/fabrication/index.ts";
 import type { ReadProjects } from "../features/projects/index.ts";
-import { labelledProjects } from "../features/projects/tool.ts";
 import type { SaveRefusal } from "../features/saves/index.ts";
 import type { UseSkillAnswer, UseSkillRefusal } from "../features/skills/index.ts";
 import { linksIn } from "../features/sources/index.ts";
@@ -76,19 +77,12 @@ import type {
 } from "../providers/index.ts";
 import { BUILD_TOOL, buildSaveLine, buildsPart, KEEPING_BUILDS } from "./builds.ts";
 import { DOCUMENT_TOOL, DOCUMENTING, documentLine, documentsPart } from "./documents.ts";
-import {
-  KEEPING_PROJECTS,
-  PROJECT_TOOL,
-  projectLine,
-  projectsPart,
-  sessionProjectPart,
-} from "./projects.ts";
+import { KEEPING_PROJECTS, PROJECT_TOOL, projectsPart, sessionProjectPart } from "./projects.ts";
 import { KEEPING_SIZES, type ReadSizes, SIZE_TOOL, sizeSaveLine, sizesPart } from "./sizes.ts";
 import { contained, quoted, textReply } from "./text.ts";
 import { toolsPart } from "./tools.ts";
 
 export { DOCUMENT_TOOL_NAME, documentReply } from "./documents.ts";
-export { MOVE_REVIEW_WRITING, MoveReviewAnswer } from "./move-review.ts";
 
 /**
  * Everything a model reads, built from the rules in docs/ai-conduct.md. Providers deliver it as
@@ -429,6 +423,7 @@ const thingLine = ({ label, thing }: LabelledThing, all: readonly LabelledThing[
       : thing.partOf === undefined
         ? []
         : [`part of ${thing.partOf}`]),
+    ...(thing.place === undefined ? [] : [`place ${thing.place}`]),
   ];
   return `[${label}] ${fields.join(", ")} (${thing.path})`;
 };
@@ -459,7 +454,7 @@ const thingsPart = (workspace: FramingWorkspace, readsFiles: boolean) => {
 };
 
 /** When and how a model keeps Things current (docs/ai-conduct.md, Things). */
-const KEEPING_THINGS = `The owner's kit for this workspace, what they have, want, or have and mean to replace, are its Things, which you keep current yourself with the ${THING_TOOL_NAME} tool as you answer, by the same rules as saves: save what the owner tells you, never your own suggestions until the owner agrees, and ask rather than guess which Thing they mean, or whether they've bought it. When the owner says they bought, fitted, swapped, sold or did something to one ("swapped the chain today"), change that Thing: set the fields that changed, such as bought and price, and add a line to its history saying what happened. When they add something that has typical parts, such as a bike's chain, tyres and fork, add only what they told you about, offer to add its parts, and once the owner agrees add them straight away with what you know, since details can come later. Name each Thing as the owner does ("Whyte T-140", not "Mountain bike"), one Thing for each they name ("the tyres" is one). A Thing is part of at most one other, which isn't a part itself. A part holds what's on it and what's coming next: when the owner wants a new one of a part that's there ("I want new pedals"), it's that part's upcoming one, never a new Thing. Once they've said which, set the part's upcoming (with its price, shop, link and why, those you know); until then mark it replace and help them choose. When they say they've bought or fitted it, change the part with fitted, which swaps it in and keeps the old one in its history. A wanted Thing that's a new one of a part that's there, such as wanted pedals beside the bike's pedals, belongs on that part: offer to move it, and once the owner agrees, set it as the part's upcoming one and remove the wanted Thing. What a Thing holds goes in the Thing, not in a context line as well. To compare options, such as which racket to buy, answer with a table, and offer to save the comparison as a document; once the owner picks one, add it as a Thing, or set it as the upcoming one of the part it replaces. The owner sees each Thing you save as a note under your answer, so leave saves unmentioned.`;
+const KEEPING_THINGS = `The owner's kit for this workspace, what they have, want, or have and mean to replace, are its Things, which you keep current yourself with the ${THING_TOOL_NAME} tool as you answer, by the same rules as saves: save what the owner tells you, never your own suggestions until the owner agrees, and ask rather than guess which Thing they mean, or whether they've bought it. When the owner says they bought, fitted, swapped, sold or did something to one ("swapped the chain today"), change that Thing: set the fields that changed, such as bought and price, and add a line to its history saying what happened. When they add something that has typical parts, such as a bike's chain, tyres and fork, add only what they told you about, offer to add its parts, and once the owner agrees add them straight away with what you know, since details can come later. Name each Thing as the owner does ("Whyte T-140", not "Mountain bike"), one Thing for each they name ("the tyres" is one). A Thing is part of at most one other, which isn't a part itself. Home draws a bike from its parts' places: give each part of a bike that has none the place it is, such as saddle for its saddle, as you add it or once you see it has none. A part holds what's on it and what's coming next: when the owner wants a new one of a part that's there ("I want new pedals"), it's that part's upcoming one, never a new Thing. Once they've said which, set the part's upcoming (with its price, shop, link and why, those you know); until then mark it replace and help them choose. When they say they've bought or fitted it, change the part with fitted, which swaps it in and keeps the old one in its history. A wanted Thing that's a new one of a part that's there, such as wanted pedals beside the bike's pedals, belongs on that part: offer to move it, and once the owner agrees, set it as the part's upcoming one and remove the wanted Thing. What a Thing holds goes in the Thing, not in a context line as well. To compare options, such as which racket to buy, answer with a table, and offer to save the comparison as a document; once the owner picks one, add it as a Thing, or set it as the upcoming one of the part it replaces. The owner sees each Thing you save as a note under your answer, so leave saves unmentioned.`;
 
 /** Each of a Thing's details as the Things tool describes it to a model. */
 const THING_DETAIL_INPUTS: Readonly<Record<ThingDetailName, string>> = {
@@ -501,6 +496,11 @@ const THING_TOOL: TurnTool = {
       .optional()
       .describe(
         "The label of the Thing it's part of, such as T1, which isn't a part itself. An empty text makes it a Thing of its own.",
+      ),
+    place: BikePlace.or(z.literal(""))
+      .optional()
+      .describe(
+        `A bike's part's place on Home's drawing of the bike: ${BIKE_PLACES.join(", ")}. Each place has one part. An empty text takes its place away.`,
       ),
     history: z
       .string()
@@ -1669,14 +1669,14 @@ export const withTaskOutput = (message: string, output: string) =>
 
 /**
  * The message the worker sends a code session when its pull request's checks fail (#172;
- * docs/ai-conduct.md, Coding), naming the checks that failed. A flake that isn't the pull
- * request's is said on it and re-run once, with no code changed (#356).
+ * docs/ai-conduct.md, Coding), naming them; `again` once the worker's re-run failed too (#740).
  */
 export const checksFailedMessage = (failed: {
   number: number;
   checks: readonly [string, ...string[]];
+  again: boolean;
 }) =>
-  `The checks on your pull request #${failed.number} failed: ${failed.checks.join(", ")}. Find out why (gh pr checks and gh run view --log-failed show what failed). First, check whether a failing test is yours: if it also failed lately on the default branch (gh run list --branch), has an open issue saying it's flaky (gh issue list --search), or tests nothing your changes touch, it isn't. Then change no code: comment "Flaky, not this PR's: <test>" on the pull request with gh pr comment, re-run its failed jobs once with gh run rerun <run> --failed, and say so. Otherwise, fix it on your session branch and push the fix to the same pull request. If you can't fix it, say why, so the owner can decide what to do.`;
+  `The checks on your pull request #${failed.number} failed${failed.again ? " again after Courtyard re-ran them once" : ""}: ${failed.checks.join(", ")}.${failed.again ? " So the failure is real, not a flaky test." : ""} Find out why (gh pr checks and gh run view --log-failed show what failed), then fix it on your session branch and push the fix to the same pull request. If you can't fix it, say why, so the owner can decide what to do.`;
 /**
  * What the worker sends a code session when the owner taps Bring up to date on its pull request
  * (#278), once it has fetched the base branch: merge it in and fix the conflict.
@@ -2511,41 +2511,4 @@ export const readSessionReply = (
       `<conversation>\n${contained(said.text)}\n</conversation>`,
     ].join("\n\n"),
   );
-};
-
-/** A workspace as the move review's model is given it: its files whole, Things and projects a line each. */
-export type MoveReviewWorkspace = {
-  readonly name: string;
-  readonly contextFile: string | null;
-  readonly documents: readonly { readonly path: string; readonly text: string }[];
-  readonly things: ReadThings;
-  readonly projects: ReadProjects;
-};
-
-/**
- * The move review's message (docs/ai-conduct.md, The move review): today's date, the workspace's
- * name in quotes it can't close, then its context file, each document whole, and its Things and
- * projects one line each, each between its markers.
- */
-export const moveReviewMessage = (asked: { now: number; workspace: MoveReviewWorkspace }) => {
-  const { workspace } = asked;
-  const things = thingLines(labelledThings(workspace.things.things));
-  const projects = labelledProjects(workspace.projects.projects).map(projectLine);
-  return [
-    `${todayIs(asked.now)} The workspace is ${quoted(workspace.name)}.`,
-    workspace.contextFile === null
-      ? "It has no context file."
-      : `Its context file:\n\n<context_file>\n${contained(workspace.contextFile.trim())}\n</context_file>`,
-    workspace.documents.length === 0
-      ? "It has no documents."
-      : `Its documents, each whole, its path first:\n\n${workspace.documents
-          .map(({ path, text }) => `<document>\n${path}\n\n${contained(text.trim())}\n</document>`)
-          .join("\n\n")}`,
-    things.length === 0
-      ? "It has no Things."
-      : `Its Things, a line each, its file at the end:\n\n<things>\n${contained(things.join("\n"))}\n</things>`,
-    projects.length === 0
-      ? "It has no projects."
-      : `Its projects, a line each, its file at the end:\n\n<projects>\n${contained(projects.join("\n"))}\n</projects>`,
-  ].join("\n\n");
 };

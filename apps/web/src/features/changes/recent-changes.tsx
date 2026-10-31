@@ -208,7 +208,8 @@ function ChangeEntry(props: { workspace: Whose; change: RecentChange; onUndone: 
     );
   }
 
-  // A move the owner ticked in the move review (#603), by what moved where.
+  // A move the owner ticked in the move review (#603), by what moved where: the review went once
+  // every workspace had moved (#711), and the moves it made stay listed, with Undo.
   if (change.move !== undefined) {
     return (
       <NoteRow

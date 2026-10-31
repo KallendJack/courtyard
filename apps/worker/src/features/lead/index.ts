@@ -547,7 +547,7 @@ export const createLead = (options: {
     if (kept.state !== "running") return kept;
     const { building, ready } = buildersOf(kept, listed, statuses);
     // What waits on the owner holds back only its own builder (#591); the Lead holds back while
-    // the owner's reviews pile up, or its model is at its usage limit, until its reset.
+    // reviews pile up (not main's fix: it takes the next free slot, #740), or its model's at its limit.
     const reviewing = ready.length >= LEAD_REVIEWS_AT_MOST;
     const limited = limitOf(statuses, options.now());
     const red = await options.mainRed(workspaceId);
@@ -582,7 +582,7 @@ export const createLead = (options: {
           : undefined;
     let started = 0;
     let free = kept.builders - building.length;
-    if (!reviewing && limited === undefined && free > 0) {
+    if ((!reviewing || red) && limited === undefined && free > 0) {
       // What's held back is worked out afresh each time a builder could start.
       const { heldBack: _held, ...unheld } = kept;
       kept = unheld;

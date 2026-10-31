@@ -27,10 +27,12 @@ A planning workspace's Things (ADR 0020): one file each, `things/<slug>.md`, rea
   kept through a rename; a Thing deleted and made again gets a new one. The owner's own tools are Things too, kept
   at the context folder's top by `fabrication/tools.ts`, and so is Your stock (#760), of kind material or fixing,
   kept by `fabrication/stock/`; a workspace's own Things are never those two kinds (`WorkspaceThingKind`).
+- A part's **place** on its Thing's drawing (#711), one of the contract's `BIKE_PLACES`, set by the Things tool's
+  `place` and kept by Edit, which Home's drawing places it by; nothing is guessed from its name.
 - A `pin:` line left by Home's photo view, and a `needs:` line (what a Thing needed next, which a project's steps
   hold now), are read past, and go on the Thing's next save (#603).
 - Adds, changes and removes one as one change through `context-folder/`, its photo with it.
-- Keeps a photo resized with `sharp` (`keptPhoto`).
+- Keeps a photo resized with `sharp` (`keptPhoto`, in `photo.ts`).
 - A Thing's **upcoming** one (#602) is its `upcoming …` lines: a new name replaces the last whole, and a Thing the
   owner has with one coming is one to replace. Fitted (`fitted` on a save) swaps it in: its name as the brand, its
   price and shop, bought today, had again, and a history line for the one it had ("Fitted DMR V8, replacing Wellgo

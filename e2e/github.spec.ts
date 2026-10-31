@@ -33,7 +33,7 @@ test("the owner signs in to GitHub from Connections with a device code, and a co
   // The fake's codes count up from FAKE-0001: other specs on the same worker may have signed in
   // first, depending on how CI shards them.
   await expect(github).toContainText(/FAKE-\d{4}/);
-  const code = /FAKE-\d{4}/.exec(await github.innerText())?.[0];
+  const code = /FAKE-\d{4}/.exec((await github.textContent()) ?? "")?.[0];
   const opened = page.waitForEvent("popup");
   await github.getByRole("link", { name: "Copy, open GitHub" }).click();
   expect((await opened).url()).toBe("https://github.com/login/device");

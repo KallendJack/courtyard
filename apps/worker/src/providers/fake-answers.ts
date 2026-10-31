@@ -50,56 +50,6 @@ const scriptedNote = (message: string): Result<Record<string, string>, FailureRe
   return ok(note);
 };
 
-const MOVE = /^move: (\{.*\})\s*$/i;
-
-/**
- * The move review a workspace's files script (#603), one move per line anywhere in them: "move: "
- * then the move as JSON, its title and about, and of the rest only what it does (a missing
- * project or field is none, a missing list empty). With none, it proposes nothing, so a workspace's files
- * never move unless a test says so.
- */
-const scriptedMoves = (message: string) => ({
-  moves: message.split("\n").flatMap((line) => {
-    const [, json] = MOVE.exec(line.trim()) ?? [];
-    if (json === undefined) return [];
-    try {
-      const move: Record<string, unknown> = JSON.parse(json);
-      const fields = (value: unknown): Record<string, unknown> =>
-        typeof value === "object" && value !== null ? { ...value } : {};
-      const list = (value: unknown) => (Array.isArray(value) ? value.map(fields) : []);
-      const project =
-        move.project === undefined || move.project === null ? null : fields(move.project);
-      return [
-        {
-          documents: [],
-          archive: [],
-          ...move,
-          project:
-            project === null
-              ? null
-              : {
-                  slug: null,
-                  name: null,
-                  goal: null,
-                  ...project,
-                  steps: list(project.steps).map((step) => ({ detail: null, ...step })),
-                },
-          upcoming: list(move.upcoming).map((part) => ({
-            price: null,
-            shop: null,
-            link: null,
-            why: null,
-            ...part,
-          })),
-          remove: { documents: [], things: [], lines: [], ...fields(move.remove) },
-        },
-      ];
-    } catch {
-      return [];
-    }
-  }),
-});
-
 const POINT_AT = /point at (\S+) line (\d+)/gi;
 
 /**
@@ -168,8 +118,6 @@ export const scriptedAnswer = (
       return scriptedQuickAnswer(message);
     case "session-note":
       return scriptedNote(message);
-    case "move-review":
-      return ok(scriptedMoves(message));
     case "heard-tools":
       return scriptedHeardTools(message);
   }

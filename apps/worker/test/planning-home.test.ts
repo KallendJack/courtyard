@@ -1,13 +1,19 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PlanningHome } from "@courtyard/contract";
+import { PlanningHome, RecentChanges } from "@courtyard/contract";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createFakeProvider } from "../src/providers/index.ts";
-import { asOwner, type Requester, removeTestFolder, testWorker } from "./testing.ts";
+import {
+  asOwner,
+  gitIn,
+  postJson,
+  type Requester,
+  removeTestFolder,
+  testWorker,
+} from "./testing.ts";
 
 // A planning workspace's Home (#603): its main subject, a Thing drawn as its kind of thing with
-// its parts placed by name, or a room's floor plan; then its projects (projects.test.ts).
+// its parts on their places, or a room's floor plan; then its projects (projects.test.ts).
 
 let root: string;
 let contextDir: string;
@@ -33,18 +39,18 @@ const thing = async (slug: string, ...lines: readonly string[]) => {
   await writeFile(join(thingsDir(), `${slug}.md`), `---\n${lines.join("\n")}\n---\n`);
 };
 
-/** A part of the hardtail, by its name. */
+/** A part of the hardtail, by its name, on its place on the drawing when it has one. */
 const part = (slug: string, name: string, ...more: readonly string[]) =>
   thing(slug, `name: ${name}`, "status: have", "part of: hardtail", ...more);
 
-/** The hardtail with its parts as the owner named them, and a helmet that isn't one. */
+/** The hardtail with its parts, each on its place, and a helmet that isn't one. */
 const withBike = async () => {
   await thing("hardtail", "name: Boardman MHT 8.6", "status: have", "photo: photos/hardtail.jpg");
-  await part("saddle", "Saddle");
-  await part("pedals", "Pedals", "upcoming: DMR V8", "upcoming price: £60");
-  await part("front-tyre", "Front tyre");
-  await part("rear-tyre", "Rear tyre");
-  await part("drivetrain", "Drivetrain");
+  await part("saddle", "Saddle", "place: saddle");
+  await part("pedals", "Pedals", "place: pedals", "upcoming: DMR V8", "upcoming price: £60");
+  await part("front-tyre", "Front tyre", "place: front-tyre");
+  await part("rear-tyre", "Rear tyre", "place: rear-tyre");
+  await part("drivetrain", "Drivetrain", "place: drivetrain");
   await part("bottle-cage", "Bottle cage");
   await thing("helmet", "name: Helmet", "status: have");
 };
@@ -60,10 +66,10 @@ describe("a planning workspace's Home (#603)", () => {
     await thing("helmet", "name: Helmet", "status: have");
     const request = await asOwner(testWorker({ root }));
 
-    expect(await home(request)).toEqual({ subject: null, projects: [], review: null });
+    expect(await home(request)).toEqual({ subject: null, projects: [] });
   });
 
-  it("draws the Thing whose parts fit the mountain bike, each part on its place by name, an upcoming one with it, and lists the rest under it", async () => {
+  it("draws the Thing whose parts have places on the mountain bike, each on its place, an upcoming one with it, and lists the rest under it", async () => {
     await withBike();
     const request = await asOwner(testWorker({ root }));
 
@@ -84,7 +90,36 @@ describe("a planning workspace's Home (#603)", () => {
     });
   });
 
-  it("places parts by the words in their names, one part to a place, and a second for a taken place goes under it", async () => {
+  it("places parts by their saved place first, one part to a place, whatever their names say", async () => {
+    await thing("whyte", "name: Whyte T-140", "status: have");
+    const whyte = (slug: string, name: string, ...more: readonly string[]) =>
+      thing(slug, `name: ${name}`, "status: have", "part of: whyte", ...more);
+    // Named for the saddle, but saved on the seatpost.
+    await whyte("dropper", "Saddle dropper", "place: seatpost");
+    await whyte("cassette", "Cassette", "place: drivetrain");
+    await whyte("chain", "KMC chain", "place: drivetrain");
+    await whyte("tyres", "Tyres", "place: front-tyre");
+    // Saved before places were: its name finds it a place, but never one a part has saved.
+    await whyte("grips", "Grips");
+    await whyte("front-tyre", "Front tyre");
+    const request = await asOwner(testWorker({ root }));
+
+    const subject = (await home(request)).subject;
+
+    expect(subject).toMatchObject({
+      kind: "drawing",
+      placed: [
+        { place: "seatpost", name: "Saddle dropper" },
+        { place: "grips", name: "Grips" },
+        // Cassette comes before the chain by name, so it has the drivetrain's place.
+        { place: "drivetrain", name: "Cassette" },
+        { place: "front-tyre", name: "Tyres" },
+      ],
+      unplaced: [{ name: "Front tyre" }, { name: "KMC chain" }],
+    });
+  });
+
+  it("keeps drawing a bike whose parts were saved before places were, each by the words in its name (#711)", async () => {
     await thing("whyte", "name: Whyte T-140", "status: have");
     const whyte = (slug: string, name: string) =>
       thing(slug, `name: ${name}`, "status: have", "part of: whyte");
@@ -95,11 +130,11 @@ describe("a planning workspace's Home (#603)", () => {
     await whyte("lock-on-grips", "Lock-on grips");
     await whyte("tyres", "Tyres");
     await whyte("back-wheel", "Back tyre");
+    await whyte("clipless-pedals", "Clipless pedals");
+    await whyte("pedals", "Pedals");
     const request = await asOwner(testWorker({ root }));
 
-    const subject = (await home(request)).subject;
-
-    expect(subject).toMatchObject({
+    expect((await home(request)).subject).toMatchObject({
       kind: "drawing",
       placed: [
         { place: "seatpost", name: "OneUp dropper post" },
@@ -107,16 +142,18 @@ describe("a planning workspace's Home (#603)", () => {
         { place: "brakes", name: "Front brake pads" },
         // Cassette comes before the chain by name, so it takes the drivetrain's place.
         { place: "drivetrain", name: "Cassette" },
+        // The one named just for the place has it first.
+        { place: "pedals", name: "Pedals" },
         { place: "front-tyre", name: "Tyres" },
         { place: "rear-tyre", name: "Back tyre" },
       ],
-      unplaced: [{ name: "KMC chain" }],
+      unplaced: [{ name: "Clipless pedals" }, { name: "KMC chain" }],
     });
   });
 
   it("draws only fitted parts: a wanted one is neither on the bike nor under it (the owner's pedals, #603)", async () => {
     await thing("hardtail", "name: Boardman MHT 8.6", "status: have");
-    await part("saddle", "Saddle");
+    await part("saddle", "Saddle", "place: saddle");
     // As the owner's real files have them: the wanted DMR V8s beside the fitted Wellgo flats.
     await thing(
       "dmr-v8-pedals",
@@ -125,18 +162,17 @@ describe("a planning workspace's Home (#603)", () => {
       "brand: DMR V8",
       "price: about £30",
       "part of: hardtail",
+      "place: pedals",
     );
     await part(
       "pedals",
       "Pedals",
+      "place: pedals",
       "brand: Wellgo alloy flats",
       "condition: Pins short and domed; slippy",
       "where: On the bike",
     );
-    // A wanted Thing is a move, so Home writes the move review in the background (#603).
-    const request = await asOwner(
-      testWorker({ root, providers: [createFakeProvider({ delayMs: 0 })] }),
-    );
+    const request = await asOwner(testWorker({ root }));
 
     expect((await home(request)).subject).toMatchObject({
       placed: [
@@ -147,38 +183,23 @@ describe("a planning workspace's Home (#603)", () => {
     });
   });
 
-  it("gives a place two fitted parts fit to the one named just for it, the other under the bike", async () => {
-    await thing("hardtail", "name: Boardman MHT 8.6", "status: have");
-    await part("saddle", "Saddle");
-    await part("clipless-pedals", "Clipless pedals");
-    await part("pedals", "Pedals");
-    const request = await asOwner(testWorker({ root }));
-
-    expect((await home(request)).subject).toMatchObject({
-      placed: [
-        { place: "saddle", name: "Saddle" },
-        { place: "pedals", name: "Pedals" },
-      ],
-      unplaced: [{ name: "Clipless pedals" }],
-    });
-  });
-
-  it("draws nothing for a Thing with only one part that fits, nor for a Thing whose parts don't", async () => {
+  it("draws nothing for a Thing with only one part placed, nor for a Thing whose parts have no places", async () => {
     await thing("rack", "name: Squat rack", "status: have");
     await thing("bar", "name: Pull-up bar", "status: have", "part of: rack");
     await thing("plates", "name: Plates", "status: have", "part of: rack");
     await thing("road-bike", "name: Road bike", "status: have");
-    await thing("rb-saddle", "name: Saddle", "status: have", "part of: road-bike");
+    await thing("rb-saddle", "name: Saddle", "status: have", "part of: road-bike", "place: saddle");
+    await thing("rb-bell", "name: Bell", "status: have", "part of: road-bike");
     const request = await asOwner(testWorker({ root }));
 
     expect((await home(request)).subject).toBeNull();
   });
 
-  it("draws the Thing with the most parts on the drawing when two fit", async () => {
+  it("draws the Thing with the most parts on the drawing when two have places", async () => {
     await withBike();
     await thing("road-bike", "name: Road bike", "status: have");
-    await thing("rb-saddle", "name: Saddle", "status: have", "part of: road-bike");
-    await thing("rb-pedals", "name: Pedals", "status: have", "part of: road-bike");
+    await thing("rb-saddle", "name: Saddle", "status: have", "part of: road-bike", "place: saddle");
+    await thing("rb-pedals", "name: Pedals", "status: have", "part of: road-bike", "place: pedals");
     const request = await asOwner(testWorker({ root }));
 
     expect((await home(request)).subject).toMatchObject({ thing: "hardtail" });
@@ -186,7 +207,7 @@ describe("a planning workspace's Home (#603)", () => {
 
   it("reads past a pin left in a Thing's file by the photo view", async () => {
     await withBike();
-    await part("fork", "Fork", "pin: 30.3, 47.1");
+    await part("fork", "Fork", "place: fork", "pin: 30.3, 47.1");
     const request = await asOwner(testWorker({ root }));
 
     const things = await request("/api/workspaces/mountain-biking/things");
@@ -211,82 +232,69 @@ describe("a planning workspace's Home (#603)", () => {
   });
 });
 
-describe("a space with no floor plan yet (#604)", () => {
-  /** The garage workspace, its context file holding these facts. */
-  const garage = async (...facts: readonly string[]) => {
-    await mkdir(join(contextDir, "garage"), { recursive: true });
-    await writeFile(
-      join(contextDir, "garage", "CONTEXT.md"),
-      `# Garage\n\nTurning it into an office.\n\n## Facts\n\n${facts.map((fact) => `- ${fact}\n`).join("")}`,
+describe("what the move review left, once it went (#711)", () => {
+  const bike = () => join(contextDir, "mountain-biking");
+  const GUIDE = "# Day one guide\n\nPump the tyres.\n";
+  /** A review as the worker kept it in its data folder, made up. */
+  const REVIEW = JSON.stringify({ state: "done", moves: [{ title: "Day one guide → archive" }] });
+  const reviewFile = () => join(root, "data", "move-reviews", "mountain-biking.json");
+
+  /**
+   * The workspace as a move left it: its guide archived, as one change, in a repository of the
+   * test's own (the context folder in the test's temporary folder), and the review in the data
+   * folder.
+   */
+  const moved = async () => {
+    await gitIn(root, "init", "--quiet", contextDir);
+    await mkdir(join(bike(), "docs", "archive"), { recursive: true });
+    await writeFile(join(bike(), "docs", "day-one-guide.md"), GUIDE);
+    await gitIn(contextDir, "add", "--all");
+    await gitIn(contextDir, "commit", "--quiet", "-m", "Mine");
+    await rename(
+      join(bike(), "docs", "day-one-guide.md"),
+      join(bike(), "docs", "archive", "day-one-guide.md"),
     );
+    await gitIn(contextDir, "add", "--all");
+    await gitIn(
+      contextDir,
+      "commit",
+      "--quiet",
+      "-m",
+      "Move: Day one guide → archive",
+      "-m",
+      [
+        "Courtyard-Change: move",
+        "Courtyard-Place: workspace/mountain-biking",
+        "Courtyard-File: mountain-biking/docs/day-one-guide.md",
+        "Courtyard-File: mountain-biking/docs/archive/day-one-guide.md",
+      ].join("\n"),
+    );
+    await mkdir(join(root, "data", "move-reviews"), { recursive: true });
+    await writeFile(reviewFile(), REVIEW);
   };
-  const garageHome = async (request: Requester) =>
-    PlanningHome.parse(await (await request("/api/workspaces/garage/home")).json());
 
-  it("is the space to draw, named from the workspace, with its size and the facts that measure it", async () => {
-    await garage(
-      "The garage is 5.14 × 2.74 m inside.",
-      "It's 2.45 m high.",
-      "The boiler is in the back corner.",
-      "Narrower by the door: 2.40 m.",
-    );
+  it("leaves Home as it is, and its review in the data folder untouched", async () => {
+    await moved();
     const request = await asOwner(testWorker({ root }));
 
-    expect((await garageHome(request)).subject).toEqual({
-      kind: "space",
-      name: "garage",
-      size: "5.14 m × 2.74 m",
-      measurements: [
-        "The garage is 5.14 × 2.74 m inside.",
-        "It's 2.45 m high.",
-        "Narrower by the door: 2.40 m.",
-      ],
+    expect(await home(request)).toEqual({ subject: null, projects: [] });
+    expect(await readFile(reviewFile(), "utf8")).toBe(REVIEW);
+  });
+
+  it("keeps each move in Recent changes, with Undo", async () => {
+    await moved();
+    const request = await asOwner(testWorker({ root }));
+
+    const listed = RecentChanges.parse(
+      await (await request("/api/workspaces/mountain-biking/changes")).json(),
+    ).changes;
+    expect(listed[0]).toMatchObject({
+      kind: "move",
+      move: { title: "Day one guide → archive" },
+      undo: "available",
     });
-  });
-
-  it("reads a room's size in centimetres or with both units said", async () => {
-    await garage("Shed floor 240cm x 180cm.");
-    const request = await asOwner(testWorker({ root }));
-
-    expect((await garageHome(request)).subject).toMatchObject({
-      kind: "space",
-      size: "240 cm × 180 cm",
-    });
-  });
-
-  it("reads a floor's two sides saved as a sentence, with words between them (#658)", async () => {
-    // The owner's own fact, as a model saved it.
-    await garage(
-      "The single garage measures approximately 5.137 m long × 2.735 m internally wide.",
-    );
-    const request = await asOwner(testWorker({ root }));
-
-    expect((await garageHome(request)).subject).toMatchObject({
-      kind: "space",
-      size: "5.137 m × 2.735 m",
-    });
-  });
-
-  it("isn't a space without a floor's two sides saved, however many lengths are", async () => {
-    await garage("The back wall is 2.4 m wide.", "Rides on Sundays.");
-    const request = await asOwner(testWorker({ root }));
-
-    expect((await garageHome(request)).subject).toBeNull();
-  });
-
-  it("gives way to a drawn Thing, which leads Home first", async () => {
-    await garage("The garage is 5.14 × 2.74 m inside.");
-    const bike = join(contextDir, "garage", "things");
-    await mkdir(bike, { recursive: true });
-    await writeFile(join(bike, "hardtail.md"), "---\nname: Hardtail\nstatus: have\n---\n");
-    for (const name of ["Saddle", "Pedals"]) {
-      await writeFile(
-        join(bike, `${name.toLowerCase()}.md`),
-        `---\nname: ${name}\nstatus: have\npart of: hardtail\n---\n`,
-      );
-    }
-    const request = await asOwner(testWorker({ root }));
-
-    expect((await garageHome(request)).subject).toMatchObject({ kind: "drawing" });
+    const undone = await postJson(request, `/api/changes/${listed[0]?.id}/undo`, {});
+    expect(undone.status).toBe(204);
+    expect(await readFile(join(bike(), "docs", "day-one-guide.md"), "utf8")).toBe(GUIDE);
   });
 });

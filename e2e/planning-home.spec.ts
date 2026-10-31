@@ -4,7 +4,7 @@ import { newWorkspace, startSaving } from "./saving.ts";
 import { openTab, openWhatCourtyardKnows } from "./workspace-page.ts";
 
 // A planning workspace's Home (#603; Paper, "Tablet · Mountain biking Home: the bike, then
-// projects (#603)"): its main subject, the drawn bike with each part placed on it by name, a
+// projects (#603)"): its main subject, the drawn bike with each part on its place (#711), a
 // label each that opens its card, one with an upcoming replacement a quiet dot (#664), and those it
 // has no place for listed under it; then its projects (projects.spec.ts), then the message box. Its
 // header is the name and the pills (+ New · History · Things · Docs); no photo, no view chips, no
@@ -20,26 +20,26 @@ const shot = async (page: Page, name: string) => {
 };
 
 /**
- * The hardtail and its parts as the owner named them, as a model would add them: new pedals
- * picked for the pedals, and a bottle cage the drawing has no place for, then any `more` lines (its
- * projects). Back on Home after.
+ * The hardtail and its parts as the owner named them, as a model would add them, each on its place
+ * (#711): new pedals picked for the pedals, and a bottle cage the drawing has no place for, then
+ * any `more` lines (its projects). Back on Home after.
  */
 const addBike = async (page: Page, name: string, more: readonly string[] = []) => {
-  const part = (named: string, more = "") =>
-    `thing add: name ${named} | status have | part of T1${more}`;
+  const part = (named: string, place: string, more = "") =>
+    `thing add: name ${named} | status have | part of T1${place === "" ? "" : ` | place ${place}`}${more}`;
   await startSaving(
     page,
     [
       "thing add: name Boardman MHT 8.6 | status have | brand Boardman",
-      part("Saddle"),
-      part("Grips"),
-      part("Fork", " | brand RockShox | size 120 mm"),
-      part("Brakes"),
-      part("Drivetrain"),
-      part("Pedals", " | upcoming DMR V8 | upcoming price £60"),
-      part("Front tyre"),
-      part("Rear tyre"),
-      part("Bottle cage"),
+      part("Saddle", "saddle"),
+      part("Grips", "grips"),
+      part("Fork", "fork", " | brand RockShox | size 120 mm"),
+      part("Brakes", "brakes"),
+      part("Drivetrain", "drivetrain"),
+      part("Pedals", "pedals", " | upcoming DMR V8 | upcoming price £60"),
+      part("Front tyre", "front-tyre"),
+      part("Rear tyre", "rear-tyre"),
+      part("Bottle cage", ""),
       ...more,
     ].join("\n"),
   );
@@ -68,7 +68,7 @@ test("a new workspace's Home is only its name, one line and the message box", as
 test.describe("on the unfolded Fold", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 950, height: 712 } });
 
-  test("Home leads with the drawn bike, each part on it by name, the upcoming one said, the rest under it, and the box", async ({
+  test("Home leads with the drawn bike, each part on its place, the upcoming one said, the rest under it, and the box", async ({
     page,
   }) => {
     const name = `Trail bike ${Date.now()}`;

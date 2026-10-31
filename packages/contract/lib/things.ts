@@ -30,6 +30,25 @@ export const WorkspaceThingKind = ThingKind.exclude(["material", "fixing"]);
 export const SubjectId = z.uuid().brand<"SubjectId">();
 export type SubjectId = z.infer<typeof SubjectId>;
 
+/**
+ * The places on Courtyard's drawing of a mountain bike (#603), the first kind of thing it draws, in
+ * the order the drawing lists them. A part goes on the place saved on it (#711), never one guessed
+ * from its name.
+ */
+export const BIKE_PLACES = [
+  "saddle",
+  "seatpost",
+  "grips",
+  "fork",
+  "brakes",
+  "drivetrain",
+  "pedals",
+  "front-tyre",
+  "rear-tyre",
+] as const;
+export const BikePlace = z.enum(BIKE_PLACES);
+export type BikePlace = z.infer<typeof BikePlace>;
+
 /** The most of one Thing the owner can have, as a count: a case of screws holds hundreds (#760). */
 export const THING_COUNT_MAX = 9999;
 
@@ -132,6 +151,8 @@ export const ThingFields = z
     size: oneLine(THING_FIELD_MAX_CHARACTERS, "size").optional(),
     where: oneLine(THING_FIELD_MAX_CHARACTERS, "where").optional(),
     partOf: ThingSlug.optional(),
+    /** A part's place on its Thing's drawing (#711): the bike's saddle, say. */
+    place: BikePlace.optional(),
     photo: ThingPhotoPath.optional(),
     subject: SubjectId.optional(),
     /**
@@ -274,6 +295,8 @@ export const ThingSave = z.object({
       where: z.string().nullable(),
       /** The name of the Thing it's now part of. */
       partOf: z.string().nullable(),
+      /** Its place on that Thing's drawing (#711). */
+      place: BikePlace.nullable(),
       /** Its upcoming replacement's name (#602), and the rest of it. */
       upcoming: z.string().nullable(),
       upcomingPrice: z.string().nullable(),

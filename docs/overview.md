@@ -120,11 +120,11 @@ sessions ─► prompts ─► providers ─► Claude ─► answer ─► sour
 ### 🗂️ What Courtyard knows
 
 **Worker features:** `context-folder` · `context-file` · `owner-context` · `workspaces` · `things` ·
-`projects` · `fabrication` · `move-review` · `status-line` · `documents` · `floor-plans` · `planning-files` ·
+`projects` · `fabrication` · `status-line` · `documents` · `floor-plans` · `planning-files` ·
 `planning-home` · `changes` · `attachments`
 
 **Web features:** `home` · `planning-home` · `new-workspace` · `things` · `projects` · `fabrication` ·
-`move-review` · `status-line` · `documents` · `changes` · `settings`
+`status-line` · `documents` · `changes` · `settings`
 
 You say "swapped the chain today":
 
@@ -142,9 +142,8 @@ the chain  a time            changed                   Undo
   `packages/fabrication` each time they're read, and serves Fabrication's API. The model's Build tool starts and
   changes them and reports the numbers code works out; a project step can own one, and opens it in Fabrication,
   whose `builds` shows it: in 3D, its cut plan, buy list, tools and steps, and a chat about it in its project's
-  session.
-- **`move-review`** proposes, once, where a planning workspace's guides, Plans lines and wanted Things go now
-  (projects, parts, the archive), which the owner ticks on Home, each move with Undo.
+  session. It keeps the workspace's size records too, each with its source, which a Build's sizes point at and
+  Home reads a space's floor from.
 - **`status-line`** builds the line under a code workspace's name, ✓ just done · ● now · ○ next, from its pull
   requests and issues.
 

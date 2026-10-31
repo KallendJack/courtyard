@@ -31,7 +31,8 @@ because it changes the same file, and starts it once the first one's PR merges.
   numbered milestones (never Later, or one with none), and only `ready-for-agent` ones (grills are never its own).
   It holds back while 4 of its builders' pull requests wait for the owner's review (carrying on as they merge),
   while one of its builders waits for its model's usage limit (until the reset), while main is red (starting only
-  its fix), and while the owner's own sessions leave one place free; what waits on the owner holds back only its own
+  its fix, which takes the next free slot even while reviews pile up, and stops no builder at work, #740), and
+  while the owner's own sessions leave one place free; what waits on the owner holds back only its own
   builder, and an Update waiting holds back nothing. With nothing ready it rests, and starts again as soon as
   something is, through the night: there's no window and no cap on a Run.
 - **Notified** (#593): only as it pauses itself, for the owner's reviews ("4 pull requests wait for you") or the usage

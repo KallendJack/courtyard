@@ -98,7 +98,7 @@ _Avoid_: truth, state
 
 **Plan**:
 Something the owner has decided to do: a project's step (#603, ADR 0032). Before projects it was a line in a context
-file's Plans section, which went: one still in a file is kept as written, with no label, for the **move review**.
+file's Plans section, which went: one still in a file is kept as written, with no label.
 _Avoid_: decision, todo, goal
 
 **Idea**:
@@ -387,10 +387,11 @@ _Avoid_: shopping list, basket, cart, recommendations, deals
 
 **Main subject**:
 What a planning workspace's Home leads with (#603), decided by the worker from its data: a Thing drawn as its kind of
-thing, or a space's floor plan (#257), or, until a space has one, **Draw the garage** (#604): a workspace whose facts
-give a floor's two sides is a space, and its card shows its size and the facts that measure it, with a button named
-from the workspace that starts a session with them, for a floor plan. The **drawn bike** is Courtyard's own drawing of a mountain bike, never a
-model's, the Thing's parts placed on it by name, each a label opening its card, one with an upcoming replacement
+thing, or a space's floor plan (#257), its size checked against the space's size records (#711), or, until a space
+has one, **Draw the garage** (#604): a space Thing whose floor length and floor width are recorded, and its card
+shows its size and its records, with a button named from the space that starts a session with them, for a floor
+plan. The **drawn bike** is Courtyard's own drawing of a mountain bike, never a model's, each of the Thing's parts
+on its **place**, saved on the part (#711), or by its name for one saved before places were, each a label opening its card, one with an upcoming replacement
 saying so ("Pedals · DMR V8 next"), and those it has no place for listed under it. The Thing's photo is on its card.
 _Avoid_: view, Breakdown view, hero, dashboard
 
@@ -482,6 +483,21 @@ reset, and one a restart cut off carries on by itself once (cut off again, it's 
 Builders board and in Home's Needs you, saying why, its slot free, until the owner taps **Retry** (#592), which
 starts it afresh. Only these eight words name where a builder stands, on every screen.
 _Avoid_: state, phase, health, stalled, hung, idle, resting, held back
+
+**Review**:
+What a fresh Claude session, the **reviewer**, makes of a pull request before it merges (ADR 0041): checked against
+its issue, the agreed board, the ADRs and the house rules, with a security pass when it touches approvals, sign-in,
+secrets, or code that deletes or pushes, and the issue's conduct tests where it changes what models are told. It
+works in a throwaway worktree, never pushes and never runs the browser tests, and takes one of the Lead's builder
+slots. It passes, or lists its **findings**. Every pull request gets one, the owner's own sessions' too.
+_Avoid_: code review (that's the house skill), audit, approval (that's ADR 0008's)
+
+**Fixing round**:
+One review and the builder's answer to its findings (ADR 0041): each fixed, or rejected with a reason the next review
+re-checks. A builder whose session has ended is replaced by a new session on its branch. After 3 rounds that don't
+pass, the pull request goes to the owner in Needs you, with the open findings and both sides. The Builders board says
+"fixing review · round 2", then "merged after 1 review".
+_Avoid_: iteration, review cycle, back-and-forth
 
 **Roadmap**:
 A code workspace's tab of the whole plan (#532): every open milestone in the roadmap's order, Later last, with its
@@ -598,12 +614,6 @@ _Avoid_: built-in skill, default skill
 A house skill: a model stress-tests a plan or an idea one question at a time, recommending an answer with each, saves
 each decision as the owner agrees it, and ends with a wrap-up of the decisions and the questions still open.
 _Avoid_: interview, review, critique
-
-**Move review**:
-Once, a planning workspace's moves into what it keeps now (#603, ADR 0032): its guides to projects or one screen, its
-Plans and Ideas lines to projects' steps, a done guide to the archive, wanted Things onto their parts as upcoming.
-A model proposes them, Home shows them ticked, and only the ticked ones move, each with Undo.
-_Avoid_: migration, tidy (that went with #600), clean-up
 
 **Continue**:
 Carrying on a turn a restart cut off (an Update, a crash, the PC restarting): a new turn on the same model, told it was

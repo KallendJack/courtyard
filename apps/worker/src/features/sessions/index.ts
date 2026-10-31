@@ -208,8 +208,9 @@ import {
   withoutStarterHint,
 } from "../workspaces/index.ts";
 import { type AddedInbox, createAddedInbox } from "./added.ts";
+import { type AfterFailing, createFailedChecks } from "./failed-checks.ts";
 import { fileSavingTools, ownerMessagesIn } from "./file-tools.ts";
-import { createClearingRetries, failedAgain, samePullRequest } from "./following.ts";
+import { askedToFix, createClearingRetries, failedAgain, samePullRequest } from "./following.ts";
 import { createSessionNotes } from "./notes.ts";
 import { createQuietWorktrees } from "./quiet-worktrees.ts";
 import { savingTool } from "./saving-tools.ts";
@@ -679,6 +680,8 @@ export const createSessions = (options: {
   matt: MattSkills | undefined;
   /** Code sessions' branches and worktrees (ADR 0007). */
   code: Code;
+  /** GitHub, for a pull request's failed jobs, re-run once before a fixing turn (#740). */
+  github?: Parameters<typeof createFailedChecks>[0]["github"];
   /** A code workspace's connections (#308), which each of its turns is told. */
   connectionsOf: (workspace: Workspace) => Promise<WorkspaceConnections>;
   now: () => number;
@@ -720,6 +723,23 @@ export const createSessions = (options: {
    * events or written there, so listing a workspace's sessions doesn't read every event log.
    */
   const pullRequests = new Map<SessionId, PullRequest | null>();
+  /** What the worker tries itself when a pull request's checks fail (#740). */
+  const failedChecks =
+    options.github &&
+    createFailedChecks({
+      ...options,
+      github: options.github,
+      // No turn starts while the worker updates a branch: one asked for meanwhile is queued.
+      whileIdle: async (id, step) => {
+        const session = runningSession(id);
+        if (session.turn.kind !== "idle" || tasks.running(id).length > 0) return undefined;
+        session.turn = { kind: "ending" };
+        return step().finally(() => {
+          session.turn = { kind: "idle" };
+          void sendNextQueued(id);
+        });
+      },
+    });
   /** Set while a fresh start sets every session aside: no turn starts meanwhile. */
   let settingAside = false;
   /**
@@ -2772,15 +2792,17 @@ export const createSessions = (options: {
         }
         return;
       }
+      const fixing = { id, workspaceId, repoPath, branch, events: events.value, pullRequest };
       // A conflict first: its checks may not run again until it's brought up to date (#382).
-      if (pullRequest.conflicts === true) {
-        await bringUpToDateOnce({ id, workspaceId, repoPath, events: events.value, pullRequest });
+      if (pullRequest.conflicts === true) return askToFix({ ...fixing, after: "conflict" });
+      // One fixing turn a commit: once asked, the worker tries nothing more on it.
+      if (pullRequest.checks.kind !== "failed" || askedToFix(events.value, pullRequest.head))
         return;
-      }
-      if (pullRequest.checks.kind === "failed") {
-        const { failed } = pullRequest.checks;
-        await fixChecks({ id, workspaceId, events: events.value, pullRequest, failed });
-      }
+      // First the worker updates a Lead builder's own branch behind its base (never one it didn't
+      // make, nor the owner's), or re-runs untouched tests once (#740).
+      const mayUpdate = file.value.byLead === true && file.value.keepsBranch !== true;
+      const tried = await failedChecks?.tryAgain({ ...fixing, mayUpdate });
+      if (tried !== "wait") await askToFix({ ...fixing, after: tried ?? "fix" });
     });
     following = look.catch((error: unknown) =>
       console.error(`Session ${id}: its pull request couldn't be followed`, error),
@@ -2789,40 +2811,49 @@ export const createSessions = (options: {
   };
 
   /**
-   * Starts a turn asking the model to bring a pull request that conflicts with its base up to
-   * date (#382), the message Bring up to date sends (#278), on the model the owner last used:
-   * once per commit, so a conflict the model can't resolve waits for the owner instead of looping.
+   * Starts a turn asking the model to fix its pull request's latest commit, on the model the owner
+   * last used, once per commit, so what the model can't fix waits for the owner instead of looping:
+   * its conflict with its base, with Bring up to date's message (#382, #278); or its failed checks,
+   * or say why it can't (#172), told when they failed again after the worker re-ran them (#740).
    */
-  const bringUpToDateOnce = async (bring: {
+  const askToFix = async (fix: {
     id: SessionId;
     workspaceId: WorkspaceId;
     repoPath: string;
     events: readonly SessionEvent[];
     pullRequest: PullRequest;
+    after: Exclude<AfterFailing, "wait">;
   }) => {
-    const { pullRequest } = bring;
-    const asked = bring.events.some(
-      (event) => event.type === "owner-message" && event.conflicted?.head === pullRequest.head,
-    );
-    const last = bring.events.findLast((event) => event.type === "owner-message");
+    const { pullRequest, after } = fix;
+    const { number, head } = pullRequest;
+    const conflict = after === "conflict";
+    const asked = askedToFix(fix.events, head, [conflict ? "conflicted" : "checksFailed"]);
+    const last = fix.events.findLast((event) => event.type === "owner-message");
     if (asked || last?.type !== "owner-message") return;
-    const fresh = await options.code.freshDefault(bring.repoPath);
-    if (!fresh.ok) return;
+    const [first, ...more] = pullRequest.checks.kind === "failed" ? pullRequest.checks.failed : [];
+    const fresh = conflict ? await options.code.freshDefault(fix.repoPath) : undefined;
+    if (fresh?.ok === false || (!conflict && first === undefined)) return;
+    const checks: [string, ...string[]] = [first ?? "", ...more];
     const message: NewMessage = {
-      text: bringUpToDateMessage({ number: pullRequest.number, base: fresh.value.branch }),
+      text:
+        fresh?.ok === true
+          ? bringUpToDateMessage({ number, base: fresh.value.branch })
+          : checksFailedMessage({ number, checks, again: after === "fix-again" }),
       model: last.model,
       ...(last.effort === undefined ? {} : { effort: last.effort }),
     };
     const provider = await providerFor(message);
     if (!provider.ok || !provider.value.capabilities.codes) return;
     await startTurn({
-      id: bring.id,
-      workspaceId: bring.workspaceId,
+      id: fix.id,
+      workspaceId: fix.workspaceId,
       provider: provider.value,
       message,
       since: freshStarts,
       coding: true,
-      conflicted: { pullRequest: pullRequest.number, head: pullRequest.head },
+      ...(conflict
+        ? { conflicted: { pullRequest: number, head } }
+        : { checksFailed: { pullRequest: number, head, checks } }),
     });
   };
 
@@ -2900,48 +2931,6 @@ export const createSessions = (options: {
       since,
       coding: found.value.branch !== undefined,
       placeless: found.value.placeless === true,
-    });
-  };
-
-  /**
-   * Starts a turn asking the model to fix the checks that failed on a pull request's latest
-   * commit, or say why it can't (#172), on the model the owner last used: once per commit.
-   */
-  const fixChecks = async (fix: {
-    id: SessionId;
-    workspaceId: WorkspaceId;
-    events: readonly SessionEvent[];
-    pullRequest: PullRequest;
-    /** The checks that failed, by name. */
-    failed: readonly string[];
-  }) => {
-    const { pullRequest } = fix;
-    const asked = fix.events.some(
-      (event) => event.type === "owner-message" && event.checksFailed?.head === pullRequest.head,
-    );
-    const last = fix.events.findLast((event) => event.type === "owner-message");
-    if (asked || last?.type !== "owner-message") return;
-    const [first, ...more] = fix.failed;
-    if (first === undefined) return;
-    const message: NewMessage = {
-      text: checksFailedMessage({ number: pullRequest.number, checks: [first, ...more] }),
-      model: last.model,
-      ...(last.effort === undefined ? {} : { effort: last.effort }),
-    };
-    const provider = await providerFor(message);
-    if (!provider.ok || !provider.value.capabilities.codes) return;
-    await startTurn({
-      id: fix.id,
-      workspaceId: fix.workspaceId,
-      provider: provider.value,
-      message,
-      since: freshStarts,
-      coding: true,
-      checksFailed: {
-        pullRequest: pullRequest.number,
-        head: pullRequest.head,
-        checks: [first, ...more],
-      },
     });
   };
 

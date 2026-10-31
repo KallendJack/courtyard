@@ -18,4 +18,4 @@ None of its own.
 
 - Puts line labels on a file for a model: Facts and Ideas, and How to answer me in the owner context.
 - A Plans section, from before projects (#603), is kept as written with no labels, so models read it but can't save
-  there; `plansLines` gives its lines to the move review, and a save recorded in it still undoes.
+  there, and a save recorded in it still undoes.
