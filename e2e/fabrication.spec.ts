@@ -40,7 +40,7 @@ const pickTheFrameTimber = async (page: Page) => {
   await page.getByRole("tab", { name: "Buy list" }).click();
   await page
     .getByRole("region", { name: "Buy list" })
-    .getByRole("button", { name: /45 × 95 C16, 2\.4 m/ })
+    .getByRole("button", { name: /^45 × 95 C16, 2\.4 m/ })
     .click();
   const options = page.getByRole("region", { name: "Frame timber options" });
   await expect(options).toContainText("Legs, long rails, end rails and shelf support");
@@ -306,7 +306,7 @@ test.describe("on the unfolded Fold", () => {
 
     await page.getByRole("tab", { name: "Buy list" }).click();
     const buyList = page.getByRole("region", { name: "Buy list" });
-    await expect(buyList).toContainText("To buy · 11");
+    await expect(buyList.getByRole("heading", { name: "11 things left" })).toBeVisible();
     await expect(buyList.getByRole("link", { name: /Wheelwright TD60 castors/ })).toHaveAttribute(
       "href",
       "https://shop.example/td60",
@@ -357,8 +357,11 @@ test.describe("on the unfolded Fold", () => {
 
     await page.getByRole("tab", { name: "Buy list" }).click();
     const buyList = page.getByRole("region", { name: "Buy list" });
-    await expect(buyList).toContainText("To buy · 12");
-    await expect(buyList).toContainText("Spannerstep 6");
+    await expect(buyList.getByRole("heading", { name: "12 things left" })).toBeVisible();
+    // A tool to buy, with no Have it: Your tools says when the owner has one.
+    const spannerLine = buyList.getByRole("listitem").filter({ hasText: "Spanner" });
+    await expect(spannerLine).toContainText("× 1");
+    await expect(spannerLine.getByRole("button", { name: /Have it/ })).toHaveCount(0);
 
     // Its Undo takes it off the list again.
     await page.getByRole("tab", { name: "Tools" }).click();

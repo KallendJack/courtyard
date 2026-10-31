@@ -1,9 +1,10 @@
 import type { BuildTemplate, SizeSource, SourcedSize } from "@courtyard/contract";
 import type { ToolSize } from "./capacity.ts";
-import type { CloseUp, FixingType } from "./close-up.ts";
+import type { CloseUp } from "./close-up.ts";
 import type { Finding } from "./finding.ts";
 import type { CheckedRecipe } from "./print/recipe.ts";
 import type { Scene } from "./scene.ts";
+import type { Held, StepFixing } from "./stock.ts";
 import type { Tool } from "./tools.ts";
 
 export type { CloseUp, CloseUpShape, CloseUpType, FixingType } from "./close-up.ts";
@@ -112,8 +113,10 @@ export type BuyLine = {
   readonly stock?: string;
   /** What it's for, in a few words. */
   readonly for: string;
-  /** How many pieces the Build uses. */
+  /** How many pieces to buy: what the Build uses, less what the owner has of it (#760). */
   readonly needed: number;
+  /** How many of it Your stock has, when that covers some of it but not all (#760). */
+  readonly have?: number;
   /** How many come in one pack (a set of 4 castors, a box of 100 screws); 1 when sold singly. */
   readonly packOf: number;
   readonly packs: number;
@@ -127,6 +130,8 @@ export type BuyLine = {
 
 export type BuyList = {
   readonly lines: readonly BuyLine[];
+  /** The lines Your stock covers whole (#760), left off `lines`, as they'd be bought. */
+  readonly had: readonly BuyLine[];
   /** The priced lines' total, in pence. */
   readonly total: number;
   /** How many lines have no price yet, so the total leaves them out. */
@@ -212,6 +217,8 @@ export type BuildSetting = {
   readonly have?: readonly string[];
   /** The tools the owner chose to buy for this Build, which its buy list lists until they have them. */
   readonly buying?: readonly Tool[];
+  /** Your stock (#760): the materials and fixings the owner has, which come off the buy list. */
+  readonly stock?: readonly Held[];
 };
 
 /**
@@ -252,21 +259,14 @@ export type Step = {
   readonly wayChanged: { readonly was: string; readonly now: string } | null;
   readonly tools: readonly StepTool[];
   readonly safety: readonly StepTool[];
-  /** Its fixings, each with the type of close-up that shows how it's made (#813). */
-  readonly fixings: readonly {
-    readonly name: string;
-    readonly count: number;
-    readonly joint?: FixingType;
-  }[];
+  /** Its fixings, each with its close-up's type (#813) and where the owner keeps it (#760). */
+  readonly fixings: readonly StepFixing[];
   readonly batch: string; // How to batch it: "One joint at a time" (#789).
   readonly actions: readonly Action[];
   readonly tips: readonly string[]; // Extras, behind a Tips tap, never in the lines (#789).
   /** Its close-ups: most steps have one, a fixing two (tightening it, and taken apart, #783). */
   readonly closeUps: readonly CloseUp[];
-  /**
-   * The techniques it uses, each as its close-up (#813): open in full the first time the Build's
-   * steps use it (`first`), a "how?" tap after.
-   */
+  /** Its techniques' close-ups (#813): in full the first time (`first`), a "how?" tap after. */
   readonly techniques: readonly { readonly closeUp: CloseUp; readonly first: boolean }[];
   /** What "show me how" walks through first, the first time it comes up; none otherwise. */
   readonly walkThrough: readonly WalkStep[];

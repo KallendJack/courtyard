@@ -10,12 +10,12 @@ import {
   type ThingDetailName,
   ThingFields,
   type ThingHistoryEntry,
-  ThingKind,
   type ThingProblem,
   type ThingSave,
   ThingSlug,
   ThingStatus,
   type ThingSummary,
+  WorkspaceThingKind,
 } from "@courtyard/contract";
 import { z } from "zod";
 import {
@@ -231,7 +231,7 @@ export const thingPhoto = async (
 type FieldChange = {
   readonly name?: string;
   readonly status?: ThingStatus;
-  readonly kind?: ThingKind;
+  readonly kind?: ThingSummary["kind"];
   readonly partOf?: ThingSlug | null;
   readonly place?: BikePlace | null;
 } & { readonly [K in ThingDetailName | UpcomingField]?: string | null };
@@ -618,7 +618,7 @@ const ThingRequest = z.looseObject({
   remove: z.boolean().optional(),
   name: z.string().optional(),
   status: ThingStatus.optional(),
-  kind: ThingKind.optional(),
+  kind: WorkspaceThingKind.optional(),
   part_of: z.string().optional(),
   place: BikePlace.or(z.literal("")).optional(),
   history: z.string().optional(),

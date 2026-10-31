@@ -67,7 +67,10 @@ export const BuildBuyLine = z.object({
   /** The timber or sheet it buys, whose options its row opens (#704). */
   stock: z.string().optional(),
   for: z.string(),
+  /** How many to buy: what the Build uses, less what Your stock has of it (#760). */
   needed: z.number(),
+  /** How many Your stock has, when that covers some but not all. */
+  have: z.number().optional(),
   packOf: z.number(),
   packs: z.number(),
   price: z
@@ -195,7 +198,8 @@ export const BuildStep = z.object({
   wayChanged: z.object({ was: z.string(), now: z.string() }).nullable(),
   tools: list(BuildStepTool),
   safety: list(BuildStepTool),
-  fixings: list(z.object({ name: z.string(), count: z.number() })),
+  /** Each with where the owner keeps theirs, when Your stock has it: "red screw case" (#760). */
+  fixings: list(z.object({ name: z.string(), count: z.number(), from: z.string().optional() })),
   /** How to batch it, in a few words: "One joint at a time" (#789). */
   batch: z.string(),
   actions: list(
@@ -330,7 +334,13 @@ export const DerivedBuild = z.object({
   parts: list(BuildPart),
   fitted: list(z.object({ name: z.string(), on: z.string(), boxes: list(BuildBox) })),
   cutPlan: BuildCutPlan,
-  buyList: z.object({ lines: list(BuildBuyLine), total: z.number(), unpriced: z.number() }),
+  /** What's left to buy, and the lines Your stock covers whole (`had`, #760). */
+  buyList: z.object({
+    lines: list(BuildBuyLine),
+    had: list(BuildBuyLine),
+    total: z.number(),
+    unpriced: z.number(),
+  }),
   steps: list(BuildStep),
   /** The words the steps use that a beginner may not know, each with a line saying what it means. */
   glossary: list(z.object({ word: z.string(), means: z.string() })),

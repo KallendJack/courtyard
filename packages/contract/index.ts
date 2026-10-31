@@ -310,6 +310,7 @@ export {
   ThingStatus,
   ThingSummary,
   ThingUpcoming,
+  WorkspaceThingKind,
 } from "./lib/things.ts";
 export {
   ModelUsageMeter,

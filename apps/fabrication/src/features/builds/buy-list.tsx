@@ -1,17 +1,42 @@
-import type { BuildBuyLine, DerivedBuild } from "@courtyard/contract";
+import {
+  type BuildBuyLine,
+  type ChangeId,
+  type DerivedBuild,
+  stockKindOf,
+} from "@courtyard/contract";
 import { Button } from "@courtyard/ui/buttons/button.tsx";
+import { FormError } from "@courtyard/ui/forms/form-error.tsx";
+import { useAction } from "@courtyard/ui/hooks/use-action.ts";
 import { CapsLabel } from "@courtyard/ui/layout/caps-label.tsx";
-import { ChevronRight } from "lucide-react";
+import { Check } from "lucide-react";
 import { useState } from "react";
+import { type Answer, haveIt, undoHaveIt } from "../../api/fabrication.ts";
+import { UndoNote } from "../../components/undo-note.tsx";
 import { pounds, tenths } from "./words.ts";
 
 /** How many to buy: "× 5" of what's sold one at a time, "1 pack" of what's sold in packs. */
 const howMany = (line: BuildBuyLine) =>
   line.packOf === 1 ? `× ${line.packs}` : `${line.packs} ${line.packs === 1 ? "pack" : "packs"}`;
 
-/** Its second line: the shop, then what it's for. */
-const shopAndFor = (line: BuildBuyLine) =>
-  [line.price?.shop, line.for].filter((part) => part !== undefined).join(" · ");
+/** A line's group on the list, as the board heads them. */
+const GROUPS: Record<BuildBuyLine["kind"], string> = {
+  timber: "Timber",
+  sheet: "Sheets",
+  fitted: "Fixings",
+  fixing: "Fixings",
+  filament: "Filament",
+  tool: "Tools",
+};
+
+/** The lines in their groups, each group where its first line is. */
+const grouped = (lines: readonly BuildBuyLine[]) => {
+  const groups = new Map<string, BuildBuyLine[]>();
+  for (const line of lines) {
+    const group = GROUPS[line.kind];
+    groups.set(group, [...(groups.get(group) ?? []), line]);
+  }
+  return [...groups];
+};
 
 /** A bolt's length, as the length its line buys: "65" of "M6 × 65 bolts". */
 const lengthBought = (line: BuildBuyLine) => /× (\d+)/.exec(line.item)?.[1];
@@ -50,89 +75,191 @@ function BoltLength(props: { line: BuildBuyLine; length: NonNullable<BuildBuyLin
   );
 }
 
-function Line(props: { line: BuildBuyLine; open: (() => void) | undefined }) {
+function Line(props: {
+  line: BuildBuyLine;
+  open: (() => void) | undefined;
+  /** Have it, for a line Your stock can keep; none for a tool. */
+  have: (() => void) | undefined;
+  busy: boolean;
+  waiting: boolean;
+}) {
   const { line, open } = props;
+  // One line, as the board has it: the item, how many, and Have it.
   const body = (
     <>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-interface font-bold text-foreground">{line.item}</span>
-        <span className="truncate text-meta text-muted-foreground">{shopAndFor(line)}</span>
-      </span>
+      <span className="min-w-0 flex-1 text-sm font-medium text-foreground">{line.item}</span>
       <span className="shrink-0 font-mono text-meta text-muted-foreground">{howMany(line)}</span>
-      <span className="w-17 shrink-0 text-right font-mono text-meta font-bold text-foreground">
-        {line.total === undefined ? "No price" : pounds(line.total)}
-      </span>
     </>
   );
-  const row = "flex items-center gap-3 py-2.5";
+  const row = "flex min-h-11 min-w-0 flex-1 items-center gap-2.5 py-2";
   const link = line.price?.link;
   return (
     <li className="border-b border-border">
-      {open !== undefined ? (
-        // A timber or sheet with options opens them (#704); its shop's link is there.
-        <button
-          type="button"
-          onClick={open}
-          className={`${row} w-full text-left hover:bg-muted/40`}
-        >
-          {body}
-          <ChevronRight aria-hidden className="size-4 shrink-0 text-primary-text" />
-        </button>
-      ) : link === undefined ? (
-        <div className={row}>
-          {body}
-          <span aria-hidden className="w-4 shrink-0" />
-        </div>
-      ) : (
-        <a href={link} target="_blank" rel="noreferrer" className={`${row} hover:bg-muted/40`}>
-          {body}
-          <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-        </a>
-      )}
+      <div className="flex items-center gap-2.5">
+        {open !== undefined ? (
+          // A timber or sheet with options opens them (#704); its shop's link is there.
+          <button type="button" onClick={open} className={`${row} text-left hover:bg-muted/40`}>
+            {body}
+          </button>
+        ) : link === undefined ? (
+          <div className={row}>{body}</div>
+        ) : (
+          <a href={link} target="_blank" rel="noreferrer" className={`${row} hover:bg-muted/40`}>
+            {body}
+          </a>
+        )}
+        {props.have !== undefined && (
+          <Button
+            variant="outline"
+            size="row"
+            aria-label={`Have it: ${line.item}`}
+            busy={props.busy}
+            busyLabel="Saving…"
+            waiting={props.waiting}
+            onClick={props.have}
+          >
+            Have it
+          </Button>
+        )}
+      </div>
       {/* A bolt's length sits under its row. */}
       {line.length && <BoltLength line={line} length={line.length} />}
     </li>
   );
 }
 
+/** What Your stock covers whole, folded away: "You have 2 · screws, castors", and Show. */
+function Had(props: { had: readonly BuildBuyLine[] }) {
+  const [open, setOpen] = useState(false);
+  if (props.had.length === 0) return null;
+  return (
+    // Clipped across, so Show's edge (its words flush with the Have it buttons) never scrolls the
+    // panel sideways.
+    <section aria-label="You have" className="flex flex-col gap-1 overflow-x-clip pt-1">
+      <p className="flex items-center gap-2">
+        <Check aria-hidden className="size-4 shrink-0 text-success" />
+        <span className="min-w-0 flex-1 truncate text-meta text-success">
+          You have {props.had.length} · {props.had.map((line) => line.item).join(", ")}
+        </span>
+        <Button
+          variant="quietPrimary"
+          size="words"
+          aria-expanded={open}
+          onClick={() => setOpen((now) => !now)}
+        >
+          {open ? "Hide" : "Show"}
+        </Button>
+      </p>
+      {open && (
+        <ul className="flex flex-col">
+          {props.had.map((line) => (
+            <li
+              key={line.item}
+              className="flex items-baseline justify-between gap-3 border-b border-border py-2 text-meta"
+            >
+              <span className="text-foreground">{line.item}</span>
+              <span className="shrink-0 font-mono text-muted-foreground">{line.needed} used</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** Why Have it or its Undo didn't happen, as the list says it. */
+const problemOf = (answer: Exclude<Answer<unknown>, { kind: "loaded" }>) =>
+  answer.kind === "failed" ? answer.message : "Can't reach Courtyard's worker. Try again.";
+
 /**
- * The buy list (#698; Paper, "Fabrication · A Build, buy list · Cover (#698)"): what to buy, from
- * where, how many, and what it comes to, each line a link to its shop where there is one, or
- * opening its options where it's a timber or sheet with some (#704). Its total, and what has no
- * price yet, at its foot.
+ * The buy list (#698; with Have it, #760: Paper, 2 · Agreed, "Fabrication · Buy list with Have it ·
+ * Fold"): how many things are left to buy and what they come to, then each line in its group, a
+ * link to its shop where there is one, or opening its options where it's a timber or sheet with
+ * some (#704). Have it saves a line to Your stock, for every Build, and it drops off the list, with
+ * Undo; what Your stock covers is folded away at the foot.
  */
 export function BuyList(props: {
   buyList: DerivedBuild["buyList"];
   /** The stocks with options to pick from, by name. */
   withOptions: readonly string[];
   openOptions: (stock: string) => void;
+  /** Reads the Build again, once Have it or its Undo has changed what's left. */
+  reread: () => Promise<void>;
 }) {
-  const { lines, total, unpriced } = props.buyList;
+  const { lines, had, total } = props.buyList;
+  const { reread } = props;
+  const [justHad, setJustHad] = useState<{ item: string; change: ChangeId }>();
+  const having = useAction(async (line: BuildBuyLine) => {
+    const kind = stockKindOf(line.kind);
+    if (kind === undefined) return undefined;
+    const done = await haveIt({
+      name: line.item,
+      kind,
+      count: line.needed + (line.have ?? 0),
+    });
+    if (done.kind !== "loaded") return problemOf(done);
+    const { change } = done.data;
+    setJustHad(change === null ? undefined : { item: line.item, change });
+    await reread();
+    return undefined;
+  });
+  const undoing = useAction(async () => {
+    if (justHad === undefined) return undefined;
+    const done = await undoHaveIt(justHad.change);
+    if (done.kind !== "loaded") return problemOf(done);
+    setJustHad(undefined);
+    await reread();
+    return undefined;
+  });
+  const busy = having.busy || undoing.busy;
   return (
     <section aria-label="Buy list" className="flex flex-col gap-1">
-      <CapsLabel tone="muted">To buy · {lines.length}</CapsLabel>
-      <ul className="flex flex-col">
-        {lines.map((line) => (
-          <Line
-            key={line.item}
-            line={line}
-            open={
-              line.stock !== undefined && props.withOptions.includes(line.stock)
-                ? () => props.openOptions(line.stock ?? "")
-                : undefined
-            }
-          />
-        ))}
-      </ul>
-      <p className="flex items-baseline justify-between gap-3 pt-3">
-        <span className="text-meta text-muted-foreground">
-          {unpriced === 0 ? "Everything priced" : `${unpriced} without a price yet`}
-        </span>
-        <span className="font-mono text-xl font-bold text-foreground">
-          <span className="sr-only">Total </span>
-          {pounds(total)}
-        </span>
-      </p>
+      <div className="flex flex-col gap-1 border-b border-border pb-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="display-title text-sheet-title">
+            {lines.length === 0
+              ? "All to hand"
+              : `${lines.length} ${lines.length === 1 ? "thing" : "things"} left`}
+          </h2>
+          <span className="shrink-0 font-mono text-interface font-semibold text-foreground">
+            <span className="sr-only">Total </span>
+            {pounds(total)}
+          </span>
+        </div>
+        <p className="text-label text-muted-foreground">
+          Tick Have it and the line drops off the list.
+        </p>
+      </div>
+      {justHad !== undefined && (
+        <UndoNote undo={() => void undoing.run()} undoing={undoing.busy} waiting={having.busy}>
+          Have it: {justHad.item}
+        </UndoNote>
+      )}
+      <FormError message={having.error ?? undoing.error} />
+      {grouped(lines).map(([group, inGroup]) => (
+        <div key={group} className="flex flex-col pt-2">
+          <CapsLabel tone="muted">{group}</CapsLabel>
+          <ul className="flex flex-col">
+            {inGroup.map((line) => (
+              <Line
+                key={line.item}
+                line={line}
+                open={
+                  line.stock !== undefined && props.withOptions.includes(line.stock)
+                    ? () => props.openOptions(line.stock ?? "")
+                    : undefined
+                }
+                have={
+                  stockKindOf(line.kind) === undefined ? undefined : () => void having.run(line)
+                }
+                busy={having.running?.[0].item === line.item}
+                waiting={busy && having.running?.[0].item !== line.item}
+              />
+            ))}
+          </ul>
+        </div>
+      ))}
+      <Had had={had} />
     </section>
   );
 }

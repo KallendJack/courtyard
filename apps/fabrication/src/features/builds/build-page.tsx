@@ -187,6 +187,7 @@ export function BuildPage(props: { build: BuildOpened }) {
             buyList={derived.buyList}
             withOptions={derived.options.map((options) => options.stock)}
             openOptions={stock.open}
+            reread={() => router.invalidate()}
           />
         );
       case "Tools":

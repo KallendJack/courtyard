@@ -10,11 +10,18 @@ export const ThingStatus = z.enum(["have", "want", "replace"]);
 export type ThingStatus = z.infer<typeof ThingStatus>;
 
 /**
- * What kind of Thing it is (ADR 0037): an item of the owner's kit, a space (a garage, a van), or a
- * tool. A file that doesn't say is an item, as every file before kinds is.
+ * What kind of Thing it is (ADR 0037): an item of the owner's kit, a space (a garage, a van), a
+ * tool, or Your stock's material (timber, sheets) or fixing (screws, castors, #760). A file that
+ * doesn't say is an item, as every file before kinds is.
  */
-export const ThingKind = z.enum(["item", "space", "tool"]);
+export const ThingKind = z.enum(["item", "space", "tool", "material", "fixing"]);
 export type ThingKind = z.infer<typeof ThingKind>;
+
+/**
+ * The kinds a workspace's own Things have: Your stock is the owner's, kept from a Build's buy list
+ * (#760), never a workspace's.
+ */
+export const WorkspaceThingKind = ThingKind.exclude(["material", "fixing"]);
 
 /**
  * A Thing's subject ID (ADR 0037): given by the worker the first time a size is recorded for it,
@@ -42,10 +49,10 @@ export const BIKE_PLACES = [
 export const BikePlace = z.enum(BIKE_PLACES);
 export type BikePlace = z.infer<typeof BikePlace>;
 
-/** The most of one tool the owner can have, as a count (clamps × 2). */
-export const THING_COUNT_MAX = 99;
+/** The most of one Thing the owner can have, as a count: a case of screws holds hundreds (#760). */
+export const THING_COUNT_MAX = 9999;
 
-/** How many of a Thing the owner has, when it's more than one (clamps × 2). */
+/** How many of a Thing the owner has, when it's more than one (clamps × 2, screws × 100). */
 export const ThingCount = z.coerce
   .number()
   .int("Give the count as a whole number.")

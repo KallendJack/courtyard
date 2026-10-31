@@ -31,6 +31,7 @@ export type {
   WalkStep,
   Way,
 } from "./build.ts";
+export { sameStock } from "./buy-list.ts";
 export { planLengths, planSheets } from "./cut-plan.ts";
 export {
   derivePrinted,
@@ -54,5 +55,13 @@ export { deriveRecipe } from "./recipe/index.ts";
 export { deriveBench, type Starter, starterRecipe } from "./recipe/starters.ts";
 export { pickRecipeStock } from "./recipe/work-out.ts";
 export type { Scene, SceneMark, ScenePiece } from "./scene.ts";
-export { Fixing, OptionPrices, Price, Sheet, StockOptionId, Timber } from "./stock.ts";
+export {
+  Fixing,
+  type Held,
+  OptionPrices,
+  Price,
+  Sheet,
+  StockOptionId,
+  Timber,
+} from "./stock.ts";
 export { TOOL_NAMES, Tool, toolsFrom } from "./tools.ts";

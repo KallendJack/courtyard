@@ -8,6 +8,7 @@ import {
   BuildTimber,
 } from "@courtyard/contract";
 import { z } from "zod";
+import type { FixingType } from "./close-up.ts";
 
 // What parts are cut from and fixed with, for any template or recipe, as the contract defines them
 // (#769). A template takes each of its slots' stock as a parameter (the frame's timber, the top's
@@ -15,6 +16,23 @@ import { z } from "zod";
 // plywood, OSB or MDF, and the Build derived again (#704).
 
 export const Words = z.string().trim().min(1).max(80);
+
+/**
+ * Something Your stock has (#760): its name, as a buy list line names it ("5 × 80 screws"), how
+ * many, and where it's kept ("red screw case"), which the steps say it comes from.
+ */
+export type Held = { readonly name: string; readonly count: number; readonly where?: string };
+
+/**
+ * A fixing a step uses, the type of close-up that shows how it's made (#813), and where the owner
+ * keeps theirs when Your stock has it: "red screw case".
+ */
+export type StepFixing = {
+  readonly name: string;
+  readonly count: number;
+  readonly joint?: FixingType;
+  readonly from?: string;
+};
 
 /** A pack's price, in pence, and where it's from. */
 export const Price = BuildPrice;

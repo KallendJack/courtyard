@@ -9,7 +9,7 @@ import { LengthBar } from "./cut-plan.tsx";
 import { Findings } from "./findings.tsx";
 import { type Detail, type Progress, useDetail } from "./progress.ts";
 import { BeforeMovingOn, WalkThrough } from "./step/how.tsx";
-import { chipOf, listed, stepFindings, wayChanges } from "./words.ts";
+import { chipOf, fixingLine, listed, stepFindings, wayChanges } from "./words.ts";
 
 // A Build's steps as an instruction manual (#699; Paper, 2 · Agreed, "Fabrication · Build steps
 // v2, teaching · Tablet (#699)" and "· Build steps, cutting by your tools · Tablet (#699)"): one
@@ -266,15 +266,15 @@ export function Meaning(props: { meaning: { word: string; means: string }; close
   );
 }
 
-/** A step's fixings: "5 × 80 screws (16)", a count after its size so it doesn't read as one more. */
+/**
+ * A step's fixings: "5 × 80 screws (16)", a count after its size so it doesn't read as one more,
+ * and where Your stock keeps them (#760).
+ */
 export function Fixings(props: { step: BuildStep }) {
   if (props.step.fixings.length === 0) return null;
   return (
     <p className="text-interface text-muted-foreground">
-      Fixings:{" "}
-      <span className="text-foreground">
-        {listed(props.step.fixings.map((fixing) => `${fixing.name} (${fixing.count})`))}
-      </span>
+      Fixings: <span className="text-foreground">{listed(props.step.fixings.map(fixingLine))}</span>
     </p>
   );
 }

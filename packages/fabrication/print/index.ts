@@ -1,6 +1,14 @@
 import { type BuildTemplate, type PartFeature, PartRecipeShown } from "@courtyard/contract";
 import type { z } from "zod";
-import { type Build, err, type Finding, ok, type Result, type Step } from "../build.ts";
+import {
+  type Build,
+  type BuildSetting,
+  err,
+  type Finding,
+  ok,
+  type Result,
+  type Step,
+} from "../build.ts";
 import { buyLine, buyListOf } from "../buy-list.ts";
 import { toolsMissing } from "../findings.ts";
 import { glossaryOf } from "../glossary.ts";
@@ -202,10 +210,13 @@ export const fitsPlate = (
   ((size.length <= plate.width && size.depth <= plate.depth) ||
     (size.length <= plate.depth && size.depth <= plate.width));
 
-/** Everything a printed part's Build shows, from its template and parameters (ADR 0036). */
+/**
+ * Everything a printed part's Build shows, from its template and parameters (ADR 0036), its buy
+ * list less what Your stock has (#760), as a bench's is.
+ */
 export const derivePrinted =
   (template: Printed) =>
-  (raw: unknown): Result<Build, string[]> => {
+  (raw: unknown, setting: Pick<BuildSetting, "stock"> = {}): Result<Build, string[]> => {
     const { parameters: schema, shape } = TEMPLATES[template];
     const parsed = schema.safeParse(raw);
     if (!parsed.success) return err(issues(parsed.error));
@@ -232,24 +243,27 @@ export const derivePrinted =
     if (missing) findings.push(missing);
 
     const priced = (item: string) => parameters.prices[item];
-    const buyList = buyListOf([
-      buyLine({
-        item: parameters.filament,
-        kind: "filament",
-        for: `printing ${parameters.count === 1 ? "it" : `${parameters.count}`}`,
-        needed: 1,
-        price: priced(parameters.filament),
-      }),
-      ...[...screws].map(([item, each]) =>
+    const buyList = buyListOf(
+      [
         buyLine({
-          item,
-          kind: "fixing",
-          for: "fixing it",
-          needed: each * parameters.count,
-          price: priced(item),
+          item: parameters.filament,
+          kind: "filament",
+          for: `printing ${parameters.count === 1 ? "it" : `${parameters.count}`}`,
+          needed: 1,
+          price: priced(parameters.filament),
         }),
-      ),
-    ]);
+        ...[...screws].map(([item, each]) =>
+          buyLine({
+            item,
+            kind: "fixing",
+            for: "fixing it",
+            needed: each * parameters.count,
+            price: priced(item),
+          }),
+        ),
+      ],
+      setting.stock,
+    );
 
     return ok({
       template,

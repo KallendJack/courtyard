@@ -2052,6 +2052,13 @@ after the Build had changed, and sent the cutting stage's photos with every turn
 file name), the documents list marks each (Documents, above), and the owner archives them with one tap on the
 model's suggested reply. Each photo from a Build's chat says the step it was taken at (Attachments, above).
 
+Changed with #760: the owner's question was "a really easy parts list of what to buy based on what I have already".
+Your stock, the materials and fixings the owner ticked Have it on in Fabrication, comes off every Build's buy list
+before a model sees it, so the reply's lines are only what's left to buy. A line Your stock covers in part says so
+(`- 4 × 40 screws: 1 × pack of 200 (43 used, 20 in Your stock, fit the shelf, …)`), and after the total, `Already in Your stock, so
+not bought: 5 × 80 screws.` Your stock's materials and fixings are never a workspace's Things, so the Things tool's
+kinds stay item, space and tool.
+
 **The save_build tool,** offered beside the project tool, as a model reads it, and its inputs (`<schemas>` is each
 template's parameters as JSON Schema, `framed-bench: {…}` from `BenchParameters`, then each printed template's own
 from `PRINTED_PARAMETERS` (a recipe's features with each kind's fields, `PartRecipeShown`), then `and every printed

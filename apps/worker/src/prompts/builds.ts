@@ -289,9 +289,14 @@ const numbersOf = (build: Build) => {
     "Buy list:",
     ...buyList.lines.map(
       (line) =>
-        `- ${line.item}: ${line.packs} × ${line.packOf === 1 ? "1" : `pack of ${line.packOf}`} (${line.needed} used, ${line.for})${line.total === undefined ? ", no price yet" : `, ${pounds(line.total)}${line.price?.shop === undefined ? "" : ` at ${line.price.shop}`}`}${line.length === undefined ? "" : boltLine(line.length)}`,
+        `- ${line.item}: ${line.packs} × ${line.packOf === 1 ? "1" : `pack of ${line.packOf}`} (${line.needed + (line.have ?? 0)} used${line.have === undefined ? "" : `, ${line.have} in Your stock`}, ${line.for})${line.total === undefined ? ", no price yet" : `, ${pounds(line.total)}${line.price?.shop === undefined ? "" : ` at ${line.price.shop}`}`}${line.length === undefined ? "" : boltLine(line.length)}`,
     ),
     `Total: ${pounds(buyList.total)}${buyList.unpriced === 0 ? "" : `, leaving out ${buyList.unpriced} ${buyList.unpriced === 1 ? "line" : "lines"} with no price`}`,
+    ...(buyList.had.length === 0
+      ? []
+      : [
+          `Already in Your stock, so not bought: ${buyList.had.map(({ item }) => item).join(", ")}.`,
+        ]),
     `Steps: ${build.steps.map((step) => `${step.number}. ${step.title}`).join(" · ")}`,
     ...(build.findings.length === 0
       ? ["Findings: none."]

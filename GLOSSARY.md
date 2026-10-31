@@ -259,8 +259,16 @@ How a Build's parts come out of the timber lengths and sheets it's cut from, all
 _Avoid_: cutting list, cut sheet
 
 **Buy list**:
-What a Build needs bought: each item, how many, its price and where it's sold, from the Build's parts and fixings.
+What a Build needs bought: each item, how many, its price and where it's sold, from the Build's parts and fixings,
+less what Your stock has: "N things left". **Have it** on a line saves it to Your stock (#760).
 _Avoid_: shopping list, BOM, wanted list (that's Things the owner wants)
+
+**Your stock**:
+What the owner has for making besides their tools (#760): materials (timber, sheets, filament) and fixings (a screw
+case's sizes and counts, castors), Things of kind material or fixing kept at the owner's level, so every Build's buy
+list leaves off what it covers, buying only the shortfall, and its steps say where each fixing comes from ("from
+your red screw case").
+_Avoid_: inventory, materials list, spares
 
 **Build steps**:
 A Build's instruction manual in Fabrication (#699), worked out by code from its parameters and the tools to hand

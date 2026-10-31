@@ -36,6 +36,13 @@ export const printSizeLine = (size: DerivedBuild["size"]) =>
 export const listed = (items: readonly string[]) =>
   items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
 
+/**
+ * A step's fixing: "5 × 80 screws (16)", as a count before a size would read as one more size,
+ * and where Your stock keeps them (#760): "…, from your red screw case".
+ */
+export const fixingLine = (fixing: BuildStep["fixings"][number]) =>
+  `${fixing.name} (${fixing.count})${fixing.from === undefined ? "" : `, from your ${fixing.from}`}`;
+
 /** A finding as its card says it: a title, and what to do. */
 type Card = { readonly title: string; readonly detail: string };
 
