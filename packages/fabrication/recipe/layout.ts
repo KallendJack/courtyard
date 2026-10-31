@@ -2,6 +2,7 @@ import type { BuildRecipe, RecipeGroup, RecipePiece, RecipeStock } from "@courty
 import type { Box } from "../build.ts";
 import { err, ok, type Result } from "../build.ts";
 import { carcassBody } from "./carcass.ts";
+import { castorsUnder } from "./castors.ts";
 import { box, cutSize } from "./geometry.ts";
 import { legsBody } from "./legs.ts";
 
@@ -27,12 +28,16 @@ export type Placed = {
   readonly legs?: boolean;
 };
 
-/** Something fitted whole: its piece, the castor it is, and the member it's under. */
+/**
+ * Something fitted whole: its piece, the castor it is, and the member it's under; and the coach
+ * screws' length when it's fixed from below rather than bolted through (#835).
+ */
 export type PlacedFitted = {
   readonly from: string;
   readonly stock: string;
   readonly under: string;
   readonly boxes: readonly Box[];
+  readonly screws?: number;
 };
 
 export type Layout = {
@@ -77,9 +82,6 @@ export type Body = {
   /** The span from front to back a support across the middle fills, when it has one. */
   readonly across: { readonly y: number; readonly depth: number } | undefined;
 };
-
-/** How far a castor's plate sits in from each end of its base. */
-const CASTOR_INSET = 10;
 
 /** "top-support" as it's said: "Top support". */
 export const words = (id: string) => {
@@ -266,25 +268,16 @@ export const layoutOf = (recipe: BuildRecipe): Result<Layout, string[]> => {
   }
   if (problems.length > 0) return err(problems);
 
+  // Each castor clear of what stands on its base, or on coach screws from below (#835).
   const fittedPlaced = fitted.flatMap((piece): PlacedFitted[] => {
     const under = placed.find((each) => each.from === piece.under);
     if (!castor || !under) return [];
-    const plateLength = castor.plate.length.value;
-    const plateWidth = castor.plate.width.value;
     return [
       {
         from: piece.id,
         stock: piece.stock,
         under: piece.under,
-        boxes: under.boxes.flatMap((on) =>
-          on.d >= on.w
-            ? [on.y + CASTOR_INSET, on.y + on.d - CASTOR_INSET - plateLength].map((y) =>
-                box(on.x + (on.w - plateWidth) / 2, y, 0, plateWidth, plateLength, castorHeight),
-              )
-            : [on.x + CASTOR_INSET, on.x + on.w - CASTOR_INSET - plateLength].map((x) =>
-                box(x, on.y + (on.d - plateWidth) / 2, 0, plateLength, plateWidth, castorHeight),
-              ),
-        ),
+        ...castorsUnder({ recipe, placed, base: under, fitted: piece.id, castor }),
       },
     ];
   });

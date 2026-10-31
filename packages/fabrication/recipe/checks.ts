@@ -1,6 +1,8 @@
 import type { BuildRecipe } from "@courtyard/contract";
+import { clashesOf } from "../assembly/space.ts";
 import type { Box, Finding, Part } from "../build.ts";
 import { type LoadClass, loadClassOf, stiffnessOf } from "../loads.ts";
+import { castorFixingsTaken } from "./castors.ts";
 import { BOX_EDGE } from "./fixings.ts";
 import { type Axis, alongOf, contactOf, extent, span, tenth, thinnest } from "./geometry.ts";
 import { type Layout, said, stockIn, words } from "./layout.ts";
@@ -293,6 +295,27 @@ const screwLengths = (recipe: BuildRecipe, layout: Layout): Finding[] => {
   ];
 };
 
+/**
+ * The whole Build as one (#835): its castors' nuts and bolt ends, the brackets at the feet on
+ * their bases, and every piece, each keeping its own space. A fixing that takes a piece's says
+ * its own fixes.
+ */
+const clashes = (recipe: BuildRecipe, layout: Layout): Finding[] => {
+  const fixings = castorFixingsTaken(recipe, layout);
+  const taken = [
+    ...fixings,
+    ...layout.placed.map((piece) => ({ name: piece.name, boxes: piece.boxes })),
+    ...layout.fitted.map((each) => ({ name: words(each.from), boxes: each.boxes })),
+  ];
+  return clashesOf(taken).map((clash) => ({
+    kind: "clashes",
+    ...clash,
+    fixes: fixings.find((each) => each.name === clash.what)?.fixes ?? [
+      "Change their sizes so each keeps its own space",
+    ],
+  }));
+};
+
 /** Every check's findings for a recipe laid out, its parts lettered and its height. */
 export const checksOf = (options: {
   recipe: BuildRecipe;
@@ -304,4 +327,5 @@ export const checksOf = (options: {
   ...tips(options.layout, options.height),
   ...racks(options.recipe),
   ...screwLengths(options.recipe, options.layout),
+  ...clashes(options.recipe, options.layout),
 ];

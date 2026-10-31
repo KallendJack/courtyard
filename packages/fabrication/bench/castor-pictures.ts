@@ -1,7 +1,7 @@
 import type { Box } from "../build.ts";
 import type { Scene, SceneMark } from "../scene.ts";
 import { TOOL_NAMES } from "../tools.ts";
-import { CASTOR_INSET } from "./close-ups.ts";
+import { castorInsetOf } from "./frame.ts";
 import { castorFixingNames } from "./parameters.ts";
 import {
   at,
@@ -38,10 +38,11 @@ const drillAt = (tip: { x: number; y: number; z: number }, bit: number): Box[] =
 
 /**
  * One castor base upside down: held in the Workmate's jaws, castor end out, when there's one to
- * hand, or on two offcuts on the floor. One castor upside down on its end, the same gap both
- * sides and a fingernail from the end; its first bolt in, and the drill's bit through the plate's
- * next hole. Its words are off the model, each with a short leader: the owner's own tools and
- * where things go in their colour, the next thing to do in green.
+ * hand, or on two offcuts on the floor. One castor upside down, the same gap both sides, past
+ * where the leg stands on the base's other face (#835), with the size from the end; its first
+ * bolt in, and the drill's bit through the plate's next hole. Its
+ * words are off the model, each with a short leader: the owner's own tools and where things go in
+ * their colour, the next thing to do in green.
  */
 export const castorScene = (setting: SceneSetting): Scene => {
   const castors = setting.parameters.castors;
@@ -59,10 +60,22 @@ export const castorScene = (setting: SceneSetting): Scene => {
   const top = under + s.wideThick;
   const plateY = (s.wideWidth - plateWidth) / 2;
   const corner = 10;
-  const first = { x: CASTOR_INSET + corner, y: plateY + corner };
-  const next = { x: CASTOR_INSET + plateLength - corner, y: plateY + plateWidth - corner };
-  const jawsFrom = CASTOR_INSET + plateLength + 60;
+  const inset = castorInsetOf(setting.parameters, s);
+  const first = { x: inset + corner, y: plateY + corner };
+  const next = { x: inset + plateLength - corner, y: plateY + plateWidth - corner };
+  const jawsFrom = inset + plateLength + 60;
+  // Where the leg stands on the base's other face: from the long rail's thickness in, a leg thick.
+  const legFrom = s.thick;
+  const legTo = 2 * s.thick;
   const marks: SceneMark[] = [
+    {
+      kind: "callout",
+      at: at((legFrom + legTo) / 2, s.wideWidth / 2, top),
+      says: "leg stands here",
+      more: "on the other face: castor past it",
+      tone: "yours",
+    },
+    { kind: "size", from: at(0, -20, top), to: at(inset, -20, top), mm: inset },
     hasDrill
       ? {
           kind: "callout",
@@ -134,9 +147,9 @@ export const castorScene = (setting: SceneSetting): Scene => {
         tone: "plain",
         // The castor's plate on the base, its swivel, and its wheel standing up from them.
         boxes: [
-          box(CASTOR_INSET, plateY, top, plateLength, plateWidth, plate),
+          box(inset, plateY, top, plateLength, plateWidth, plate),
           box(
-            CASTOR_INSET + plateLength / 4,
+            inset + plateLength / 4,
             plateY + plateWidth / 4,
             top + plate,
             plateLength / 2,
@@ -144,7 +157,7 @@ export const castorScene = (setting: SceneSetting): Scene => {
             12,
           ),
           box(
-            CASTOR_INSET + plateLength / 2 - 12,
+            inset + plateLength / 2 - 12,
             plateY + plateWidth / 2 - (s.castor - plate - 12) / 2,
             top + plate + 12,
             24,

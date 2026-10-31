@@ -99,4 +99,24 @@ type CheckFinding =
       readonly least: number;
       readonly room: number;
       readonly fixes: readonly string[];
+    }
+  /**
+   * Two things that take the same space once it's all built (#835), a fixing first: a castor
+   * bolt's nut where a leg stands. Each plain fix, or why the engine's own don't work.
+   */
+  | {
+      readonly kind: "clashes";
+      readonly what: string;
+      readonly with: string;
+      readonly fixes: readonly string[];
+    }
+  /**
+   * A step that can't reach its work after the ones before it (#835): what an earlier step put
+   * there stands where it drills, screws or turns a nut, and that step is one it needs.
+   */
+  | {
+      readonly kind: "out-of-reach";
+      readonly step: string;
+      readonly by: string;
+      readonly fixes: readonly string[];
     };

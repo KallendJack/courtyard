@@ -512,7 +512,11 @@ describe("choosing the stock (#704)", () => {
     expect(after.buyList.total).toBe(17702 - 3400 + 3150);
 
     expect(after.size).toEqual(before.size);
-    expect(after.fitted).toEqual(before.fitted);
+    // The castors follow the legs, clear of them (#835): 38 thinner legs end 14 nearer the base's
+    // end, and the castors 25 nearer, at the next round step.
+    const ys = (build: Build) => build.fitted[0]?.boxes.map((plate) => plate.y);
+    expect(ys(before)).toEqual([120, 400, 120, 400]);
+    expect(ys(after)).toEqual([105, 415, 105, 415]);
     expect(after.steps.map((step) => step.title)).toEqual(before.steps.map((step) => step.title));
     expect(after.findings).toEqual(before.findings);
     expect(after.buyList.lines.slice(1)).toEqual(before.buyList.lines.slice(1));
@@ -690,6 +694,43 @@ describe("the golden bench's steps", () => {
     ]);
   });
 
+  it("sit each castor 95 in from its base's end, its nuts clear of the leg and its brackets (#835)", () => {
+    const build = built(goldenBench);
+    // The leg's inner face is 90 in from the base's end (the long rail's 45, then the leg's);
+    // the nearest washer is 4 in from the plate's end and stays 5 clear: 95 to say.
+    expect(build.fitted[0]?.boxes).toEqual(
+      [67.5, 1372.5].flatMap((x) => [120, 400].map((y) => ({ x, y, z: 0, w: 60, d: 80, h: 86.6 }))),
+    );
+    const legs = build.parts.find((part) => part.label === "A")?.boxes ?? [];
+    const plates = build.fitted[0]?.boxes ?? [];
+    for (const plate of plates) {
+      for (const leg of legs) {
+        // Each washer's edge is 4 in from the plate's end, and 5 clear of the leg.
+        const apart =
+          plate.y + 4 >= leg.y + leg.d + 5 ||
+          plate.y + plate.d - 4 <= leg.y - 5 ||
+          plate.x >= leg.x + leg.w ||
+          plate.x + plate.w <= leg.x;
+        expect(apart).toBe(true);
+      }
+    }
+    expect(build.findings.map((finding) => finding.kind)).not.toContain("clashes");
+    expect(build.findings.map((finding) => finding.kind)).not.toContain("out-of-reach");
+  });
+
+  it("say a clash when the bench is too shallow to move its castors clear of the legs (#835)", () => {
+    const shallow = built({ ...goldenBench, depth: { ...goldenBench.depth, value: 380 } });
+    expect(shallow.findings).toContainEqual({
+      kind: "clashes",
+      what: "M6 × 60 bolts' nuts and ends",
+      with: "Legs",
+      fixes: [
+        "Make the bench at least 400 deep, so the castors sit clear of the legs",
+        "Fix the castors with 6 × 40 coach screws from below, nothing through the top",
+      ],
+    });
+  });
+
   it("say how a step can be done, the way in use and the others not yet to hand (#699)", () => {
     const ways = (build: Build) => build.steps.find((step) => step.title.startsWith("Cut"))?.ways;
 
@@ -851,6 +892,10 @@ describe("the golden bench's steps, at the bench (#699)", () => {
       { name: "4 × 30 screws", count: 32, joint: "bracket" },
     ]);
     expect(standing?.actions.map((action) => action.numbers)).toContain("2 brackets a leg.");
+    // The face towards the other leg is where the castor's nuts are: the base's end is free (#835).
+    expect(standing?.actions.map((action) => action.howTo)).toContain(
+      "Two angle brackets a leg: one facing the middle, one facing the base's end.",
+    );
     expect(standing?.actions.at(-1)?.howTo).toBe(
       "Bracket tight in its corner: mark its holes. Drill a 3 mm pilot hole at each, then screw.",
     );
@@ -888,13 +933,13 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     const fitting = stepOf(built(goldenBench), "fit-castors");
 
     expect(fitting?.actions.map((action) => action.howTo)).toEqual([
-      "Base in the Workmate's jaws. Castor on its end, centred, a fingernail in.",
+      "Base in the Workmate's jaws. Castor centred, 95 from the end: clear of the leg.",
       "Drill one hole through the plate with the 7 mm bit. Bolt it loosely.",
       "Drill the next hole through the plate. Bolt it. Then the other two.",
       "Tighten each: spanner on the head, against the castor. Turn the nut.",
     ]);
     expect(fitting?.actions.map((action) => action.numbers)).toEqual([
-      "E in the jaws; castor 10 from the end, centred.",
+      "E in the jaws; castor 95 from the end, centred.",
       "7 mm through one plate hole; bolt loosely.",
       "Each next hole through the plate; bolt it.",
       "Head held against the castor; turn the nut.",
@@ -911,7 +956,7 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     const fitting = stepOf(built(goldenBench), "fit-castors");
 
     expect(fitting?.batch).toBe(
-      "One castor at a time, placed by eye: each hole drilled and bolted before the next.",
+      "One castor at a time, measured from the end: each hole drilled and bolted before the next.",
     );
     expect(fitting?.closeUps.map((closeUp) => closeUp.title)).toEqual([
       "Tighten",
@@ -930,7 +975,7 @@ describe("the golden bench's steps, at the bench (#699)", () => {
     const fitting = derived.ok ? stepOf(derived.value, "fit-castors") : undefined;
 
     expect(fitting?.actions[0]?.howTo).toBe(
-      "Base upside down on two offcuts. Castor on its end, centred, a fingernail in.",
+      "Base upside down on two offcuts. Castor centred, 95 from the end: clear of the leg.",
     );
     expect(fitting?.scene?.title).toBe("On two offcuts");
   });

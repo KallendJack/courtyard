@@ -518,6 +518,9 @@ test.describe("on the unfolded Fold", () => {
     await expect(picture).toBeVisible();
     await expect(picture).toContainText("your Workmate's jaws");
     await expect(picture).toContainText("1 bolt in");
+    // Where the leg will stand, so the plate goes past it, its nuts clear (#835).
+    await expect(picture).toContainText("leg stands here");
+    await expect(steps).toContainText("Castor centred, 95 from the end: clear of the leg.");
     await expect(checklist.getByRole("checkbox")).toHaveCount(4);
     await expect(steps.getByRole("region", { name: "How it's done" })).toHaveCount(0);
     // The drill and its bit one chip, gold while the bit's to check; the fixings behind Show me how.
@@ -708,6 +711,8 @@ test.describe("on the unfolded Fold", () => {
     // Over the step, with its Close first (#826).
     await expect(missing.getByRole("button", { name: "Close" })).toBeVisible();
     await expect(missing.getByRole("button").filter({ hasText: /\S/ })).toHaveText([
+      // The castor's place is measured from the base's end, clear of the leg (#835).
+      "Tape measure",
       "Drill, 7 mm bit",
       "10 mm spanner × 2",
       "Safety glasses",

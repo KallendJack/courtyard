@@ -1,4 +1,5 @@
-import type { CutPlan, Fitted, KeptWay, Part, Step } from "../build.ts";
+import { inOrder } from "../assembly/order.ts";
+import type { CutPlan, Finding, Fitted, KeptWay, Part, Step } from "../build.ts";
 import type { Capacities } from "../capacity.ts";
 import { bracketArm, bracketCloseUp } from "../close-ups/bracket.ts";
 import { overlapCloseUp } from "../close-ups/overlap.ts";
@@ -7,7 +8,7 @@ import { type SpannerKit, type SquareKind, TOOL_NAMES, type Tool } from "../tool
 import { castorsDraft } from "./castor-steps.ts";
 import { braceCloseUp, SHEET_SCREWS_PER_BRACE, sheetCloseUp } from "./close-ups.ts";
 import { type Shape, whole } from "./frame.ts";
-import { bracketed, bracketScrewsOf, frameDrafts } from "./frame-steps.ts";
+import { bracketed, bracketScrewsOf, frameDrafts, plannedOf } from "./frame-steps.ts";
 import type { BenchParameters } from "./parameters.ts";
 import { act, CUT_STEP, type Draft, handedOn, preparingSteps, sawInUse } from "./preparing.ts";
 import { nameOf, type SceneSetting, sectionOf } from "./scene-pieces.ts";
@@ -31,7 +32,10 @@ import { stepToolsOf } from "./step-tools.ts";
 // circular saw). Each step is the simplest way that holds and looks right (#789): at most four
 // lines, measured only where it decides how it turns out, by eye elsewhere, extras as tips.
 
-/** The bench's steps, numbered, with each tool set against the tools to hand. */
+/**
+ * The bench's steps, numbered, with each tool set against the tools to hand, in an order each can
+ * still be done in (#835); and any that can't reach their work.
+ */
 export const benchSteps = (options: {
   parameters: BenchParameters;
   shape: Shape;
@@ -57,7 +61,7 @@ export const benchSteps = (options: {
   capacities: Capacities;
   /** The kind of square the owner has, which the close-ups draw (#813); none when not known. */
   square: SquareKind | undefined;
-}): Step[] => {
+}): { steps: Step[]; outOfReach: Finding[] } => {
   const { parameters: p, shape: s, cutPlan, toHand, kept } = options;
   const castors = p.castors;
   const saw = sawInUse(toHand, kept);
@@ -311,14 +315,28 @@ export const benchSteps = (options: {
   ];
 
   const stepTool = stepToolsOf(options);
-  const on = drafts.filter((draft) => draft.on);
+  // In an order each step can still be done in, after the ones before it (#835).
+  const ordered = inOrder(
+    plannedOf(
+      options,
+      drafts.filter((draft) => draft.on),
+    ),
+  );
+  const on = ordered.order.flatMap((id) => drafts.filter((draft) => draft.id === id));
+  const titled = (id: string) => on.find((draft) => draft.id === id)?.title ?? id;
+  const outOfReach: Finding[] = ordered.blocked.map(({ step, by }) => ({
+    kind: "out-of-reach",
+    step: titled(step),
+    by: titled(by),
+    fixes: [`Change the sizes so "${titled(step)}" can still be done after "${titled(by)}"`],
+  }));
   const techniques = techniquesOf(on, {
     square: options.square,
     marking: (["tape-measure", "pencil", "square"] as const).every((tool) => toHand.has(tool)),
     drill: toHand.has("drill-driver"),
     zone: SPLIT_RISK,
   });
-  return on.map((draft, at) => ({
+  const steps = on.map((draft, at) => ({
     id: draft.id,
     number: at + 1,
     title: draft.title,
@@ -354,4 +372,5 @@ export const benchSteps = (options: {
     check: draft.check,
     words: draft.words ?? [],
   }));
+  return { steps, outOfReach };
 };

@@ -224,6 +224,10 @@ const findingLine = (finding: Finding) => {
       return `The frame on the ${finding.frame} can lean over: nothing braces it. Fix: ${finding.fixes.join(", or ")}.`;
     case "screw-length":
       return `The ${finding.screws} for ${finding.joint} are ${finding.problem}: through ${finding.through} mm, ${finding.problem === "too long" ? `${finding.into} mm into ${finding.room} mm, out the far side` : `${finding.into} mm into what they grip, less than ${finding.least} mm`}. Fix: ${finding.fixes.join(", or ")}.`;
+    case "clashes":
+      return `Built as it is, the ${finding.what.toLowerCase()} take the same space as the ${finding.with.toLowerCase()}. Fix: ${finding.fixes.join(", or ")}.`;
+    case "out-of-reach":
+      return `"${finding.step}" can't reach its work: "${finding.by}" puts pieces in the way, and must come first. Fix: ${finding.fixes.join(", or ")}.`;
   }
 };
 

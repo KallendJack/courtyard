@@ -1,5 +1,15 @@
+import {
+  CASTOR_INSET,
+  type CastorPlaces,
+  castorPlaces,
+  footBrackets,
+  nutsOn,
+  type Taken,
+  type ThroughBolt,
+} from "../assembly/space.ts";
 import type { Box, Fitted, Part } from "../build.ts";
-import type { BenchParameters } from "./parameters.ts";
+import { bracketArm } from "../close-ups/bracket.ts";
+import { type BenchParameters, type Castors, castorFixingNames } from "./parameters.ts";
 
 // The framed bench's shape: where every piece goes, and so every piece's cut size.
 //
@@ -11,8 +21,6 @@ import type { BenchParameters } from "./parameters.ts";
 
 /** What the shelf leaves between itself and each end frame, so it drops in. */
 const SHELF_GAP = 2;
-/** How far a castor's plate sits in from each end of its base. */
-const CASTOR_INSET = 10;
 
 /** Cut to the whole mm below: a part a touch short fits, one a touch long doesn't. */
 const cutSize = (mm: number) => Math.floor(mm + 1e-9);
@@ -121,11 +129,7 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
       does: `One at each corner, standing on ${parameters.castors ? "the castor bases" : "the floor"}.`,
       length: s.leg,
       ...frameTimber,
-      boxes: [s.left, s.right - s.wide].flatMap((x) =>
-        [s.front + s.thick, s.back - 2 * s.thick].map((y) =>
-          box(x, y, s.foot, s.wide, s.thick, s.leg),
-        ),
-      ),
+      boxes: legBoxes(s),
     },
     {
       on: true,
@@ -165,9 +169,7 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
       does: "Under each end frame, with a castor bolted under each end.",
       length: cutSize(s.frameDepth),
       ...wideCut,
-      boxes: [s.left, s.right - s.wideWidth].map((x) =>
-        box(x, s.front, s.castor, s.wideWidth, s.frameDepth, s.wideThick),
-      ),
+      boxes: baseBoxes(s),
     },
     {
       on: true,
@@ -247,22 +249,119 @@ export const benchParts = (parameters: BenchParameters, shape: Shape): Part[] =>
     .map(({ on: _on, ...part }) => ({ ...part, count: part.boxes.length }));
 };
 
-/** The castors, under the ends of each base. */
+/** The legs, one at each corner, inside the long rails. */
+const legBoxes = (s: Shape) =>
+  [s.left, s.right - s.wide].flatMap((x) =>
+    [s.front + s.thick, s.back - 2 * s.thick].map((y) => box(x, y, s.foot, s.wide, s.thick, s.leg)),
+  );
+
+/** The castor bases, one under each end frame, flush with its outside. */
+const baseBoxes = (s: Shape) =>
+  [s.left, s.right - s.wideWidth].map((x) =>
+    box(x, s.front, s.castor, s.wideWidth, s.frameDepth, s.wideThick),
+  );
+
+/** A castor bolt through its plate and base: its sizes, at the length the steps fit. */
+export const castorBolt = (castors: Castors, length: number): ThroughBolt => ({
+  diameter: castors.bolt.diameter.value,
+  length,
+  washers: castors.washer.perBolt,
+  washer: castors.washer.thickness.value,
+  nut: castors.nut.height.value,
+  plate: castors.plate.thickness.value,
+});
+
+/** The brackets at each leg's foot, holding it to its base (#835). */
+export const legBrackets = (parameters: BenchParameters, s: Shape) =>
+  footBrackets({
+    feet: legBoxes(s),
+    bases: baseBoxes(s),
+    middle: { x: s.length / 2, y: (s.front + s.back) / 2 },
+    arm: bracketArm(parameters.fixings.brackets.name),
+  });
+
+/**
+ * Where the castors go under the first base, clear of its legs and their brackets (#835); none
+ * when the bench is too shallow for them to be.
+ */
+export const castorPlacesOf = (parameters: BenchParameters, s: Shape): CastorPlaces | undefined => {
+  const castors = parameters.castors;
+  const [base] = baseBoxes(s);
+  if (!castors || !base) return undefined;
+  return castorPlaces({
+    base,
+    plate: { length: castors.plate.length.value, width: castors.plate.width.value },
+    bolt: castorBolt(castors, castors.bolt.length.value),
+    count: castors.boltsEach,
+    standing: [...legBoxes(s), ...legBrackets(parameters, s)],
+  });
+};
+
+/** How far in from its base's end each castor goes, mm: clear of the leg, or a fingernail. */
+export const castorInsetOf = (parameters: BenchParameters, s: Shape) =>
+  castorPlacesOf(parameters, s)?.insets[0] ?? CASTOR_INSET;
+
+/** The castors, under the ends of each base, clear of what stands on it (#835). */
 export const benchFitted = (parameters: BenchParameters, shape: Shape): Fitted[] => {
   const castors = parameters.castors;
   if (!castors) return [];
   const s = shape;
   const plateLength = castors.plate.length.value;
   const plateWidth = castors.plate.width.value;
+  const [near, far] = castorPlacesOf(parameters, s)?.insets ?? [CASTOR_INSET, CASTOR_INSET];
   return [
     {
       name: castors.name,
       on: "E",
       boxes: [s.left, s.right - s.wideWidth].flatMap((x) =>
-        [s.front + CASTOR_INSET, s.back - CASTOR_INSET - plateLength].map((y) =>
+        [s.front + near, s.back - far - plateLength].map((y) =>
           box(x + (s.wideWidth - plateWidth) / 2, y, 0, plateWidth, plateLength, s.castor),
         ),
       ),
     },
+  ];
+};
+
+/** What the castors' bolts leave on the bases' tops: each nut and the bolt's end past it. */
+export const castorNuts = (
+  parameters: BenchParameters,
+  s: Shape,
+  fitted: readonly Fitted[],
+  boltLength: number,
+) => {
+  const castors = parameters.castors;
+  if (!castors) return [];
+  const bases = baseBoxes(s);
+  return fitted.flatMap((each) =>
+    each.boxes.flatMap((plate) => {
+      const base = bases.find((under) => under.x <= plate.x && plate.x < under.x + under.w);
+      return base ? nutsOn(plate, base, castorBolt(castors, boltLength), castors.boltsEach) : [];
+    }),
+  );
+};
+
+/**
+ * The bench as it stands once it's all built (#835): its parts, its castors, their nuts and bolt
+ * ends on the bases, and the brackets at the legs' feet, each keeping its own space.
+ */
+export const benchTaken = (
+  parameters: BenchParameters,
+  s: Shape,
+  built: { parts: readonly Part[]; fitted: readonly Fitted[]; boltLength: number },
+): Taken[] => {
+  const castors = parameters.castors;
+  // The fixings first, so a clash says the fixing and what it meets.
+  return [
+    ...(castors
+      ? [
+          {
+            name: `${castorFixingNames(castors, built.boltLength).bolts}' nuts and ends`,
+            boxes: castorNuts(parameters, s, built.fitted, built.boltLength),
+          },
+          { name: parameters.fixings.brackets.name, boxes: legBrackets(parameters, s) },
+        ]
+      : []),
+    ...built.parts.map((part) => ({ name: part.name, boxes: part.boxes })),
+    ...built.fitted.map((each) => ({ name: each.name, boxes: each.boxes })),
   ];
 };
